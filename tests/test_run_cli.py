@@ -55,6 +55,37 @@ print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "re
 print("claude diagnostic", file=sys.stderr)
 """
 
+NEW_ADAPTER_FIXTURES = {
+    "gemini": """import json, sys
+prompt = next(arg for arg in sys.argv if arg.startswith("--prompt=")).split("=", 1)[1]
+answer = json.dumps({"argv": sys.argv[1:], "prompt": prompt})
+print(json.dumps({"response": answer}))
+""",
+    "antigravity": """import json, sys
+prompt = json.loads(sys.stdin.read())["message"]["content"]
+answer = json.dumps({"argv": sys.argv[1:], "prompt": prompt})
+print(json.dumps({"event": "init", "init": {"cwd": "/work"}}))
+print(json.dumps({"event": "result", "result": {"status": "SUCCESS", "response": answer, "usage": {"input_tokens": 3, "output_tokens": 2, "thinking_tokens": 1, "cache_read_tokens": 1, "total_tokens": 5}}}))
+""",
+    "copilot": """import json, sys
+prompt = next(arg for arg in sys.argv if arg.startswith("--prompt=")).split("=", 1)[1]
+answer = json.dumps({"argv": sys.argv[1:], "prompt": prompt})
+print(json.dumps({"type": "assistant.message", "data": {"messageId": "answer", "content": answer}}))
+print(json.dumps({"type": "result", "timestamp": "2026-09-09T12:00:00Z", "sessionId": "id", "exitCode": 0, "usage": {"premiumRequests": 1, "totalApiDurationMs": 2, "sessionDurationMs": 3, "codeChanges": {"linesAdded": 0, "linesRemoved": 0, "filesModified": 0}}}))
+""",
+    "cursor": """import json, sys
+prompt = sys.argv[sys.argv.index("--") + 1]
+answer = json.dumps({"argv": sys.argv[1:], "prompt": prompt})
+print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": answer, "session_id": "id"}))
+""",
+    "opencode": """import json, sys
+prompt = sys.stdin.read()
+answer = json.dumps({"argv": sys.argv[1:], "prompt": prompt})
+print(json.dumps({"type": "text", "part": {"id": "answer", "type": "text", "text": answer, "time": {"end": 1}}}))
+print(json.dumps({"type": "step_finish", "part": {"id": "step", "type": "step-finish", "reason": "stop", "cost": 0.01, "tokens": {"total": 5, "input": 3, "output": 2, "reasoning": 0, "cache": {"read": 1, "write": 0}}}}))
+""",
+}
+
 
 def test_codex_dispatch_normalizes_output_and_supports_flags_around_selector(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -142,6 +173,91 @@ print(json.dumps({"type": "result", "subtype": "error_max_turns", "is_error": Tr
     assert result["status"] == "error"
     assert result["usage"]["input_tokens"] == 5
     assert result["error"] == {"code": "provider_error", "message": "Turn limit reached."}
+
+
+@pytest.mark.parametrize("agent", NEW_ADAPTER_FIXTURES)
+def test_new_adapter_fake_cli_dispatches_real_protocol(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    agent: str,
+) -> None:
+    config = write_agent(tmp_path, agent, NEW_ADAPTER_FIXTURES[agent])
+    assert main([agent, "--prompt=-exact prompt", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    answer = json.loads(result["output"])
+    assert result["agent"] == agent
+    assert result["status"] == "success"
+    assert result["native_exit_code"] == 0
+    assert answer["prompt"] == "-exact prompt"
+
+
+def test_copilot_profile_transmits_optional_variadic_native_arguments(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    native_args = [
+        "--available-tools",
+        "--allow-tool",
+        "shell(git status)",
+        "write",
+        "--deny-url=https://example.com",
+        "--no-color",
+    ]
+    config = write_agent(
+        tmp_path,
+        "copilot",
+        NEW_ADAPTER_FIXTURES["copilot"],
+        profile="permissions",
+        settings=f"native_args={json.dumps(native_args)}\n",
+    )
+    assert main(["permissions", "prompt", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert json.loads(result["output"])["argv"] == [
+        "--output-format=json",
+        *native_args,
+        "--prompt=prompt",
+    ]
+
+
+def test_gemini_explicit_provider_timeout_maps_to_124(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fixture = """import json
+print(json.dumps({"response": "partial", "error": {"type": "TimeoutError", "message": "provider timed out"}}))
+"""
+    config = write_agent(tmp_path, "gemini", fixture)
+    assert main(["gm", "prompt", "--config", str(config), "--json"]) == 124
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "timeout"
+    assert result["output"] == "partial"
+    assert result["error"] == {"code": "timeout", "message": "provider timed out"}
+
+
+@pytest.mark.parametrize(
+    ("agent", "native_argument"),
+    [
+        ("gemini", "--output-format=text"),
+        ("antigravity", "--input-format=text"),
+        ("copilot", "--prompt=native"),
+        ("cursor", "--workspace=/elsewhere"),
+        ("opencode", "--variant=native"),
+    ],
+)
+def test_all_profiles_validate_new_adapter_native_arguments(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    agent: str,
+    native_argument: str,
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write(
+            f'\n[profiles.bad]\nagent="{agent}"\nnative_args=[{json.dumps(native_argument)}]\n'
+        )
+    assert main(["cx", "prompt", "--config", str(config), "--dry-run", "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_config"
+    assert "profiles.bad.native_args" in result["error"]["message"]
+    assert "controlled by prat" in result["error"]["message"]
 
 
 def test_stdin_prompt_is_read_once_as_utf8(
@@ -327,12 +443,12 @@ def test_prompt_byte_limit_and_invalid_stdin_utf8(
     assert "not valid UTF-8" in json.loads(capsys.readouterr().out)["error"]["message"]
 
 
-def test_unimplemented_adapter_fails_before_launch(
+def test_future_adapter_fails_before_launch(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["gm", "prompt", "--json"]) == 2
+    assert main(["ki", "prompt", "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
-    assert result["agent"] == "gemini"
+    assert result["agent"] == "kiro"
     assert result["error"]["code"] == "unsupported_agent"
 
 

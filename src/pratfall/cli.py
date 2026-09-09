@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from pratfall import __version__
-from pratfall.adapters import claude, codex
+from pratfall.adapters.registry import ADAPTERS
 from pratfall.catalog import AGENTS, MANAGEMENT_COMMANDS
 from pratfall.config import config_path, init_config, load_config, resolve_profile
 from pratfall.errors import PratError
@@ -171,14 +171,13 @@ def _doctor(config: Config, json_mode: bool) -> None:
 
 
 def _validate_config_native_arguments(config: Config) -> None:
-    validators = {"claude": claude.validate, "codex": codex.validate}
     for name in config.profiles:
         resolved = resolve_profile(config, name)
-        validator = validators.get(resolved.agent.name)
-        if validator is None:
+        adapter = ADAPTERS.get(resolved.agent.name)
+        if adapter is None:
             continue
         try:
-            validator(resolved.options.native_args or ())
+            adapter.validate(resolved.options.native_args or ())
         except PratError as error:
             raise PratError(f"{config.path}: profiles.{name}.native_args: {error}") from error
 
@@ -373,22 +372,17 @@ def _run_cwd(value: str | None, invocation_cwd: Path) -> Path:
 
 
 def _build_invocation(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
-    if resolved.agent.name == "claude":
-        return claude.build(resolved, prompt)
-    if resolved.agent.name == "codex":
-        return codex.build(resolved, prompt)
-    raise PratError(
-        f"{resolved.agent.label} execution is not implemented yet.",
-        code="unsupported_agent",
-    )
+    adapter = ADAPTERS.get(resolved.agent.name)
+    if adapter is None:
+        raise PratError(
+            f"{resolved.agent.label} execution is not implemented yet.",
+            code="unsupported_agent",
+        )
+    return adapter.build(resolved, prompt)
 
 
 def _decode(resolved: ResolvedProfile, stdout: str) -> DecodedOutput:
-    if resolved.agent.name == "claude":
-        return claude.decode(stdout)
-    if resolved.agent.name == "codex":
-        return codex.decode(stdout)
-    raise AssertionError(resolved.agent.name)
+    return ADAPTERS[resolved.agent.name].decode(stdout)
 
 
 def _decode_process(

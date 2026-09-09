@@ -9,6 +9,7 @@ from pratfall.errors import PratError
 class Flag:
     arity: int
     joined: bool = False
+    variadic: bool = False
 
 
 def validate_flags(
@@ -39,9 +40,12 @@ def validate_flags(
                 )
             _fail(agent, argument, "unknown native option")
         if has_equals:
-            if spec.arity != 1:
+            if spec.arity != 1 and not spec.variadic:
                 _fail(agent, argument, "this option does not take a value")
-            index += 1
+            index = _consume_variadic(arguments, index + 1) if spec.variadic else index + 1
+            continue
+        if spec.variadic:
+            index = _consume_variadic(arguments, index + 1)
             continue
         if spec.arity == 1:
             if index + 1 >= len(arguments):
@@ -51,6 +55,12 @@ def validate_flags(
             index += 2
         else:
             index += 1
+
+
+def _consume_variadic(arguments: tuple[str, ...], index: int) -> int:
+    while index < len(arguments) and not arguments[index].startswith(("-", "@")):
+        index += 1
+    return index
 
 
 def _split_long(argument: str) -> tuple[str, bool]:

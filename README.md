@@ -1,9 +1,9 @@
 # Pratfall
 
 Pratfall provides the `prat` command for one-shot coding-agent invocations through named profiles.
-Claude Code and Codex execution are available in this development increment. The inventory also
-lists the eight adapters planned for later increments; attempting to run one of those exits with
-an `unsupported_agent` error.
+Claude Code, Codex, Gemini, Antigravity, Copilot, Cursor, and OpenCode execution are available in
+this development increment. The inventory also lists Kiro, OpenClaw, and Hermes; attempting to run
+one of those exits with an `unsupported_agent` error.
 
 Requires Python 3.13 or newer. Development uses [uv](https://docs.astral.sh/uv/) and
 [just](https://github.com/casey/just):
@@ -25,12 +25,17 @@ uv run prat cx "summarize the changes in this checkout"
 uv run prat --model gpt-5.6-luna simple --effort low --prompt="review this code"
 printf 'multiline\nprompt\n' | uv run prat cc -
 uv run prat cc --max-budget-usd 1 --max-turns 3 "inspect this failure"
+uv run prat ag --effort high "finish the requested change"
+uv run prat oc --model provider/model "review this repository"
 ```
 
 Run flags can appear before or after the selector. `--prompt=TEXT` is required for prompt text
 that starts with a dash. A lone `-` reads one UTF-8 prompt from stdin. Prompts must be nonempty,
-contain no NUL bytes, and fit within 1 MiB. Prat sends both Claude and Codex prompts through
-stdin, never through a shell or the inherited terminal.
+contain no NUL bytes, and fit within 1 MiB. Prat sends Claude, Codex, Antigravity, and OpenCode
+prompts through native stdin protocols. Gemini and Copilot use a documented prompt option, while
+Cursor uses its positional prompt after an end-of-options marker. These three argv transports are
+also subject to the operating system's argv-size limit, which can be lower than Prat's 1 MiB input
+limit. Prompts are never passed through a shell or the inherited terminal.
 
 Use `--cwd PATH` to select the agent working directory. Relative config and working-directory
 paths resolve from the directory where `prat` was invoked. `--timeout` is a wall-clock deadline
@@ -138,7 +143,16 @@ Claude's `max_budget_usd` is its native API-call budget in US dollars, and `max_
 native agent-turn limit. Prat passes both through without treating either as a token cap. Claude's
 documentation does not specify exact overshoot behavior, so `max_budget_usd` should not be treated
 as a stronger spend guarantee than the native CLI provides. Codex has no verified invocation-wide
-token or spend cap, so Prat rejects budget fields for Codex.
+token or spend cap, so Prat rejects budget fields for Codex. Copilot's `max_ai_credits` is a soft
+per-response native limit, and Prat does not reinterpret it as a hard run-wide cap.
+
+Native usage is nullable. Gemini sums each model's reported token snapshot and maps fresh input,
+cache reads, candidates, and thoughts without adding the duplicated per-role views. Antigravity
+uses the cumulative usage snapshot from its single terminal result. OpenCode keeps the latest
+snapshot for each step ID, sums distinct steps, and reports its native fresh-input, cache-read,
+cache-write, text-output, and reasoning counts separately. Copilot 1.0.83 exposes AI-credit and
+duration metrics but no token counts in CLI JSON, and Cursor does not document token usage, so
+both report `usage: null` rather than inferred values.
 
 Scalar precedence is invocation overrides, then profile, then defaults. Native argument arrays
 replace the lower-precedence array, including when the replacement is empty. Executable prefixes
