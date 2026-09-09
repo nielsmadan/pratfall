@@ -1,5 +1,7 @@
 import io
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -532,3 +534,63 @@ def test_broken_output_pipe_returns_one_after_child_cleanup(
     monkeypatch.setattr(sys, "stdout", BrokenOutput())
     assert main(["cx", "prompt", "--config", str(config)]) == 1
     assert marker.read_text(encoding="utf-8") == "done"
+
+
+def _run_with_closed_stdout(
+    tmp_path: Path, arguments: list[str]
+) -> subprocess.CompletedProcess[bytes]:
+    consumer = tmp_path / "consumer"
+    consumer.mkdir(exist_ok=True)
+    read_descriptor, write_descriptor = os.pipe()
+    os.close(read_descriptor)
+    env = {
+        "HOME": str(tmp_path / "home"),
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+    }
+    try:
+        process = subprocess.Popen(
+            [sys.executable, "-m", "pratfall", *arguments],
+            cwd=consumer,
+            env=env,
+            stdout=write_descriptor,
+            stderr=subprocess.PIPE,
+        )
+    finally:
+        os.close(write_descriptor)
+    stderr = process.communicate(timeout=10)[1]
+    return subprocess.CompletedProcess(process.args, process.returncode, b"", stderr)
+
+
+def test_management_output_to_early_closed_pipe_returns_one(tmp_path: Path) -> None:
+    completed = _run_with_closed_stdout(tmp_path, ["agents"])
+    assert completed.returncode == 1
+    assert b"BrokenPipeError" not in completed.stderr
+
+
+@pytest.mark.parametrize("argument", ["--help", "--version"])
+def test_argparse_output_to_early_closed_pipe_returns_one(tmp_path: Path, argument: str) -> None:
+    completed = _run_with_closed_stdout(tmp_path, [argument])
+    assert completed.returncode == 1
+    assert b"BrokenPipeError" not in completed.stderr
+
+
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_successful_fake_agent_output_to_early_closed_pipe_returns_one(
+    tmp_path: Path, json_mode: bool
+) -> None:
+    fake = tmp_path / "fake.py"
+    fake.write_text(CLAUDE_SUCCESS, encoding="utf-8")
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"version=1\n[agents.claude]\ncommand={json.dumps([sys.executable, str(fake)])}\n",
+        encoding="utf-8",
+    )
+    arguments = ["cc", "prompt", "--config", str(config)]
+    if json_mode:
+        arguments.append("--json")
+    completed = _run_with_closed_stdout(tmp_path, arguments)
+    assert completed.returncode == 1
+    assert b"BrokenPipeError" not in completed.stderr
+    assert b"finished with status success" in completed.stderr

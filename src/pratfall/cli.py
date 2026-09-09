@@ -559,13 +559,10 @@ def _management_mode(arguments: list[str]) -> bool:
     return not run_option
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     if not _management_mode(arguments):
-        try:
-            return _run_command(arguments, Path.cwd())
-        except BrokenPipeError:
-            return 1
+        return _run_command(arguments, Path.cwd())
     try:
         parser = build_parser()
         args = parser.parse_args(arguments)
@@ -587,6 +584,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             print(f"prat: {error}", file=sys.stderr)
         return error.exit_code
-    except BrokenPipeError:
-        return 1
     return 0
+
+
+def _silence_broken_stdout() -> None:
+    descriptor = os.open(os.devnull, os.O_WRONLY)
+    try:
+        try:
+            os.dup2(descriptor, sys.stdout.fileno())
+        except (AttributeError, OSError, ValueError):
+            sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+    finally:
+        os.close(descriptor)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        try:
+            exit_code = _main(argv)
+        except SystemExit:
+            sys.stdout.flush()
+            raise
+        sys.stdout.flush()
+    except BrokenPipeError:
+        _silence_broken_stdout()
+        return 1
+    return exit_code

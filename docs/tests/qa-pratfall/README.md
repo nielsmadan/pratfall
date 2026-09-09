@@ -35,6 +35,7 @@ uv run python scripts/qa_installed.py \
   --sdist-prat "$qa_root/env-sdist/bin/prat" \
   --wheel "$wheel" \
   --sdist "$sdist" \
+  --expected-version "$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml)" \
   --base-revision "$(git rev-parse HEAD)" \
   --work-dir "$qa_root/run" \
   --output "$qa_root/results.json"
@@ -74,3 +75,4 @@ uses a disposable XDG config directory, restores no global state, and leaves no 
 
 - [2026-09-09 initial release QA](runs/2026-09-09-initial.md)
 - [2026-09-09 harness repair and installed retest](runs/2026-09-09-repair.md)
+- [2026-09-09 verification after final review fixes](runs/2026-09-09-final-review.md)

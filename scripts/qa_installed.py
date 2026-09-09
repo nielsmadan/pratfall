@@ -18,7 +18,6 @@ from pathlib import Path
 
 HARNESS_TIMEOUT = 15.0
 CLEANUP_TIMEOUT = 2.0
-EXPECTED_VERSION = "prat 0.1.0"
 
 AGENTS = {
     "claude": "claude",
@@ -461,7 +460,7 @@ def _run(
     env = os.environ.copy()
     env["PRAT_QA_LOG"] = str(root / "native.jsonl")
     env["XDG_CONFIG_HOME"] = str(root / "xdg")
-    env["PATH"] = f"{path or root / 'bin'}{os.pathsep}{env['PATH']}"
+    env["PATH"] = f"{path or root / 'bin'}{os.pathsep}/usr/bin{os.pathsep}/bin"
     invocation = _start(command, root, env, stdin=stdin)
     try:
         stdout, stderr = _communicate(invocation)
@@ -698,6 +697,18 @@ def _portable(value: object, repository: Path) -> object:
     return value
 
 
+def _entry_point_versions(
+    prat: Path, sdist_prat: Path, root: Path, expected_version: str
+) -> tuple[subprocess.CompletedProcess[bytes], subprocess.CompletedProcess[bytes]]:
+    expected = f"prat {expected_version}"
+    wheel_version = _run(prat, root, ["--version"])
+    sdist_version = _run(sdist_prat, root, ["--version"])
+    assert wheel_version.returncode == sdist_version.returncode == 0
+    assert wheel_version.stdout.decode().strip() == expected
+    assert sdist_version.stdout.decode().strip() == expected
+    return wheel_version, sdist_version
+
+
 def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     prat: Path,
     sdist_prat: Path,
@@ -706,6 +717,7 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     base_revision: str,
     root: Path,
     output: Path,
+    expected_version: str,
 ) -> int:
     root.mkdir(parents=True, exist_ok=True)
     consumer = root / "consumer"
@@ -720,12 +732,13 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     _write_config(config, python, script)
     results: dict[str, object] = {}
 
-    version = _run(prat, root, ["--version"])
+    version, _sdist_version = _entry_point_versions(prat, sdist_prat, root, expected_version)
     help_result = _run(prat, root, ["--help"])
     assert version.returncode == help_result.returncode == 0
     version_text = version.stdout.decode().strip()
     help_text = help_result.stdout.decode()
-    assert version_text == EXPECTED_VERSION
+    expected_version_text = f"prat {expected_version}"
+    assert version_text == expected_version_text
     assert help_text.startswith("usage: prat ")
     for expected in (
         "Run installed coding agents through named profiles.",
@@ -740,10 +753,7 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         "help": help_text,
     }
 
-    sdist_version = _run(sdist_prat, root, ["--version"])
-    assert sdist_version.returncode == 0
-    assert sdist_version.stdout.decode().strip() == EXPECTED_VERSION
-    results["Q02"] = {"status": "Pass", "version": EXPECTED_VERSION}
+    results["Q02"] = {"status": "Pass", "version": expected_version_text}
 
     prompt = "fix this bug"
     completed = _run(prat, root, ["cc", prompt, "--json"], config=config)
@@ -1266,6 +1276,7 @@ def main() -> int:
     parser.add_argument("--wheel", type=Path)
     parser.add_argument("--sdist", type=Path)
     parser.add_argument("--base-revision")
+    parser.add_argument("--expected-version")
     parser.add_argument("--work-dir", type=Path)
     parser.add_argument("--output", type=Path)
     args, native_arguments = parser.parse_known_args()
@@ -1280,6 +1291,7 @@ def main() -> int:
             args.wheel,
             args.sdist,
             args.base_revision,
+            args.expected_version,
             args.work_dir,
             args.output,
         )
@@ -1293,6 +1305,7 @@ def main() -> int:
         args.base_revision,
         args.work_dir.resolve(),
         args.output.resolve(),
+        args.expected_version,
     )
 
 

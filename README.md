@@ -115,7 +115,8 @@ uv run prat --config example.toml config validate
 uv run prat --config example.toml profiles --json
 ```
 
-`config init` exclusively creates an example file and fails if it already exists. Ordinary
+`config init` creates missing directories with owner-only permissions and exclusively creates an
+owner-readable and writable example file; it fails if the file already exists. Ordinary
 commands never write configuration. A missing default file is valid; a missing explicitly
 selected file is an error. Existing files require `version = 1`.
 

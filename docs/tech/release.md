@@ -11,8 +11,9 @@ The repository must be published and `origin/main` must exist before `just relea
 new repository, publish the initial main branch as a separate, explicit action first. Do not weaken
 the helper's remote-branch or ancestry checks to bootstrap it.
 
-Before the first release, configure the repository's `HOMEBREW_TAP_TOKEN` Actions secret with write
-access to `nielsmadan/homebrew-tap`. The workflow can bootstrap an absent
+Before the first release, configure the repository's `HOMEBREW_TAP_TOKEN` Actions secret from a
+fine-grained PAT restricted to write access on `nielsmadan/homebrew-tap` only. The workflow can
+bootstrap an absent
 `Formula/pratfall.rb`. Its template contains placeholders, so no fake checksum is presented as an
 installable formula. The workflow renders the formula only after downloading the tagged GitHub
 source and computing its SHA256.
@@ -41,13 +42,25 @@ The preparation stage updates `pyproject.toml`, runs `uv lock`, and generates `C
 an annotated `vVERSION` tag, and uses one atomic push with `--no-follow-tags`. Failures preserve
 local state for inspection; never replace a published tag.
 
-The tag workflow validates the exact semantic tag against the project version, tests the installed
-project, builds the sdist and then builds the wheel from that sdist, generates release notes without
-ignoring git-cliff failures, and uploads both artifacts. Homebrew authentication is supplied only to
-the final tap push through a command-scoped Git header; credentials are not embedded in a clone URL.
+The tag workflow first runs without write credentials. It requires an annotated tag whose push-event
+commit is contained in fetched `origin/main`, validates the semantic tag against the project version,
+and enforces Ruff, formatting, import-cycle, strict mypy, branch-coverage, and strict-docs checks. It
+builds the sdist and then the wheel from that sdist, installs both artifacts in isolated environments,
+and runs all offline installed-package scenarios. The QA report is saved with the distributions and
+generated notes as one workflow artifact.
 
-The formula uses Homebrew `python@3.13` and `virtualenv_install_with_resources`. Pratfall has no
-runtime dependencies, so it needs no resource blocks. Homebrew performs the isolated package build.
+A separate minimal `contents: write` job checks out the immutable triggering ref without persisted
+credentials and consumes that saved artifact. Release retries require the existing title, notes,
+target commit, non-prerelease state, and attached asset hashes to match. Identical assets are
+retained, missing assets are uploaded without clobbering, and a matching partial draft is published
+only after its assets are complete. Divergent or unverifiable publication state stops the workflow.
+
+The formula uses Homebrew `python@3.13` plus checksummed pure-Python wheels for Hatchling and all of
+its runtime requirements. It installs those resources first and installs Pratfall with build
+isolation disabled. Before rendering, the workflow parses the trusted tap formula version: an older
+tag cannot replace a newer formula, while a same-version repair and a normal upgrade remain valid.
+Formula rendering, Ruby validation, and commit creation run before the PAT-bearing final push step;
+the credential is supplied only to that command through a Git header and is never put in a clone URL.
 
 `CHANGELOG.md` is generated output. `just changelog` refreshes its unreleased view; do not edit a
 generated release section by hand.

@@ -126,6 +126,120 @@ def test_release_prepares_tags_and_pushes_atomically(checkout: Checkout) -> None
     assert checkout.git("show", "v1.2.1:VERSION") == "1.2.1"
     remote_tags = checkout.command("git", "--git-dir", str(checkout.remote), "tag", "--list")
     assert remote_tags.splitlines() == ["v1.2.0", "v1.2.1"]
+    remote_main = checkout.command(
+        "git", "--git-dir", str(checkout.remote), "rev-parse", "refs/heads/main"
+    )
+    remote_release = checkout.command(
+        "git", "--git-dir", str(checkout.remote), "rev-parse", "v1.2.1^{commit}"
+    )
+    assert remote_main == remote_release
+
+
+def test_atomic_push_rejection_preserves_remote_branch_and_tags(checkout: Checkout) -> None:
+    hook = checkout.remote / "hooks/update"
+    hook.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "refs/tags/v1.2.1" ]; then\n'
+        '  echo "reject release tag" >&2\n'
+        "  exit 1\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+    before_main = checkout.command(
+        "git", "--git-dir", str(checkout.remote), "rev-parse", "refs/heads/main"
+    )
+    before_tags = checkout.command("git", "--git-dir", str(checkout.remote), "show-ref", "--tags")
+    result = checkout.invoke("--yes")
+    assert result.returncode == 1
+    assert "reject release tag" in result.stderr
+    after_main = checkout.command(
+        "git", "--git-dir", str(checkout.remote), "rev-parse", "refs/heads/main"
+    )
+    after_tags = checkout.command("git", "--git-dir", str(checkout.remote), "show-ref", "--tags")
+    assert after_main == before_main
+    assert after_tags == before_tags
+
+    control_directory = checkout.directory / "non-atomic-control"
+    control_directory.mkdir()
+    control = Checkout(control_directory)
+    control_hook = control.remote / "hooks/update"
+    control_hook.write_bytes(hook.read_bytes())
+    control_hook.chmod(0o755)
+    control_script = control.root / "scripts/release.py"
+    source = control_script.read_text(encoding="utf-8")
+    without_atomic = source.replace('        "--atomic",\n', "", 1)
+    assert without_atomic != source
+    assert '        "--atomic",\n' not in without_atomic
+    control_script.write_text(without_atomic, encoding="utf-8")
+    control.commit("chore: remove atomic push for control")
+    control.git("push", "origin", "main")
+    control.initial_head = control.git("rev-parse", "HEAD")
+    control_result = control.invoke("--yes")
+    assert control_result.returncode == 1
+    assert (
+        control.command("git", "--git-dir", str(control.remote), "rev-parse", "refs/heads/main")
+        != control.initial_head
+    )
+    assert control.command("git", "--git-dir", str(control.remote), "tag", "--list", "v1.2.1") == ""
+
+
+def test_failing_preflight_check_prevents_all_release_mutations(checkout: Checkout) -> None:
+    marker = checkout.root / "preflight-ran"
+    checkout.config["checks"] = [
+        [
+            sys.executable,
+            "-c",
+            f"from pathlib import Path;Path({str(marker)!r}).write_text('ran');raise SystemExit(9)",
+        ]
+    ]
+    checkout.save_config()
+    checkout.commit("chore: configure failing check")
+    checkout.git("push", "origin", "main")
+    before_head = checkout.git("rev-parse", "HEAD")
+    before_version = (checkout.root / "VERSION").read_text(encoding="utf-8")
+    before_tags = checkout.git("tag", "--list")
+    before_remote = checkout.command(
+        "git", "--git-dir", str(checkout.remote), "show-ref", "--heads", "--tags"
+    )
+    result = checkout.invoke("--yes")
+    assert result.returncode == 1
+    assert marker.read_text(encoding="utf-8") == "ran"
+    assert checkout.git("rev-parse", "HEAD") == before_head
+    assert (checkout.root / "VERSION").read_text(encoding="utf-8") == before_version
+    assert checkout.git("tag", "--list") == before_tags
+    assert (
+        checkout.command("git", "--git-dir", str(checkout.remote), "show-ref", "--heads", "--tags")
+        == before_remote
+    )
+
+
+def test_successful_preflight_check_runs_before_preparation(checkout: Checkout) -> None:
+    marker = checkout.directory / "preflight-ran"
+    checkout.config["checks"] = [
+        [
+            sys.executable,
+            "-c",
+            f"from pathlib import Path;Path({str(marker)!r}).write_text('checked')",
+        ]
+    ]
+    checkout.config["stages"][0]["commands"] = [
+        [
+            sys.executable,
+            "-c",
+            (
+                f"from pathlib import Path;assert Path({str(marker)!r}).read_text()=='checked';"
+                "Path('VERSION').write_text('{version}\\n')"
+            ),
+        ]
+    ]
+    checkout.save_config()
+    checkout.commit("chore: configure ordered check")
+    checkout.git("push", "origin", "main")
+    result = checkout.invoke("--yes")
+    assert result.returncode == 0, result.stderr
+    assert marker.read_text(encoding="utf-8") == "checked"
+    assert checkout.git("show", "v1.2.1:VERSION") == "1.2.1"
 
 
 def test_dirty_checkout_stops_before_release(checkout: Checkout) -> None:

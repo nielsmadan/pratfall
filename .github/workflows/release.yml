@@ -5,27 +5,34 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  verify:
     runs-on: ubuntu-latest
+    outputs:
+      release-commit: ${{ steps.identity.outputs.release-commit }}
+      version: ${{ steps.identity.outputs.version }}
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
 
-      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.8.10"
           python-version: "3.13"
 
-      - name: Validate tag and project version
+      - name: Validate annotated tag, ancestry, and project version
+        id: identity
         run: |
+          RELEASE_COMMIT=$(python scripts/release_workflow.py \
+            validate-tag "$GITHUB_REF_NAME" "$GITHUB_SHA")
           VERSION=${GITHUB_REF_NAME#v}
           python - "$VERSION" <<'PY'
           import re
@@ -42,10 +49,22 @@ jobs:
                   f"Tag version {version!r} does not match project version {project['version']!r}."
               )
           PY
+          echo "RELEASE_COMMIT=$RELEASE_COMMIT" >> "$GITHUB_ENV"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "release-commit=$RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - run: uv sync --all-groups --frozen
-      - run: uv run pytest tests/ scripts/ -q
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv run pylint src/pratfall
+      - run: uv run mypy
+      - name: Test with branch coverage
+        run: >-
+          uv run pytest tests/ scripts/ -q --cov --cov-branch
+          --cov-report=term-missing --cov-fail-under=80
+          --basetemp=.cache/release/pytest
+      - run: uv run zensical build -f mkdocs.yml --strict
 
       - name: Build sdist then wheel from sdist
         run: |
@@ -55,44 +74,122 @@ jobs:
           test -f "dist/pratfall-${VERSION}.tar.gz"
           test -f "dist/pratfall-${VERSION}-py3-none-any.whl"
 
-      - name: Compute released source SHA256
+      - name: QA isolated wheel and sdist installs offline
         run: |
-          curl -fsSL -o /tmp/source.tar.gz \
-            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
-          TARBALL_SHA=$(sha256sum /tmp/source.tar.gz | cut -d' ' -f1)
-          echo "TARBALL_SHA=$TARBALL_SHA" >> "$GITHUB_ENV"
+          mkdir -p .cache/release/bundle/dist
+          cp dist/* .cache/release/bundle/dist/
+          uv venv --python 3.13 .cache/release/env-wheel
+          uv pip install --offline --no-deps \
+            --python .cache/release/env-wheel/bin/python \
+            "dist/pratfall-${VERSION}-py3-none-any.whl"
+          uv venv --python 3.13 .cache/release/env-sdist
+          uv pip install --offline --no-deps \
+            --python .cache/release/env-sdist/bin/python \
+            "dist/pratfall-${VERSION}.tar.gz"
+          uv run python scripts/qa_installed.py \
+            --prat .cache/release/env-wheel/bin/prat \
+            --sdist-prat .cache/release/env-sdist/bin/prat \
+            --wheel "dist/pratfall-${VERSION}-py3-none-any.whl" \
+            --sdist "dist/pratfall-${VERSION}.tar.gz" \
+            --expected-version "$VERSION" \
+            --base-revision "$RELEASE_COMMIT" \
+            --work-dir .cache/release/installed-qa \
+            --output .cache/release/bundle/qa-installed.json
 
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute source checksum and generate release notes
         run: |
-          uvx git-cliff@2.13.1 --current --strip all -o /tmp/release-notes.md
-          sed -i '/^## \[/d' /tmp/release-notes.md
+          curl -fsSL -o .cache/release/source.tar.gz \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          sha256sum .cache/release/source.tar.gz | cut -d' ' -f1 \
+            > .cache/release/bundle/source-sha256.txt
+          uvx git-cliff@2.13.1 --current --strip all \
+            -o .cache/release/bundle/release-notes.md
+          sed -i '/^## \[/d' .cache/release/bundle/release-notes.md
           PREV_TAG=$(python scripts/release_workflow.py previous-tag "$GITHUB_REF_NAME")
           if [ -n "$PREV_TAG" ]; then
             printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' \
-              "$GITHUB_REPOSITORY" "$PREV_TAG" "$GITHUB_REF_NAME" >> /tmp/release-notes.md
+              "$GITHUB_REPOSITORY" "$PREV_TAG" "$GITHUB_REF_NAME" \
+              >> .cache/release/bundle/release-notes.md
           fi
-          python scripts/release_workflow.py publish \
-            "$GITHUB_REF_NAME" "pratfall $VERSION" /tmp/release-notes.md dist/*
 
-      - name: Create or update Homebrew formula
+      - name: Save verified release bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-bundle
+          path: .cache/release/bundle
+          if-no-files-found: error
+          include-hidden-files: true
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Revalidate trusted publication code
+        run: |
+          test "$(python scripts/release_workflow.py validate-tag \
+            "$GITHUB_REF_NAME" "$GITHUB_SHA")" = "${{ needs.verify.outputs.release-commit }}"
+
+      - name: Download verified release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-bundle
+          path: release-bundle
+
+      - name: Publish GitHub release
         env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/release_workflow.py publish \
+            "$GITHUB_REF_NAME" \
+            "pratfall ${{ needs.verify.outputs.version }}" \
+            release-bundle/release-notes.md \
+            "${{ needs.verify.outputs.release-commit }}" \
+            release-bundle/dist/*
+
+      - name: Render, validate, and commit Homebrew formula
+        id: formula
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           TAP_DIR="$RUNNER_TEMP/homebrew-tap"
           git clone https://github.com/nielsmadan/homebrew-tap.git "$TAP_DIR"
-          python scripts/render_formula.py \
-            "$VERSION" "$TARBALL_SHA" "$TAP_DIR/Formula/pratfall.rb"
+          FORMULA_ACTION=$(python scripts/render_formula.py \
+            "$VERSION" "$(cat release-bundle/source-sha256.txt)" \
+            "$TAP_DIR/Formula/pratfall.rb")
+          if [ "$FORMULA_ACTION" = "skipped-newer" ]; then
+            echo "A newer Homebrew formula is already published"
+            echo "push=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           ruby -c "$TAP_DIR/Formula/pratfall.rb"
           git -C "$TAP_DIR" config user.name "github-actions[bot]"
           git -C "$TAP_DIR" config user.email "github-actions[bot]@users.noreply.github.com"
           git -C "$TAP_DIR" add Formula/pratfall.rb
           if git -C "$TAP_DIR" diff --cached --quiet; then
             echo "Homebrew formula is current"
+            echo "push=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git -C "$TAP_DIR" commit -m "chore: update pratfall to ${VERSION}"
+          echo "push=true" >> "$GITHUB_OUTPUT"
+          echo "tap-dir=$TAP_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Push Homebrew formula
+        if: steps.formula.outputs.push == 'true'
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAP_DIR: ${{ steps.formula.outputs.tap-dir }}
+        run: |
           BASIC_AUTH=$(printf 'x-access-token:%s' "$HOMEBREW_TAP_TOKEN" | base64 | tr -d '\n')
-          git -C "$TAP_DIR" \
-            -c http.https://github.com/.extraheader="AUTHORIZATION: basic $BASIC_AUTH" push
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $BASIC_AUTH" \
+            git -C "$TAP_DIR" push

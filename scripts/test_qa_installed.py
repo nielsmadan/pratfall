@@ -180,3 +180,30 @@ def test_install_identity_rejects_source_or_archive_mismatch(tmp_path: Path) -> 
             expected,
             expected,
         )
+
+
+def _version_executable(path: Path, version: str) -> Path:
+    path.write_text(
+        f"#!{sys.executable}\nimport sys\nassert sys.argv[1:] == ['--version']\n"
+        f"print('prat {version}')\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return path
+
+
+def test_both_artifact_entry_points_accept_non_initial_expected_version(tmp_path: Path) -> None:
+    (tmp_path / "consumer").mkdir()
+    wheel = _version_executable(tmp_path / "wheel-prat", "2.3.4")
+    sdist = _version_executable(tmp_path / "sdist-prat", "2.3.4")
+    wheel_result, sdist_result = qa._entry_point_versions(wheel, sdist, tmp_path, "2.3.4")
+    assert wheel_result.stdout == b"prat 2.3.4\n"
+    assert sdist_result.stdout == b"prat 2.3.4\n"
+
+
+def test_artifact_entry_point_version_mismatch_is_rejected(tmp_path: Path) -> None:
+    (tmp_path / "consumer").mkdir()
+    wheel = _version_executable(tmp_path / "wheel-prat", "2.3.4")
+    sdist = _version_executable(tmp_path / "sdist-prat", "2.3.3")
+    with pytest.raises(AssertionError):
+        qa._entry_point_versions(wheel, sdist, tmp_path, "2.3.4")

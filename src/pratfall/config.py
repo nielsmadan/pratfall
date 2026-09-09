@@ -245,11 +245,18 @@ def resolve_profile(
 def init_config(explicit: str | Path | None = None, *, cwd: Path | None = None) -> Path:
     path = config_path(explicit, cwd=cwd)
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        missing = []
+        parent = path.parent
+        while not parent.exists():
+            missing.append(parent)
+            parent = parent.parent
+        for directory in reversed(missing):
+            directory.mkdir(mode=0o700)
     except OSError as error:
         raise PratError(f"{path}: cannot create config directory: {error}.") from error
     try:
-        with path.open("x", encoding="utf-8") as stream:
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             stream.write(SAMPLE_CONFIG)
     except FileExistsError as error:
         raise PratError(

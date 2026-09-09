@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -281,6 +282,31 @@ def test_config_init_creates_valid_sample_and_refuses_overwrite(tmp_path: Path) 
     with pytest.raises(PratError, match="already exists"):
         init_config(path)
     assert path.read_bytes() == original
+
+
+def test_config_init_secures_only_new_paths_under_open_umask(tmp_path: Path) -> None:
+    existing = tmp_path / "existing"
+    existing.mkdir(mode=0o751)
+    existing.chmod(0o751)
+    path = existing / "new" / "nested" / "config.toml"
+    previous_umask = os.umask(0)
+    try:
+        init_config(path)
+    finally:
+        os.umask(previous_umask)
+    assert existing.stat().st_mode & 0o777 == 0o751
+    assert path.parent.parent.stat().st_mode & 0o777 == 0o700
+    assert path.parent.stat().st_mode & 0o777 == 0o700
+    assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_config_init_preserves_existing_file_mode_and_contents(tmp_path: Path) -> None:
+    path = write_config(tmp_path, "preserve this")
+    path.chmod(0o640)
+    with pytest.raises(PratError, match="already exists"):
+        init_config(path)
+    assert path.read_text(encoding="utf-8") == "preserve this"
+    assert path.stat().st_mode & 0o777 == 0o640
 
 
 def test_init_refuses_existing_symlink(tmp_path: Path) -> None:
