@@ -53,3 +53,46 @@ class ResolvedProfile:
     profile: str | None
     command: tuple[str, ...]
     options: Options
+
+
+@dataclass(frozen=True)
+class Invocation:
+    argv: tuple[str, ...]
+    stdin: bytes
+
+
+@dataclass(frozen=True)
+class Usage:
+    input_tokens: int | None = None
+    cached_input_tokens: int | None = None
+    cache_write_input_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_output_tokens: int | None = None
+
+
+@dataclass(frozen=True)
+class ResultError:
+    code: str
+    message: str
+
+
+@dataclass(frozen=True)
+class DecodedOutput:
+    output: str = ""
+    usage: Usage | None = None
+    error: ResultError | None = None
+    timed_out: bool = False
+
+
+@dataclass(frozen=True)
+class NormalizedResult:
+    agent: str | None
+    profile: str | None
+    model: str | None
+    status: str
+    output: str
+    exit_code: int
+    native_exit_code: int | None
+    duration_ms: int
+    usage: Usage | None
+    error: ResultError | None

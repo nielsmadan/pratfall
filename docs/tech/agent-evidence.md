@@ -6,7 +6,7 @@ model inference. Native CLI releases can change these interfaces.
 
 | Agent | Native invocation | Model | Effort | Native limits | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| Claude Code | `claude -p --output-format json` | `--model` | `--effort` | `--max-budget-usd`, `--max-turns` | Installed 2.1.266 and [CLI reference](https://code.claude.com/docs/en/cli-reference) |
+| Claude Code | `claude -p --output-format json` | `--model` | `--effort` | `--max-budget-usd`, `--max-turns` | Installed 2.1.266, [CLI reference](https://code.claude.com/docs/en/cli-reference), and [Agent SDK result type](https://platform.claude.com/docs/en/agent-sdk/typescript#sdkresultmessage) |
 | Codex | `codex exec --json` | `--model` | `-c model_reasoning_effort="LEVEL"` | No verified total-token/spend cap | Installed 0.153.4, [noninteractive docs](https://developers.openai.com/codex/noninteractive), [event source](https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs) |
 | Gemini | `gemini -p PROMPT --output-format json` | `--model` | Unverified | Unverified | [Headless reference](https://geminicli.com/docs/cli/headless) |
 | Antigravity | `agy -p PROMPT --output-format json` | `--model` | `--effort low\|medium\|high` | `--print-timeout` is duration | Installed 1.1.11 and [headless docs](https://antigravity.google/docs/cli/headless) |
@@ -24,9 +24,14 @@ model inference. Native CLI releases can change these interfaces.
 A live read-only Haiku plan consultation with `--output-format json` returned one JSON object
 with `type: result`, `subtype: success`, `is_error: false`, `result: STRING`, native usage and
 modelUsage, duration fields, and `terminal_reason: completed`. Successful exit was 0.
-Budget and turn failures must be handled from native result semantics, not result text alone.
 Current help lists effort low/medium/high/xhigh/max; docs additionally describe model-dependent
 ultracode. Model-name catalogs should not be frozen in pratfall.
+
+The Agent SDK's `SDKResultMessage` is a union. Only the `success` arm has `result: string`.
+The `error_max_turns`, `error_during_execution`, `error_max_budget_usd`, and
+`error_max_structured_output_retries` arms instead have `errors: string[]`; both arms carry
+native usage. Prat preserves those diagnostic strings in the normalized provider error and
+retains usage. The error subtype is a semantic failure even when the native process exits 0.
 
 ### Codex
 

@@ -100,6 +100,35 @@ def test_default_validate_explains_missing_config(capsys: pytest.CaptureFixture[
     assert "using built-in defaults" in capsys.readouterr().out
 
 
+def test_config_validate_checks_resolved_native_arguments(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'version=1\n[defaults]\nnative_args=["--output-format", "text"]\n'
+        '[profiles.bad]\nagent="claude"\n',
+        encoding="utf-8",
+    )
+    assert main(["config", "validate", "--config", str(path), "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_config"
+    assert f"{path}: profiles.bad.native_args" in result["error"]["message"]
+    assert "controlled by prat" in result["error"]["message"]
+
+
+def test_profile_native_arguments_replace_invalid_defaults_during_validation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'version=1\n[defaults]\nnative_args=["--output-format", "text"]\n'
+        '[profiles.safe]\nagent="claude"\nnative_args=["--verbose"]\n',
+        encoding="utf-8",
+    )
+    assert main(["config", "validate", "--config", str(path)]) == 0
+    assert capsys.readouterr().out == f"Valid config: {path}\n"
+
+
 def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[str]) -> None:
     init_config()
     assert main(["profiles"]) == 0
@@ -135,14 +164,14 @@ effort="high"
 timeout=42
 max_budget_usd=2.5
 max_turns=3
-native_args=["--flag", "two words"]
+native_args=["--permission-mode", "two words"]
 """,
         encoding="utf-8",
     )
     assert main(["profiles", "--config", str(path)]) == 0
     assert capsys.readouterr().out == (
         "inspect: claude model=model-id effort=high timeout=42.0 "
-        'max_budget_usd=2.5 max_turns=3 native_args=["--flag", "two words"]\n'
+        'max_budget_usd=2.5 max_turns=3 native_args=["--permission-mode", "two words"]\n'
     )
 
 

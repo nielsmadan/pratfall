@@ -76,14 +76,14 @@ def test_scalars_and_native_arguments_follow_precedence(tmp_path: Path) -> None:
 model="default-model"
 effort="low"
 timeout=90
-native_args=["--default"]
+native_args=["--verbose"]
 [profiles.work]
 agent="cc"
 model="profile-model"
 timeout=30
 max_budget_usd=2.5
 max_turns=4
-native_args=["--profile", "literal argument"]
+native_args=["--allowed-tools", "literal argument"]
 """,
     )
     config = load_config(path)
@@ -96,13 +96,13 @@ native_args=["--profile", "literal argument"]
         timeout=12,
         max_budget_usd=2.5,
         max_turns=4,
-        native_args=("--profile", "literal argument"),
+        native_args=("--allowed-tools", "literal argument"),
     )
     assert resolve_profile(config, "cc").options.model == "default-model"
     assert resolve_profile(config, "work", Options(native_args=())).options.native_args == ()
-    assert resolve_profile(config, "work", Options(native_args=("--cli",))).options.native_args == (
-        "--cli",
-    )
+    assert resolve_profile(
+        config, "work", Options(native_args=("--strict-mcp-config",))
+    ).options.native_args == ("--strict-mcp-config",)
 
 
 def test_command_prefixes_resolve_paths_without_expanding_argument_data(tmp_path: Path) -> None:
@@ -118,7 +118,7 @@ command=["/absolute/gemini"]
 [agents.hermes]
 [profiles.work]
 agent="codex"
-native_args=["--flag", "$DATA", "`literal`", "~/file", "two words"]
+native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", "~/file", "--sandbox", "two words"]
 """,
     )
     config = load_config(path)
@@ -132,7 +132,16 @@ native_args=["--flag", "$DATA", "`literal`", "~/file", "two words"]
         "",
         "line\nbreak",
     )
-    assert resolved.options.native_args == ("--flag", "$DATA", "`literal`", "~/file", "two words")
+    assert resolved.options.native_args == (
+        "--profile",
+        "$DATA",
+        "--output-schema",
+        "`literal`",
+        "--add-dir",
+        "~/file",
+        "--sandbox",
+        "two words",
+    )
     assert resolve_profile(config, "cc").command == ("claude-wrapper", "--config=other.toml")
     assert resolve_profile(config, "gm").command == ("/absolute/gemini",)
     assert resolve_profile(config, "hm").command == ("hermes",)
