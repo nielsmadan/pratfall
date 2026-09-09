@@ -11,10 +11,10 @@ model inference. Native CLI releases can change these interfaces.
 | Gemini | `gemini --output-format json --prompt=PROMPT` | `--model` | Unsupported | None verified | [Headless reference](https://geminicli.com/docs/cli/headless) and cached formatter source/tests |
 | Antigravity | `agy --input-format stream-json --output-format stream-json` with one stdin user event | `--model` | `--effort low\|medium\|high` | `--print-timeout` belongs to native print mode and is reserved | Installed 1.1.11 and [headless docs](https://antigravity.google/docs/cli/headless) |
 | Copilot | `copilot --output-format=json --prompt=PROMPT` | `--model` | `--effort low\|medium\|high\|xhigh\|max` | `--max-ai-credits`, soft per-response cap | [CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference) and published 1.0.83 package source |
-| Kiro | `kiro-cli chat --no-interactive PROMPT` | No verified override | `--effort` | Unverified | [CLI reference](https://kiro.dev/docs/reference/cli-commands/), [headless](https://kiro.dev/docs/cli/headless/) |
+| Kiro | `kiro-cli chat --no-interactive --wrap never -- PROMPT` | `--model` | `--effort low\|medium\|high\|xhigh\|max` | None verified | [CLI reference](https://kiro.dev/docs/reference/cli-commands/), [headless](https://kiro.dev/docs/cli/headless/), and statically inspected 2.21.2 package |
 | Cursor | `agent --print --output-format json agent -- PROMPT` | `--model` | Unsupported | None verified | [Parameters](https://cursor.com/docs/cli/reference/parameters), [output format](https://cursor.com/docs/cli/reference/output-format), and published 2026.09.08 package source |
 | OpenClaw | `openclaw agent exec --json --message-file -` | `--model provider/model` | `--thinking` | Native timeout in seconds | [Agent exec](https://docs.openclaw.ai/cli/agent) |
-| Hermes | `hermes chat --oneshot --quiet --query-file -` | `--model`, `--provider` | Top-level reasoning dispatch needs verification | `--max-turns` | [CLI docs](https://hermes-agent.nousresearch.com/docs/reference/cli-commands), [source](https://github.com/NousResearch/hermes-agent/blob/main/cli.py) |
+| Hermes | `hermes chat --oneshot --quiet --query-file -` | `--model`, `--provider` | `--reasoning none\|minimal\|low\|medium\|high\|xhigh\|max\|ultra` | `--max-turns` | [CLI docs](https://hermes-agent.nousresearch.com/docs/reference/cli-commands), [source](https://github.com/NousResearch/hermes-agent/blob/main/cli.py) |
 | OpenCode | `opencode run --format json` with stdin prompt | `--model provider/model` | `--variant` (provider-specific string) | None verified | Installed 1.18.29 help and cached `run.ts`/session source |
 
 ## Verified output contracts
@@ -96,8 +96,18 @@ reported as incomplete provider failures.
 Docs advertise `--output-format stream-json` on V2/V3, but omit event schemas. V3 documentation
 also says classic `kiro-cli chat` does not support V3, so do not silently force an engine.
 Native exit codes include 0 success, 1 failure, 3 mandatory MCP startup failure.
-Do not invent `--model`, confuse model-list `--format json` with chat format, or build a
-structured decoder from convenient guessed fixtures. Find authentic evidence first.
+Do not confuse model-list `--format json` with chat format or build a structured decoder from
+convenient guessed fixtures.
+
+Static inspection of the [official Kiro CLI 2.21.2 archive](https://prod.download.cli.kiro.dev/stable/2.21.2/kirocli-aarch64-linux.zip), whose checksum matched the [official stable manifest](https://prod.download.cli.kiro.dev/stable/latest/manifest.json), verifies that the native chat arguments include invocation-scoped `--model`. The archive identifies Clap 4.5.60; its [matching parser source](https://github.com/clap-rs/clap/blob/v4.5.60/clap_builder/src/parser/parser.rs) switches to positional-only parsing after `--`, establishing the end-of-options behavior used here. This was static package and parser verification, not a live Kiro execution.
+
+Prat uses the documented noninteractive text response with wrapping disabled and protects the
+positional prompt with the native end-of-options marker. It returns the complete stdout text,
+apart from terminal line endings, because the docs do not guarantee that banners and tool progress
+are separated from the final answer. Usage stays null. The prompt travels in argv and inherits the
+operating system's lower size limit. Current headless mode requires `KIRO_API_KEY`; Prat inherits
+native authentication and does not inspect or modify it. The documented reasoning enum is passed
+through `--effort`; the resolved model is passed through `--model`.
 
 ### Copilot
 
@@ -142,6 +152,16 @@ prompt through `--message-file -`. JSON has `ok: boolean`, `status: ok|error|tim
 `payloads`, optional `usage: {input,output,total}`, optional `error: {message,kind}`, nullable
 model/provider, and sessionId. Native exits are 0 success, 1 result/cleanup error, 2 timeout.
 Map native timeout to prat's 124. Temporary native run state normally cleans up automatically.
+Payload entries are objects with optional `text`, `mediaUrl`, `mediaUrls`, `isError`, `isReasoning`,
+and `isCommentary` fields of their native types; additive fields remain allowed. A native error
+object or payload marked `isError: true` is failure evidence even when `ok` or `status` contradicts
+it.
+
+Prat passes its exact positive deadline to the process runner. Because current `agent exec`
+accepts only whole-second timeout strings and internally ceilings milliseconds, its native timeout
+hint is the configured value rounded upward; the wrapper's exact deadline remains authoritative.
+Explicit native fallback entries require an explicit model and stay under OpenClaw's ordered
+fallback behavior. Prat does not add fallbacks or retry a completed invocation.
 
 ### Hermes
 
@@ -151,10 +171,16 @@ nonempty failed result. The quiet chat path preserves the separate explicit `--y
 prints final response text on stdout and diagnostics/session id on stderr, checks `result.failed`
 for exit 1, and exits 130 on interruption. Quiet output has no usage JSON, so usage is null.
 
+Current parser and dispatch source verifies that chat accepts `--reasoning`, forwards it through
+`cmd_chat`, and applies it to this run. Prat accepts only the canonical values
+`none|minimal|low|medium|high|xhigh|max|ultra`, because Hermes otherwise warns and retains its
+default for an unknown value. `--max-turns` remains the native tool-loop limit. `--run-budget` is
+a separate native wall-time hint available through trusted native arguments, not a token cap.
+
 ## Remaining factual verification
 
-- Kiro authentic JSONL schema or a documented native text limitation.
-- Hermes top-level `--reasoning` dispatch and any additional supported limits.
+- Kiro authentic JSONL schema remains unavailable; the adapter intentionally uses documented text
+  output with the limitation above.
 - Most agents are absent locally; fixture coverage must be distinguished from live verification.
 
 ## Source acquisition notes for implementers

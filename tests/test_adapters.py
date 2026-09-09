@@ -2,7 +2,18 @@ import json
 
 import pytest
 
-from pratfall.adapters import antigravity, claude, codex, copilot, cursor, gemini, opencode
+from pratfall.adapters import (
+    antigravity,
+    claude,
+    codex,
+    copilot,
+    cursor,
+    gemini,
+    hermes,
+    kiro,
+    openclaw,
+    opencode,
+)
 from pratfall.catalog import BY_NAME
 from pratfall.errors import PratError
 from pratfall.models import DecodedOutput, Options, ResolvedProfile, ResultError, Usage
@@ -67,6 +78,18 @@ def opencode_usage(**changes: object) -> dict[str, object]:
     }
     usage.update(changes)
     return usage
+
+
+def openclaw_result(**changes: object) -> dict[str, object]:
+    value: dict[str, object] = {
+        "ok": True,
+        "status": "ok",
+        "final": "final answer",
+        "payloads": [{"text": "final answer"}],
+        "usage": {"input": 12, "output": 4, "total": 16},
+    }
+    value.update(changes)
+    return value
 
 
 def test_claude_builds_verified_stdin_invocation() -> None:
@@ -540,6 +563,132 @@ def test_opencode_builds_verified_stdin_invocation() -> None:
     assert invocation.stdin == b"-leading prompt"
 
 
+def test_kiro_builds_protected_text_invocation() -> None:
+    invocation = kiro.build(
+        resolved(
+            "kiro",
+            Options(
+                model="claude-sonnet-4",
+                effort="xhigh",
+                native_args=("--agent", "reviewer", "--trust-tools=read,grep"),
+            ),
+        ),
+        b"--leading prompt",
+    )
+    assert invocation.argv == (
+        "kiro-wrapper",
+        "native",
+        "chat",
+        "--no-interactive",
+        "--wrap",
+        "never",
+        "--model",
+        "claude-sonnet-4",
+        "--effort",
+        "xhigh",
+        "--agent",
+        "reviewer",
+        "--trust-tools=read,grep",
+        "--",
+        "--leading prompt",
+    )
+    assert invocation.stdin == b""
+
+
+def test_openclaw_builds_embedded_stdin_invocation() -> None:
+    invocation = openclaw.build(
+        resolved(
+            "openclaw",
+            Options(
+                model="provider/model",
+                effort="adaptive",
+                timeout=42.5,
+                native_args=("--isolated", "--code-mode", "code"),
+            ),
+        ),
+        b"multi\nline",
+    )
+    assert invocation.argv == (
+        "openclaw-wrapper",
+        "native",
+        "agent",
+        "exec",
+        "--json",
+        "--message-file",
+        "-",
+        "--model",
+        "provider/model",
+        "--thinking",
+        "adaptive",
+        "--timeout",
+        "43",
+        "--isolated",
+        "--code-mode",
+        "code",
+    )
+    assert invocation.stdin == b"multi\nline"
+
+
+@pytest.mark.parametrize(("timeout", "native"), [(0.25, "1"), (1e6, "1000000")])
+def test_openclaw_serializes_native_timeout_as_ceiling_plain_integer(
+    timeout: float, native: str
+) -> None:
+    invocation = openclaw.build(resolved("openclaw", Options(timeout=timeout)), b"prompt")
+    assert invocation.argv[-2:] == ("--timeout", native)
+
+
+def test_openclaw_explicit_fallback_requires_model() -> None:
+    with pytest.raises(PratError, match="fallback requires an explicit model"):
+        openclaw.build(
+            resolved("openclaw", Options(native_args=("--fallback", "provider/backup"))),
+            b"prompt",
+        )
+
+
+def test_openclaw_accepts_repeatable_fallback_with_model() -> None:
+    arguments = ("--fallback", "provider/backup", "--fallback=provider/last")
+    invocation = openclaw.build(
+        resolved("openclaw", Options(model="provider/primary", native_args=arguments)),
+        b"prompt",
+    )
+    assert invocation.argv[-3:] == arguments
+
+
+def test_hermes_builds_quiet_stdin_invocation_without_yolo() -> None:
+    invocation = hermes.build(
+        resolved(
+            "hermes",
+            Options(
+                model="provider/model",
+                effort="ultra",
+                max_turns=7,
+                native_args=("--provider", "provider", "--checkpoints"),
+            ),
+        ),
+        b"-leading prompt",
+    )
+    assert invocation.argv == (
+        "hermes-wrapper",
+        "native",
+        "chat",
+        "--oneshot",
+        "--quiet",
+        "--query-file",
+        "-",
+        "--model",
+        "provider/model",
+        "--reasoning",
+        "ultra",
+        "--max-turns",
+        "7",
+        "--provider",
+        "provider",
+        "--checkpoints",
+    )
+    assert invocation.stdin == b"-leading prompt"
+    assert "-z" not in invocation.argv
+
+
 @pytest.mark.parametrize(
     ("adapter", "agent", "arguments"),
     [
@@ -554,6 +703,15 @@ def test_opencode_builds_verified_stdin_invocation() -> None:
         (cursor, "cursor", ("-ptext",)),
         (opencode, "opencode", ("--format=text",)),
         (opencode, "opencode", ("-msmall",)),
+        (kiro, "kiro", ("--model=native",)),
+        (kiro, "kiro", ("--output-format=stream-json",)),
+        (kiro, "kiro", ("--resume-id=session",)),
+        (openclaw, "openclaw", ("--message-file=task.md",)),
+        (openclaw, "openclaw", ("--state-dir=/tmp/state",)),
+        (openclaw, "openclaw", ("--timeout=0",)),
+        (hermes, "hermes", ("--query=native",)),
+        (hermes, "hermes", ("-zprompt",)),
+        (hermes, "hermes", ("--max-turns=2",)),
     ],
 )
 def test_new_adapters_reject_owned_native_flags(
@@ -573,6 +731,9 @@ def test_new_adapters_reject_owned_native_flags(
         (copilot, "copilot", ("--allow-tool", "@args"), "response files"),
         (cursor, "cursor", ("--sandbox",), "missing native option value"),
         (opencode, "opencode", ("--pure=yes",), "does not take a value"),
+        (kiro, "kiro", ("--future",), "unknown native option"),
+        (openclaw, "openclaw", ("gateway",), "subcommands"),
+        (hermes, "hermes", ("@args",), "response files"),
     ],
 )
 def test_new_adapters_reject_unvetted_native_arguments(
@@ -589,6 +750,150 @@ def test_new_adapters_reject_unvetted_native_arguments(
 def test_copilot_rejects_native_flags_that_persist_configuration(argument: str) -> None:
     with pytest.raises(PratError, match="unknown native option"):
         copilot.build(resolved("copilot", Options(native_args=(argument,))), b"prompt")
+
+
+@pytest.mark.parametrize("adapter", [kiro, hermes])
+def test_text_adapters_preserve_stdout_and_remove_terminal_line_endings(adapter: object) -> None:
+    decoded = adapter.decode("banner\nfinal answer\r\n")
+    assert decoded == DecodedOutput(output="banner\nfinal answer")
+
+
+def test_openclaw_decodes_stable_success_envelope() -> None:
+    decoded = openclaw.decode(
+        json.dumps(
+            openclaw_result(
+                costUsd=0.0021,
+                model="provider/model",
+                provider="provider",
+                sessionId="session",
+            )
+        )
+    )
+    assert decoded.output == "final answer"
+    assert decoded.usage == Usage(input_tokens=12, output_tokens=4)
+    assert decoded.error is None
+
+
+def test_openclaw_preserves_partial_final_on_provider_failure() -> None:
+    decoded = openclaw.decode(
+        json.dumps(
+            openclaw_result(
+                ok=False,
+                status="error",
+                final="safe partial",
+                payloads=[{"text": "safe partial"}],
+                error={"message": "provider unavailable", "kind": "model_error"},
+            )
+        )
+    )
+    assert decoded.output == "safe partial"
+    assert decoded.usage == Usage(input_tokens=12, output_tokens=4)
+    assert decoded.error == ResultError("provider_error", "provider unavailable")
+
+
+def test_openclaw_explicit_error_overrides_contradictory_success_and_malformed_usage() -> None:
+    decoded = openclaw.decode(
+        json.dumps(
+            openclaw_result(
+                final="safe final",
+                usage={"input": 1},
+                error={"message": "provider unavailable", "kind": "model_error"},
+            )
+        )
+    )
+    assert decoded.output == "safe final"
+    assert decoded.usage is None
+    assert decoded.error == ResultError("provider_error", "provider unavailable")
+
+
+def test_openclaw_error_payload_overrides_contradictory_success() -> None:
+    decoded = openclaw.decode(
+        json.dumps(
+            openclaw_result(
+                final="safe final",
+                payloads=[
+                    {"text": "safe final", "future": {"additive": True}},
+                    {"text": "model failed", "isError": True},
+                ],
+            )
+        )
+    )
+    assert decoded.output == "safe final"
+    assert decoded.usage == Usage(input_tokens=12, output_tokens=4)
+    assert decoded.error == ResultError("provider_error", "model failed")
+
+
+def test_openclaw_preserves_final_when_success_error_field_is_malformed() -> None:
+    decoded = openclaw.decode(
+        json.dumps(
+            openclaw_result(
+                final="safe final",
+                error={"message": 3, "kind": "model_error"},
+            )
+        )
+    )
+    assert decoded.output == "safe final"
+    assert decoded.usage == Usage(input_tokens=12, output_tokens=4)
+    assert decoded.error == ResultError("protocol_error", "OpenClaw error is malformed.")
+
+
+def test_openclaw_provider_timeout_is_explicit() -> None:
+    decoded = openclaw.decode(
+        json.dumps(
+            openclaw_result(
+                ok=False,
+                status="timeout",
+                final="partial",
+                error={"message": "deadline exceeded", "kind": "timeout"},
+            )
+        )
+    )
+    assert decoded.output == "partial"
+    assert decoded.timed_out is True
+    assert decoded.error == ResultError("timeout", "deadline exceeded")
+
+
+def test_openclaw_omitted_usage_stays_unknown() -> None:
+    value = openclaw_result()
+    del value["usage"]
+    decoded = openclaw.decode(json.dumps(value))
+    assert decoded.usage is None
+    assert decoded.error is None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "",
+        "{",
+        "[]",
+        json.dumps({"future": True}),
+        json.dumps(openclaw_result(status="future")),
+        json.dumps(openclaw_result(status=[])),
+        json.dumps(openclaw_result(status={})),
+        json.dumps(openclaw_result(ok=False)),
+        json.dumps(openclaw_result(final=None)),
+        json.dumps(openclaw_result(payloads=None)),
+        json.dumps(openclaw_result(payloads=[3])),
+        json.dumps(openclaw_result(payloads=[{"text": 3}])),
+        json.dumps(openclaw_result(payloads=[{"mediaUrl": 3}])),
+        json.dumps(openclaw_result(payloads=[{"mediaUrls": ["image.png", 3]}])),
+        json.dumps(openclaw_result(payloads=[{"isError": "yes"}])),
+        json.dumps(openclaw_result(usage={"input": 1, "output": 2})),
+        json.dumps(
+            openclaw_result(
+                ok=False,
+                status="error",
+                error={"message": 3, "kind": "model_error"},
+            )
+        ),
+        json.dumps(openclaw_result()) + "\n" + json.dumps(openclaw_result()),
+    ],
+)
+def test_openclaw_rejects_malformed_or_truncated_results(payload: str) -> None:
+    decoded = openclaw.decode(payload)
+    assert decoded.error is not None
+    assert decoded.error.code == "protocol_error"
 
 
 def test_gemini_decodes_per_model_usage_without_double_counting_roles() -> None:

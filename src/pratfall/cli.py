@@ -177,7 +177,10 @@ def _validate_config_native_arguments(config: Config) -> None:
         if adapter is None:
             continue
         try:
-            adapter.validate(resolved.options.native_args or ())
+            if adapter.validate_resolved is not None:
+                adapter.validate_resolved(resolved)
+            else:
+                adapter.validate(resolved.options.native_args or ())
         except PratError as error:
             raise PratError(f"{config.path}: profiles.{name}.native_args: {error}") from error
 

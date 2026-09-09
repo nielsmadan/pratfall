@@ -35,11 +35,37 @@ AGENTS = (
             budgets=frozenset({"max_ai_credits"}),
         ),
     ),
-    AgentSpec("kiro", "Kiro", ("ki",), ("kiro-cli",), Capabilities(model=False, effort=True)),
+    AgentSpec(
+        "kiro",
+        "Kiro",
+        ("ki",),
+        ("kiro-cli",),
+        Capabilities(
+            effort=True,
+            effort_values=("low", "medium", "high", "xhigh", "max"),
+        ),
+    ),
     AgentSpec("cursor", "Cursor", ("cu",), ("agent",)),
     AgentSpec("openclaw", "OpenClaw", ("claw",), ("openclaw",), Capabilities(effort=True)),
     AgentSpec(
-        "hermes", "Hermes", ("hm",), ("hermes",), Capabilities(budgets=frozenset({"max_turns"}))
+        "hermes",
+        "Hermes",
+        ("hm",),
+        ("hermes",),
+        Capabilities(
+            effort=True,
+            effort_values=(
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                "ultra",
+            ),
+            budgets=frozenset({"max_turns"}),
+        ),
     ),
     AgentSpec("opencode", "OpenCode", ("oc",), ("opencode",), Capabilities(effort=True)),
 )

@@ -40,7 +40,19 @@ def test_agents_inventory_reports_aliases_and_capabilities(
     assert [agent["name"] for agent in result["agents"]] == [agent.name for agent in AGENTS]
     kiro = next(agent for agent in result["agents"] if agent["name"] == "kiro")
     assert kiro["aliases"] == ["ki"]
-    assert kiro["capabilities"]["model"] is False
+    assert kiro["capabilities"]["model"] is True
+    assert kiro["capabilities"]["effort_values"] == ["low", "medium", "high", "xhigh", "max"]
+    hermes = next(agent for agent in result["agents"] if agent["name"] == "hermes")
+    assert hermes["capabilities"]["effort_values"] == [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        "ultra",
+    ]
 
 
 def test_agents_text(capsys: pytest.CaptureFixture[str]) -> None:

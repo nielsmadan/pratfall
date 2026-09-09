@@ -84,6 +84,19 @@ answer = json.dumps({"argv": sys.argv[1:], "prompt": prompt})
 print(json.dumps({"type": "text", "part": {"id": "answer", "type": "text", "text": answer, "time": {"end": 1}}}))
 print(json.dumps({"type": "step_finish", "part": {"id": "step", "type": "step-finish", "reason": "stop", "cost": 0.01, "tokens": {"total": 5, "input": 3, "output": 2, "reasoning": 0, "cache": {"read": 1, "write": 0}}}}))
 """,
+    "kiro": """import json, sys
+prompt = sys.argv[sys.argv.index("--") + 1]
+print(json.dumps({"argv": sys.argv[1:], "prompt": prompt}))
+""",
+    "openclaw": """import json, sys
+prompt = sys.stdin.read()
+answer = json.dumps({"argv": sys.argv[1:], "prompt": prompt})
+print(json.dumps({"ok": True, "status": "ok", "final": answer, "payloads": [{"text": answer}], "usage": {"input": 3, "output": 2, "total": 5}}))
+""",
+    "hermes": """import json, sys
+prompt = sys.stdin.read()
+print(json.dumps({"argv": sys.argv[1:], "prompt": prompt}))
+""",
 }
 
 
@@ -191,6 +204,39 @@ def test_new_adapter_fake_cli_dispatches_real_protocol(
     assert answer["prompt"] == "-exact prompt"
 
 
+def test_kiro_fake_cli_dispatches_model_override(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "kiro", NEW_ADAPTER_FIXTURES["kiro"])
+    assert (
+        main(
+            [
+                "ki",
+                "prompt",
+                "--model",
+                "claude-sonnet-4",
+                "--config",
+                str(config),
+                "--json",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+    answer = json.loads(result["output"])
+    assert result["model"] == "claude-sonnet-4"
+    assert answer["argv"] == [
+        "chat",
+        "--no-interactive",
+        "--wrap",
+        "never",
+        "--model",
+        "claude-sonnet-4",
+        "--",
+        "prompt",
+    ]
+
+
 def test_copilot_profile_transmits_optional_variadic_native_arguments(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -232,6 +278,22 @@ print(json.dumps({"response": "partial", "error": {"type": "TimeoutError", "mess
     assert result["error"] == {"code": "timeout", "message": "provider timed out"}
 
 
+def test_openclaw_native_timeout_maps_to_124_and_preserves_partial_output(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fixture = """import json, sys
+print(json.dumps({"ok": False, "status": "timeout", "final": "partial", "payloads": [{"text": "partial"}], "error": {"message": "native deadline", "kind": "timeout"}}))
+sys.exit(2)
+"""
+    config = write_agent(tmp_path, "openclaw", fixture)
+    assert main(["claw", "prompt", "--config", str(config), "--json"]) == 124
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "timeout"
+    assert result["native_exit_code"] == 2
+    assert result["output"] == "partial"
+    assert result["error"] == {"code": "timeout", "message": "native deadline"}
+
+
 @pytest.mark.parametrize(
     ("agent", "native_argument"),
     [
@@ -240,6 +302,9 @@ print(json.dumps({"response": "partial", "error": {"type": "TimeoutError", "mess
         ("copilot", "--prompt=native"),
         ("cursor", "--workspace=/elsewhere"),
         ("opencode", "--variant=native"),
+        ("kiro", "--wrap=always"),
+        ("openclaw", "--state-dir=/tmp/state"),
+        ("hermes", "--query=native"),
     ],
 )
 def test_all_profiles_validate_new_adapter_native_arguments(
@@ -258,6 +323,21 @@ def test_all_profiles_validate_new_adapter_native_arguments(
     assert result["error"]["code"] == "invalid_config"
     assert "profiles.bad.native_args" in result["error"]["message"]
     assert "controlled by prat" in result["error"]["message"]
+
+
+def test_config_validation_checks_openclaw_fallback_model_dependency(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write(
+            '\n[profiles.bad]\nagent="openclaw"\nnative_args=["--fallback", "provider/backup"]\n'
+        )
+    assert main(["config", "validate", "--config", str(config), "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_config"
+    assert "profiles.bad.native_args" in result["error"]["message"]
+    assert "fallback requires an explicit model" in result["error"]["message"]
 
 
 def test_stdin_prompt_is_read_once_as_utf8(
@@ -441,15 +521,6 @@ def test_prompt_byte_limit_and_invalid_stdin_utf8(
     monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"\xff")))
     assert main(["cx", "-", "--dry-run", "--json"]) == 2
     assert "not valid UTF-8" in json.loads(capsys.readouterr().out)["error"]["message"]
-
-
-def test_future_adapter_fails_before_launch(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    assert main(["ki", "prompt", "--json"]) == 2
-    result = json.loads(capsys.readouterr().out)
-    assert result["agent"] == "kiro"
-    assert result["error"]["code"] == "unsupported_agent"
 
 
 def test_broken_output_pipe_returns_one_after_child_cleanup(

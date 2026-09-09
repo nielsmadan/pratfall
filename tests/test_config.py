@@ -191,8 +191,11 @@ native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", 
         ("version=1\n[profiles.work]", "profiles.work.agent"),
         ('version=1\n[profiles.work]\nagent="bad"', "profiles.work.agent: Unknown agent"),
         ('version=1\n[profiles.work]\nagent="codex"\ncommand=["bad"]', "unknown field 'command'"),
-        ('version=1\n[profiles.work]\nagent="kiro"\nmodel="any"', "profiles.work.model"),
-        ('version=1\n[profiles.work]\nagent="hermes"\neffort="low"', "profiles.work.effort"),
+        (
+            'version=1\n[profiles.work]\nagent="hermes"\neffort="unknown"',
+            "Hermes accepts:",
+        ),
+        ('version=1\n[profiles.work]\nagent="kiro"\neffort="ultra"', "Kiro accepts:"),
         ('version=1\n[profiles.work]\nagent="claude"\neffort="bad"', "Claude Code accepts:"),
         (
             'version=1\n[profiles.work]\nagent="codex"\nmax_budget_usd=1',
@@ -203,10 +206,6 @@ native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", 
             "profiles.work.max_ai_credits",
         ),
         ('version=1\n[profiles.work]\nagent="codex"\nmax_turns=1', "profiles.work.max_turns"),
-        (
-            'version=1\n[defaults]\nmodel="any"\n[profiles.unused]\nagent="kiro"',
-            "profiles.unused.model",
-        ),
     ],
 )
 def test_invalid_config_identifies_source_and_field(
@@ -259,10 +258,9 @@ max_turns=3
 def test_defaults_and_overrides_are_validated_for_selected_builtin(tmp_path: Path) -> None:
     path = write_config(tmp_path, 'version=1\n[defaults]\nmodel="new-model"\n')
     config = load_config(path)
-    with pytest.raises(PratError, match="Kiro does not support a model"):
-        resolve_profile(config, "ki")
-    with pytest.raises(PratError, match="Hermes does not support an effort"):
-        resolve_profile(config, "hm", Options(effort="low"))
+    assert resolve_profile(config, "ki").options.model == "new-model"
+    with pytest.raises(PratError, match="Hermes accepts:"):
+        resolve_profile(config, "hm", Options(effort="unknown"))
 
 
 def test_unknown_selector_suggests_inventory() -> None:
