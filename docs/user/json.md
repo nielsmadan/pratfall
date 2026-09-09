@@ -34,5 +34,6 @@ non-executable commands exit 127 and 126, timeouts exit 124, and signals exit `1
 Provider and protocol failures exit 1 unless a native nonzero exit has precedence.
 
 `--dry-run --json` emits a preview with `dry_run`, resolved identity, argv, cwd, timeout, and stdin
-byte count rather than a run status. Management commands use separate versioned inventory or config
-objects; their errors still contain `status`, `exit_code`, and `error`.
+byte count rather than a run status. Prompts carried through argv appear in that preview. Management
+commands use separate versioned inventory or config objects; their errors still contain `status`,
+`exit_code`, and `error`.

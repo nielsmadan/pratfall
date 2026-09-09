@@ -1,0 +1,386 @@
+{
+  "schema_version": 1,
+  "identity": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "Python 3.13.6",
+    "base_revision": "0609f8a",
+    "runtime_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wheel_sha256": "1aca00c48236ecc7ffcb763c41c2518b0b1c506f0a6f7237c4969b2b9536b174",
+    "sdist_sha256": "315a7eb25433cc20e90c4b8e72417a9fdd53397ee0ce0db9c09de42353cf9be0",
+    "wheel_prat": "$REPO/.cache/task6-installed-qa/env-wheel/bin/prat",
+    "sdist_prat": "$REPO/.cache/task6-installed-qa/env-sdist/bin/prat",
+    "script_sha256": "02fbad73e9d23890051a3e8392b2852a1ab4b1a8b62b50b5ee037e0b83af57c8",
+    "source_runtime_files": {
+      "__init__.py": "d42c98fa979c19e45c9b15092257de57272d897201798a82d5ee4b4b21da92ef",
+      "__main__.py": "7269cb66d60f16270f7c2d31dd7bea50cae0cb587b00c45eb95385e0097d2289",
+      "adapters/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapters/antigravity.py": "c999bdd9889b5251dd7a7538851ad25366f20d889a352072a21854399fcdc4fb",
+      "adapters/claude.py": "695ea15e02fc67dbd87be7978f48fe4097c502db8aa396202ddd5f5106661ab4",
+      "adapters/codex.py": "edb4530a9bf1d3b6efbfffc7058a306ddd7f37c5580d59129b3f71b6d7bc0800",
+      "adapters/copilot.py": "53c42cf3f8db40aa38838cc031a09396d1161931c223e13d8344feb64b5360a2",
+      "adapters/cursor.py": "27bf6e55877948aad77e18d8d463d7ab4a142ed223df8d82662b531409818739",
+      "adapters/gemini.py": "aca9bed965e99d691ca16f3ad75ca8297d564ac32765b34e5b56d90745aa5af3",
+      "adapters/hermes.py": "5ca352a240a45d9334da3f7627b447dfa301a1572b4b991630a9ce6bc810747c",
+      "adapters/kiro.py": "f85958c30282e39f9cd522e9e9639efc882b6ad7f922fa8fcdbd7167ad06580d",
+      "adapters/native_args.py": "eb2d079e0b19a2a9e46245da970cf550fa04a0820498a53b51976d441936e8f5",
+      "adapters/openclaw.py": "b08f1005ad0741a84a7c26ce7ffcc94b5c8d01285041fe8f085f4aff374f6837",
+      "adapters/opencode.py": "1d513d6badcb79dcd6ab39ad87f796b9920b8856f56f6525f893cb71c2423724",
+      "adapters/registry.py": "4cfe489a4f3f1384f66e90c1c49d84db1beeaa0f70b654200d98921c4106b927",
+      "catalog.py": "9628c5a1912b44ba1e308b875568b3955939c901b6e3df2b49a4ea479f1c801c",
+      "cli.py": "43d265a3db81de2cc17379729d93cd766d86e4ccbd593830eec734abb925efd7",
+      "config.py": "4c9a9af30f2c8af554fa26a267233dea74a97a11eff0c88c887290493a0b5208",
+      "errors.py": "069bb4167db447528a78939d900e7ade3e55f81a3098ed87c9b8e8d764c40612",
+      "models.py": "fd76b68b3aa900b3d02c042d9129fbd26689969e0aa4c81492b3a2a4e347a4ed",
+      "output.py": "c623aea7097475945bcca9feb3bcbc07708723c42d0477bc0ce0c9cf6e0636d5",
+      "runner.py": "3bc2dbd365436b369a9816178145950440281bb6839b355774360c999fd77078"
+    },
+    "wheel_runtime_matches_source": true,
+    "sdist_runtime_matches_source": true
+  },
+  "scenarios": {
+    "Q01": {
+      "status": "Pass",
+      "version": "prat 0.1.0",
+      "help": true
+    },
+    "Q02": {
+      "status": "Pass",
+      "version": "prat 0.1.0"
+    },
+    "Q03": {
+      "status": "Pass",
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "native": {
+        "agent": "claude",
+        "argv": [
+          "-p",
+          "--output-format",
+          "json"
+        ],
+        "stdin": "fix this bug",
+        "prompt": "fix this bug",
+        "cwd": "$REPO/.cache/task6-installed-qa/run/consumer"
+      }
+    },
+    "Q04": {
+      "status": "Pass",
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "native": {
+        "agent": "codex",
+        "argv": [
+          "exec",
+          "--json",
+          "--model",
+          "profile-model",
+          "-c",
+          "model_reasoning_effort=\"medium\"",
+          "--sandbox",
+          "read-only",
+          "-"
+        ],
+        "stdin": "rebase git",
+        "prompt": "rebase git",
+        "cwd": "$REPO/.cache/task6-installed-qa/run/consumer"
+      }
+    },
+    "Q05": {
+      "status": "Pass",
+      "routed": {
+        "cc": "claude",
+        "cx": "codex",
+        "gm": "gemini",
+        "ag": "antigravity",
+        "cp": "copilot",
+        "ki": "kiro",
+        "cu": "cursor",
+        "claw": "openclaw",
+        "hm": "hermes",
+        "oc": "opencode"
+      }
+    },
+    "Q06": {
+      "status": "Pass",
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      }
+    },
+    "Q07": {
+      "status": "Pass",
+      "init_exit": 0,
+      "refusal_exit": 2,
+      "refusal": "prat: $REPO/.cache/task6-installed-qa/run/init.toml: already exists; edit it or choose another --config path.",
+      "validate_exit": 0,
+      "profile_count": 1
+    },
+    "Q08": {
+      "status": "Pass",
+      "native": {
+        "agent": "claude",
+        "argv": [
+          "-p",
+          "--output-format",
+          "json",
+          "--model",
+          "cli-model",
+          "--effort",
+          "high",
+          "--max-budget-usd",
+          "4.0",
+          "--max-turns",
+          "5",
+          "--permission-mode",
+          "plan"
+        ],
+        "stdin": "precedence",
+        "prompt": "precedence",
+        "cwd": "$REPO/.cache/task6-installed-qa/run/consumer"
+      }
+    },
+    "Q09": {
+      "status": "Pass",
+      "prompt": "-leading $HOME $(touch injected) ; ✓\nsecond line",
+      "side_effect": false
+    },
+    "Q10": {
+      "status": "Pass",
+      "argv_transport": {
+        "schema_version": 1,
+        "dry_run": true,
+        "agent": "gemini",
+        "profile": null,
+        "model": null,
+        "argv": [
+          "$REPO/.cache/task6-installed-qa/env-wheel/bin/python",
+          "$REPO/scripts/qa_installed.py",
+          "--fake-native",
+          "gemini",
+          "--output-format",
+          "json",
+          "--prompt=DRY_$HOME_$(touch dry-injected)_ß"
+        ],
+        "cwd": "$REPO/.cache/task6-installed-qa/run/consumer",
+        "timeout": 7.0,
+        "stdin_bytes": 0
+      },
+      "stdin_transport": {
+        "schema_version": 1,
+        "dry_run": true,
+        "agent": "codex",
+        "profile": null,
+        "model": null,
+        "argv": [
+          "$REPO/.cache/task6-installed-qa/env-wheel/bin/python",
+          "$REPO/scripts/qa_installed.py",
+          "--fake-native",
+          "codex",
+          "exec",
+          "--json",
+          "-"
+        ],
+        "cwd": "$REPO/.cache/task6-installed-qa/run/consumer",
+        "timeout": 7.0,
+        "stdin_bytes": 34
+      },
+      "native_launches": 0,
+      "side_effect": false
+    },
+    "Q11": {
+      "status": "Pass",
+      "success": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "failure": {
+        "returncode": 17,
+        "status": "error",
+        "native_exit_code": 17,
+        "error": {
+          "code": "native_exit",
+          "message": "Codex exited with status 17."
+        }
+      }
+    },
+    "Q12": {
+      "status": "Pass",
+      "errors": [
+        {
+          "returncode": 2,
+          "status": "error",
+          "native_exit_code": null,
+          "error": {
+            "code": "invalid_config",
+            "message": "$REPO/.cache/task6-installed-qa/run/invalid.toml: unknown field 'unknown'."
+          }
+        },
+        {
+          "returncode": 2,
+          "status": "error",
+          "native_exit_code": null,
+          "error": {
+            "code": "invalid_config",
+            "message": "$REPO/.cache/task6-installed-qa/run/unsupported.toml: profiles.bad.effort: Gemini does not support an effort override."
+          }
+        },
+        {
+          "returncode": 2,
+          "status": "error",
+          "native_exit_code": null,
+          "error": {
+            "code": "invalid_arguments",
+            "message": "Unknown selector 'unknown'; run 'prat agents' or 'prat profiles' to list choices."
+          }
+        }
+      ],
+      "native_launches": 0
+    },
+    "Q13": {
+      "status": "Pass",
+      "missing": {
+        "returncode": 127,
+        "status": "error",
+        "native_exit_code": null,
+        "error": {
+          "code": "executable_not_found",
+          "message": "Executable '$REPO/.cache/task6-installed-qa/run/missing-agent' was not found."
+        }
+      },
+      "non_executable": {
+        "returncode": 126,
+        "status": "error",
+        "native_exit_code": null,
+        "error": {
+          "code": "executable_not_executable",
+          "message": "Executable '$REPO/.cache/task6-installed-qa/run/blocked-agent' cannot be executed."
+        }
+      }
+    },
+    "Q14": {
+      "status": "Pass",
+      "provider": {
+        "returncode": 1,
+        "status": "error",
+        "native_exit_code": 0,
+        "error": {
+          "code": "provider_error",
+          "message": "controlled provider failure"
+        }
+      },
+      "truncated": {
+        "returncode": 1,
+        "status": "error",
+        "native_exit_code": 0,
+        "error": {
+          "code": "protocol_error",
+          "message": "Codex stream ended without turn.completed."
+        }
+      },
+      "recovery": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      }
+    },
+    "Q15": {
+      "status": "Pass",
+      "timeout": {
+        "returncode": 124,
+        "status": "timeout",
+        "native_exit_code": -15,
+        "error": {
+          "code": "timeout",
+          "message": "Agent exceeded the 1 second timeout."
+        }
+      },
+      "interrupt": {
+        "returncode": 130,
+        "status": "interrupted",
+        "native_exit_code": -15,
+        "error": {
+          "code": "interrupted",
+          "message": "Interrupted by signal 2."
+        }
+      },
+      "pending_observed": true,
+      "descendant_locks_released": true,
+      "recovery": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      }
+    },
+    "Q16": {
+      "status": "Pass",
+      "result": {
+        "returncode": 124,
+        "status": "timeout",
+        "native_exit_code": 0,
+        "error": {
+          "code": "timeout",
+          "message": "Agent exceeded the 1 second timeout."
+        }
+      },
+      "pending_observed": true,
+      "descendant_lock_released": true
+    },
+    "Q17": {
+      "status": "Pass",
+      "stdout_limit": {
+        "returncode": 1,
+        "status": "error",
+        "error": {
+          "code": "stdout_limit_exceeded",
+          "message": "Agent stdout exceeded 8388608 bytes."
+        },
+        "captured_json_bytes": 277,
+        "captured_json_sha256": "136f41ecdc8f2fcc1a226d77937b7c75ebffbab7262b0e089151f0b10995b91e"
+      },
+      "pending_observed": true,
+      "descendant_lock_released": true,
+      "stderr_limit": {
+        "returncode": 1,
+        "status": "error",
+        "error": {
+          "code": "stderr_limit_exceeded",
+          "message": "Agent stderr exceeded 2097152 bytes."
+        },
+        "captured_stderr_bytes": 2097224,
+        "captured_stderr_sha256": "c6e7cf5730e2e7d148c1382acc42206e9f9e320080b3db26be16b8181e0dc1b9"
+      },
+      "invalid_utf8": {
+        "returncode": 1,
+        "status": "error",
+        "native_exit_code": 0,
+        "error": {
+          "code": "output_encoding",
+          "message": "Agent stdout is not valid UTF-8."
+        }
+      },
+      "oversized_prompt": {
+        "returncode": 2,
+        "status": "error",
+        "native_exit_code": null,
+        "error": {
+          "code": "invalid_arguments",
+          "message": "Prompt exceeds the 1048576 byte limit."
+        }
+      }
+    }
+  }
+}

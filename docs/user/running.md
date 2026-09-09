@@ -16,7 +16,8 @@ Cursor, and Kiro carry prompts in argv and can hit an operating-system argv limi
 Run options can appear before or after the selector. `--model`, `--effort`, `--timeout`,
 `--max-budget-usd`, `--max-turns`, and `--max-ai-credits` override supported profile fields.
 `--cwd PATH` changes the child working directory. `--dry-run` validates and prints the resolved argv
-without launching the agent or revealing the prompt.
+without launching the agent. Prompts carried through stdin appear only as a byte count. Gemini,
+Copilot, Cursor, and Kiro carry the prompt in argv, so their previews include it.
 
 Arguments after `--` are trusted native argv and replace configured `native_args`. Pratfall accepts
 only a finite documented option set and rejects native prompt, output, session, cwd, model, effort,

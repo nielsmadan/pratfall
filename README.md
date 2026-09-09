@@ -49,8 +49,9 @@ Use `--cwd PATH` to select the agent working directory. Relative config and work
 paths resolve from the directory where `prat` was invoked. `--timeout` is a wall-clock deadline
 for the child and output draining, and defaults to 600 seconds.
 
-`--dry-run` validates the complete invocation and shows its argv without launching the agent or
-printing the prompt:
+`--dry-run` validates the complete invocation and shows its argv without launching the agent.
+Prompts carried through stdin appear only as a byte count. Gemini, Copilot, Cursor, and Kiro carry
+the prompt in argv, so their previews include it:
 
 ```sh
 uv run prat simple "review this change" --dry-run

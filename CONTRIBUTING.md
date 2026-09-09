@@ -3,8 +3,8 @@
 Pratfall is a small, solo-maintained project. Issues and pull requests are welcome and handled on a
 best-effort basis.
 
-Install [uv](https://docs.astral.sh/uv/) and [just](https://github.com/casey/just), then prepare the
-checkout:
+Install [uv](https://docs.astral.sh/uv/), [just](https://github.com/casey/just), and
+[Lefthook](https://lefthook.dev/installation/homebrew), then prepare the checkout:
 
 ```sh
 just setup
