@@ -17,6 +17,11 @@ just coverage
 just build
 ```
 
+Until the first release is published, use the source checkout as shown above. `just install-local`
+installs the checkout as a user-level uv tool; `just refresh-local` performs a no-cache reinstall,
+and `just reset-local` removes it. These recipes change the user's tool installation and are never
+run implicitly. Pratfall does not install or authenticate native agent commands.
+
 Run a built-in selector or a named profile with exactly one prompt:
 
 ```sh
@@ -181,3 +186,8 @@ Management `--json` emits one object with `schema_version: 1`. Agent and doctor 
 `agents`; profile listings use `profiles`; config operations report `path` plus their result.
 Errors return status `error`, `exit_code`, and `error` with a stable `code` and readable `message`.
 Invalid syntax or configuration exits with 2. Help and version output remain text.
+
+The [user guides](docs/user/index.md) cover installation, profiles, prompts, JSON, and adapter
+limitations. Builder documentation starts at [docs/overview.md](docs/overview.md). Pratfall is MIT
+licensed; see [LICENSE](LICENSE). Published package and Homebrew URLs will become installable only
+after the first GitHub release.

@@ -1,0 +1,24 @@
+pre-commit:
+  parallel: true
+  commands:
+    ruff-format:
+      glob: "*.py"
+      run: uv run ruff format --check {staged_files}
+    ruff-lint:
+      glob: "*.py"
+      run: uv run ruff check {staged_files}
+
+pre-push:
+  commands:
+    pylint:
+      run: uv run pylint src/pratfall
+    mypy:
+      run: uv run mypy
+    tests:
+      run: uv run pytest tests/ scripts/ -q --cov
+    docs:
+      glob:
+        - "docs/user/**/*"
+        - "mkdocs.yml"
+        - "README.md"
+      run: uv run --group docs zensical build -f mkdocs.yml --strict

@@ -1,0 +1,21 @@
+class Pratfall < Formula
+  include Language::Python::Virtualenv
+
+  desc "Run installed coding agents through named profiles"
+  homepage "https://github.com/nielsmadan/pratfall"
+  url "https://github.com/nielsmadan/pratfall/archive/refs/tags/v{{VERSION}}.tar.gz"
+  sha256 "{{SHA256}}"
+  license "MIT"
+  head "https://github.com/nielsmadan/pratfall.git", branch: "main"
+
+  depends_on "python@3.13"
+
+  def install
+    virtualenv_install_with_resources
+  end
+
+  test do
+    assert_match "Run installed coding agents", shell_output("#{bin}/prat --help")
+    assert_match "codex", shell_output("#{bin}/prat agents")
+  end
+end

@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.8.10"
+          python-version: "3.13"
+
+      - name: Validate tag and project version
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          python - "$VERSION" <<'PY'
+          import re
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          version = sys.argv[1]
+          if re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version) is None:
+              raise SystemExit(f"Invalid release tag version: {version!r}")
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          if project["version"] != version:
+              raise SystemExit(
+                  f"Tag version {version!r} does not match project version {project['version']!r}."
+              )
+          PY
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - run: uv sync --all-groups --frozen
+      - run: uv run pytest tests/ scripts/ -q
+
+      - name: Build sdist then wheel from sdist
+        run: |
+          rm -rf dist build
+          uv build --sdist
+          uv build --wheel "dist/pratfall-${VERSION}.tar.gz"
+          test -f "dist/pratfall-${VERSION}.tar.gz"
+          test -f "dist/pratfall-${VERSION}-py3-none-any.whl"
+
+      - name: Compute released source SHA256
+        run: |
+          curl -fsSL -o /tmp/source.tar.gz \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          TARBALL_SHA=$(sha256sum /tmp/source.tar.gz | cut -d' ' -f1)
+          echo "TARBALL_SHA=$TARBALL_SHA" >> "$GITHUB_ENV"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          uvx git-cliff@2.13.1 --current --strip all -o /tmp/release-notes.md
+          sed -i '/^## \[/d' /tmp/release-notes.md
+          PREV_TAG=$(python scripts/release_workflow.py previous-tag "$GITHUB_REF_NAME")
+          if [ -n "$PREV_TAG" ]; then
+            printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' \
+              "$GITHUB_REPOSITORY" "$PREV_TAG" "$GITHUB_REF_NAME" >> /tmp/release-notes.md
+          fi
+          python scripts/release_workflow.py publish \
+            "$GITHUB_REF_NAME" "pratfall $VERSION" /tmp/release-notes.md dist/*
+
+      - name: Create or update Homebrew formula
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          TAP_DIR="$RUNNER_TEMP/homebrew-tap"
+          git clone https://github.com/nielsmadan/homebrew-tap.git "$TAP_DIR"
+          python scripts/render_formula.py \
+            "$VERSION" "$TARBALL_SHA" "$TAP_DIR/Formula/pratfall.rb"
+          ruby -c "$TAP_DIR/Formula/pratfall.rb"
+          git -C "$TAP_DIR" config user.name "github-actions[bot]"
+          git -C "$TAP_DIR" config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C "$TAP_DIR" add Formula/pratfall.rb
+          if git -C "$TAP_DIR" diff --cached --quiet; then
+            echo "Homebrew formula is current"
+            exit 0
+          fi
+          git -C "$TAP_DIR" commit -m "chore: update pratfall to ${VERSION}"
+          BASIC_AUTH=$(printf 'x-access-token:%s' "$HOMEBREW_TAP_TOKEN" | base64 | tr -d '\n')
+          git -C "$TAP_DIR" \
+            -c http.https://github.com/.extraheader="AUTHORIZATION: basic $BASIC_AUTH" push

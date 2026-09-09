@@ -68,7 +68,29 @@ def build_parser() -> Parser:
     parser = Parser(
         prog="prat",
         description="Run installed coding agents through named profiles.",
-        epilog="Run: prat [OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""run syntax:
+  prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]
+
+run options:
+  --prompt=TEXT           Pass prompt text, including text beginning with a dash.
+  --model MODEL           Override the profile model.
+  --effort EFFORT         Override the native effort setting.
+  --timeout SECONDS       Set the wall-clock deadline.
+  --max-budget-usd USD    Set Claude's native API-call budget.
+  --max-turns COUNT       Set a supported native turn limit.
+  --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
+  --cwd PATH              Set the agent working directory.
+  --config PATH           Use this config path.
+  --json                  Print one normalized JSON result.
+  --dry-run               Resolve and print the invocation without launching it.
+
+examples:
+  prat cx "review this change"
+  prat simple "review this change" --effort low
+  printf 'multiline prompt\\n' | prat cc -
+  prat cc --prompt=-leading-dash
+""",
         allow_abbrev=False,
     )
     parser.set_defaults(config=None, json=False)

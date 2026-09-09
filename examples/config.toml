@@ -1,0 +1,21 @@
+version = 1
+
+[defaults]
+timeout = 600
+
+[agents.codex]
+command = ["codex"]
+
+[agents.claude]
+command = ["/absolute/path/to/trusted-claude-wrapper", "--team"]
+
+[profiles.simple]
+agent = "codex"
+model = "gpt-5.6-luna"
+effort = "low"
+
+[profiles.review]
+agent = "cc"
+model = "claude-sonnet-4"
+max_turns = 4
+native_args = ["--permission-mode", "plan"]

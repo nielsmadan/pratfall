@@ -1,0 +1,42 @@
+# Profiles and configuration
+
+The default config is `$XDG_CONFIG_HOME/pratfall/config.toml`, falling back to
+`~/.config/pratfall/config.toml`. An empty `XDG_CONFIG_HOME` uses the fallback. `--config PATH`
+selects another file, with relative paths resolved from the invocation directory.
+
+```toml
+version = 1
+
+[defaults]
+timeout = 600
+
+[agents.codex]
+command = ["codex"]
+
+[profiles.simple]
+agent = "codex"
+model = "gpt-5.6-luna"
+effort = "low"
+```
+
+A profile requires `agent`. It may set `model`, `effort`, `timeout`, `native_args`, and agent-backed
+budget fields. Invocation flags override profiles, which override defaults. Native argument arrays
+replace the lower-precedence array. Profiles do not inherit from each other.
+
+`[agents.NAME].command` accepts an executable argv prefix. Bare executable names use `PATH`.
+Relative executable paths containing `/` resolve from the config directory. Pratfall performs no
+shell, variable, or tilde expansion. Shell functions are not executable files on `PATH`; expose one
+through a trusted executable wrapper and configure that wrapper's argv explicitly.
+
+Built-in selectors, aliases, and management commands are reserved profile names. Inspect and
+validate configuration with:
+
+```sh
+prat config path
+prat --config config.toml config init
+prat --config config.toml config validate
+prat --config config.toml profiles
+```
+
+`config init` creates a new example exclusively and fails if the destination exists. Ordinary runs
+never write configuration.

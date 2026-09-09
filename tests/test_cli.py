@@ -31,6 +31,26 @@ def test_no_arguments_shows_help(capsys: pytest.CaptureFixture[str]) -> None:
     assert "usage: prat" in capsys.readouterr().out
 
 
+def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as caught:
+        main(["--help"])
+    assert caught.value.code == 0
+    output = capsys.readouterr().out
+    assert "prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]" in output
+    for flag in (
+        "--prompt=TEXT",
+        "--model MODEL",
+        "--effort EFFORT",
+        "--timeout SECONDS",
+        "--cwd PATH",
+        "--dry-run",
+    ):
+        assert flag in output
+    assert 'prat simple "review this change" --effort low' in output
+    assert "prat cc -" in output
+    assert "prat cc --prompt=-leading-dash" in output
+
+
 def test_agents_inventory_reports_aliases_and_capabilities(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
