@@ -1,4 +1,5 @@
-.cache/
+.cache/*
+!.cache/.gitkeep
 .coverage
 .mypy_cache/
 .pytest_cache/
