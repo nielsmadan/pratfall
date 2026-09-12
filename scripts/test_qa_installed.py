@@ -206,13 +206,27 @@ def test_deadline_cleans_separate_owned_fixture_group(tmp_path: Path) -> None:
 def test_result_check_rejects_false_pass() -> None:
     result = {
         "schema_version": 1,
-        "status": "error",
+        "status": "success",
         "exit_code": 0,
         "native_exit_code": 0,
+        "reported_models": None,
+        "cost_usd": None,
         "error": None,
     }
     completed = subprocess.CompletedProcess(["prat"], 0, json.dumps(result).encode() + b"\n", b"")
+    assert (
+        qa._assert_result(
+            completed,
+            returncode=0,
+            status="success",
+            native_exit_code=0,
+            error_code=None,
+        )
+        == result
+    )
 
+    result["status"] = "error"
+    completed.stdout = json.dumps(result).encode() + b"\n"
     with pytest.raises(AssertionError):
         qa._assert_result(
             completed,

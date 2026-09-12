@@ -94,7 +94,8 @@ These argv transports are subject to the operating system's argv-size limit, whi
 Prat's 1 MiB input limit. Prompts are never passed through a shell or the inherited terminal.
 
 Use `--cwd PATH` to select the agent working directory. Relative config and working-directory
-paths resolve from the directory where `prat` was invoked. Input acquisition waits for EOF and is
+paths resolve from the directory where `prat` was invoked. Configuration, selected native options,
+and `--cwd` are validated before reading prompt input. Input acquisition waits for EOF and is
 not charged to the agent timeout. SIGINT or SIGTERM during input acquisition exits as interrupted
 without launching an agent. `--timeout` is a wall-clock deadline for agent execution and output
 draining, and defaults to 600 seconds. A timed-out or failed run can leave edits in the working
@@ -125,6 +126,10 @@ uv run prat cc "make the requested edit" -- --permission-mode acceptEdits
 Standard output contains normalized final text. Structured adapters select assistant text;
 text adapters capture complete native stdout, which can include banners or progress.
 Launch/completion progress and native stderr diagnostics go to standard error.
+If writing diagnostics fails, Prat cleans up the owned process group and preserves the answer on
+stdout. JSON results also retain accounting and report `output_io_error` unless a prior timeout,
+interruption, or runner error takes precedence.
+
 `--json` emits exactly one normalized result object for a run,
 including validation and runtime failures:
 

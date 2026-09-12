@@ -1,0 +1,46 @@
+# Qwen Code 0.23.3
+
+**Evidence recorded:** 2026-09-11.
+**Method:** Static primary-source and package inspection; native agents were not executed.
+
+## Native contract
+
+The pinned [headless guide](https://github.com/QwenLM/qwen-code/blob/v0.23.3/docs/users/features/headless.md)
+and [option declarations](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/config/top-level-options.ts)
+establish `qwen --output-format stream-json` with plain text stdin. Prat maps model to `--model`
+and max_turns to `--max-session-turns`; effort, fast and spend budgets are unsupported.
+Accepted native flags are `--debug`/`-d` (zero values), `--approval-mode`, `--system-prompt` and
+`--append-system-prompt` (one value each). Prompt/input/output, native model/turn/budget controls,
+config/cwd, continuation/session, ACP/serve and fallback selectors are reserved or rejected.
+The version diagnostic uses `--version`. Existing native permissions apply; unresolved interactive
+approval requests are denied in headless mode. No approval bypass is added.
+
+The [message types](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/nonInteractive/types.ts)
+and [result builder](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/nonInteractive/io/BaseJsonOutputAdapter.ts)
+define root assistant text/model fields under `message`, with `parent_tool_use_id: null`.
+Child assistant records, thinking and tools cannot replace root text or reported models. Root
+model identifiers are retained in observed order. Final result usage is authoritative: input,
+output and optional cache-read token counts are normalized without adding message snapshots.
+Cache writes and USD cost remain unknown.
+
+A success requires result subtype `success`, `is_error: false` and a result string. Failures use
+`error_during_execution` or `error_max_turns`, `is_error: true` and an error object with a message.
+The [stream emitter](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/nonInteractive/io/StreamJsonOutputAdapter.ts)
+can emit intermediate subagent error results without a parent discriminator. The
+[root run loop](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/nonInteractiveCli.ts)
+waits for background task completion before emitting its final result (lines 3077–3184), and
+emits a result on its failure path (3249–3305). The last valid result therefore governs; repeated
+results are accepted, malformed records remain errors, and assistant text alone cannot complete
+successfully. Only known system, user and stream-event records are ignored. JSONL bounds apply.
+These contracts were statically checked on 2026-09-11 before accepting fake executable fixtures.
+
+## Implementation
+
+Model deduplication in the [adapter](../../src/pratfall/adapters/qwen.py#L123) uses list membership
+and scales quadratically. A synthetic 2026-09-11 review measured about three seconds for 16,380
+distinct 500-byte root model identifiers, within the byte/record limits. Ordinary native streams
+report few models; this performance case remains deferred. The runner checks deadlines between reads.
+
+- [Pratfall adapter](../../src/pratfall/adapters/qwen.py)
+- [Shared execution boundary](../execution.md)
+- [Interface comparison and evidence scope](overview.md)

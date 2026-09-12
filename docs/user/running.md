@@ -50,6 +50,7 @@ five seconds. Backpressure on stderr drops updates rather than delaying the agen
 flag applies to one run and is not a profile setting. It does not change final stdout: JSON mode
 still writes exactly one result object.
 
+Configuration, selected native options, and `--cwd` are validated before reading prompt input.
 Input acquisition waits for EOF before the agent-execution timeout begins. Unavailable or closed
 standard input is an input error; provide inline text or a regular file instead. SIGINT or SIGTERM while
 Prat is reading input returns interrupted status and exits with `128 + signal` without launching an
@@ -58,6 +59,10 @@ a fresh invocation; Prat does not retry automatically or roll back native edits.
 Those results can also contain partial final output and any accounting decoded before failure.
 In particular, Codex assistant messages completed before EOF or the outer timeout are preserved,
 but an unfinished turn still fails rather than becoming a synthetic success.
+
+Diagnostic write failures trigger process-group cleanup in both ordinary and progress modes while
+preserving final output on stdout. JSON also retains accounting and reports `output_io_error` unless
+a prior timeout, interruption, or runner error takes precedence.
 
 Codex, Copilot, Antigravity, OpenCode, Warp, Qwen, Amp and Kimi JSONL output is decoded as it arrives. OpenHands
 decodes its mixed SDK events and native status/summary text incrementally. Prat limits each

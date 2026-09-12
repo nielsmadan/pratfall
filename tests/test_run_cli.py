@@ -17,7 +17,7 @@ import pytest
 from pratfall import cli as cli_module
 from pratfall import runner as runner_module
 from pratfall.cli import main
-from pratfall.models import DecodedOutput, ResultError
+from pratfall.models import DecodedOutput, ResultError, Usage
 from pratfall.prompt_input import PROMPT_LIMIT
 from pratfall.runner import ProcessResult
 
@@ -612,6 +612,35 @@ def test_prompt_source_conflicts_are_normalized_without_opening_input(
     }
 
 
+@pytest.mark.parametrize("source", [[], ["-"], ["--file", "-"]])
+@pytest.mark.parametrize(
+    "case",
+    [
+        ("codex", ["--cwd=missing"], "--cwd is not a directory"),
+        ("codex", ["--", "--model", "x"], "this option is controlled by prat"),
+        ("openclaw", ["--", "--fallback", "x"], "requires an explicit model override"),
+    ],
+)
+def test_invalid_run_options_are_rejected_before_reading_stdin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    source: list[str],
+    case: tuple[str, list[str], str],
+) -> None:
+    agent, options, message = case
+    marker = tmp_path / "launched"
+    config = write_agent(tmp_path, agent, f"from pathlib import Path;Path({str(marker)!r}).touch()")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main([agent, *source, "--config", str(config), "--json", *options]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_arguments"
+    assert message in result["error"]["message"]
+    assert result["native_exit_code"] is None
+    assert not marker.exists()
+
+
 def test_terminal_without_prompt_is_an_actionable_usage_error(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1160,8 +1189,10 @@ time.sleep(30)
 
 
 @pytest.mark.parametrize("native_diagnostic", [False, True])
-def test_progress_final_stderr_failure_preserves_output_and_cleans_owned_descendant(
-    tmp_path: Path, native_diagnostic: bool
+@pytest.mark.parametrize("progress", [False, True])
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_final_stderr_failure_preserves_output_and_cleans_owned_descendant(
+    tmp_path: Path, native_diagnostic: bool, progress: bool, json_mode: bool
 ) -> None:
     ready = tmp_path / "final-failure-ready"
     release = tmp_path / "final-failure-release"
@@ -1197,8 +1228,8 @@ print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":1,"cached_in
             "pratfall",
             "cx",
             "prompt",
-            "--progress",
-            "--json",
+            *(["--progress"] if progress else []),
+            *(["--json"] if json_mode else []),
             "--config",
             str(config),
         ],
@@ -1210,13 +1241,14 @@ print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":1,"cached_in
     )
     stderr_data = bytearray()
     cleaned = False
+    launched = b"s starting" if progress else b"launching Codex"
     try:
         assert process.stderr is not None
         selected = selectors.DefaultSelector()
         selected.register(process.stderr, selectors.EVENT_READ)
         deadline = time.monotonic() + 5
         while (
-            (not ready.exists() or b"s starting" not in stderr_data)
+            (not ready.exists() or launched not in stderr_data)
             and process.poll() is None
             and time.monotonic() < deadline
         ):
@@ -1224,17 +1256,22 @@ print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":1,"cached_in
                 stderr_data.extend(os.read(process.stderr.fileno(), 4096))
         selected.close()
         assert ready.exists()
-        assert b"s starting" in stderr_data
+        assert launched in stderr_data
         process.stderr.close()
         process.stderr = None
         release.touch()
         stdout = process.communicate(timeout=6)[0]
-        result = json.loads(stdout)
         assert process.returncode == 1
-        assert result["status"] == "error"
-        assert result["output"] == "KEEP"
-        assert result["native_exit_code"] == 0
-        assert result["error"]["code"] == "output_io_error"
+        if json_mode:
+            result = json.loads(stdout)
+            assert result["status"] == "error"
+            assert result["output"] == "KEEP"
+            assert result["native_exit_code"] == 0
+            assert result["error"]["code"] == "output_io_error"
+            assert result["usage"]["input_tokens"] == 1
+            assert result["usage"]["output_tokens"] == 1
+        else:
+            assert stdout == b"KEEP\n"
         assert stdout.count(b"\n") == 1
         cleaned = _lock_is_available(lock_path)
         assert cleaned
@@ -1415,6 +1452,66 @@ print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":0,"cached_in
             process.wait()
 
 
+@pytest.mark.parametrize(("failure_at", "json_mode"), [("error", False), ("flush", True)])
+def test_final_diagnostic_and_flush_failures_preserve_results(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure_at: str,
+    json_mode: bool,
+) -> None:
+    class FailingDiagnostics(io.StringIO):
+        flushes = 0
+
+        def write(self, value: str) -> int:
+            if failure_at == "error" and value == "prat: native failed":
+                raise OSError("diagnostic write failed")
+            return super().write(value)
+
+        def flush(self) -> None:
+            self.flushes += 1
+            if failure_at == "flush" and self.flushes == 2:
+                raise OSError("diagnostic flush failed")
+            super().flush()
+
+    config = write_agent(tmp_path, "codex", "")
+    process = ProcessResult(
+        b"",
+        b"",
+        0,
+        12,
+        decoded=DecodedOutput(
+            output="KEEP",
+            usage=Usage(input_tokens=3, output_tokens=2),
+            reported_models=("native-model",),
+            cost_usd=0.01,
+            error=ResultError("provider_error", "native failed"),
+        ),
+        process_group=123,
+    )
+    cleaned: list[int] = []
+    monkeypatch.setattr(cli_module, "run", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(cli_module, "cleanup_process_group", cleaned.append)
+    monkeypatch.setattr(sys, "stderr", FailingDiagnostics())
+    arguments = ["cx", "prompt", "--config", str(config)]
+    if json_mode:
+        arguments.append("--json")
+    assert main(arguments) == 1
+    output = capsys.readouterr().out
+    if json_mode:
+        result = json.loads(output)
+        assert result["error"]["code"] == "output_io_error"
+        assert result["output"] == "KEEP"
+        assert result["native_exit_code"] == 0
+        assert result["usage"]["input_tokens"] == 3
+        assert result["usage"]["output_tokens"] == 2
+        assert result["reported_models"] == ["native-model"]
+        assert result["cost_usd"] == 0.01
+    else:
+        assert output == "KEEP\n"
+    assert cleaned == [123]
+
+
 def test_final_presentation_cleanup_failure_stays_normalized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1480,8 +1577,9 @@ def test_quiet_run_has_no_elapsed_progress_events(
     assert "s working" not in captured.err
 
 
-def test_progress_with_closed_stderr_preserves_normalized_json_and_does_not_launch(
-    tmp_path: Path,
+@pytest.mark.parametrize("progress", [False, True])
+def test_closed_stderr_preserves_normalized_json_and_does_not_launch(
+    tmp_path: Path, progress: bool
 ) -> None:
     marker = tmp_path / "launched"
     config = write_agent(
@@ -1507,7 +1605,7 @@ raise SystemExit(main(sys.argv[1:]))
             bootstrap,
             "cx",
             "prompt",
-            "--progress",
+            *(["--progress"] if progress else []),
             "--json",
             "--config",
             str(config),

@@ -1,0 +1,26 @@
+# Cursor
+
+**Evidence recorded:** 2026-09-09, with accounting updates on 2026-09-10.
+**Method:** Source inspection and native observations where explicitly described below.
+
+**Baseline:** Published Cursor 2026.09.08 package.
+
+## Native contract
+
+JSON print mode succeeds with one `type: result`, `subtype: success`, `is_error: false` object and a
+string `result`. The docs state that failures exit nonzero and need not emit well-formed JSON, so
+native exit status takes precedence over decoder failure. Published package source confirms
+Commander's end-of-options handling. Prat supplies global print/model options first, then the
+explicit `agent` command and `--` before the prompt; command-like text such as `login` and flags such
+as `--force` remain data. No token usage is documented, and the argv prompt inherits OS size limits.
+
+## Sources
+
+- [Parameters](https://cursor.com/docs/cli/reference/parameters)
+- [output format](https://cursor.com/docs/cli/reference/output-format)
+
+## Implementation
+
+- [Pratfall adapter](../../src/pratfall/adapters/cursor.py)
+- [Shared execution boundary](../execution.md)
+- [Interface comparison and evidence scope](overview.md)

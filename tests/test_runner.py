@@ -309,43 +309,50 @@ def test_timeout_does_not_wait_unused_term_grace_after_group_exits(tmp_path: Pat
 
 
 @pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])
+@pytest.mark.parametrize("startup_delay", [0, 0.4])
 def test_runner_converts_cancellation_and_restores_handler(
-    tmp_path: Path, chosen: signal.Signals
+    tmp_path: Path, chosen: signal.Signals, startup_delay: float
 ) -> None:
     previous = signal.getsignal(chosen)
-
-    def interrupt() -> None:
-        time.sleep(0.15)
-        os.kill(os.getpid(), chosen)
-
-    sender = threading.Thread(target=interrupt)
-    sender.start()
-    result = run(python("import time;time.sleep(30)"), tmp_path, 5)
-    sender.join()
+    result = run(
+        python(
+            f"import os,time;time.sleep({startup_delay});"
+            f"os.kill(os.getppid(),{int(chosen)});time.sleep(30)"
+        ),
+        tmp_path,
+        5,
+    )
     assert result.interrupted_by == chosen
+    assert result.native_exit_code == -signal.SIGTERM
     assert result.error is not None
     assert result.error.code == "interrupted"
     assert signal.getsignal(chosen) == previous
 
 
-def test_repeated_interrupt_escalates_without_stranding_child(tmp_path: Path) -> None:
-    def interrupt() -> None:
-        time.sleep(0.15)
-        os.kill(os.getpid(), signal.SIGINT)
-        time.sleep(0.15)
-        os.kill(os.getpid(), signal.SIGINT)
-
-    sender = threading.Thread(target=interrupt)
-    sender.start()
+@pytest.mark.parametrize("startup_delay", [0, 0.4])
+def test_repeated_interrupt_escalates_without_stranding_child(
+    tmp_path: Path, startup_delay: float
+) -> None:
+    previous = signal.getsignal(signal.SIGINT)
+    code = f"""import os,signal,time
+time.sleep({startup_delay})
+def interrupt_again(_signum, _frame):
+    print("termination requested", flush=True)
+    os.kill(os.getppid(), signal.SIGINT)
+signal.signal(signal.SIGTERM, interrupt_again)
+os.kill(os.getppid(), signal.SIGINT)
+time.sleep(30)
+"""
     result = run(
-        python("import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(30)"),
+        python(code),
         tmp_path,
         5,
     )
-    sender.join()
     assert result.interrupted_by == signal.SIGINT
+    assert result.stdout == b"termination requested\n"
     assert result.native_exit_code == -signal.SIGKILL
     assert result.duration_ms < 2_000
+    assert signal.getsignal(signal.SIGINT) == previous
 
 
 def test_runner_streams_stdout_to_consumer_without_retaining_trace(tmp_path: Path) -> None:
