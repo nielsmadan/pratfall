@@ -4,10 +4,13 @@ import math
 import os
 import shlex
 import shutil
+import signal
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+from types import FrameType
 from typing import NoReturn
 
 from pratfall import __version__
@@ -18,7 +21,11 @@ from pratfall.errors import PratError
 from pratfall.models import Config, DecodedOutput, Invocation, Options, ResolvedProfile, ResultError
 from pratfall.output import normalize, result_dict, validation_error
 from pratfall.prompt_input import InputInterrupted, PromptSource, acquire_prompt
-from pratfall.runner import ProcessResult, run
+from pratfall.runner import OutputLimits, ProcessResult, run
+
+VERSION_TIMEOUT = 3.0
+VERSION_OUTPUT_LIMIT = 64 * 1024
+VERSION_LIMITS = OutputLimits(stdout=VERSION_OUTPUT_LIMIT, stderr=VERSION_OUTPUT_LIMIT)
 
 _RUN_VALUE_FLAGS = {
     "--config": "config",
@@ -43,6 +50,16 @@ class RunArguments:
     json: bool
     dry_run: bool
     options: Options
+
+
+@dataclass
+class _InterruptionState:
+    received: int | None = None
+    result_chosen: bool = False
+
+
+class _DoctorInterrupted(Exception):
+    pass
 
 
 class Parser(argparse.ArgumentParser):
@@ -78,6 +95,7 @@ run options:
   -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.
   --model MODEL           Override the profile model.
   --effort EFFORT         Override the native effort setting.
+  --fast / --no-fast      Enable or disable supported native fast mode for this run.
   --timeout SECONDS       Set the wall-clock deadline.
   --max-budget-usd USD    Set Claude's native API-call budget.
   --max-turns COUNT       Set a supported native turn limit.
@@ -107,6 +125,15 @@ examples:
     ):
         child = subparsers.add_parser(command, help=help_text, allow_abbrev=False)
         _common_flags(child)
+        if command == "doctor":
+            child.add_argument(
+                "--versions",
+                action="store_true",
+                help=(
+                    "Execute each available configured command prefix with --version; "
+                    "configured wrappers may have side effects."
+                ),
+            )
     config = subparsers.add_parser(
         "config", help="Manage the global TOML config.", allow_abbrev=False
     )
@@ -142,6 +169,7 @@ def _agents(json_mode: bool) -> None:
             "effort": caps.effort,
             "effort_values": list(caps.effort_values) or None,
             "budgets": sorted(caps.budgets),
+            "fast": caps.fast,
         }
         records.append(
             {
@@ -152,7 +180,7 @@ def _agents(json_mode: bool) -> None:
                 "capabilities": capabilities,
             }
         )
-        supported = [field for field in ("model", "effort") if getattr(caps, field)]
+        supported = [field for field in ("model", "effort", "fast") if getattr(caps, field)]
         supported.extend(sorted(caps.budgets))
         lines.append(f"{agent.name} ({', '.join(agent.aliases)}): {', '.join(supported) or 'none'}")
     _emit({"agents": records}, lines, json_mode=json_mode)
@@ -175,11 +203,15 @@ def _profiles(config: Config, json_mode: bool) -> None:
     _emit({"profiles": records}, lines or ["No profiles configured."], json_mode=json_mode)
 
 
-def _doctor(config: Config, json_mode: bool) -> None:
-    records = []
-    lines = []
+def _doctor_inventory(
+    config: Config, interruption: _InterruptionState | None = None
+) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
     for agent in AGENTS:
-        executable = config.commands.get(agent.name, agent.command)[0]
+        if interruption is not None and interruption.received is not None:
+            break
+        command = config.commands.get(agent.name, agent.command)
+        executable = command[0]
         found = shutil.which(executable)
         records.append(
             {
@@ -187,12 +219,130 @@ def _doctor(config: Config, json_mode: bool) -> None:
                 "executable": executable,
                 "path": found,
                 "available": found is not None,
+                "version": None,
+                "version_error": None,
             }
         )
-        lines.append(
-            f"{agent.name}: {found if found is not None else 'unavailable (' + executable + ')'}"
+    return records
+
+
+@contextmanager
+def _track_interruption(state: _InterruptionState) -> Iterator[None]:
+    previous: dict[signal.Signals, Callable[[int, FrameType | None], None] | int | None] = {}
+    raise_immediately = True
+
+    def receive(signum: int, _frame: FrameType | None) -> None:
+        if state.received is None:
+            state.received = signum
+            if raise_immediately and not state.result_chosen:
+                raise _DoctorInterrupted
+
+    try:
+        for chosen in (signal.SIGINT, signal.SIGTERM):
+            previous[chosen] = signal.getsignal(chosen)
+            signal.signal(chosen, receive)
+        yield
+    finally:
+        raise_immediately = False
+        for chosen, handler in previous.items():
+            signal.signal(chosen, handler)
+
+
+def _doctor(config: Config, json_mode: bool, *, versions: bool) -> int:
+    records: list[dict[str, object]] = []
+    if not versions:
+        records = _doctor_inventory(config)
+        _emit(
+            {"agents": records},
+            [_doctor_line(record, versions=False) for record in records],
+            json_mode=json_mode,
         )
-    _emit({"agents": records}, lines, json_mode=json_mode)
+        return 0
+
+    interruption = _InterruptionState()
+    try:
+        with _track_interruption(interruption):
+            try:
+                records = _doctor_inventory(config, interruption)
+                for agent, record in zip(AGENTS, records, strict=True):
+                    if interruption.received is not None:
+                        break
+                    if not record["available"]:
+                        continue
+                    command = config.commands.get(agent.name, agent.command)
+                    process = run(
+                        Invocation((*command, *agent.version_args), b""),
+                        Path.cwd(),
+                        VERSION_TIMEOUT,
+                        output_limits=VERSION_LIMITS,
+                    )
+                    version, version_error = _version_result(process)
+                    record["version"] = version
+                    record["version_error"] = version_error
+                    if process.interrupted_by is not None:
+                        interruption.received = process.interrupted_by
+                prepared = _doctor_result(records, versions=True, interrupted=interruption.received)
+                interruption.result_chosen = True
+            except _DoctorInterrupted:
+                prepared = _doctor_result(records, versions=True, interrupted=interruption.received)
+                interruption.result_chosen = True
+    except _DoctorInterrupted:
+        prepared = _doctor_result(records, versions=True, interrupted=interruption.received)
+        interruption.result_chosen = True
+
+    payload, lines, exit_code, message = prepared
+    _emit(payload, lines, json_mode=json_mode)
+    if message is not None and not json_mode:
+        print(f"prat: {message}", file=sys.stderr)
+    return exit_code
+
+
+def _doctor_result(
+    records: list[dict[str, object]], *, versions: bool, interrupted: int | None
+) -> tuple[dict[str, object], list[str], int, str | None]:
+    lines = [_doctor_line(record, versions=versions) for record in records]
+    payload: dict[str, object] = {"agents": records}
+    if interrupted is not None:
+        message = f"Interrupted by signal {interrupted}."
+        payload.update(
+            status="interrupted",
+            exit_code=128 + interrupted,
+            error={"code": "interrupted", "message": message},
+        )
+        return payload, lines, 128 + interrupted, message
+    return payload, lines, 0, None
+
+
+def _version_result(process: ProcessResult) -> tuple[str | None, str | None]:
+    if process.error is not None:
+        return None, process.error.message
+    if process.native_exit_code != 0:
+        return None, f"Version probe exited with status {process.native_exit_code}."
+    try:
+        stdout = process.stdout.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return None, "Version output is not valid UTF-8."
+    if stdout:
+        return stdout, None
+    try:
+        stderr = process.stderr.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return None, "Version output is not valid UTF-8."
+    if stderr:
+        return stderr, None
+    return None, "Version probe returned no version text."
+
+
+def _doctor_line(record: dict[str, object], *, versions: bool) -> str:
+    name = record["agent"]
+    found = record["path"]
+    executable = record["executable"]
+    line = f"{name}: {found if found is not None else 'unavailable (' + str(executable) + ')'}"
+    if not versions or not record["available"]:
+        return line
+    if record["version_error"] is not None:
+        return f"{line} version_error={record['version_error']}"
+    return f"{line} version={json.dumps(record['version'], ensure_ascii=False)}"
 
 
 def _validate_config_native_arguments(config: Config) -> None:
@@ -210,7 +360,7 @@ def _validate_config_native_arguments(config: Config) -> None:
             raise PratError(f"{config.path}: profiles.{name}.native_args: {error}") from error
 
 
-def _dispatch(args: argparse.Namespace) -> None:
+def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "config" and args.config_command == "path":
         path = config_path(args.config)
         _emit({"path": str(path)}, [str(path)], json_mode=args.json)
@@ -225,7 +375,7 @@ def _dispatch(args: argparse.Namespace) -> None:
         elif args.command == "profiles":
             _profiles(config, args.json)
         elif args.command == "doctor":
-            _doctor(config, args.json)
+            return _doctor(config, args.json, versions=args.versions)
         else:
             _emit(
                 {"path": str(config.path), "exists": config.exists, "valid": True},
@@ -236,6 +386,7 @@ def _dispatch(args: argparse.Namespace) -> None:
                 ],
                 json_mode=args.json,
             )
+    return 0
 
 
 def _parse_run(arguments: list[str]) -> RunArguments:
@@ -245,6 +396,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     prompt_source: PromptSource | None = None
     json_mode = False
     dry_run = False
+    fast: bool | None = None
     index = 0
     while index < len(prat_arguments):
         argument = prat_arguments[index]
@@ -254,6 +406,16 @@ def _parse_run(arguments: list[str]) -> RunArguments:
             continue
         if argument == "--dry-run":
             dry_run = True
+            index += 1
+            continue
+        if argument in {"--fast", "--no-fast"}:
+            fast_value = argument == "--fast"
+            if fast is not None and fast != fast_value:
+                raise PratError(
+                    "--fast and --no-fast cannot be used together.",
+                    code="invalid_arguments",
+                )
+            fast = fast_value
             index += 1
             continue
         if argument == "--prompt":
@@ -292,6 +454,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         max_budget_usd=_number_option(values.get("max_budget_usd"), "--max-budget-usd"),
         max_turns=_integer_option(values.get("max_turns"), "--max-turns"),
         max_ai_credits=_number_option(values.get("max_ai_credits"), "--max-ai-credits"),
+        fast=fast,
         native_args=native_arguments,
     )
     return RunArguments(
@@ -423,6 +586,7 @@ def _preview(
         "agent": resolved.agent.name,
         "profile": resolved.profile,
         "model": resolved.options.model,
+        "fast": resolved.options.fast,
         "argv": list(invocation.argv),
         "cwd": str(cwd),
         "timeout": resolved.options.timeout,
@@ -434,6 +598,8 @@ def _preview(
         print(f"command: {shlex.join(invocation.argv)}")
         print(f"cwd: {cwd}")
         print(f"timeout: {resolved.options.timeout:g}s")
+        fast = "native" if resolved.options.fast is None else str(resolved.options.fast).lower()
+        print(f"fast: {fast}")
         print(f"stdin: {len(invocation.stdin)} bytes")
 
 
@@ -540,7 +706,9 @@ def _management_mode(arguments: list[str]) -> bool:
             run_option = run_option or name != "--config"
             index += 1 if "=" in argument else 2
             continue
-        if argument in {"--json", "--dry-run"} or argument.startswith("--prompt="):
+        if argument in {"--json", "--dry-run", "--fast", "--no-fast"} or argument.startswith(
+            "--prompt="
+        ):
             run_option = run_option or argument != "--json"
             index += 1
             continue
@@ -561,7 +729,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
         if args.command is None:
             parser.print_help()
             return 0
-        _dispatch(args)
+        return _dispatch(args)
     except PratError as error:
         if _json_requested(arguments):
             _emit(

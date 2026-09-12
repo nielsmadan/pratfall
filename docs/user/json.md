@@ -37,3 +37,8 @@ Provider and protocol failures exit 1 unless a native nonzero exit has precedenc
 byte count rather than a run status. Prompts carried through argv appear in that preview. Management
 commands use separate versioned inventory or config objects; their errors still contain `status`,
 `exit_code`, and `error`.
+
+Agent capability records include `fast`. Doctor inventory records include nullable `version` and
+`version_error` fields, separate from `available`. Without `doctor --versions`, both version fields
+remain null and no configured command is launched. Ordinary probe failures leave doctor at exit 0.
+An interrupted version probe adds interrupted management status and exits with `128 + signal`.

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from pratfall.models import Invocation
-from pratfall.runner import STDERR_LIMIT, STDOUT_LIMIT, run
+from pratfall.runner import STDERR_LIMIT, STDOUT_LIMIT, OutputLimits, run
 
 
 def python(code: str, stdin: bytes = b"") -> Invocation:
@@ -66,6 +66,21 @@ def test_output_bounds_fail_and_stop_child(tmp_path: Path, fd: str, limit: int, 
     assert result.error.code == f"{fd}_limit_exceeded"
     assert len(getattr(result, fd)) == limit
     assert result.duration_ms < 4_000
+
+
+def test_runner_accepts_explicit_capture_bounds_without_changing_defaults(tmp_path: Path) -> None:
+    limited = run(
+        python("import os;os.write(1,b'12345')"),
+        tmp_path,
+        5,
+        output_limits=OutputLimits(stdout=4, stderr=7),
+    )
+    assert limited.stdout == b"1234"
+    assert limited.error is not None
+    assert limited.error.code == "stdout_limit_exceeded"
+    ordinary = run(python("import os;os.write(1,b'12345')"), tmp_path, 5)
+    assert ordinary.stdout == b"12345"
+    assert ordinary.error is None
 
 
 def test_runner_preserves_failing_native_exit_and_output(tmp_path: Path) -> None:

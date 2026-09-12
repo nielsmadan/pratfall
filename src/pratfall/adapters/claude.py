@@ -70,6 +70,7 @@ _RESERVED = {
         "--output-format",
         "--remote-control",
         "--resume",
+        "--settings",
         "-r",
         "--session-id",
         "--worktree",
@@ -91,6 +92,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--max-budget-usd", str(options.max_budget_usd)))
     if options.max_turns is not None:
         argv.extend(("--max-turns", str(options.max_turns)))
+    if options.fast is not None:
+        argv.extend(("--settings", json.dumps({"fastMode": options.fast})))
     argv.extend(arguments)
     return Invocation(tuple(argv), prompt)
 

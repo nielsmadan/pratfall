@@ -9,6 +9,7 @@ version = 1
 
 [defaults]
 timeout = 600
+# fast = true
 
 [agents.codex]
 command = ["codex"]
@@ -19,9 +20,15 @@ model = "gpt-5.6-luna"
 effort = "low"
 ```
 
-A profile requires `agent`. It may set `model`, `effort`, `timeout`, `native_args`, and agent-backed
+A profile requires `agent`. It may set `model`, `effort`, `fast`, `timeout`, `native_args`, and
+agent-backed
 budget fields. Invocation flags override profiles, which override defaults. Native argument arrays
 replace the lower-precedence array. Profiles do not inherit from each other.
+
+`fast` is an optional boolean for Claude and Codex. `true` and `false` are both explicit overrides;
+when absent, the native setting remains in force. A global default is validated against a built-in
+agent only when that selector is resolved, while every configured profile is validated after merging
+defaults. Unsupported agents reject either boolean value.
 
 `[agents.NAME].command` accepts an executable argv prefix. Bare executable names use `PATH`.
 Relative executable paths containing `/` resolve from the config directory. Pratfall performs no

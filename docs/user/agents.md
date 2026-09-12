@@ -5,8 +5,8 @@ when the native CLI supports model selection; Pratfall does not freeze a model c
 
 | Agent | Aliases | Output and usage notes |
 | --- | --- | --- |
-| Claude Code | `cc` | Structured final result and token usage |
-| Codex | `cx` | Structured event stream and token usage |
+| Claude Code | `cc` | Structured final result and token usage; invocation-only fast override |
+| Codex | `cx` | Structured event stream and token usage; invocation-only fast override |
 | Gemini | `gm` | Structured final result and token usage; no effort override |
 | Antigravity | `ag`, `agy` | Structured stream and cumulative usage |
 | Copilot | `cp` | Structured final text; no token counts |
@@ -25,3 +25,7 @@ There is no common verified hard token cap. Claude exposes native USD and turn b
 `max_ai_credits` is a soft per-response limit and may not stop exactly at the requested amount.
 Hermes supports a native turn count. Pratfall forwards those native controls without strengthening
 their guarantees.
+
+Claude fast mode is passed as an inline `fastMode` setting for the current invocation. Codex fast
+mode is passed as `service_tier="priority"`; false selects `service_tier="default"`. Pratfall does
+not edit native settings, choose a different model, or infer account eligibility or pricing.

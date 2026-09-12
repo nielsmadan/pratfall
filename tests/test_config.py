@@ -76,11 +76,13 @@ def test_scalars_and_native_arguments_follow_precedence(tmp_path: Path) -> None:
 [defaults]
 model="default-model"
 effort="low"
+fast=true
 timeout=90
 native_args=["--verbose"]
 [profiles.work]
 agent="cc"
 model="profile-model"
+fast=false
 timeout=30
 max_budget_usd=2.5
 max_turns=4
@@ -97,6 +99,7 @@ native_args=["--allowed-tools", "literal argument"]
         timeout=12,
         max_budget_usd=2.5,
         max_turns=4,
+        fast=False,
         native_args=("--allowed-tools", "literal argument"),
     )
     assert resolve_profile(config, "cc").options.model == "default-model"
@@ -170,6 +173,8 @@ native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", 
         ('version=1\n[defaults]\ntimeout="30"', "defaults.timeout"),
         ('version=1\n[defaults]\nmodel=" "', "defaults.model"),
         ('version=1\n[defaults]\neffort=""', "defaults.effort"),
+        ('version=1\n[defaults]\nfast="true"', "defaults.fast"),
+        ("version=1\n[defaults]\nfast=1", "defaults.fast"),
         ('version=1\n[defaults]\nnative_args="--flag"', "defaults.native_args"),
         ('version=1\n[defaults]\nnative_args=["--flag", 1]', "defaults.native_args"),
         ("version=1\n[defaults]\nmax_turns=1.5", "defaults.max_turns"),
@@ -207,6 +212,7 @@ native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", 
             "profiles.work.max_ai_credits",
         ),
         ('version=1\n[profiles.work]\nagent="codex"\nmax_turns=1', "profiles.work.max_turns"),
+        ('version=1\n[profiles.work]\nagent="gemini"\nfast=false', "profiles.work.fast"),
     ],
 )
 def test_invalid_config_identifies_source_and_field(
@@ -262,6 +268,25 @@ def test_defaults_and_overrides_are_validated_for_selected_builtin(tmp_path: Pat
     assert resolve_profile(config, "ki").options.model == "new-model"
     with pytest.raises(PratError, match="Hermes accepts:"):
         resolve_profile(config, "hm", Options(effort="unknown"))
+
+
+def test_fast_mode_follows_cli_profile_defaults_precedence(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path,
+        'version=1\n[defaults]\nfast=true\n[profiles.work]\nagent="codex"\nfast=false\n',
+    )
+    config = load_config(path)
+    assert resolve_profile(config, "cx").options.fast is True
+    assert resolve_profile(config, "work").options.fast is False
+    assert resolve_profile(config, "work", Options(fast=True)).options.fast is True
+
+
+def test_global_fast_is_checked_only_when_a_builtin_is_resolved(tmp_path: Path) -> None:
+    path = write_config(tmp_path, "version=1\n[defaults]\nfast=true\n")
+    config = load_config(path)
+    assert resolve_profile(config, "cc").options.fast is True
+    with pytest.raises(PratError, match="Gemini does not support"):
+        resolve_profile(config, "gm")
 
 
 def test_unknown_selector_suggests_inventory() -> None:

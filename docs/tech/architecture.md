@@ -17,3 +17,7 @@ keeps source and Homebrew installation free of vendored Python resources.
 
 stdout is reserved for final text or one JSON object. Native stderr and Pratfall progress go to
 stderr. Child stdin is always explicit bytes or closed; it never inherits the user's terminal.
+
+Version diagnostics reuse the same runner with explicit 64 KiB stream bounds and a three-second
+deadline. `cli.py` selects opaque version text and records per-agent probe errors; the runner keeps
+the same process-group cleanup and interruption behavior as ordinary runs.

@@ -1,14 +1,32 @@
 import json
+import os
+import shutil
+import signal
 import subprocess
 import sys
+import threading
+import time
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import replace
 from pathlib import Path
+from types import FrameType
 
 import pytest
 
 from pratfall import __version__
 from pratfall.catalog import AGENTS
-from pratfall.cli import main
-from pratfall.config import init_config
+from pratfall.cli import (
+    _doctor,
+    _doctor_inventory,
+    _doctor_line,
+    _InterruptionState,
+    _version_result,
+    main,
+)
+from pratfall.config import init_config, load_config
+from pratfall.models import Config, Invocation
+from pratfall.runner import OutputLimits, ProcessResult
+from pratfall.runner import run as run_process
 
 
 @pytest.mark.parametrize("arguments", [["--help"], ["config", "--help"], ["agents", "--help"]])
@@ -42,6 +60,7 @@ def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str])
         "-f, --file PATH",
         "--model MODEL",
         "--effort EFFORT",
+        "--fast / --no-fast",
         "--timeout SECONDS",
         "--cwd PATH",
         "--dry-run",
@@ -75,11 +94,18 @@ def test_agents_inventory_reports_aliases_and_capabilities(
         "max",
         "ultra",
     ]
+    assert (
+        next(agent for agent in result["agents"] if agent["name"] == "claude")["capabilities"][
+            "fast"
+        ]
+        is True
+    )
+    assert kiro["capabilities"]["fast"] is False
 
 
 def test_agents_text(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["agents"]) == 0
-    assert "claude (cc): model, effort, max_budget_usd, max_turns" in capsys.readouterr().out
+    assert "claude (cc): model, effort, fast, max_budget_usd, max_turns" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -179,6 +205,7 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
                 "max_budget_usd": None,
                 "max_turns": None,
                 "max_ai_credits": None,
+                "fast": None,
                 "native_args": [],
             },
         }
@@ -242,11 +269,440 @@ def test_doctor_locates_wrappers_without_executing(
         "executable": str(wrapper),
         "path": str(wrapper),
         "available": True,
+        "version": None,
+        "version_error": None,
     }
     claude = next(agent for agent in result["agents"] if agent["agent"] == "claude")
-    assert claude == {"agent": "claude", "executable": "claude", "path": None, "available": False}
+    assert claude == {
+        "agent": "claude",
+        "executable": "claude",
+        "path": None,
+        "available": False,
+        "version": None,
+        "version_error": None,
+    }
     assert main(["doctor", "--config", str(path)]) == 0
     assert f"codex: {wrapper}\n" in capsys.readouterr().out
+
+
+def _version_config(tmp_path: Path, commands: dict[str, list[str]]) -> Path:
+    path = tmp_path / "versions.toml"
+    tables = ["version=1"]
+    for agent, command in commands.items():
+        tables.extend((f"[agents.{agent}]", f"command={json.dumps(command)}"))
+    path.write_text("\n".join(tables), encoding="utf-8")
+    return path
+
+
+def test_doctor_versions_uses_literal_prefix_empty_stdin_and_stream_precedence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("PATH", "")
+    evidence = tmp_path / "evidence.json"
+    fake = tmp_path / "version.py"
+    fake.write_text(
+        "import json,pathlib,sys\n"
+        f"pathlib.Path({str(evidence)!r}).write_text(json.dumps([sys.argv[1:], len(sys.stdin.buffer.read())]))\n"
+        "sys.stdout.write('  tool 1.2.3\\n')\n"
+        "sys.stderr.buffer.write(b'ignored invalid: \\xff')\n",
+        encoding="utf-8",
+    )
+    config = _version_config(
+        tmp_path,
+        {"codex": [sys.executable, str(fake), "two words", "$TOKEN"]},
+    )
+    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    codex = next(agent for agent in result["agents"] if agent["agent"] == "codex")
+    assert codex["version"] == "tool 1.2.3"
+    assert codex["version_error"] is None
+    assert json.loads(evidence.read_text(encoding="utf-8")) == [
+        ["two words", "$TOKEN", "--version"],
+        0,
+    ]
+
+
+def test_default_doctor_does_not_spawn(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("doctor started execution-only behavior")
+
+    monkeypatch.setattr("pratfall.cli.run", fail)
+    monkeypatch.setattr(signal, "signal", fail)
+    assert main(["doctor", "--json"]) == 0
+    assert all(
+        record["version"] is None for record in json.loads(capsys.readouterr().out)["agents"]
+    )
+
+
+def test_version_selection_strips_unicode_whitespace_before_stderr_fallback() -> None:
+    fallback = _version_result(ProcessResult("\u2003".encode(), b" fallback 3.0 \n", 0, 0))
+    empty = _version_result(ProcessResult("\u2003".encode(), "\u2002".encode(), 0, 0))
+    assert fallback == ("fallback 3.0", None)
+    assert empty == (None, "Version probe returned no version text.")
+
+
+@pytest.mark.parametrize(
+    ("code", "message"),
+    [
+        ("import sys;sys.stderr.write('fallback 2.0\\n')", None),
+        ("import sys;sys.stdout.write('bad');sys.exit(9)", "status 9"),
+        ("pass", "no version text"),
+        ("import os;os.write(1,b'\\xff')", "not valid UTF-8"),
+        ("import os;os.write(1,b'x'*65537)", "exceeded 65536 bytes"),
+        ("import os;os.write(2,b'x'*65537)", "exceeded 65536 bytes"),
+    ],
+)
+def test_doctor_versions_reports_diagnostic_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    code: str,
+    message: str | None,
+) -> None:
+    monkeypatch.setenv("PATH", "")
+    config = _version_config(tmp_path, {"codex": [sys.executable, "-c", code]})
+    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 0
+    codex = next(
+        agent
+        for agent in json.loads(capsys.readouterr().out)["agents"]
+        if agent["agent"] == "codex"
+    )
+    if message is None:
+        assert codex["version"] == "fallback 2.0"
+        assert codex["version_error"] is None
+    else:
+        assert codex["version"] is None
+        assert message in codex["version_error"]
+
+
+def test_doctor_version_timeout_is_diagnostic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr("pratfall.cli.VERSION_TIMEOUT", 0.05)
+    config = _version_config(
+        tmp_path, {"codex": [sys.executable, "-c", "import time;time.sleep(30)"]}
+    )
+    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 0
+    codex = next(
+        agent
+        for agent in json.loads(capsys.readouterr().out)["agents"]
+        if agent["agent"] == "codex"
+    )
+    assert codex["version"] is None
+    assert "0.05 second timeout" in codex["version_error"]
+
+
+def test_run_fast_flags_are_tri_state_and_conflicts_are_rejected(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / "fast.toml"
+    config.write_text("version=1\n[defaults]\nfast=false\n", encoding="utf-8")
+    assert main(["cx", "prompt", "--config", str(config), "--dry-run", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["fast"] is False
+    assert main(["cx", "prompt", "--fast", "--config", str(config), "--dry-run", "--json"]) == 0
+    enabled = json.loads(capsys.readouterr().out)
+    assert enabled["fast"] is True
+    assert 'service_tier="priority"' in enabled["argv"]
+    assert main(["cx", "prompt", "--fast", "--no-fast", "--dry-run", "--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == "invalid_arguments"
+
+
+def test_run_rejects_fast_override_for_unsupported_agent(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["gm", "prompt", "--no-fast", "--dry-run", "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_config"
+    assert "does not support a fast-mode override" in result["error"]["message"]
+
+
+@pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])
+def test_doctor_version_interruption_during_probe_stops_and_restores_handlers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    chosen: signal.Signals,
+) -> None:
+    monkeypatch.setenv("PATH", "")
+    previous = {
+        candidate: signal.getsignal(candidate) for candidate in (signal.SIGINT, signal.SIGTERM)
+    }
+    ready = tmp_path / "ready"
+    later = tmp_path / "later"
+    fake = tmp_path / "interrupt.py"
+    fake.write_text(
+        "import pathlib,sys,time\n"
+        "mode=sys.argv[1]\n"
+        f"ready=pathlib.Path({str(ready)!r});later=pathlib.Path({str(later)!r})\n"
+        "(ready if mode == 'wait' else later).write_text(str(__import__('os').getpid()))\n"
+        "time.sleep(30) if mode == 'wait' else print('later')\n",
+        encoding="utf-8",
+    )
+    config = _version_config(
+        tmp_path,
+        {
+            "codex": [sys.executable, str(fake), "wait"],
+            "gemini": [sys.executable, str(fake), "later"],
+        },
+    )
+
+    def interrupt() -> None:
+        deadline = time.monotonic() + 3
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists()
+        os.kill(os.getpid(), chosen)
+
+    sender = threading.Thread(target=interrupt)
+    sender.start()
+    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 128 + chosen
+    sender.join()
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "interrupted"
+    assert result["exit_code"] == 128 + chosen
+    assert result["error"]["code"] == "interrupted"
+    assert not later.exists()
+    assert {candidate: signal.getsignal(candidate) for candidate in previous} == previous
+    pid = int(ready.read_text(encoding="utf-8"))
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
+@pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])
+def test_doctor_version_interruption_during_discovery_is_normalized(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    chosen: signal.Signals,
+) -> None:
+    config = _version_config(tmp_path, {"codex": [sys.executable, "-c", "print('later')"]})
+    previous = {
+        candidate: signal.getsignal(candidate) for candidate in (signal.SIGINT, signal.SIGTERM)
+    }
+    discoveries = 0
+
+    def interrupt_discovery(_executable: str) -> None:
+        nonlocal discoveries
+        discoveries += 1
+        os.kill(os.getpid(), chosen)
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("doctor launched a version probe")
+
+    monkeypatch.setattr(shutil, "which", interrupt_discovery)
+    monkeypatch.setattr("pratfall.cli.run", fail)
+    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 128 + chosen
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "interrupted"
+    assert result["exit_code"] == 128 + chosen
+    assert discoveries == 1
+    assert {candidate: signal.getsignal(candidate) for candidate in previous} == previous
+
+
+def test_doctor_version_interruption_before_first_inventory_item_is_normalized(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = _version_config(tmp_path, {"codex": [sys.executable, "-c", "print('later')"]})
+
+    def interrupt_before_inventory(
+        loaded: Config, interruption: _InterruptionState | None = None
+    ) -> list[dict[str, object]]:
+        assert interruption is not None
+        os.kill(os.getpid(), signal.SIGINT)
+        return _doctor_inventory(loaded, interruption)
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("doctor launched a version probe")
+
+    monkeypatch.setattr("pratfall.cli._doctor_inventory", interrupt_before_inventory)
+    monkeypatch.setattr("pratfall.cli.run", fail)
+    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 130
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "interrupted"
+    assert result["exit_code"] == 130
+    assert result["agents"] == []
+
+
+def test_doctor_version_interruption_during_handler_install_is_normalized(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = _version_config(tmp_path, {"codex": [sys.executable, "-c", "print('later')"]})
+    previous = {
+        candidate: signal.getsignal(candidate) for candidate in (signal.SIGINT, signal.SIGTERM)
+    }
+    actual_signal = signal.signal
+    installations = 0
+
+    def interrupt_after_install(
+        chosen: signal.Signals,
+        handler: Callable[[int, FrameType | None], None] | int | None,
+    ) -> Callable[[int, FrameType | None], None] | int | None:
+        nonlocal installations
+        prior = actual_signal(chosen, handler)
+        installations += 1
+        if installations == 1:
+            os.kill(os.getpid(), signal.SIGINT)
+        return prior
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("doctor launched a version probe")
+
+    monkeypatch.setattr(signal, "signal", interrupt_after_install)
+    monkeypatch.setattr("pratfall.cli.run", fail)
+    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 130
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "interrupted"
+    assert result["exit_code"] == 130
+    assert result["agents"] == []
+    assert {candidate: signal.getsignal(candidate) for candidate in previous} == previous
+
+
+@pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])
+def test_doctor_version_interruption_during_probe_selection_prevents_launch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    chosen: signal.Signals,
+) -> None:
+    path = _version_config(tmp_path, {"codex": [sys.executable, "-c", "print('later')"]})
+    loaded = load_config(path)
+    previous = {
+        candidate: signal.getsignal(candidate) for candidate in (signal.SIGINT, signal.SIGTERM)
+    }
+
+    class InterruptingCommands(Mapping[str, tuple[str, ...]]):
+        def __init__(self) -> None:
+            self.codex_lookups = 0
+
+        def __getitem__(self, key: str) -> tuple[str, ...]:
+            command = loaded.commands[key]
+            if key == "codex":
+                self.codex_lookups += 1
+                if self.codex_lookups == 2:
+                    os.kill(os.getpid(), chosen)
+            return command
+
+        def __iter__(self) -> Iterator[str]:
+            return iter(loaded.commands)
+
+        def __len__(self) -> int:
+            return len(loaded.commands)
+
+    commands = InterruptingCommands()
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("doctor launched a version probe")
+
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr("pratfall.cli.run", fail)
+    assert _doctor(replace(loaded, commands=commands), True, versions=True) == 128 + chosen
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "interrupted"
+    assert result["exit_code"] == 128 + chosen
+    assert commands.codex_lookups == 2
+    assert {candidate: signal.getsignal(candidate) for candidate in previous} == previous
+
+
+def test_doctor_version_interruption_during_result_preparation_is_normalized(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("PATH", "")
+    config = _version_config(tmp_path, {"codex": [sys.executable, "-c", "print('1.0')"]})
+    launches = 0
+    line_calls = 0
+
+    def counting_run(
+        invocation: Invocation,
+        cwd: Path,
+        timeout: float,
+        *,
+        output_limits: OutputLimits,
+    ) -> ProcessResult:
+        nonlocal launches
+        launches += 1
+        return run_process(invocation, cwd, timeout, output_limits=output_limits)
+
+    def interrupt_first_line(record: dict[str, object], *, versions: bool) -> str:
+        nonlocal line_calls
+        line_calls += 1
+        if line_calls == 1:
+            os.kill(os.getpid(), signal.SIGINT)
+        return _doctor_line(record, versions=versions)
+
+    monkeypatch.setattr("pratfall.cli.run", counting_run)
+    monkeypatch.setattr("pratfall.cli._doctor_line", interrupt_first_line)
+    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 130
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "interrupted"
+    assert result["exit_code"] == 130
+    assert launches == 1
+
+
+@pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])
+def test_doctor_version_interruption_after_probe_prevents_next_launch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    chosen: signal.Signals,
+) -> None:
+    monkeypatch.setenv("PATH", "")
+    first = tmp_path / "first"
+    later = tmp_path / "later"
+    fake = tmp_path / "version.py"
+    fake.write_text(
+        "import pathlib,sys\n"
+        f"first=pathlib.Path({str(first)!r});later=pathlib.Path({str(later)!r})\n"
+        "(first if sys.argv[1] == 'first' else later).write_text('launched')\n"
+        "print('1.0')\n",
+        encoding="utf-8",
+    )
+    config = _version_config(
+        tmp_path,
+        {
+            "codex": [sys.executable, str(fake), "first"],
+            "gemini": [sys.executable, str(fake), "later"],
+        },
+    )
+    previous = {
+        candidate: signal.getsignal(candidate) for candidate in (signal.SIGINT, signal.SIGTERM)
+    }
+    launches = 0
+
+    def interrupt_after_run(
+        invocation: Invocation,
+        cwd: Path,
+        timeout: float,
+        *,
+        output_limits: OutputLimits,
+    ) -> ProcessResult:
+        nonlocal launches
+        process = run_process(invocation, cwd, timeout, output_limits=output_limits)
+        launches += 1
+        os.kill(os.getpid(), chosen)
+        return process
+
+    monkeypatch.setattr("pratfall.cli.run", interrupt_after_run)
+    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 128 + chosen
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "interrupted"
+    assert result["exit_code"] == 128 + chosen
+    assert launches == 1
+    assert first.exists()
+    assert not later.exists()
+    assert {candidate: signal.getsignal(candidate) for candidate in previous} == previous
 
 
 @pytest.mark.parametrize(

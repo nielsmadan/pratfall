@@ -101,6 +101,7 @@ def test_claude_builds_verified_stdin_invocation() -> None:
                 effort="high",
                 max_budget_usd=2.5,
                 max_turns=4,
+                fast=True,
                 native_args=("--permission-mode=plan", "--allowed-tools", "Read,Glob"),
             ),
         ),
@@ -120,6 +121,8 @@ def test_claude_builds_verified_stdin_invocation() -> None:
         "2.5",
         "--max-turns",
         "4",
+        "--settings",
+        '{"fastMode": true}',
         "--permission-mode=plan",
         "--allowed-tools",
         "Read,Glob",
@@ -134,6 +137,7 @@ def test_codex_builds_verified_stdin_invocation_and_toml_quotes_effort() -> None
             Options(
                 model="gpt-5.6-luna",
                 effort='high"value',
+                fast=False,
                 native_args=("--sandbox", "read-only", "--ephemeral"),
             ),
         ),
@@ -148,6 +152,8 @@ def test_codex_builds_verified_stdin_invocation_and_toml_quotes_effort() -> None
         "gpt-5.6-luna",
         "-c",
         'model_reasoning_effort="high\\"value"',
+        "-c",
+        'service_tier="default"',
         "--sandbox",
         "read-only",
         "--ephemeral",
@@ -163,6 +169,7 @@ def test_codex_builds_verified_stdin_invocation_and_toml_quotes_effort() -> None
         ("claude", ("-pprint",)),
         ("claude", ("-rsession",)),
         ("claude", ("--output-format", "text")),
+        ("claude", ("--settings", '{"fastMode": true}')),
         ("codex", ("-mnative",)),
         ("codex", ("--cd=/tmp",)),
         ("codex", ("-cmodel=other",)),
@@ -173,6 +180,25 @@ def test_owned_native_flags_are_rejected(agent: str, arguments: tuple[str, ...])
     adapter = claude if agent == "claude" else codex
     with pytest.raises(PratError, match="controlled by prat"):
         adapter.build(resolved(agent, Options(native_args=arguments)), b"prompt")
+
+
+@pytest.mark.parametrize(
+    ("agent", "fast", "expected"),
+    [
+        ("claude", None, ()),
+        ("claude", False, ("--settings", '{"fastMode": false}')),
+        ("codex", None, ()),
+        ("codex", True, ("-c", 'service_tier="priority"')),
+    ],
+)
+def test_fast_mode_native_mapping(agent: str, fast: bool | None, expected: tuple[str, ...]) -> None:
+    adapter = claude if agent == "claude" else codex
+    invocation = adapter.build(resolved(agent, Options(fast=fast)), b"prompt")
+    for item in expected:
+        assert item in invocation.argv
+    if fast is None:
+        assert "service_tier" not in " ".join(invocation.argv)
+        assert "--settings" not in invocation.argv
 
 
 @pytest.mark.parametrize(

@@ -748,6 +748,7 @@ def test_dry_run_is_a_single_versioned_preview_and_does_not_launch(
         "agent": "codex",
         "profile": "safe",
         "model": "configured",
+        "fast": None,
         "argv": [
             sys.executable,
             str(tmp_path / "codex_fake.py"),

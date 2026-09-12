@@ -12,6 +12,7 @@ uv sync
 uv run prat --help
 uv run prat agents
 uv run prat doctor
+uv run prat doctor --versions
 just check
 just coverage
 just build
@@ -36,9 +37,12 @@ uv run prat oc --model provider/model "review this repository"
 uv run prat ki --model claude-sonnet-4 --effort high "inspect this change"
 uv run prat claw --model provider/model "run the focused tests"
 uv run prat hm --effort high "review this repository"
+uv run prat cx --fast "review this urgently"
 ```
 
-Run flags can appear before or after the selector. Supply exactly one explicit prompt source:
+Run flags can appear before or after the selector. `--fast` and `--no-fast` override supported
+native fast settings for one Claude or Codex invocation. Omitting both preserves the native setting;
+`--no-fast` is an explicit override. Supply exactly one explicit prompt source:
 positional text, `--prompt=TEXT`, `-f PATH` / `--file PATH`, or stdin through positional `-` or
 `--file -`. `--prompt=TEXT` is required for text that starts with a dash, and `--prompt=-` remains
 literal text. With no explicit source, Prat reads stdin when it is redirected; at a terminal it
@@ -116,8 +120,12 @@ and I/O failures exit 1. A dry-run JSON object instead has `dry_run: true`, reso
 `argv`, `cwd`, `timeout`, and `stdin_bytes`; it does not claim a run status or usage.
 
 `agents` lists canonical names, aliases, and supported settings. `doctor` reports which executable
-prefixes are available on PATH; it never launches agents or checks credentials. Missing optional
-agents do not make the inventory command fail. `profiles` lists resolved profile settings.
+prefixes are available on PATH without launching them. `doctor --versions` additionally executes
+each available configured argv prefix followed by `--version`, one at a time, with empty stdin, a
+three-second deadline, and 64 KiB limits on each output stream. Configured wrappers are trusted and
+may have side effects. Version failures remain per-agent diagnostics and do not make doctor fail;
+an interruption stops later probes and exits with `128 + signal`. Neither form checks credentials.
+Missing optional agents do not make the inventory command fail. `profiles` lists resolved settings.
 
 Configuration lives at `$XDG_CONFIG_HOME/pratfall/config.toml`, or
 `~/.config/pratfall/config.toml` when XDG_CONFIG_HOME is absent or empty. Use `--config PATH`
@@ -140,6 +148,7 @@ version = 1
 
 [defaults]
 timeout = 600
+# fast = true
 
 [agents.codex]
 command = ["codex"]
@@ -155,7 +164,7 @@ Built-in names, aliases, and management commands are reserved. Each profile requ
 there is no profile inheritance. Agent settings accept canonical names and a `command` array
 only. Profiles accept canonical agent names or aliases.
 
-Options are `model`, `effort`, `timeout` (seconds), `native_args` (an argv array), and supported
+Options are `model`, `effort`, `fast`, `timeout` (seconds), `native_args` (an argv array), and supported
 native budgets: Claude `max_budget_usd` and `max_turns`, Copilot `max_ai_credits`, and Hermes
 `max_turns`.
 Limits must be positive and finite; `max_turns` must be an integer. Unsupported options and
@@ -165,6 +174,11 @@ accepts effort `low|medium|high|xhigh|max`; Hermes accepts
 `none|minimal|low|medium|high|xhigh|max|ultra`. Native effort enums are validated where known;
 other supported effort strings are left to the native CLI. Native permission defaults are
 preserved unless explicitly overridden.
+
+Fast mode is verified only for Claude and Codex. Claude receives an invocation-only inline
+`fastMode` setting; Codex receives an invocation-only `service_tier` setting (`priority` for true,
+`default` for false). Pratfall never edits either tool's settings files, changes models, or promises
+that the selected account can use faster service. Unsupported agents reject both true and false.
 
 Claude's `max_budget_usd` is its native API-call budget in US dollars, and `max_turns` is its
 native agent-turn limit. Prat passes both through without treating either as a token cap. Claude's
@@ -201,6 +215,7 @@ when another selector is used. Unused executables need not be installed.
 
 Management `--json` emits one object with `schema_version: 1`. Agent and doctor inventories use
 `agents`; profile listings use `profiles`; config operations report `path` plus their result.
+Doctor records contain nullable `version` and `version_error` fields in addition to availability.
 Errors return status `error`, `exit_code`, and `error` with a stable `code` and readable `message`.
 Invalid syntax or configuration exits with 2. Help and version output remain text.
 

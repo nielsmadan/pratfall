@@ -24,8 +24,11 @@ file paths resolve from the directory where Prat was invoked, independently of `
 Copilot, Cursor, and Kiro carry prompts in argv and can hit an operating-system argv limit below
 1 MiB.
 
-Run options can appear before or after the selector. `--model`, `--effort`, `--timeout`,
+Run options can appear before or after the selector. `--model`, `--effort`, `--fast`, `--no-fast`,
+`--timeout`,
 `--max-budget-usd`, `--max-turns`, and `--max-ai-credits` override supported profile fields.
+Fast overrides are supported by Claude and Codex. Omitting both flags preserves native behavior;
+`--no-fast` is a real false override. Conflicting fast flags fail before launch.
 `--cwd PATH` changes the child working directory. `--dry-run` acquires and validates the selected
 input, then prints the resolved argv without launching the agent. Prompts carried through stdin
 appear only as a byte count. Gemini, Copilot, Cursor, and Kiro carry the prompt in argv, so their
@@ -37,7 +40,8 @@ agent. A timed-out or failed run can leave edits in the working directory.
 
 Arguments after `--` are trusted native argv and replace configured `native_args`. Pratfall accepts
 only a finite documented option set and rejects native prompt, output, session, cwd, model, effort,
-and budget controls that it owns. Unsupported options can be placed in a trusted executable wrapper.
+fast, and budget controls that it owns. Unsupported options can be placed in a trusted executable
+wrapper.
 
 Pratfall preserves native permission defaults. It does not retry, fall back to another agent or
 model, install or log into commands, or edit configuration. Hermes `--run-budget` is a native

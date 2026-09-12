@@ -13,9 +13,10 @@ AGENTS = (
             effort=True,
             effort_values=("low", "medium", "high", "xhigh", "max"),
             budgets=frozenset({"max_budget_usd", "max_turns"}),
+            fast=True,
         ),
     ),
-    AgentSpec("codex", "Codex", ("cx",), ("codex",), Capabilities(effort=True)),
+    AgentSpec("codex", "Codex", ("cx",), ("codex",), Capabilities(effort=True, fast=True)),
     AgentSpec("gemini", "Gemini", ("gm",), ("gemini",)),
     AgentSpec(
         "antigravity",

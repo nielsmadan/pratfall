@@ -60,6 +60,9 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--model", options.model))
     if options.effort is not None:
         argv.extend(("-c", f"model_reasoning_effort={json.dumps(options.effort)}"))
+    if options.fast is not None:
+        service_tier = "priority" if options.fast else "default"
+        argv.extend(("-c", f"service_tier={json.dumps(service_tier)}"))
     argv.extend(arguments)
     argv.append("-")
     return Invocation(tuple(argv), prompt)

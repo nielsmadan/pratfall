@@ -851,6 +851,7 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
                     "max_budget_usd": None,
                     "max_turns": None,
                     "max_ai_credits": None,
+                    "fast": None,
                     "native_args": [],
                 },
             }
@@ -925,6 +926,7 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         "agent": "claude",
         "profile": "override",
         "model": "cli-model",
+        "fast": None,
         "argv": [str(python), str(script), "--fake-native", "claude", *expected_native_argv],
         "cwd": str(consumer),
         "timeout": 3.0,

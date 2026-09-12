@@ -10,6 +10,7 @@ class Capabilities:
     effort: bool = False
     effort_values: tuple[str, ...] = ()
     budgets: frozenset[str] = frozenset()
+    fast: bool = False
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class AgentSpec:
     aliases: tuple[str, ...]
     command: tuple[str, ...]
     capabilities: Capabilities = Capabilities()
+    version_args: tuple[str, ...] = ("--version",)
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,7 @@ class Options:
     max_budget_usd: float | None = None
     max_turns: int | None = None
     max_ai_credits: float | None = None
+    fast: bool | None = None
     native_args: tuple[str, ...] | None = None
 
 

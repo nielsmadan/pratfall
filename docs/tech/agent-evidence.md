@@ -4,6 +4,20 @@ Verified 2026-09-09 for the initial implementation. This is a working evidence r
 adapter tasks replace uncertainties with verified contracts. Installed help was read without
 model inference. Native CLI releases can change these interfaces.
 
+Fast mode and version probes were verified separately on 2026-09-10. Codex 0.153.4's configuration
+schema accepts `service_tier` strings; Prat maps true to the invocation override
+`-c service_tier="priority"` and false to `-c service_tier="default"`. Claude's fast-mode guide
+documents noninteractive `--settings '{"fastMode": true}'`, and its CLI reference says inline
+settings apply to that session; Prat passes the same single-key object with either boolean. Omission
+adds no override. Native account and model restrictions still apply, and settings files are never
+changed.
+
+All ten catalog entries use a conventional `--version` diagnostic. The configured prefix is kept
+literal. Prat treats the stripped stdout, or stderr when stdout is empty, as opaque strict UTF-8 and
+does not infer authentication. A nonzero exit, empty selected output, invalid selected encoding,
+timeout, or output overflow becomes a per-agent `version_error`. The default doctor path performs
+discovery only.
+
 | Agent | Native invocation | Model | Effort | Native limits | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | Claude Code | `claude -p --output-format json` | `--model` | `--effort` | `--max-budget-usd`, `--max-turns` | Installed 2.1.266, [CLI reference](https://code.claude.com/docs/en/cli-reference), and [Agent SDK result type](https://platform.claude.com/docs/en/agent-sdk/typescript#sdkresultmessage) |

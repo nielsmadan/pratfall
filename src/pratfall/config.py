@@ -81,6 +81,12 @@ def _integer(value: object, label: str) -> int:
     return value
 
 
+def _boolean(value: object, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise PratError(f"{label}: expected a boolean.")
+    return value
+
+
 def _arguments(value: object, label: str) -> tuple[str, ...]:
     if not isinstance(value, list | tuple):
         raise PratError(f"{label}: expected an array of strings.")
@@ -108,6 +114,7 @@ def parse_options(table: dict[str, object], label: str) -> Options:
             if "max_ai_credits" in table
             else None
         ),
+        fast=_boolean(table["fast"], f"{label}.fast") if "fast" in table else None,
         native_args=(
             _arguments(table["native_args"], f"{label}.native_args")
             if "native_args" in table
@@ -136,6 +143,8 @@ def validate_capabilities(agent: AgentSpec, options: Options, label: str) -> Non
     for field in ("max_budget_usd", "max_turns", "max_ai_credits"):
         if getattr(options, field) is not None and field not in caps.budgets:
             raise PratError(f"{label}.{field}: {agent.label} does not support this budget.")
+    if options.fast is not None and not caps.fast:
+        raise PratError(f"{label}.fast: {agent.label} does not support a fast-mode override.")
 
 
 def _commands(table: dict[str, object], path: Path) -> dict[str, tuple[str, ...]]:

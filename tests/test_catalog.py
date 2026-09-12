@@ -44,6 +44,11 @@ def test_kiro_supports_current_native_model_and_effort_options() -> None:
     )
 
 
+def test_only_verified_agents_support_fast_mode() -> None:
+    assert {agent.name for agent in AGENTS if agent.capabilities.fast} == {"claude", "codex"}
+    assert all(agent.version_args == ("--version",) for agent in AGENTS)
+
+
 def test_unknown_agent_is_actionable() -> None:
     with pytest.raises(PratError, match="prat agents"):
         get_agent("unknown")

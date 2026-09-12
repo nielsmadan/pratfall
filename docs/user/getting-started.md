@@ -10,6 +10,7 @@ Until a release is published, install or run from a source checkout:
 uv sync
 uv run prat --help
 uv run prat doctor
+uv run prat doctor --versions
 uv run prat cx "summarize this checkout"
 ```
 
@@ -19,5 +20,8 @@ hooks. `just install-local` installs the current source as a user-level uv tool,
 `just reset-local` to remove that tool installation.
 
 `prat doctor` only checks whether configured executable names resolve on `PATH`. It does not run an
-agent or verify credentials. Install and authenticate each native CLI from its official
-instructions before use.
+agent or verify credentials. `prat doctor --versions` opts into executing each available configured
+command prefix with `--version`; trusted wrappers may have side effects. Each probe gets empty stdin,
+a three-second deadline, and separate 64 KiB stdout and stderr limits. Probe errors are inventory
+data, while interruption stops the remaining probes. Neither command checks authentication.
+Install and authenticate each native CLI from its official instructions before use.
