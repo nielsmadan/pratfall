@@ -6,6 +6,12 @@ Names of four letters or fewer use the name itself. Run `prat agents` for the cu
 supported settings. Model identifiers are passed through when the native CLI supports model
 selection; Pratfall does not freeze a model catalog.
 
+- [Selectors](#selectors)
+- [Shared controls and limitations](#shared-controls-and-limitations)
+- [Native behavior](#native-behavior)
+
+## Selectors
+
 | Agent | Long form | Aliases | Output, usage, and accounting notes |
 | --- | --- | --- | --- |
 | Claude Code | `claude` | `cc` | Structured result, token usage, modelUsage IDs, native USD cost; invocation-only fast override |
@@ -31,6 +37,8 @@ selection; Pratfall does not freeze a model catalog.
 | Devin | `devin` | `dv` | Print text capture; requires trusted workspace; model override; accounting unknown |
 | Cortex Code / CoCo | `cortex` | `co` | Exec text capture; Snowflake connection required; model/effort/turns; accounting unknown |
 
+## Shared controls and limitations
+
 Kiro's invocation-scoped `--model` and `--` delimiter behavior are supported from static inspection
 of the official 2.21.2 package and its Clap 4.5.60 parser. Kiro was not live-tested for this claim.
 Its text mode can include banners or progress on stdout. Hermes is also text-only in the selected
@@ -49,6 +57,10 @@ Antigravity's documented `--print-timeout` examples apply to print mode. Its std
 contract is not verified, so Pratfall relies on its configured outer `--timeout` and strict terminal
 event checks instead of forwarding the print-only option.
 
+## Native behavior
+
+### OpenHands
+
 OpenHands support targets CLI 1.16.0 with its pinned SDK 1.21.0. It requires native setup before
 running headlessly. This mode automatically approves actions and disables the native critic.
 Prat does not provide an approval layer. Set the model in native settings, or explicitly pass
@@ -58,6 +70,8 @@ the echoed conversation summary do not prove completion. Conversation error even
 failures even if the native CLI exits zero. A finish message may explain that the agent could not
 perform the requested work; Prat does not infer task success from its prose.
 
+### Warp
+
 Warp uses local `oz agent run`. Its [legacy `oz` interface](https://docs.warp.dev/reference/cli/) is documented through the end of
 September 2026, and the newer `warp` TUI has no verified replacement one-shot invocation here.
 Compatibility evidence must be rechecked at release time; Prat has no date cutoff or automatic
@@ -65,6 +79,8 @@ fallback. NDJSON agent messages are joined in order, excluding reasoning and too
 errors can be recovered from; successful native exit and EOF complete the stream, including runs
 with no text. Native permissions and authentication remain active. Optional native arguments are
 `--name`/`-n`, `--strict-mcp-startup`, and `--mcp-startup-timeout`.
+
+### iFlow
 
 iFlow support targets the published 0.5.19 package. Maintenance ended on 2026-03-20 and its hosted
 service closed on 2026-04-17. The [official FAQ](https://vibex.iflow.cn/t/topic/4819) confirms existing installations can continue
@@ -79,6 +95,8 @@ OpenHands, Warp and iFlow inherit native authentication/settings. Native startup
 migrate settings; Prat does not run setup or edit vendor configuration. Their argv prompt
 transports preserve literal data while remaining subject to OS argument-size limits.
 
+### Qwen Code
+
 Qwen support targets 0.23.3 with plain stdin and stream-json output. The final valid native result
 at EOF determines completion: intermediate subagent error results can be followed by root success.
 Root assistant text and models exclude child messages; final usage replaces message snapshots.
@@ -86,12 +104,16 @@ Qwen denies unresolved interactive approvals. Optional native flags are `--debug
 `--approval-mode`, `--system-prompt`, and `--append-system-prompt`. No generic effort or spend cap
 is verified; `max_turns` maps to `--max-session-turns` with native counting semantics.
 
+### Amp
+
 Amp uses `--execute --stream-json` with plain stdin and one terminal result. Native error strings
 and system errors remain failures; final result usage is optional. Native mode does not identify
 a model, so model/effort/fast/budget overrides are unsupported. `--stream-json-thinking` is the
 only optional native argument; thinking remains excluded from final output. Current Amp defaults
 to automatic tool approval unless existing native settings enable permissions. Prat preserves
 that behavior. Its version diagnostic is `amp version`.
+
+### Reasonix
 
 Reasonix support targets 1.38.5. `--model` selects a configured provider name; effort levels depend
 on that provider. Native `--max-steps` counts tool-call rounds and is available after `--`, alongside
@@ -102,12 +124,16 @@ cache-read counts are preserved, while cache-write counts and USD cost remain un
 the native cache-creation and USD aliases have different meanings. These three adapters inherit
 existing authentication/settings and perform no setup.
 
+### Droid
+
 Droid uses `exec --output-format json` with plain stdin and requires a successful native result
 object. It defaults to read-only. Explicit `--auto low|medium|high` is available after `--`, but
 Prat never injects it. Model and reasoning effort are supported; the accepted effort union is
 `none|dynamic|off|minimal|low|medium|high|xhigh|max`, with each model accepting its own subset.
 Custom models control reasoning in their native provider settings. Usage, observed models and
 USD cost remain unknown.
+
+### Kimi CLI
 
 Kimi support targets kimi-cli 1.50.0, not its successor kimi-code. Print mode automatically approves
 tools and dismisses user questions. Prat uses final-message-only stream JSON with plain stdin,
@@ -116,6 +142,8 @@ succeed with no output. Native buffered text cannot be recovered if never emitte
 `--thinking`/`--no-thinking`, `--plan`, and `--debug` are available after `--`; thinking is boolean,
 not generic effort. There is no verified accounting. Plain-text native errors still preserve the
 native failure status and any answer already emitted.
+
+### Mistral Vibe
 
 Mistral Vibe support targets 2.25.2. Bare `--prompt --output json` reads and trims stdin, then
 returns complete public history. Prat selects the last nonempty assistant message and joins text
@@ -130,6 +158,8 @@ cumulative prompt plus completion tokens; it remains a native argument, alongsid
 synchronize Git and changes the output protocol. Accounting remains unknown. All three adapters
 inherit existing authentication and perform no native setup or configuration changes.
 
+### Crush
+
 Crush support targets 0.93.1. `run --quiet` reads stdin and hides the native spinner. Prat sends
 the original prompt bytes; Crush adds two trailing newline characters without trimming the input.
 Local run automatically approves its session. Existing provider setup is required. `CRUSH_CLIENT_SERVER`
@@ -138,12 +168,16 @@ model overrides there can update workspace preferences. Model selection is suppo
 effort, fast and budgets are unsupported. Optional native flags are `--verbose`/`-v` and
 `--debug`/`-d`.
 
+### Devin
+
 Devin support uses the 3000.10.21 baseline and documented `-p -- PROMPT` path. The prompt is one
 literal argv item, so operating-system argv-size limits can apply below Prat's input limit.
 Print requires existing authentication and an already trusted workspace; Prat adds no trust
 bypass. Native `--permission-mode VALUE` may be explicitly selected after `--`; the exact outcome
 of every headless tool approval is not established. Model selection is supported; effort, fast
 and budgets are unsupported.
+
+### Cortex Code
 
 Cortex Code / CoCo support uses executable `cortex` and the 1.1.78 baseline. `exec --file -`
 reads stdin. Existing Snowflake account, connection and native authentication/policies are

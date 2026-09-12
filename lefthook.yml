@@ -16,9 +16,3 @@ pre-push:
       run: uv run mypy
     tests:
       run: uv run pytest tests/ scripts/ -q --cov
-    docs:
-      glob:
-        - "docs/user/**/*"
-        - "mkdocs.yml"
-        - "README.md"
-      run: uv run --group docs zensical build -f mkdocs.yml --strict

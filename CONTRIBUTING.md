@@ -11,7 +11,6 @@ just setup
 just doctor
 just check
 just coverage
-just docs-build
 just build
 ```
 
@@ -21,6 +20,9 @@ global command. Tests use fake executables and must not invoke paid agent infere
 Runtime code lives in `src/pratfall/`; tests mirror its modules under `tests/`. Release helper tests
 live under `scripts/` and are part of `just test` and `just check`. Keep the runtime standard-library
 only unless a dependency has a demonstrated need.
+
+Update the [README](README.md) and linked [Markdown guides](docs/overview.md) when changing public
+behavior. Keep relative links valid when moving documentation.
 
 Use one of `feat:`, `fix:`, or `chore:` without scopes. `feat` and `fix` entries appear in the
 generated changelog. Mark breaking changes with `feat!:` / `fix!:` or a `BREAKING CHANGE:` footer.

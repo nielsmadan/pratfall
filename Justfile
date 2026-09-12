@@ -77,13 +77,7 @@ reset-local:
     @uv tool uninstall pratfall
 
 clean:
-    @rm -rf dist build .pytest_cache htmlcov .coverage coverage.xml site
-
-docs-build:
-    @uv run --group docs zensical build -f mkdocs.yml --strict
-
-docs:
-    @uv run --group docs zensical serve -f mkdocs.yml
+    @rm -rf dist build .pytest_cache htmlcov .coverage coverage.xml
 
 changelog:
     @uvx {{git_cliff}} -o CHANGELOG.md

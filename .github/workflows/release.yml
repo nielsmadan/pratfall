@@ -64,8 +64,6 @@ jobs:
           uv run pytest tests/ scripts/ -q --cov --cov-branch
           --cov-report=term-missing --cov-fail-under=80
           --basetemp=.cache/release/pytest
-      - run: uv run zensical build -f mkdocs.yml --strict
-
       - name: Build sdist then wheel from sdist
         run: |
           rm -rf dist build

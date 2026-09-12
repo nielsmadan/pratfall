@@ -20,6 +20,15 @@ Crush local run automatically approves actions; `CRUSH_CLIENT_SERVER` can select
 with a separate lifetime. Devin print requires an already trusted workspace. Cortex exec requires
 existing Snowflake account/connection/authentication, disables plan mode and rejects interactive asks.
 
+- [Installation](#installation)
+- [Running prompts](#running-prompts)
+- [Output and diagnostics](#output-and-diagnostics)
+- [Profiles and configuration](#profiles-and-configuration)
+- [Agent controls and accounting](#agent-controls-and-accounting)
+- [Reference guides](#reference-guides)
+
+## Installation
+
 Requires Python 3.13 or newer. Development uses [uv](https://docs.astral.sh/uv/) and
 [just](https://github.com/casey/just):
 
@@ -38,6 +47,8 @@ Until the first release is published, use the source checkout as shown above. `j
 installs the checkout as a user-level uv tool; `just refresh-local` performs a no-cache reinstall,
 and `just reset-local` removes it. These recipes change the user's tool installation and are never
 run implicitly. Pratfall does not install or authenticate native agent commands.
+
+## Running prompts
 
 Run an agent by its full name, an alias, or a named profile with exactly one prompt. Every agent
 has a full name; names of four letters or fewer need no alias. See the
@@ -109,6 +120,8 @@ uv run prat cx "inspect only" -- --sandbox read-only --ephemeral
 uv run prat cc "make the requested edit" -- --permission-mode acceptEdits
 ```
 
+## Output and diagnostics
+
 Standard output contains normalized final text. Structured adapters select assistant text;
 text adapters capture complete native stdout, which can include banners or progress.
 Launch/completion progress and native stderr diagnostics go to standard error.
@@ -166,6 +179,8 @@ may have side effects. Version failures remain per-agent diagnostics and do not 
 an interruption stops later probes and exits with `128 + signal`. Neither form checks credentials.
 Missing optional agents do not make the inventory command fail. `profiles` lists resolved settings.
 
+## Profiles and configuration
+
 Configuration lives at `$XDG_CONFIG_HOME/pratfall/config.toml`, or
 `~/.config/pratfall/config.toml` when XDG_CONFIG_HOME is absent or empty. Use `--config PATH`
 before or after management commands to select another file:
@@ -203,6 +218,8 @@ Built-in names, aliases, and management commands are reserved. Each profile requ
 there is no profile inheritance. Agent settings accept canonical names and a `command` array
 only. Profiles accept canonical agent names or aliases.
 When upgrading, [rename profiles that collide with newly reserved selectors](docs/user/profiles.md).
+
+## Agent controls and accounting
 
 Options are `model`, `effort`, `fast`, `timeout` (seconds), `native_args` (an argv array), and supported
 native budgets: Claude and Vibe `max_budget_usd` and `max_turns`, Copilot `max_ai_credits`, and
@@ -294,7 +311,15 @@ Doctor records contain nullable `version` and `version_error` fields in addition
 Errors return status `error`, `exit_code`, and `error` with a stable `code` and readable `message`.
 Invalid syntax or configuration exits with 2. Help and version output remain text.
 
-The [user guides](docs/user/index.md) cover installation, profiles, prompts, JSON, and adapter
-limitations. Builder documentation starts at [docs/overview.md](docs/overview.md). Pratfall is MIT
-licensed; see [LICENSE](LICENSE). Published package and Homebrew URLs will become installable only
-after the first GitHub release.
+## Reference guides
+
+Detailed references live alongside this README:
+
+- [Installation](docs/user/getting-started.md) and [running prompts](docs/user/running.md)
+- [Profiles and configuration](docs/user/profiles.md)
+- [Agent selectors, capabilities, and limitations](docs/user/agents.md)
+- [JSON output](docs/user/json.md)
+- [Developer and release documentation](docs/overview.md)
+
+Pratfall is MIT licensed; see [LICENSE](LICENSE). Published package and Homebrew URLs will become
+installable only after the first GitHub release.
