@@ -486,6 +486,8 @@ def _assert_result(
     result = _json_result(completed)
     assert completed.returncode == returncode
     assert result["schema_version"] == 1
+    assert "reported_models" in result
+    assert "cost_usd" in result
     assert result["status"] == status
     assert result["exit_code"] == returncode
     assert result["native_exit_code"] == native_exit_code

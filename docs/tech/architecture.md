@@ -8,8 +8,8 @@
 4. The selected module in `adapters/` builds an argv/stdin invocation.
 5. `runner.py` starts a process group, drains bounded stdout and stderr concurrently, and enforces
    one monotonic deadline.
-6. The adapter decodes native output and `output.py` applies exit/error precedence to one normalized
-   result.
+6. The adapter decodes native output, usage, and verified native accounting; `output.py` applies
+   exit/error precedence to one normalized result while retaining decoded fields.
 
 The adapter registry binds small command builders and post-exit decoders. The runner does not know
 provider schemas, and adapters do not own process lifecycle. The standard-library-only runtime

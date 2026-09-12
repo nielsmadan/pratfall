@@ -3,6 +3,7 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+from pratfall.adapters.accounting import cost
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
@@ -67,6 +68,7 @@ class _State:
     text_order: list[str] = field(default_factory=list)
     texts: dict[str, str] = field(default_factory=dict)
     usage_parts: dict[str, Usage] = field(default_factory=dict)
+    cost_parts: dict[str, int | float | None] = field(default_factory=dict)
     completed: bool = False
     provider_error: ResultError | None = None
     protocol_error: ResultError | None = None
@@ -83,25 +85,35 @@ def decode(stdout: str) -> DecodedOutput:
         except json.JSONDecodeError as error:
             _protocol(state, f"Invalid OpenCode JSONL on line {line_number}: {error.msg}.")
             continue
+        except ValueError:
+            _protocol(
+                state,
+                f"Invalid OpenCode JSONL on line {line_number}: numeric value is too large.",
+            )
+            continue
         if not isinstance(event, dict) or not isinstance(event.get("type"), str):
             _protocol(state, f"Malformed OpenCode event on line {line_number}.")
             continue
         _apply_event(state, event)
     output = "\n".join(state.texts[item] for item in state.text_order)
     usage = _total_usage(state.usage_parts.values()) if state.usage_parts else None
+    cost_usd, cost_error = _total_cost(state.cost_parts.values())
+    if cost_error is not None:
+        state.protocol_error = state.protocol_error or cost_error
     failure = state.provider_error or state.protocol_error
     if failure is not None:
-        return DecodedOutput(output=output, usage=usage, error=failure)
+        return DecodedOutput(output=output, usage=usage, cost_usd=cost_usd, error=failure)
     if not state.completed:
         suffix = "" if state.recognized else " (only unknown events were received)"
         return DecodedOutput(
             output=output,
             usage=usage,
+            cost_usd=cost_usd,
             error=ResultError(
                 "protocol_error", f"OpenCode stream ended without a stop finish{suffix}."
             ),
         )
-    return DecodedOutput(output=output, usage=usage)
+    return DecodedOutput(output=output, usage=usage, cost_usd=cost_usd)
 
 
 def _apply_event(state: _State, event: dict[str, object]) -> None:
@@ -152,7 +164,6 @@ def _finish(state: _State, event: dict[str, object]) -> None:
         _protocol(state, "OpenCode step_finish event is malformed.")
         return
     reason = part.get("reason")
-    cost = part.get("cost")
     if not isinstance(reason, str) or reason not in {
         "stop",
         "length",
@@ -162,21 +173,7 @@ def _finish(state: _State, event: dict[str, object]) -> None:
         "unknown",
     }:
         _protocol(state, "OpenCode step_finish reason is malformed.")
-        return
-    if (
-        not isinstance(cost, int | float)
-        or isinstance(cost, bool)
-        or not math.isfinite(cost)
-        or cost < 0
-    ):
-        _protocol(state, "OpenCode step_finish cost is malformed.")
-        return
-    usage = _usage(part.get("tokens"))
-    if isinstance(usage, ResultError):
-        state.protocol_error = state.protocol_error or usage
-    else:
-        state.usage_parts[part_id] = usage
-    if reason == "stop":
+    elif reason == "stop":
         state.completed = True
     elif reason == "tool-calls":
         state.completed = False
@@ -184,6 +181,15 @@ def _finish(state: _State, event: dict[str, object]) -> None:
         state.provider_error = state.provider_error or ResultError(
             "provider_error", f"OpenCode stopped with finish reason {reason!r}."
         )
+    part_cost, cost_error = cost(part.get("cost"), "OpenCode step_finish cost")
+    state.cost_parts[part_id] = part_cost
+    if cost_error is not None:
+        state.protocol_error = state.protocol_error or cost_error
+    usage = _usage(part.get("tokens"))
+    if isinstance(usage, ResultError):
+        state.protocol_error = state.protocol_error or usage
+    else:
+        state.usage_parts[part_id] = usage
 
 
 def _error(state: _State, value: object) -> None:
@@ -246,6 +252,25 @@ def _total_usage(parts: Iterable[Usage]) -> Usage:
             + (part.reasoning_output_tokens or 0),
         )
     return total
+
+
+def _total_cost(
+    parts: Iterable[int | float | None],
+) -> tuple[int | float | None, ResultError | None]:
+    total: int | float | None = None
+    unknown = False
+    for part in parts:
+        if part is None:
+            unknown = True
+            continue
+        try:
+            total = part if total is None else total + part
+            finite = math.isfinite(total)
+        except OverflowError:
+            finite = False
+        if not finite:
+            return None, ResultError("protocol_error", "OpenCode aggregate cost is malformed.")
+    return (None if unknown else total), None
 
 
 def _protocol(state: _State, message: str) -> None:

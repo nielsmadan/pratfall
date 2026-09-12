@@ -31,6 +31,8 @@ def test_runner_failure_outranks_native_and_decoder_failures() -> None:
     decoded = DecodedOutput(
         output="safe partial",
         usage=Usage(input_tokens=1),
+        reported_models=("native-a", "native-b"),
+        cost_usd=0,
         error=ResultError("provider_error", "provider"),
     )
     result = normalize(RESOLVED, process(9, runner_error), decoded)
@@ -38,6 +40,8 @@ def test_runner_failure_outranks_native_and_decoder_failures() -> None:
     assert result.exit_code == 1
     assert result.native_exit_code == 9
     assert result.output == "safe partial"
+    assert result.reported_models == ("native-a", "native-b")
+    assert result.cost_usd == 0
     assert result.error == runner_error
 
 
@@ -98,6 +102,8 @@ def test_native_signal_and_success_json_shape() -> None:
         "agent": "codex",
         "profile": "profile",
         "model": "model",
+        "reported_models": None,
+        "cost_usd": None,
         "status": "success",
         "output": "answer",
         "exit_code": 0,

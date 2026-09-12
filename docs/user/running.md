@@ -37,6 +37,9 @@ previews include it.
 Input acquisition waits for EOF before the agent-execution timeout begins. SIGINT or SIGTERM while
 Prat is reading input returns interrupted status and exits with `128 + signal` without launching an
 agent. A timed-out or failed run can leave edits in the working directory.
+Those results can also contain partial final output and any accounting decoded before failure.
+In particular, Codex assistant messages completed before EOF or the outer timeout are preserved,
+but an unfinished turn still fails rather than becoming a synthetic success.
 
 Arguments after `--` are trusted native argv and replace configured `native_args`. Pratfall accepts
 only a finite documented option set and rejects native prompt, output, session, cwd, model, effort,

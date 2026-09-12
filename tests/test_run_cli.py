@@ -1,3 +1,4 @@
+import fcntl
 import io
 import json
 import os
@@ -5,6 +6,7 @@ import signal
 import subprocess
 import sys
 import time
+from contextlib import suppress
 from pathlib import Path
 
 import pytest
@@ -153,6 +155,8 @@ def test_codex_dispatch_normalizes_output_and_supports_flags_around_selector(
         "agent": "codex",
         "profile": "quick",
         "model": "model-id",
+        "reported_models": None,
+        "cost_usd": None,
         "status": "success",
         "output": result["output"],
         "exit_code": 0,
@@ -199,13 +203,16 @@ def test_claude_native_zero_exit_provider_failure_is_normalized(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     failure = """import json
-print(json.dumps({"type": "result", "subtype": "error_max_turns", "is_error": True, "errors": ["Turn limit reached."], "usage": {"input_tokens": 5, "output_tokens": 2}}))
+print(json.dumps({"type": "result", "subtype": "error_max_turns", "is_error": True, "errors": ["Turn limit reached."], "usage": {"input_tokens": 5, "output_tokens": 2}, "modelUsage": {"native-primary": {}, "native-helper": {}}, "total_cost_usd": 0}))
 """
     config = write_agent(tmp_path, "claude", failure)
-    assert main(["cc", "prompt", "--config", str(config), "--json"]) == 1
+    assert main(["cc", "prompt", "--model", "requested", "--config", str(config), "--json"]) == 1
     result = json.loads(capsys.readouterr().out)
     assert result["native_exit_code"] == 0
     assert result["status"] == "error"
+    assert result["model"] == "requested"
+    assert result["reported_models"] == ["native-primary", "native-helper"]
+    assert result["cost_usd"] == 0
     assert result["usage"]["input_tokens"] == 5
     assert result["error"] == {"code": "provider_error", "message": "Turn limit reached."}
 
@@ -314,6 +321,53 @@ sys.exit(2)
     assert result["native_exit_code"] == 2
     assert result["output"] == "partial"
     assert result["error"] == {"code": "timeout", "message": "native deadline"}
+
+
+def test_codex_outer_timeout_preserves_completed_message_and_cleans_fake(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    lock_path = tmp_path / "fake.lock"
+    ready_path = tmp_path / "fake.ready"
+    pid_path = tmp_path / "fake.pid"
+    fixture = f"""import fcntl, json, os, time
+from pathlib import Path
+lock = open({str(lock_path)!r}, "wb")
+fcntl.flock(lock, fcntl.LOCK_EX)
+Path({str(pid_path)!r}).write_text(str(os.getpid()))
+Path({str(ready_path)!r}).write_text("ready")
+print(json.dumps({{"type": "turn.started"}}), flush=True)
+print(json.dumps({{"type": "item.completed", "item": {{"id": "answer", "type": "agent_message", "text": "partial"}}}}), flush=True)
+time.sleep(30)
+"""
+    config = write_agent(tmp_path, "codex", fixture)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    cleaned = False
+    try:
+        assert main(["cx", "prompt", "--timeout", "1", "--config", str(config), "--json"]) == 124
+        result = json.loads(capsys.readouterr().out)
+        assert ready_path.read_text(encoding="utf-8") == "ready"
+        assert result["status"] == "timeout"
+        assert result["output"] == "partial"
+        assert result["error"]["code"] == "timeout"
+        with lock_path.open("a+b") as stream:
+            try:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                cleaned = False
+            else:
+                cleaned = True
+                fcntl.flock(stream, fcntl.LOCK_UN)
+        assert cleaned
+    finally:
+        if not cleaned and pid_path.exists():
+            pid = int(pid_path.read_text(encoding="utf-8"))
+            with suppress(ProcessLookupError):
+                os.killpg(pid, signal.SIGKILL)
+            with suppress(ChildProcessError):
+                os.waitpid(pid, 0)
 
 
 @pytest.mark.parametrize(
@@ -854,6 +908,8 @@ def test_run_argument_errors_use_full_json_contract_when_requested(
         "agent",
         "profile",
         "model",
+        "reported_models",
+        "cost_usd",
         "status",
         "output",
         "exit_code",

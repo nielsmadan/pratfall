@@ -85,6 +85,8 @@ class DecodedOutput:
     usage: Usage | None = None
     error: ResultError | None = None
     timed_out: bool = False
+    reported_models: tuple[str, ...] | None = None
+    cost_usd: int | float | None = None
 
 
 @dataclass(frozen=True)
@@ -99,3 +101,5 @@ class NormalizedResult:
     duration_ms: int
     usage: Usage | None
     error: ResultError | None
+    reported_models: tuple[str, ...] | None
+    cost_usd: int | float | None

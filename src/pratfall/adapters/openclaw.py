@@ -1,6 +1,7 @@
 import json
 import math
 
+from pratfall.adapters.accounting import cost, model
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.errors import PratError
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
@@ -63,12 +64,15 @@ def decode(stdout: str) -> DecodedOutput:
         value = json.loads(stdout)
     except json.JSONDecodeError as error:
         return _protocol(f"Invalid OpenClaw JSON: {error.msg}.")
+    except ValueError:
+        return _protocol("Invalid OpenClaw JSON: numeric value is too large.")
     if not isinstance(value, dict):
         return _protocol("OpenClaw result must be a JSON object.")
     return _decode_envelope(value)
 
 
 def _decode_envelope(value: dict[str, object]) -> DecodedOutput:
+    reported_models, cost_usd, accounting_error = _accounting(value)
     status = value.get("status")
     ok = value.get("ok")
     final = value.get("final")
@@ -79,9 +83,18 @@ def _decode_envelope(value: dict[str, object]) -> DecodedOutput:
         or status not in {"ok", "error", "timeout"}
         or not isinstance(final, str)
     ):
-        return _protocol("OpenClaw result envelope is malformed.")
+        return DecodedOutput(
+            reported_models=reported_models,
+            cost_usd=cost_usd,
+            error=ResultError("protocol_error", "OpenClaw result envelope is malformed."),
+        )
     if isinstance(payloads, ResultError):
-        return DecodedOutput(output=final, error=payloads)
+        return DecodedOutput(
+            output=final,
+            reported_models=reported_models,
+            cost_usd=cost_usd,
+            error=payloads,
+        )
     usage = _usage(value.get("usage")) if "usage" in value else None
     if isinstance(usage, ResultError):
         usage_error: ResultError | None = usage
@@ -92,29 +105,95 @@ def _decode_envelope(value: dict[str, object]) -> DecodedOutput:
     payload_error = _payload_error(payloads)
     provider_error = _provider_error(native_error, payload_error)
     if status == "timeout":
-        failure = provider_error or native_error or usage_error
+        failure = provider_error or native_error or usage_error or accounting_error
         if failure is None:
-            decoded = DecodedOutput(output=final, usage=usage, error=_missing_error())
+            decoded = DecodedOutput(
+                output=final,
+                usage=usage,
+                reported_models=reported_models,
+                cost_usd=cost_usd,
+                error=_missing_error(),
+            )
         elif failure.code != "provider_error":
-            decoded = DecodedOutput(output=final, usage=usage, error=failure)
+            decoded = DecodedOutput(
+                output=final,
+                usage=usage,
+                reported_models=reported_models,
+                cost_usd=cost_usd,
+                error=failure,
+            )
         else:
             decoded = DecodedOutput(
                 output=final,
                 usage=usage,
+                reported_models=reported_models,
+                cost_usd=cost_usd,
                 error=ResultError("timeout", failure.message),
                 timed_out=True,
             )
     elif provider_error is not None:
-        decoded = DecodedOutput(output=final, usage=usage, error=provider_error)
-    elif native_error is not None or usage_error is not None:
-        decoded = DecodedOutput(output=final, usage=usage, error=native_error or usage_error)
+        decoded = DecodedOutput(
+            output=final,
+            usage=usage,
+            reported_models=reported_models,
+            cost_usd=cost_usd,
+            error=provider_error,
+        )
+    elif native_error is not None or usage_error is not None or accounting_error is not None:
+        decoded = DecodedOutput(
+            output=final,
+            usage=usage,
+            reported_models=reported_models,
+            cost_usd=cost_usd,
+            error=native_error or usage_error or accounting_error,
+        )
     elif status == "ok" and ok:
-        decoded = DecodedOutput(output=final, usage=usage)
+        decoded = DecodedOutput(
+            output=final,
+            usage=usage,
+            reported_models=reported_models,
+            cost_usd=cost_usd,
+        )
     elif status != "ok" and not ok:
-        decoded = DecodedOutput(output=final, usage=usage, error=_missing_error())
+        decoded = DecodedOutput(
+            output=final,
+            usage=usage,
+            reported_models=reported_models,
+            cost_usd=cost_usd,
+            error=_missing_error(),
+        )
     else:
-        decoded = DecodedOutput(output=final, usage=usage, error=_envelope_mismatch())
+        decoded = DecodedOutput(
+            output=final,
+            usage=usage,
+            reported_models=reported_models,
+            cost_usd=cost_usd,
+            error=_envelope_mismatch(),
+        )
     return decoded
+
+
+def _accounting(
+    value: dict[str, object],
+) -> tuple[tuple[str, ...] | None, int | float | None, ResultError | None]:
+    reported_model, model_error = model(value.get("model"), "OpenClaw model")
+    provider = value.get("provider")
+    if reported_model is None:
+        reported_models = None
+    else:
+        reported_provider, provider_error = model(provider, "OpenClaw provider")
+        model_error = model_error or provider_error
+        if provider_error is not None:
+            reported_models = None
+        else:
+            identifier = (
+                f"{reported_provider}/{reported_model}"
+                if reported_provider is not None
+                else reported_model
+            )
+            reported_models = (identifier,)
+    cost_usd, cost_error = cost(value.get("costUsd"), "OpenClaw costUsd")
+    return reported_models, cost_usd, model_error or cost_error
 
 
 def _has_fallback(arguments: tuple[str, ...]) -> bool:

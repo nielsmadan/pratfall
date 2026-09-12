@@ -1,5 +1,6 @@
 import json
 
+from pratfall.adapters.accounting import cost, model_map
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
@@ -109,34 +110,72 @@ def decode(stdout: str) -> DecodedOutput:
         return DecodedOutput(
             error=ResultError("protocol_error", f"Invalid Claude JSON: {error.msg}.")
         )
+    except ValueError:
+        return _protocol("Invalid Claude JSON: numeric value is too large.")
     if not isinstance(value, dict):
         return _protocol("Claude result must be a JSON object.")
+    reported_models, model_error = model_map(value.get("modelUsage"), "Claude modelUsage")
+    cost_usd, cost_error = cost(value.get("total_cost_usd"), "Claude total_cost_usd")
+    accounting_error = model_error or cost_error
     event_type = value.get("type")
     subtype = value.get("subtype")
     is_error = value.get("is_error")
     if event_type != "result" or not isinstance(subtype, str) or not isinstance(is_error, bool):
-        return _protocol("Claude result envelope is malformed.")
-    usage = _usage(value.get("usage"))
-    if isinstance(usage, ResultError):
-        return DecodedOutput(error=usage)
+        return DecodedOutput(
+            reported_models=reported_models,
+            cost_usd=cost_usd,
+            error=ResultError("protocol_error", "Claude result envelope is malformed."),
+        )
+    decoded_usage = _usage(value.get("usage"))
+    usage = None if isinstance(decoded_usage, ResultError) else decoded_usage
+    usage_error = decoded_usage if isinstance(decoded_usage, ResultError) else None
     if subtype == "success":
-        return _decode_success(value, is_error, usage)
+        return _decode_success(
+            value,
+            is_error,
+            usage,
+            reported_models,
+            cost_usd,
+            usage_error or accounting_error,
+        )
     if subtype in {
         "error_max_turns",
         "error_during_execution",
         "error_max_budget_usd",
         "error_max_structured_output_retries",
     }:
-        return _decode_failure(value, subtype, usage)
-    return _protocol(f"Claude result has unknown subtype {subtype!r}.")
+        return _decode_failure(
+            value,
+            subtype,
+            usage,
+            reported_models,
+            cost_usd,
+            usage_error or accounting_error,
+        )
+    return DecodedOutput(
+        usage=usage,
+        reported_models=reported_models,
+        cost_usd=cost_usd,
+        error=ResultError("protocol_error", f"Claude result has unknown subtype {subtype!r}."),
+    )
 
 
-def _decode_success(value: dict[str, object], is_error: bool, usage: Usage) -> DecodedOutput:
+def _decode_success(
+    value: dict[str, object],
+    is_error: bool,
+    usage: Usage | None,
+    reported_models: tuple[str, ...] | None,
+    cost_usd: int | float | None,
+    protocol_error: ResultError | None,
+) -> DecodedOutput:
     output = value.get("result")
     if not isinstance(output, str):
         return DecodedOutput(
             usage=usage,
-            error=ResultError(
+            reported_models=reported_models,
+            cost_usd=cost_usd,
+            error=protocol_error
+            or ResultError(
                 "protocol_error", "Claude success result is missing a string result field."
             ),
         )
@@ -145,23 +184,43 @@ def _decode_success(value: dict[str, object], is_error: bool, usage: Usage) -> D
         return DecodedOutput(
             output=output,
             usage=usage,
+            reported_models=reported_models,
+            cost_usd=cost_usd,
             error=ResultError("provider_error", message),
         )
-    return DecodedOutput(output=output, usage=usage)
+    return DecodedOutput(
+        output=output,
+        usage=usage,
+        reported_models=reported_models,
+        cost_usd=cost_usd,
+        error=protocol_error,
+    )
 
 
-def _decode_failure(value: dict[str, object], subtype: str, usage: Usage) -> DecodedOutput:
+def _decode_failure(
+    value: dict[str, object],
+    subtype: str,
+    usage: Usage | None,
+    reported_models: tuple[str, ...] | None,
+    cost_usd: int | float | None,
+    protocol_error: ResultError | None,
+) -> DecodedOutput:
     errors = value.get("errors")
     if not isinstance(errors, list) or any(not isinstance(item, str) for item in errors):
         return DecodedOutput(
             usage=usage,
-            error=ResultError(
+            reported_models=reported_models,
+            cost_usd=cost_usd,
+            error=protocol_error
+            or ResultError(
                 "protocol_error", "Claude error result is missing a string array errors field."
             ),
         )
     message = "\n".join(errors) or f"Claude reported {subtype}."
     return DecodedOutput(
         usage=usage,
+        reported_models=reported_models,
+        cost_usd=cost_usd,
         error=ResultError("provider_error", message),
     )
 

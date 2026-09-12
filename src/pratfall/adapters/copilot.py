@@ -2,6 +2,7 @@ import json
 import math
 from dataclasses import dataclass, field
 
+from pratfall.adapters.accounting import model
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
 
@@ -130,6 +131,7 @@ class _State:
     provider_error: ResultError | None = None
     protocol_error: ResultError | None = None
     recognized: bool = False
+    reported_models: list[str] = field(default_factory=list)
 
 
 def decode(stdout: str) -> DecodedOutput:
@@ -142,6 +144,11 @@ def decode(stdout: str) -> DecodedOutput:
         except json.JSONDecodeError as error:
             _protocol(state, f"Invalid Copilot JSONL on line {line_number}: {error.msg}.")
             continue
+        except ValueError:
+            _protocol(
+                state, f"Invalid Copilot JSONL on line {line_number}: numeric value is too large."
+            )
+            continue
         if not isinstance(event, dict) or not isinstance(event.get("type"), str):
             _protocol(state, f"Malformed Copilot event on line {line_number}.")
             continue
@@ -149,16 +156,21 @@ def decode(stdout: str) -> DecodedOutput:
     output = "\n".join(state.messages[item] for item in state.order)
     failure = state.provider_error or state.protocol_error
     if failure is not None:
-        return DecodedOutput(output=output, error=failure)
+        return DecodedOutput(
+            output=output,
+            reported_models=tuple(state.reported_models) or None,
+            error=failure,
+        )
     if not state.completed:
         suffix = "" if state.recognized else " (only unknown events were received)"
         return DecodedOutput(
             output=output,
+            reported_models=tuple(state.reported_models) or None,
             error=ResultError(
                 "protocol_error", f"Copilot stream ended without a successful result event{suffix}."
             ),
         )
-    return DecodedOutput(output=output)
+    return DecodedOutput(output=output, reported_models=tuple(state.reported_models) or None)
 
 
 def _apply_event(state: _State, event: dict[str, object]) -> None:
@@ -203,6 +215,11 @@ def _message(state: _State, event: dict[str, object], event_type: object) -> Non
     if event_type == "assistant.message":
         state.messages[message_id] = content
         state.complete_messages.add(message_id)
+        reported_model, model_error = model(data.get("model"), "Copilot assistant model")
+        if model_error is not None:
+            state.protocol_error = state.protocol_error or model_error
+        elif reported_model is not None and reported_model not in state.reported_models:
+            state.reported_models.append(reported_model)
     elif message_id in state.complete_messages:
         return
     else:

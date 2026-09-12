@@ -12,6 +12,13 @@ Capability metadata describes whether an adapter accepts `model`, `effort`, `fas
 native budgets. It does not catalog provider model names. The normalized `model` field records the
 resolved requested model, or null when the native default was selected.
 
+`DecodedOutput` also carries nullable `reported_models` and `cost_usd`. Adapters populate only
+verified native mappings, validate exposed identifiers as nonempty UTF-8 strings and costs as
+finite nonnegative numbers, and retain valid accounting alongside provider, protocol, runner, and
+timeout failures. The normalizer copies these fields without replacing the requested `model`.
+OpenCode stores the latest cost snapshot per step ID before summing distinct steps; any unknown
+latest cost makes the aggregate unknown, and aggregate overflow is a protocol error.
+
 Claude and Codex are the only adapters with verified invocation-only fast mappings. Their native
 settings/config flags remain reserved so `native_args` cannot replace the resolved Pratfall value.
 Each catalog entry also carries its version-probe arguments; all current entries use `--version`.

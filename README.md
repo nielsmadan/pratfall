@@ -97,6 +97,8 @@ including validation and runtime failures:
   "agent": "codex",
   "profile": "simple",
   "model": "gpt-5.6-luna",
+  "reported_models": null,
+  "cost_usd": null,
   "status": "success",
   "output": "Final answer",
   "exit_code": 0,
@@ -195,6 +197,15 @@ cache-write, text-output, and reasoning counts separately. OpenClaw maps its doc
 output token counts. Copilot 1.0.83 exposes AI-credit and duration metrics but no token counts in
 CLI JSON, while Cursor, Kiro text mode, and Hermes quiet mode do not provide token usage, so those
 adapters report `usage: null` rather than inferred values.
+
+The requested `model` remains separate from `reported_models`, which contains distinct native
+model identifiers in observed order when the supported protocol exposes them. Claude reports the
+keys of `modelUsage`, Gemini the keys of `stats.models`, Copilot root completed-message models, and
+OpenClaw its provider/model identity. Other adapters report null. `cost_usd` is the native USD cost
+from Claude or OpenClaw, or the sum of OpenCode's latest snapshot for each step ID. Missing native
+data stays null, including an OpenCode run where any latest step cost is unknown. Zero is preserved.
+Pratfall does not calculate prices, convert Copilot credits, or promise that native cost equals a
+subscription bill.
 
 Kiro headless mode requires native API-key authentication; follow the
 [Kiro authentication guide](https://kiro.dev/docs/getting-started/authentication/#api-key-authentication-cli)

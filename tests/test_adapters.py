@@ -233,7 +233,8 @@ def test_claude_decodes_primary_source_result_shape() -> None:
             "cache_read_input_tokens": 3,
             "output_tokens": 4,
         },
-        "modelUsage": {"future": {"additive": True}},
+        "modelUsage": {"model-a": {"future": True}, "model-b": None},
+        "total_cost_usd": 0,
         "terminal_reason": "completed",
     }
     decoded = claude.decode(json.dumps(value))
@@ -244,6 +245,8 @@ def test_claude_decodes_primary_source_result_shape() -> None:
         cache_write_input_tokens=2,
         output_tokens=4,
     )
+    assert decoded.reported_models == ("model-a", "model-b")
+    assert decoded.cost_usd == 0
     assert decoded.error is None
 
 
@@ -262,11 +265,15 @@ def test_claude_decodes_authentic_error_result_variants(subtype: str) -> None:
         "subtype": subtype,
         "is_error": True,
         "errors": ["First native diagnostic.", "Second native diagnostic."],
-        "usage": {"input_tokens": 10, "output_tokens": 1},
+        "usage": {"input_tokens": True, "output_tokens": 1},
+        "modelUsage": {"failure-model": {"anything": "is ignored"}},
+        "total_cost_usd": 1.25,
     }
     decoded = claude.decode(json.dumps(value))
     assert decoded.output == ""
-    assert decoded.usage == Usage(input_tokens=10, output_tokens=1)
+    assert decoded.usage is None
+    assert decoded.reported_models == ("failure-model",)
+    assert decoded.cost_usd == 1.25
     assert decoded.error is not None
     assert decoded.error.code == "provider_error"
     assert decoded.error.message == "First native diagnostic.\nSecond native diagnostic."
@@ -306,6 +313,87 @@ def test_claude_rejects_malformed_or_truncated_results(payload: str) -> None:
     decoded = claude.decode(payload)
     assert decoded.error is not None
     assert decoded.error.code == "protocol_error"
+
+
+@pytest.mark.parametrize("native_cost", [True, -0.1, float("inf"), float("nan")])
+def test_claude_rejects_malformed_native_cost(native_cost: object) -> None:
+    decoded = claude.decode(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "answer",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+                "total_cost_usd": native_cost,
+            }
+        )
+    )
+    assert decoded.cost_usd is None
+    assert decoded.error is not None
+    assert decoded.error.code == "protocol_error"
+
+
+def test_claude_provider_failure_outranks_malformed_accounting() -> None:
+    decoded = claude.decode(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "errors": ["provider failed"],
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+                "modelUsage": [],
+                "total_cost_usd": -1,
+            }
+        )
+    )
+    assert decoded.error == ResultError("provider_error", "provider failed")
+
+
+@pytest.mark.parametrize(
+    ("field", "malformed"),
+    [("type", "future"), ("subtype", 3), ("is_error", "false")],
+)
+def test_claude_malformed_envelope_preserves_valid_accounting(
+    field: str, malformed: object
+) -> None:
+    value: dict[str, object] = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "answer",
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+        "modelUsage": {"model-a": {}, "model-b": {}},
+        "total_cost_usd": 1.25,
+    }
+    value[field] = malformed
+    decoded = claude.decode(json.dumps(value))
+    assert decoded.reported_models == ("model-a", "model-b")
+    assert decoded.cost_usd == 1.25
+    assert decoded.error == ResultError("protocol_error", "Claude result envelope is malformed.")
+
+
+def test_claude_rejects_huge_cost_without_numeric_conversion_failure() -> None:
+    huge_cost = "1" + "0" * 4_000
+    decoded = claude.decode(
+        '{"type":"result","subtype":"success","is_error":false,"result":"answer",'
+        '"usage":{"input_tokens":1,"output_tokens":1},"total_cost_usd":' + huge_cost + "}"
+    )
+    assert decoded.cost_usd is None
+    assert decoded.error is not None
+    assert decoded.error.code == "protocol_error"
+
+
+def test_reported_model_rejects_unpaired_surrogate_before_json_emission() -> None:
+    decoded = claude.decode(
+        '{"type":"result","subtype":"success","is_error":false,"result":"answer",'
+        '"usage":{"input_tokens":1,"output_tokens":1},"modelUsage":{"\\ud800":{}}}'
+    )
+    assert decoded.reported_models is None
+    assert decoded.error is not None
+    assert decoded.error.code == "protocol_error"
+    json.dumps(decoded.reported_models, ensure_ascii=False).encode("utf-8")
 
 
 def test_codex_decodes_sanitized_live_event_shape() -> None:
@@ -391,6 +479,52 @@ def test_codex_truncated_second_turn_invalidates_earlier_completion() -> None:
     assert decoded.output == "first answer"
     assert decoded.error is not None
     assert decoded.error.code == "protocol_error"
+
+
+def test_codex_incomplete_turn_keeps_latest_completed_assistant_message_once() -> None:
+    decoded = codex.decode(
+        codex_stream(
+            {"type": "turn.started"},
+            {
+                "type": "item.completed",
+                "item": {"id": "a", "type": "agent_message", "text": "A"},
+            },
+            {"type": "turn.completed", "usage": codex_usage()},
+            {"type": "turn.started"},
+            {
+                "type": "item.completed",
+                "item": {"id": "b-draft", "type": "agent_message", "text": "draft"},
+            },
+            {
+                "type": "item.completed",
+                "item": {"id": "b", "type": "agent_message", "text": "B"},
+            },
+        )
+    )
+    assert decoded.output == "A\nB"
+    assert decoded.error == ResultError(
+        "protocol_error", "Codex stream ended without turn.completed."
+    )
+
+
+def test_codex_new_assistant_item_without_turn_started_requires_completion() -> None:
+    decoded = codex.decode(
+        codex_stream(
+            {
+                "type": "item.completed",
+                "item": {"id": "a", "type": "agent_message", "text": "A"},
+            },
+            {"type": "turn.completed", "usage": codex_usage()},
+            {
+                "type": "item.completed",
+                "item": {"id": "b", "type": "agent_message", "text": "B"},
+            },
+        )
+    )
+    assert decoded.output == "A\nB"
+    assert decoded.error == ResultError(
+        "protocol_error", "Codex stream ended without turn.completed."
+    )
 
 
 def test_codex_provider_failure_outranks_protocol_failure_and_preserves_answer() -> None:
@@ -789,7 +923,7 @@ def test_openclaw_decodes_stable_success_envelope() -> None:
         json.dumps(
             openclaw_result(
                 costUsd=0.0021,
-                model="provider/model",
+                model="model",
                 provider="provider",
                 sessionId="session",
             )
@@ -797,6 +931,8 @@ def test_openclaw_decodes_stable_success_envelope() -> None:
     )
     assert decoded.output == "final answer"
     assert decoded.usage == Usage(input_tokens=12, output_tokens=4)
+    assert decoded.reported_models == ("provider/model",)
+    assert decoded.cost_usd == 0.0021
     assert decoded.error is None
 
 
@@ -887,6 +1023,41 @@ def test_openclaw_omitted_usage_stays_unknown() -> None:
     assert decoded.error is None
 
 
+def test_openclaw_model_without_provider_and_zero_cost_are_reported() -> None:
+    decoded = openclaw.decode(json.dumps(openclaw_result(model="model", costUsd=0)))
+    assert decoded.reported_models == ("model",)
+    assert decoded.cost_usd == 0
+    assert decoded.error is None
+
+
+@pytest.mark.parametrize("provider", ["", 3])
+def test_openclaw_malformed_provider_drops_model_but_preserves_cost(provider: object) -> None:
+    decoded = openclaw.decode(
+        json.dumps(openclaw_result(model="model", provider=provider, costUsd=0.25))
+    )
+    assert decoded.reported_models is None
+    assert decoded.cost_usd == 0.25
+    assert decoded.error == ResultError("protocol_error", "OpenClaw provider is malformed.")
+
+
+def test_openclaw_provider_failure_preserves_accounting_and_outranks_malformed_cost() -> None:
+    decoded = openclaw.decode(
+        json.dumps(
+            openclaw_result(
+                ok=False,
+                status="error",
+                model="model",
+                provider="provider",
+                costUsd=True,
+                error={"message": "unavailable", "kind": "model_error"},
+            )
+        )
+    )
+    assert decoded.reported_models == ("provider/model",)
+    assert decoded.cost_usd is None
+    assert decoded.error == ResultError("provider_error", "unavailable")
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -952,7 +1123,30 @@ def test_gemini_decodes_per_model_usage_without_double_counting_roles() -> None:
         output_tokens=8,
         reasoning_output_tokens=4,
     )
+    assert decoded.reported_models == ("model-a", "model-b")
+    assert decoded.cost_usd is None
     assert decoded.error is None
+
+
+def test_gemini_malformed_response_preserves_valid_reported_models() -> None:
+    model = {
+        "tokens": {
+            "input": 7,
+            "prompt": 10,
+            "candidates": 4,
+            "total": 16,
+            "cached": 3,
+            "thoughts": 2,
+            "tool": 0,
+        }
+    }
+    decoded = gemini.decode(
+        json.dumps({"response": 3, "stats": {"models": {"model-a": model, "model-b": model}}})
+    )
+    assert decoded.reported_models == ("model-a", "model-b")
+    assert decoded.error == ResultError(
+        "protocol_error", "Gemini response must be a string when present."
+    )
 
 
 def test_gemini_preserves_partial_response_on_provider_error() -> None:
@@ -1186,6 +1380,40 @@ def test_copilot_deduplicates_snapshots_and_excludes_subagent_text() -> None:
     assert decoded.error is None
 
 
+def test_copilot_reports_distinct_root_completed_models_only() -> None:
+    decoded = copilot.decode(
+        codex_stream(
+            {
+                "type": "assistant.message_delta",
+                "data": {"messageId": "one", "deltaContent": "draft", "model": []},
+            },
+            {
+                "type": "assistant.message",
+                "agentId": "child",
+                "data": {"messageId": "child", "content": "hidden", "model": []},
+            },
+            {
+                "type": "assistant.message",
+                "data": {"messageId": "one", "content": "one", "model": "model-a"},
+            },
+            {
+                "type": "assistant.message",
+                "data": {"messageId": "two", "content": "two", "model": "model-b"},
+            },
+            {
+                "type": "assistant.message",
+                "data": {"messageId": "three", "content": "three", "model": "model-a"},
+            },
+            {"type": "session.config", "data": {"model": []}},
+            copilot_result(),
+        )
+    )
+    assert decoded.output == "one\ntwo\nthree"
+    assert decoded.reported_models == ("model-a", "model-b")
+    assert decoded.cost_usd is None
+    assert decoded.error is None
+
+
 def test_copilot_terminal_error_beats_protocol_error_and_preserves_text() -> None:
     decoded = copilot.decode(
         codex_stream(
@@ -1296,6 +1524,8 @@ def test_opencode_deduplicates_parts_aggregates_steps_and_omits_other_events() -
     )
     assert decoded.output == "answer one\nanswer two"
     assert decoded.usage == Usage(12, 3, 1, 5, 2)
+    assert decoded.reported_models is None
+    assert decoded.cost_usd == pytest.approx(0.03)
     assert decoded.error is None
 
 
@@ -1325,7 +1555,226 @@ def test_opencode_repeated_usage_snapshot_replaces_previous_value() -> None:
         )
     )
     assert decoded.usage == Usage(10, 3, 1, 4, 2)
+    assert decoded.cost_usd == 0.01
     assert decoded.error is None
+
+
+def test_opencode_latest_cost_snapshot_replaces_and_distinct_steps_sum_once() -> None:
+    decoded = opencode.decode(
+        codex_stream(
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "one",
+                    "type": "step-finish",
+                    "reason": "tool-calls",
+                    "cost": 10,
+                    "tokens": opencode_usage(),
+                },
+            },
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "one",
+                    "type": "step-finish",
+                    "reason": "tool-calls",
+                    "cost": 1.25,
+                    "tokens": opencode_usage(),
+                },
+            },
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "two",
+                    "type": "step-finish",
+                    "reason": "stop",
+                    "cost": 2.75,
+                    "tokens": opencode_usage(),
+                },
+            },
+        )
+    )
+    assert decoded.cost_usd == 4
+    assert decoded.error is None
+
+
+def test_opencode_unknown_latest_step_cost_makes_aggregate_unknown() -> None:
+    events = [
+        {
+            "type": "step_finish",
+            "part": {
+                "id": "one",
+                "type": "step-finish",
+                "reason": "tool-calls",
+                "cost": 1,
+                "tokens": opencode_usage(),
+            },
+        },
+        {
+            "type": "step_finish",
+            "part": {
+                "id": "two",
+                "type": "step-finish",
+                "reason": "stop",
+                "cost": None,
+                "tokens": opencode_usage(),
+            },
+        },
+    ]
+    decoded = opencode.decode(codex_stream(*events))
+    assert decoded.cost_usd is None
+    assert decoded.error is None
+    events[-1]["part"].pop("cost")
+    decoded = opencode.decode(codex_stream(*events))
+    assert decoded.cost_usd is None
+    assert decoded.error is None
+
+
+def test_opencode_malformed_latest_cost_replaces_same_step_snapshot() -> None:
+    decoded = opencode.decode(
+        codex_stream(
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "step",
+                    "type": "step-finish",
+                    "reason": "tool-calls",
+                    "cost": 1,
+                    "tokens": opencode_usage(),
+                },
+            },
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "step",
+                    "type": "step-finish",
+                    "reason": "stop",
+                    "cost": False,
+                    "tokens": opencode_usage(),
+                },
+            },
+        )
+    )
+    assert decoded.cost_usd is None
+    assert decoded.error == ResultError("protocol_error", "OpenCode step_finish cost is malformed.")
+
+
+def test_opencode_malformed_distinct_step_cost_makes_aggregate_unknown() -> None:
+    decoded = opencode.decode(
+        codex_stream(
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "one",
+                    "type": "step-finish",
+                    "reason": "tool-calls",
+                    "cost": 1,
+                    "tokens": opencode_usage(),
+                },
+            },
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "two",
+                    "type": "step-finish",
+                    "reason": "stop",
+                    "cost": False,
+                    "tokens": opencode_usage(),
+                },
+            },
+        )
+    )
+    assert decoded.cost_usd is None
+    assert decoded.error == ResultError("protocol_error", "OpenCode step_finish cost is malformed.")
+
+
+def test_opencode_known_replacement_restores_total_after_malformed_cost() -> None:
+    decoded = opencode.decode(
+        codex_stream(
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "one",
+                    "type": "step-finish",
+                    "reason": "tool-calls",
+                    "cost": 1,
+                    "tokens": opencode_usage(),
+                },
+            },
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "two",
+                    "type": "step-finish",
+                    "reason": "tool-calls",
+                    "cost": False,
+                    "tokens": opencode_usage(),
+                },
+            },
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "two",
+                    "type": "step-finish",
+                    "reason": "stop",
+                    "cost": 2,
+                    "tokens": opencode_usage(),
+                },
+            },
+        )
+    )
+    assert decoded.cost_usd == 3
+    assert decoded.error == ResultError("protocol_error", "OpenCode step_finish cost is malformed.")
+
+
+def test_opencode_rejects_aggregate_cost_overflow_without_raising() -> None:
+    decoded = opencode.decode(
+        codex_stream(
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "one",
+                    "type": "step-finish",
+                    "reason": "tool-calls",
+                    "cost": 1e308,
+                    "tokens": opencode_usage(),
+                },
+            },
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "two",
+                    "type": "step-finish",
+                    "reason": "stop",
+                    "cost": 1e308,
+                    "tokens": opencode_usage(),
+                },
+            },
+        )
+    )
+    assert decoded.cost_usd is None
+    assert decoded.error == ResultError("protocol_error", "OpenCode aggregate cost is malformed.")
+
+
+def test_opencode_provider_failure_outranks_malformed_cost() -> None:
+    decoded = opencode.decode(
+        codex_stream(
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "step",
+                    "type": "step-finish",
+                    "reason": "error",
+                    "cost": False,
+                    "tokens": opencode_usage(),
+                },
+            }
+        )
+    )
+    assert decoded.cost_usd is None
+    assert decoded.error == ResultError(
+        "provider_error", "OpenCode stopped with finish reason 'error'."
+    )
 
 
 def test_opencode_error_preserves_completed_text() -> None:

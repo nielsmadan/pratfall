@@ -1,5 +1,6 @@
 import json
 
+from pratfall.adapters.accounting import model_map
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
@@ -71,12 +72,20 @@ def decode(stdout: str) -> DecodedOutput:
         value = json.loads(stdout)
     except json.JSONDecodeError as error:
         return _protocol(f"Invalid Gemini JSON: {error.msg}.")
+    except ValueError:
+        return _protocol("Invalid Gemini JSON: numeric value is too large.")
     if not isinstance(value, dict):
         return _protocol("Gemini result must be a JSON object.")
+    stats = value.get("stats") if "stats" in value else None
+    models_value = stats.get("models") if isinstance(stats, dict) else stats
+    reported_models, model_error = model_map(models_value, "Gemini stats.models")
     output = value.get("response")
     if output is not None and not isinstance(output, str):
-        return _protocol("Gemini response must be a string when present.")
-    usage = _usage(value.get("stats")) if "stats" in value else None
+        return DecodedOutput(
+            reported_models=reported_models,
+            error=ResultError("protocol_error", "Gemini response must be a string when present."),
+        )
+    usage = _usage(stats) if "stats" in value else None
     if isinstance(usage, ResultError):
         usage_error: ResultError | None = usage
         usage = None
@@ -94,13 +103,27 @@ def decode(stdout: str) -> DecodedOutput:
             ResultError("timeout", provider_error.message) if timed_out else provider_error
         )
         return DecodedOutput(
-            output=output or "", usage=usage, error=result_error, timed_out=timed_out
+            output=output or "",
+            usage=usage,
+            reported_models=reported_models,
+            error=result_error,
+            timed_out=timed_out,
         )
-    if usage_error is not None:
-        return DecodedOutput(output=output or "", error=usage_error)
+    protocol_error = usage_error or model_error
+    if protocol_error is not None:
+        return DecodedOutput(
+            output=output or "",
+            usage=usage,
+            reported_models=reported_models,
+            error=protocol_error,
+        )
     if not isinstance(output, str):
-        return _protocol("Gemini result is missing a response or error.")
-    return DecodedOutput(output=output, usage=usage)
+        return DecodedOutput(
+            usage=usage,
+            reported_models=reported_models,
+            error=ResultError("protocol_error", "Gemini result is missing a response or error."),
+        )
+    return DecodedOutput(output=output, usage=usage, reported_models=reported_models)
 
 
 def _provider_error(value: object) -> ResultError:

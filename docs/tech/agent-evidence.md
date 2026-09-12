@@ -18,6 +18,10 @@ does not infer authentication. A nonzero exit, empty selected output, invalid se
 timeout, or output overflow becomes a per-agent `version_error`. The default doctor path performs
 discovery only.
 
+Native accounting mappings were verified separately on 2026-09-10. Prat exposes only observed
+model identifiers and native USD cost fields described below. Missing data remains null; requested
+models, published prices, and non-USD credits are not used as substitutes.
+
 | Agent | Native invocation | Model | Effort | Native limits | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | Claude Code | `claude -p --output-format json` | `--model` | `--effort` | `--max-budget-usd`, `--max-turns` | Installed 2.1.266, [CLI reference](https://code.claude.com/docs/en/cli-reference), and [Agent SDK result type](https://platform.claude.com/docs/en/agent-sdk/typescript#sdkresultmessage) |
@@ -46,6 +50,9 @@ The `error_max_turns`, `error_during_execution`, `error_max_budget_usd`, and
 `error_max_structured_output_retries` arms instead have `errors: string[]`; both arms carry
 native usage. Prat preserves those diagnostic strings in the normalized provider error and
 retains usage. The error subtype is a semantic failure even when the native process exits 0.
+Both result arms also expose `modelUsage` and `total_cost_usd`. Prat reports the ordered map keys
+without inspecting unused per-model values, and passes through the finite nonnegative native total
+without combining it with per-model figures.
 
 ### Codex
 
@@ -56,6 +63,9 @@ use `type: agent_message` and `text`; reasoning and command/tool contents are se
 `turn.completed.usage` contains `input_tokens`, `cached_input_tokens`, `output_tokens`, with
 newer optional cache-write/reasoning fields. `turn.failed.error.message` and top-level
 `error.message` are failures. A terminal success event is required; EOF alone is not success.
+Codex's supported events expose no verified model or cost accounting. If EOF or Prat's outer
+timeout arrives after a completed assistant message but before `turn.completed`, Prat retains the
+latest message after any earlier completed-turn answers and still reports failure.
 
 ### Gemini
 
@@ -70,6 +80,8 @@ Usage sums `stats.models[*].tokens` once per model: `input` is fresh input, `cac
 input, `candidates` is output, and `thoughts` is reasoning output. Per-role token views repeat these
 counts and are ignored. An empty model map reports nullable usage. The prompt travels in argv, so
 the operating system may reject a large prompt before reaching Prat's 1 MiB bound.
+The ordered `stats.models` keys are also reported as observed models. Gemini exposes no verified
+native USD total in this interface.
 
 ### Antigravity
 
@@ -104,6 +116,9 @@ replaces earlier copies, and distinct steps are summed. OpenCode already separat
 cache reads/writes and text output from reasoning; Prat preserves that split. `tool-calls` continues
 the run, `stop` is completion, and `length`, `content-filter`, `error`, or `unknown` finishes are
 reported as incomplete provider failures.
+Each step-finish part also has a native `cost`. Prat applies the same latest-snapshot rule by part ID
+and sums distinct current steps once. Missing/null latest cost makes the aggregate unknown; malformed
+non-null values or aggregate overflow are protocol errors. Run events expose no verified model ID.
 
 ### Kiro
 
@@ -144,6 +159,9 @@ A `session.error` of type `model_call` is recoverable; other session errors and 
 policy warnings are failures. The terminal summary has credits, durations, and code-change counts
 but no tokens, so normalized usage is null. The prompt uses documented `--prompt=VALUE` and remains
 subject to the operating system's argv-size limit.
+Root completed `assistant.message.data.model` identifies an observed model. Prat keeps distinct IDs
+in order and excludes model fields on deltas, subagent messages, and unrelated request/config data.
+The terminal credits metric is not USD and is not exposed as `cost_usd`.
 
 Copilot's tool and URL allow/deny lists, tool visibility lists, and secret environment-variable
 list accept zero or more values per occurrence. A bare `--available-tools` disables all visible
@@ -170,6 +188,10 @@ Payload entries are objects with optional `text`, `mediaUrl`, `mediaUrls`, `isEr
 and `isCommentary` fields of their native types; additive fields remain allowed. A native error
 object or payload marked `isError: true` is failure evidence even when `ok` or `status` contradicts
 it.
+
+Nullable native `provider`, `model`, and `costUsd` provide accounting. Prat joins provider/model when
+both exist, uses the model alone when provider is absent, and reports no model when the provider has
+no model. It passes through only finite nonnegative native USD cost.
 
 Prat passes its exact positive deadline to the process runner. Because current `agent exec`
 accepts only whole-second timeout strings and internally ceilings milliseconds, its native timeout

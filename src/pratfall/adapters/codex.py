@@ -94,6 +94,11 @@ def decode(stdout: str) -> DecodedOutput:
                 "protocol_error", f"Invalid Codex JSONL on line {line_number}: {error.msg}."
             )
             continue
+        except ValueError:
+            _set_protocol(
+                state, f"Invalid Codex JSONL on line {line_number}: numeric value is too large."
+            )
+            continue
         if not isinstance(event, dict) or not isinstance(event.get("type"), str):
             state.protocol_error = state.protocol_error or ResultError(
                 "protocol_error", f"Malformed Codex event on line {line_number}."
@@ -102,7 +107,7 @@ def decode(stdout: str) -> DecodedOutput:
         _apply_event(state, event)
     failure = state.provider_error or state.protocol_error
     output_parts = state.answers.copy()
-    if failure is not None and state.current_answer is not None:
+    if state.current_answer is not None:
         output_parts.append(state.current_answer)
     output = "\n".join(output_parts)
     if failure is not None:
@@ -158,6 +163,7 @@ def _apply_item(state: _State, event: dict[str, object], event_type: object) -> 
         if not isinstance(text, str):
             _set_protocol(state, "Codex agent_message item is malformed.")
         else:
+            state.completed = False
             state.current_answer = text
 
 
