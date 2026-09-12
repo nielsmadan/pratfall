@@ -1,32 +1,35 @@
 # Agents and limitations
 
-Run `prat agents` for current aliases and supported settings. Model identifiers are passed through
-when the native CLI supports model selection; Pratfall does not freeze a model catalog.
+Every agent accepts the name in the **Long form** column, for example `prat claude "fix this bug"`
+or `prat codex "review this change"`. Longer names also have aliases, such as `prat cc "fix this bug"`.
+Names of four letters or fewer use the name itself. Run `prat agents` for the current selectors and
+supported settings. Model identifiers are passed through when the native CLI supports model
+selection; Pratfall does not freeze a model catalog.
 
-| Agent | Aliases | Output, usage, and accounting notes |
-| --- | --- | --- |
-| Claude Code | `cc` | Structured result, token usage, modelUsage IDs, native USD cost; invocation-only fast override |
-| Codex | `cx` | Structured event stream and token usage; invocation-only fast override |
-| Gemini | `gm` | Structured result, token usage, and stats model IDs; no native cost or effort override |
-| Antigravity | `ag`, `agy` | Structured stream and cumulative usage; stdin mode requires 1.1.15+ |
-| Copilot | `cp` | Structured final text and root-message model IDs; no token counts or USD cost |
-| Kiro | `ki` | Text mode; usage unknown |
-| Cursor | `cu` | Validated JSON result envelope; usage unknown; no effort override |
-| OpenClaw | `claw` | Embedded `agent exec`; optional token usage, model identity, and native USD cost |
-| Hermes | `hm` | Quiet text mode; usage unknown |
-| OpenCode | `oc` | Structured stream, token usage, and per-step native USD cost; model IDs unavailable |
-| OpenHands | `oh` | SDK final assistant/finish text; native headless autoapproval; no model/effort override; accounting unknown |
-| Warp | `wp` | Legacy executable `oz`; NDJSON agent text; model override, no effort or accounting |
-| iFlow | `if` | Legacy text mode; existing BYOK setup required; model override, no effort or accounting |
-| Qwen Code | `qw` | JSONL final result, token counts and root-message model IDs; model and native session-turn limit |
-| Amp | none | JSONL final result and optional token counts; no generic model, effort or budget override |
-| Reasonix | `rx` | Whole JSON final result and native token counts; configured provider selector and provider-specific effort |
-| Droid | `dr` | Whole JSON result; model and provider-specific reasoning effort; accounting unknown |
-| Kimi CLI | `km` | Final-only assistant JSONL; native autoapproval; model override; accounting unknown |
-| Mistral Vibe | `mv` | Whole public-history JSON; native turns/USD limits; no model/effort override or accounting |
-| Crush | `cr` | Quiet text capture; local run autoapproval; model override; accounting unknown |
-| Devin | `dv` | Print text capture; requires trusted workspace; model override; accounting unknown |
-| Cortex Code / CoCo | `co` | Exec text capture; Snowflake connection required; model/effort/turns; accounting unknown |
+| Agent | Long form | Aliases | Output, usage, and accounting notes |
+| --- | --- | --- | --- |
+| Claude Code | `claude` | `cc` | Structured result, token usage, modelUsage IDs, native USD cost; invocation-only fast override |
+| Codex | `codex` | `cx` | Structured event stream and token usage; invocation-only fast override |
+| Gemini | `gemini` | `gm` | Structured result, token usage, and stats model IDs; no native cost or effort override |
+| Antigravity | `antigravity` | `ag`, `agy` | Structured stream and cumulative usage; stdin mode requires 1.1.15+ |
+| Copilot | `copilot` | `cp` | Structured final text and root-message model IDs; no token counts or USD cost |
+| Kiro | `kiro` | none | Text mode; usage unknown |
+| Cursor | `cursor` | `cu` | Validated JSON result envelope; usage unknown; no effort override |
+| OpenClaw | `openclaw` | `claw` | Embedded `agent exec`; optional token usage, model identity, and native USD cost |
+| Hermes | `hermes` | `hm` | Quiet text mode; usage unknown |
+| OpenCode | `opencode` | `oc` | Structured stream, token usage, and per-step native USD cost; model IDs unavailable |
+| OpenHands | `openhands` | `oh` | SDK final assistant/finish text; native headless autoapproval; no model/effort override; accounting unknown |
+| Warp | `warp` | none | Legacy executable `oz`; NDJSON agent text; model override, no effort or accounting |
+| iFlow | `iflow` | `if` | Legacy text mode; existing BYOK setup required; model override, no effort or accounting |
+| Qwen Code | `qwen` | none | JSONL final result, token counts and root-message model IDs; model and native session-turn limit |
+| Amp | `amp` | none | JSONL final result and optional token counts; no generic model, effort or budget override |
+| Reasonix | `reasonix` | `rx` | Whole JSON final result and native token counts; configured provider selector and provider-specific effort |
+| Droid | `droid` | `dr` | Whole JSON result; model and provider-specific reasoning effort; accounting unknown |
+| Kimi CLI | `kimi` | none | Final-only assistant JSONL; native autoapproval; model override; accounting unknown |
+| Mistral Vibe | `vibe` | none | Whole public-history JSON; native turns/USD limits; no model/effort override or accounting |
+| Crush | `crush` | `cr` | Quiet text capture; local run autoapproval; model override; accounting unknown |
+| Devin | `devin` | `dv` | Print text capture; requires trusted workspace; model override; accounting unknown |
+| Cortex Code / CoCo | `cortex` | `co` | Exec text capture; Snowflake connection required; model/effort/turns; accounting unknown |
 
 Kiro's invocation-scoped `--model` and `--` delimiter behavior are supported from static inspection
 of the official 2.21.2 package and its Clap 4.5.60 parser. Kiro was not live-tested for this claim.

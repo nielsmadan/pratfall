@@ -35,6 +35,16 @@ def test_missing_default_resolves_builtin_defaults() -> None:
     assert resolved.options == Options(timeout=DEFAULT_TIMEOUT, native_args=())
 
 
+@pytest.mark.parametrize("name", ["ki", "wp", "qw", "km", "mv"])
+def test_removed_agent_aliases_are_available_for_profiles(tmp_path: Path, name: str) -> None:
+    with pytest.raises(PratError, match="Unknown"):
+        resolve_profile(load_config(), name)
+    path = write_config(tmp_path, f'version=1\n[profiles.{name}]\nagent="codex"\n')
+    resolved = resolve_profile(load_config(path), name)
+    assert resolved.profile == name
+    assert resolved.agent.name == "codex"
+
+
 def test_explicit_missing_file_fails(tmp_path: Path) -> None:
     path = tmp_path / "missing.toml"
     with pytest.raises(PratError, match=f"{path}: config file does not exist"):
@@ -265,7 +275,7 @@ max_turns=3
 def test_defaults_and_overrides_are_validated_for_selected_builtin(tmp_path: Path) -> None:
     path = write_config(tmp_path, 'version=1\n[defaults]\nmodel="new-model"\n')
     config = load_config(path)
-    assert resolve_profile(config, "ki").options.model == "new-model"
+    assert resolve_profile(config, "kiro").options.model == "new-model"
     with pytest.raises(PratError, match="Hermes accepts:"):
         resolve_profile(config, "hm", Options(effort="unknown"))
 
@@ -364,20 +374,16 @@ def test_init_reports_parent_creation_failure(tmp_path: Path) -> None:
         "openhands",
         "oh",
         "warp",
-        "wp",
         "iflow",
         "if",
         "qwen",
-        "qw",
         "amp",
         "reasonix",
         "rx",
         "droid",
         "dr",
         "kimi",
-        "km",
         "vibe",
-        "mv",
         "crush",
         "cr",
         "devin",

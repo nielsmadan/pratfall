@@ -85,6 +85,7 @@ packages = ["src/pratfall"]
 [tool.hatch.build.targets.sdist]
 include = [
     "src/pratfall",
+    "assets",
     "tests",
     "scripts",
     "examples",

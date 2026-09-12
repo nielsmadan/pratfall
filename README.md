@@ -1,5 +1,7 @@
 # Pratfall
 
+<img src="assets/logo.svg" alt="Pratfall logo" width="128" height="128">
+
 Pratfall provides the `prat` command for one-shot coding-agent invocations through named profiles.
 Claude Code, Codex, Gemini, Antigravity, Copilot, Kiro, Cursor, OpenClaw, Hermes, OpenCode,
 OpenHands, Warp (Oz), iFlow, Qwen Code, Amp, Reasonix, Droid, Kimi CLI, Mistral Vibe, Crush,
@@ -37,10 +39,12 @@ installs the checkout as a user-level uv tool; `just refresh-local` performs a n
 and `just reset-local` removes it. These recipes change the user's tool installation and are never
 run implicitly. Pratfall does not install or authenticate native agent commands.
 
-Run a built-in selector or a named profile with exactly one prompt:
+Run an agent by its full name, an alias, or a named profile with exactly one prompt. Every agent
+has a full name; names of four letters or fewer need no alias. See the
+[complete selector map](docs/user/agents.md).
 
 ```sh
-uv run prat cx "summarize the changes in this checkout"
+uv run prat codex "summarize the changes in this checkout"
 uv run prat --model gpt-5.6-luna simple --effort low --prompt="review this code"
 printf 'multiline\nprompt\n' | uv run prat cc -
 printf 'redirected prompt\n' | uv run prat cc
@@ -48,7 +52,7 @@ uv run prat cx --file request.md
 uv run prat cc --max-budget-usd 1 --max-turns 3 "inspect this failure"
 uv run prat ag --effort high "finish the requested change"
 uv run prat oc --model provider/model "review this repository"
-uv run prat ki --model claude-sonnet-4 --effort high "inspect this change"
+uv run prat kiro --model claude-sonnet-4 --effort high "inspect this change"
 uv run prat claw --model provider/model "run the focused tests"
 uv run prat hm --effort high "review this repository"
 uv run prat cx --fast "review this urgently"

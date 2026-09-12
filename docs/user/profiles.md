@@ -20,9 +20,10 @@ model = "gpt-5.6-luna"
 effort = "low"
 ```
 
-A profile requires `agent`. It may set `model`, `effort`, `fast`, `timeout`, `native_args`, and
-agent-backed budget fields. Invocation flags override profiles, which override defaults. Native argument arrays
-replace the lower-precedence array. Profiles do not inherit from each other.
+A profile requires `agent`, using a [full agent name or alias](agents.md). It may set `model`,
+`effort`, `fast`, `timeout`, `native_args`, and agent-backed budget fields. Invocation flags override
+profiles, which override defaults. Native argument arrays replace the lower-precedence array.
+Profiles do not inherit from each other.
 
 `fast` is an optional boolean for Claude and Codex. `true` and `false` are both explicit overrides;
 when absent, the native setting remains in force. A global default is validated against a built-in
@@ -48,8 +49,12 @@ prat --config config.toml profiles
 never write configuration.
 
 New built-in names become reserved when upgrading. In this release, profiles named `openhands`,
-`oh`, `warp`, `wp`, `iflow`, `if`, `qwen`, `qw`, `amp`, `reasonix`, `rx`, `droid`, `dr`, `kimi`,
-`km`, `vibe`, `mv`, `crush`, `cr`, `devin`, `dv`, `cortex`, or `co` must be renamed, for example
+`oh`, `warp`, `iflow`, `if`, `qwen`, `amp`, `reasonix`, `rx`, `droid`, `dr`, `kimi`,
+`vibe`, `crush`, `cr`, `devin`, `dv`, `cortex`, or `co` must be renamed, for example
 `[profiles.oh]` to `[profiles.my-openhands]`. Keep the profile's `agent` and options, update commands that invoke its
 old name, then run `prat config validate`. A collision reports
 `profiles.NAME: name is reserved; choose a different profile name.`
+
+Agents with names of four letters or fewer use their full names. Replace the former aliases
+`ki` → `kiro`, `wp` → `warp`, `qw` → `qwen`, `km` → `kimi`, and `mv` → `vibe` in CLI commands
+and profile `agent` fields. The former aliases are now available as custom profile names.

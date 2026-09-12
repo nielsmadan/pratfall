@@ -78,19 +78,14 @@ ALIASES = {
     "ag": "antigravity",
     "agy": "antigravity",
     "cp": "copilot",
-    "ki": "kiro",
     "cu": "cursor",
     "claw": "openclaw",
     "hm": "hermes",
     "oc": "opencode",
     "oh": "openhands",
-    "wp": "warp",
     "if": "iflow",
-    "qw": "qwen",
     "rx": "reasonix",
     "dr": "droid",
-    "km": "kimi",
-    "mv": "vibe",
     "cr": "crush",
     "dv": "devin",
     "co": "cortex",
@@ -1979,7 +1974,7 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
             "budgets": _BUDGETS.get(name, []),
             "fast": name in {"claude", "codex"},
         }
-    assert len(ALIASES) == 22 and not set(ALIASES).intersection(AGENTS)
+    assert len(ALIASES) == 17 and not set(ALIASES).intersection(AGENTS)
     doctor = _run(prat, root, ["doctor", "--json"], config=config)
     inventory = _json_result(doctor)
     assert doctor.returncode == 0 and inventory["schema_version"] == 1
@@ -2053,7 +2048,7 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
     config = root / "a-tier profile.toml"
     config.write_text(
         f"version = 1\n[defaults]\ntimeout = 7\n[agents.qwen]\ncommand = {json.dumps(prefix)}\n"
-        '[profiles.new-profile]\nagent = "qw"\nmodel = "profile-model"\nmax_turns = 3\n'
+        '[profiles.new-profile]\nagent = "qwen"\nmodel = "profile-model"\nmax_turns = 3\n'
         'native_args = ["--debug"]\n',
         encoding="utf-8",
     )
@@ -2153,8 +2148,8 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
     for selector, arguments, message in (
         ("oh", ["--model", "chosen"], "model: OpenHands does not support a model override."),
         ("amp", ["--effort", "high"], "effort: Amp does not support an effort override."),
-        ("mv", ["--model", "chosen"], "model: Mistral Vibe does not support a model override."),
-        ("km", ["--effort", "high"], "effort: Kimi does not support an effort override."),
+        ("vibe", ["--model", "chosen"], "model: Mistral Vibe does not support a model override."),
+        ("kimi", ["--effort", "high"], "effort: Kimi does not support an effort override."),
         ("rx", ["--max-turns", "3"], "max_turns: Reasonix does not support this budget."),
         ("cr", ["--fast"], "fast: Crush does not support a fast-mode override."),
     ):
@@ -3112,7 +3107,7 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         error_code="stderr_limit_exceeded",
         error_message="Agent stderr exceeded 2097152 bytes.",
     )
-    invalid_utf8 = _run(prat, root, ["ki", "QA_BAD_UTF8", "--json"], config=config)
+    invalid_utf8 = _run(prat, root, ["kiro", "QA_BAD_UTF8", "--json"], config=config)
     oversized = _run(
         prat,
         root,

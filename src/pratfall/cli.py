@@ -94,6 +94,8 @@ def build_parser() -> Parser:
         epilog="""run syntax:
   prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]
 
+SELECTOR is an agent name (codex, kiro), alias (cx), or profile. See prat agents.
+
 run options:
   --prompt=TEXT           Pass prompt text, including text beginning with a dash.
   -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.
@@ -111,7 +113,7 @@ run options:
   --dry-run               Resolve and print the invocation without launching it.
 
 examples:
-  prat cx "review this change"
+  prat codex "review this change"
   prat simple "review this change" --effort low
   printf 'multiline prompt\\n' | prat cc -
   prat cc --file prompt.md
@@ -188,7 +190,10 @@ def _agents(json_mode: bool) -> None:
         )
         supported = [field for field in ("model", "effort", "fast") if getattr(caps, field)]
         supported.extend(sorted(caps.budgets))
-        lines.append(f"{agent.name} ({', '.join(agent.aliases)}): {', '.join(supported) or 'none'}")
+        selectors = agent.name
+        if agent.aliases:
+            selectors += f" ({', '.join(agent.aliases)})"
+        lines.append(f"{selectors}: {', '.join(supported) or 'none'}")
     _emit({"agents": records}, lines, json_mode=json_mode)
 
 

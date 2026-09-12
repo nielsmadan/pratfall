@@ -247,7 +247,7 @@ def test_kiro_fake_cli_dispatches_model_override(
     assert (
         main(
             [
-                "ki",
+                "kiro",
                 "prompt",
                 "--model",
                 "claude-sonnet-4",

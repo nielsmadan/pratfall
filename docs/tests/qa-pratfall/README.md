@@ -22,8 +22,8 @@ invocation and option contracts. Devin enforces print mode, its native delimiter
 argv prompt and empty stdin. Cortex checks global options before `exec --file -` and rejects
 cloud controls, including `--github`.
 Crush records exact raw stdin separately from the native prompt, which adds two trailing newlines.
-Canonical and alias routes cover all 22 agents and 22 aliases, including both `ag` and `agy`.
-They compare complete expected argv for the new agents; Amp is reached by its canonical name.
+Canonical and alias routes cover all 22 agents and 17 aliases, including both `ag` and `agy`.
+They compare complete expected argv for the new agents; names of four letters or fewer have no alias.
 Probe expectations are per-agent (`version` for Amp, `--version` for others).
 Probe detection matches the complete argv, including explicit lifecycle fixtures, so a literal
 Devin prompt such as `--version` remains prompt text.
@@ -99,8 +99,8 @@ executes those contracts separately. These are planned assertions until a run re
 
 | Harness IDs | Installed assertions |
 | --- | --- |
-| `A01.inventory`, `A02.routes` | Exact capabilities, commands and aliases for all 22 agents; 44 routes each launch once; ordinary doctor launches none |
-| `A03.profile` | Qwen alias profile, literal configured prefix, CLI precedence, cwd, management JSON and dry-run without launch |
+| `A01.inventory`, `A02.routes` | Exact capabilities, commands and aliases for all 22 agents; 39 routes each launch once; ordinary doctor launches none |
+| `A03.profile` | Qwen full-name profile, literal configured prefix, CLI precedence, cwd, management JSON and dry-run without launch |
 | `A04.sources` | Devin argv and Qwen stdin through inline, file, redirected input, positional `-`, and `--file -`; exact argv/input, CRLF, Unicode, dash-leading text and paths containing spaces |
 | `A06.controls`, `A07.collisions` | Unsupported model/effort/fast/turn controls and newly reserved canonical/alias profile names fail before launch with actionable errors |
 | `A08.versions` | Exact per-agent probe argv and diagnostics, including Amp `version` and isolated Hermes failure |

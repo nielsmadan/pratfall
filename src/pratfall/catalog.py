@@ -39,7 +39,7 @@ AGENTS = (
     AgentSpec(
         "kiro",
         "Kiro",
-        ("ki",),
+        (),
         ("kiro-cli",),
         Capabilities(
             effort=True,
@@ -70,11 +70,9 @@ AGENTS = (
     ),
     AgentSpec("opencode", "OpenCode", ("oc",), ("opencode",), Capabilities(effort=True)),
     AgentSpec("openhands", "OpenHands", ("oh",), ("openhands",), Capabilities(model=False)),
-    AgentSpec("warp", "Warp", ("wp",), ("oz",)),
+    AgentSpec("warp", "Warp", (), ("oz",)),
     AgentSpec("iflow", "iFlow", ("if",), ("iflow",)),
-    AgentSpec(
-        "qwen", "Qwen Code", ("qw",), ("qwen",), Capabilities(budgets=frozenset({"max_turns"}))
-    ),
+    AgentSpec("qwen", "Qwen Code", (), ("qwen",), Capabilities(budgets=frozenset({"max_turns"}))),
     AgentSpec("amp", "Amp", (), ("amp",), Capabilities(model=False), version_args=("version",)),
     AgentSpec("reasonix", "Reasonix", ("rx",), ("reasonix",), Capabilities(effort=True)),
     AgentSpec(
@@ -97,11 +95,11 @@ AGENTS = (
             ),
         ),
     ),
-    AgentSpec("kimi", "Kimi", ("km",), ("kimi",)),
+    AgentSpec("kimi", "Kimi", (), ("kimi",)),
     AgentSpec(
         "vibe",
         "Mistral Vibe",
-        ("mv",),
+        (),
         ("vibe",),
         Capabilities(model=False, budgets=frozenset({"max_turns", "max_budget_usd"})),
     ),

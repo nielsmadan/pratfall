@@ -93,21 +93,19 @@ def test_warp_accepts_verified_name_grammar(arguments: tuple[str, ...]) -> None:
 )
 def test_warp_rejects_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "wp", options)
+        resolve_profile(load_config(native_contract_config), "warp", options)
 
 
-@pytest.mark.parametrize("selector", ["wp", "warp"])
 def test_warp_cli_satisfies_independent_native_contract(
     native_contract_config: Path,
     capsys: pytest.CaptureFixture[str],
-    selector: str,
 ) -> None:
     prompt = "-literal café 雪\n$HOME `id` $(touch forbidden)\n"
     status = main(
         [
             "--config",
             str(native_contract_config),
-            selector,
+            "warp",
             "--json",
             "--model",
             "model-x",
@@ -202,7 +200,7 @@ def test_warp_real_runner_preserves_native_failure_and_partial_answer(
     command = [sys.executable, "-c", f"import sys; print({payload!r}); sys.exit(17)"]
     config = tmp_path / "failure.toml"
     config.write_text(f"version=1\n[agents.warp]\ncommand={json.dumps(command)}\n")
-    status = main(["--config", str(config), "wp", "task", "--json"])
+    status = main(["--config", str(config), "warp", "task", "--json"])
     result = json.loads(capsys.readouterr().out)
     assert status == result["exit_code"] == result["native_exit_code"] == 17
     assert result["output"] == "partial" and result["status"] == "error"

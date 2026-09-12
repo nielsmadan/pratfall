@@ -107,19 +107,18 @@ def test_qwen_reserved_and_unknown_arguments(arguments: tuple[str, ...]) -> None
 )
 def test_qwen_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "qw", options)
+        resolve_profile(load_config(native_contract_config), "qwen", options)
 
 
-@pytest.mark.parametrize("selector", ["qwen", "qw"])
 def test_qwen_independent_native_contract(
-    native_contract_config: Path, capsys: pytest.CaptureFixture[str], selector: str
+    native_contract_config: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     prompt = "-literal café 雪\n$HOME `id` $(touch forbidden)\n"
     status = main(
         [
             "--config",
             str(native_contract_config),
-            selector,
+            "qwen",
             "--json",
             "--model",
             "model-x",
@@ -293,7 +292,7 @@ def test_qwen_runner_normalizes_terminal_failure(
     command = [sys.executable, "-c", f"import sys; print({payload!r}); sys.exit({native_exit})"]
     config = tmp_path / "failure.toml"
     config.write_text(f"version=1\n[agents.qwen]\ncommand={json.dumps(command)}\n")
-    status = main(["--config", str(config), "qw", "task", "--json"])
+    status = main(["--config", str(config), "qwen", "task", "--json"])
     value = json.loads(capsys.readouterr().out)
     assert status == value["exit_code"] == (native_exit or 1)
     assert value["native_exit_code"] == native_exit and value["output"] == "partial"

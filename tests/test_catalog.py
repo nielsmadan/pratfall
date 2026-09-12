@@ -6,36 +6,38 @@ from pratfall.errors import PratError
 
 
 @pytest.mark.parametrize(
-    ("selector", "canonical"),
+    ("name", "aliases"),
     [
-        ("cc", "claude"),
-        ("cx", "codex"),
-        ("gm", "gemini"),
-        ("ag", "antigravity"),
-        ("agy", "antigravity"),
-        ("cp", "copilot"),
-        ("ki", "kiro"),
-        ("cu", "cursor"),
-        ("claw", "openclaw"),
-        ("hm", "hermes"),
-        ("oc", "opencode"),
-        ("oh", "openhands"),
-        ("wp", "warp"),
-        ("if", "iflow"),
-        ("qw", "qwen"),
-        ("amp", "amp"),
-        ("rx", "reasonix"),
-        ("dr", "droid"),
-        ("km", "kimi"),
-        ("mv", "vibe"),
-        ("cr", "crush"),
-        ("dv", "devin"),
-        ("co", "cortex"),
+        ("claude", ("cc",)),
+        ("codex", ("cx",)),
+        ("gemini", ("gm",)),
+        ("antigravity", ("ag", "agy")),
+        ("copilot", ("cp",)),
+        ("kiro", ()),
+        ("cursor", ("cu",)),
+        ("openclaw", ("claw",)),
+        ("hermes", ("hm",)),
+        ("opencode", ("oc",)),
+        ("openhands", ("oh",)),
+        ("warp", ()),
+        ("iflow", ("if",)),
+        ("qwen", ()),
+        ("amp", ()),
+        ("reasonix", ("rx",)),
+        ("droid", ("dr",)),
+        ("kimi", ()),
+        ("vibe", ()),
+        ("crush", ("cr",)),
+        ("devin", ("dv",)),
+        ("cortex", ("co",)),
     ],
 )
-def test_aliases_resolve_to_canonical_agent(selector: str, canonical: str) -> None:
-    assert get_agent(selector) == BY_NAME[canonical]
-    assert get_agent(canonical).name == canonical
+def test_agent_names_and_aliases_resolve(name: str, aliases: tuple[str, ...]) -> None:
+    agent = get_agent(name)
+    assert agent.name == name
+    assert agent.aliases == aliases
+    for alias in aliases:
+        assert get_agent(alias) == agent
 
 
 def test_registry_has_completed_agents_and_unique_selectors() -> None:

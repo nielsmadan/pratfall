@@ -88,21 +88,19 @@ def test_kimi_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
 )
 def test_kimi_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "km", options)
+        resolve_profile(load_config(native_contract_config), "kimi", options)
 
 
-@pytest.mark.parametrize("selector", ["kimi", "km"])
 def test_kimi_independent_native_contract(
     native_contract_config: Path,
     capsys: pytest.CaptureFixture[str],
-    selector: str,
 ) -> None:
     prompt = "-literal café 雪\n$HOME `id` $(touch forbidden)\n"
     status = main(
         [
             "--config",
             str(native_contract_config),
-            selector,
+            "kimi",
             "--json",
             "--model",
             "model-x",
@@ -212,7 +210,7 @@ def test_kimi_runner_eof_and_native_error_precedence(
     ]
     config = tmp_path / "result.toml"
     config.write_text(f"version=1\n[agents.kimi]\ncommand={json.dumps(command)}\n")
-    status = main(["--config", str(config), "km", "task", "--json"])
+    status = main(["--config", str(config), "kimi", "task", "--json"])
     value = json.loads(capsys.readouterr().out)
     assert status == value["exit_code"] == (native_exit or int(error is not None))
     assert value["native_exit_code"] == native_exit and value["output"] == output

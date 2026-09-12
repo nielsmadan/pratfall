@@ -80,7 +80,7 @@ def test_agents_inventory_reports_aliases_and_capabilities(
     assert result["schema_version"] == 1
     assert [agent["name"] for agent in result["agents"]] == [agent.name for agent in AGENTS]
     kiro = next(agent for agent in result["agents"] if agent["name"] == "kiro")
-    assert kiro["aliases"] == ["ki"]
+    assert kiro["aliases"] == []
     assert kiro["capabilities"]["model"] is True
     assert kiro["capabilities"]["effort_values"] == ["low", "medium", "high", "xhigh", "max"]
     hermes = next(agent for agent in result["agents"] if agent["name"] == "hermes")
@@ -105,7 +105,14 @@ def test_agents_inventory_reports_aliases_and_capabilities(
 
 def test_agents_text(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["agents"]) == 0
-    assert "claude (cc): model, effort, fast, max_budget_usd, max_turns" in capsys.readouterr().out
+    lines = capsys.readouterr().out.splitlines()
+    assert "claude (cc): model, effort, fast, max_budget_usd, max_turns" in lines
+    assert "kiro: model, effort" in lines
+    assert "warp: model" in lines
+    assert "qwen: model, max_turns" in lines
+    assert "amp: none" in lines
+    assert "kimi: model" in lines
+    assert "vibe: max_budget_usd, max_turns" in lines
 
 
 @pytest.mark.parametrize(
