@@ -39,6 +39,7 @@ def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str])
     assert "prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]" in output
     for flag in (
         "--prompt=TEXT",
+        "-f, --file PATH",
         "--model MODEL",
         "--effort EFFORT",
         "--timeout SECONDS",
@@ -48,6 +49,7 @@ def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str])
         assert flag in output
     assert 'prat simple "review this change" --effort low' in output
     assert "prat cc -" in output
+    assert "prat cc --file prompt.md" in output
     assert "prat cc --prompt=-leading-dash" in output
 
 

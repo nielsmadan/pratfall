@@ -1,13 +1,16 @@
 import io
 import json
 import os
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
-from pratfall.cli import PROMPT_LIMIT, main
+from pratfall.cli import main
+from pratfall.prompt_input import PROMPT_LIMIT
 
 
 class BrokenOutput:
@@ -16,6 +19,23 @@ class BrokenOutput:
 
     def flush(self) -> None:
         pass
+
+
+class UnreadInput:
+    buffer: "UnreadInput"
+
+    def __init__(self, *, terminal: bool = False) -> None:
+        self.buffer = self
+        self.terminal = terminal
+
+    def isatty(self) -> bool:
+        return self.terminal
+
+    def fileno(self) -> int:
+        raise OSError("no descriptor")
+
+    def read(self, _size: int) -> bytes:
+        raise AssertionError("stdin must not be read")
 
 
 def write_agent(
@@ -352,6 +372,349 @@ def test_stdin_prompt_is_read_once_as_utf8(
     assert main(["cx", "-", "--config", str(config), "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert json.loads(result["output"])["prompt"] == "multi\nline"
+
+
+def test_redirected_stdin_is_the_implicit_prompt_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO("implicit café\n".encode())))
+    assert main(["cx", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert json.loads(result["output"])["prompt"] == "implicit café\n"
+
+
+@pytest.mark.parametrize("form", ["short", "long", "equals"])
+def test_file_prompt_forms_preserve_unicode_and_newlines(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    form: str,
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    prompt_file = tmp_path / "- prompt file.md"
+    prompt_file.write_bytes("first\n雪\n".encode())
+    monkeypatch.chdir(tmp_path)
+    if form == "short":
+        source = ["-f", prompt_file.name]
+    elif form == "long":
+        source = ["--file", prompt_file.name]
+    else:
+        source = [f"--file={prompt_file.name}"]
+    arguments = [*source, "cx"] if form == "short" else ["cx", *source]
+    assert main([*arguments, "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert json.loads(result["output"])["prompt"] == "first\n雪\n"
+
+
+def test_file_dash_reads_stdin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"file dash\n")))
+    assert main(["cx", "--file", "-", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert json.loads(result["output"])["prompt"] == "file dash\n"
+
+
+def test_explicit_file_does_not_read_incidental_stdin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text("chosen", encoding="utf-8")
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", "--file", str(prompt_file), "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert json.loads(result["output"])["prompt"] == "chosen"
+
+
+def test_relative_prompt_file_uses_invocation_directory_not_run_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    invocation = tmp_path / "invocation"
+    run_cwd = tmp_path / "work"
+    invocation.mkdir()
+    run_cwd.mkdir()
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    (invocation / "prompt.md").write_text("from invocation", encoding="utf-8")
+    monkeypatch.chdir(invocation)
+    assert (
+        main(
+            [
+                "cx",
+                "--file",
+                "prompt.md",
+                "--cwd",
+                str(run_cwd),
+                "--config",
+                str(config),
+                "--json",
+            ]
+        )
+        == 0
+    )
+    answer = json.loads(json.loads(capsys.readouterr().out)["output"])
+    assert answer == {"argv": answer["argv"], "prompt": "from invocation", "cwd": str(run_cwd)}
+
+
+def test_symlink_to_regular_prompt_file_works(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    target = tmp_path / "target.md"
+    target.write_text("through symlink", encoding="utf-8")
+    prompt_file = tmp_path / "prompt link.md"
+    prompt_file.symlink_to(target)
+    assert main(["cx", "-f", str(prompt_file), "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert json.loads(result["output"])["prompt"] == "through symlink"
+
+
+def test_valid_file_is_fully_validated_by_dry_run_without_launching(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    marker = tmp_path / "launched"
+    config = write_agent(
+        tmp_path, "codex", f"from pathlib import Path;Path({str(marker)!r}).touch()"
+    )
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text("dry café\n", encoding="utf-8")
+    assert (
+        main(["cx", "--file", str(prompt_file), "--config", str(config), "--dry-run", "--json"])
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["stdin_bytes"] == len("dry café\n".encode())
+    assert not marker.exists()
+
+
+def test_native_file_after_separator_is_not_a_prompt_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fixture = """import json, sys
+prompt = sys.stdin.read()
+answer = json.dumps({"argv": sys.argv[1:], "prompt": prompt})
+print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": answer, "usage": {"input_tokens": 1, "output_tokens": 1}}))
+"""
+    config = write_agent(tmp_path, "claude", fixture)
+    assert (
+        main(
+            [
+                "cc",
+                "wrapper prompt",
+                "--config",
+                str(config),
+                "--json",
+                "--",
+                "--file",
+                "native path.md",
+            ]
+        )
+        == 0
+    )
+    answer = json.loads(json.loads(capsys.readouterr().out)["output"])
+    assert answer["prompt"] == "wrapper prompt"
+    assert answer["argv"][-2:] == ["--file", "native path.md"]
+
+
+@pytest.mark.parametrize(
+    "sources",
+    [
+        ["inline", "--file", "prompt.md"],
+        ["--file", "one.md", "--file", "two.md"],
+        ["inline", "--prompt=other"],
+        ["-", "--file=-"],
+    ],
+)
+def test_prompt_source_conflicts_are_normalized_without_opening_input(
+    sources: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", *sources, "--dry-run", "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "error"
+    assert result["exit_code"] == 2
+    assert result["error"] == {
+        "code": "invalid_arguments",
+        "message": "Provide exactly one prompt source.",
+    }
+
+
+def test_terminal_without_prompt_is_an_actionable_usage_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", UnreadInput(terminal=True))
+    assert main(["cx", "--dry-run", "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_arguments"
+    assert "--file PATH" in result["error"]["message"]
+    assert "redirected standard input" in result["error"]["message"]
+
+
+@pytest.mark.parametrize(
+    ("contents", "message"),
+    [
+        (b"", "empty or whitespace-only"),
+        (" \n\t\u2003".encode(), "empty or whitespace-only"),
+        (b"nul\0byte", "NUL"),
+        (b"\xff", "not valid UTF-8"),
+        (b"x" * (PROMPT_LIMIT + 1), "byte limit"),
+    ],
+)
+def test_invalid_file_content_is_normalized_and_dry_run_does_not_launch(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    contents: bytes,
+    message: str,
+) -> None:
+    marker = tmp_path / "launched"
+    config = write_agent(
+        tmp_path, "codex", f"from pathlib import Path;Path({str(marker)!r}).touch()"
+    )
+    prompt_file = tmp_path / "prompt.bin"
+    prompt_file.write_bytes(contents)
+    assert (
+        main(["cx", "--file", str(prompt_file), "--config", str(config), "--dry-run", "--json"])
+        == 2
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_arguments"
+    assert message in result["error"]["message"]
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("kind", ["missing", "directory", "fifo"])
+def test_invalid_named_file_is_rejected_without_launching(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    kind: str,
+) -> None:
+    marker = tmp_path / "launched"
+    config = write_agent(
+        tmp_path, "codex", f"from pathlib import Path;Path({str(marker)!r}).touch()"
+    )
+    prompt_file = tmp_path / kind
+    if kind == "directory":
+        prompt_file.mkdir()
+    elif kind == "fifo":
+        os.mkfifo(prompt_file)
+    assert main(["cx", "-f", str(prompt_file), "--config", str(config), "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_arguments"
+    assert "prompt file" in result["error"]["message"].lower()
+    assert not marker.exists()
+
+
+def test_unreadable_prompt_file_is_normalized(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    prompt_file = tmp_path / "unreadable.md"
+    prompt_file.write_text("secret", encoding="utf-8")
+    prompt_file.chmod(0)
+    try:
+        assert main(["cx", "--file", str(prompt_file), "--dry-run", "--json"]) == 2
+        result = json.loads(capsys.readouterr().out)
+        assert result["error"]["code"] == "invalid_arguments"
+        assert "Cannot open prompt file" in result["error"]["message"]
+    finally:
+        prompt_file.chmod(0o600)
+
+
+def test_closed_stdin_is_a_normalized_input_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    stream = io.BytesIO(b"prompt")
+    stream.close()
+    monkeypatch.setattr(sys, "stdin", stream)
+    assert main(["cx", "-", "--dry-run", "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_arguments"
+    assert "Cannot read standard input" in result["error"]["message"]
+
+
+@pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])
+def test_signal_while_reading_implicit_stdin_is_normalized_without_spawning(
+    tmp_path: Path, chosen: signal.Signals
+) -> None:
+    marker = tmp_path / "launched"
+    ready = tmp_path / "input-handlers-ready"
+    config = write_agent(
+        tmp_path, "codex", f"from pathlib import Path;Path({str(marker)!r}).touch()"
+    )
+    bootstrap = """
+import sys
+from contextlib import contextmanager
+from pathlib import Path
+
+from pratfall import prompt_input
+from pratfall.cli import main
+
+original_handlers = prompt_input._input_signal_handlers
+
+@contextmanager
+def ready_handlers(state):
+    with original_handlers(state):
+        Path(sys.argv[1]).touch()
+        yield
+
+prompt_input._input_signal_handlers = ready_handlers
+raise SystemExit(main(sys.argv[2:]))
+"""
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+    }
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            bootstrap,
+            str(ready),
+            "cx",
+            "--config",
+            str(config),
+            "--json",
+        ],
+        cwd=tmp_path,
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists(), "child did not install input signal handlers"
+        process.send_signal(chosen)
+        stdout, stderr = process.communicate(timeout=10)
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.communicate()
+    assert process.returncode == 128 + chosen
+    result = json.loads(stdout)
+    assert result["status"] == "interrupted"
+    assert result["exit_code"] == 128 + chosen
+    assert result["error"] == {
+        "code": "interrupted",
+        "message": f"Interrupted by signal {chosen}.",
+    }
+    assert stdout.count(b"\n") == 1
+    assert stderr == b""
+    assert not marker.exists()
 
 
 def test_prompt_option_can_pass_a_literal_dash(

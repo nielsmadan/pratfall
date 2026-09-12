@@ -17,9 +17,9 @@ from pratfall.config import config_path, init_config, load_config, resolve_profi
 from pratfall.errors import PratError
 from pratfall.models import Config, DecodedOutput, Invocation, Options, ResolvedProfile, ResultError
 from pratfall.output import normalize, result_dict, validation_error
+from pratfall.prompt_input import InputInterrupted, PromptSource, acquire_prompt
 from pratfall.runner import ProcessResult, run
 
-PROMPT_LIMIT = 1024 * 1024
 _RUN_VALUE_FLAGS = {
     "--config": "config",
     "--cwd": "cwd",
@@ -29,14 +29,15 @@ _RUN_VALUE_FLAGS = {
     "--max-turns": "max_turns",
     "--model": "model",
     "--timeout": "timeout",
+    "--file": "file",
+    "-f": "file",
 }
 
 
 @dataclass(frozen=True)
 class RunArguments:
     selector: str
-    prompt: str
-    prompt_from_stdin: bool
+    prompt_source: PromptSource | None
     config: str | None
     cwd: str | None
     json: bool
@@ -74,6 +75,7 @@ def build_parser() -> Parser:
 
 run options:
   --prompt=TEXT           Pass prompt text, including text beginning with a dash.
+  -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.
   --model MODEL           Override the profile model.
   --effort EFFORT         Override the native effort setting.
   --timeout SECONDS       Set the wall-clock deadline.
@@ -89,6 +91,7 @@ examples:
   prat cx "review this change"
   prat simple "review this change" --effort low
   printf 'multiline prompt\\n' | prat cc -
+  prat cc --file prompt.md
   prat cc --prompt=-leading-dash
 """,
         allow_abbrev=False,
@@ -239,8 +242,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     prat_arguments, native_arguments = _split_native(arguments)
     values: dict[str, str] = {}
     selector: str | None = None
-    prompt: str | None = None
-    prompt_option = False
+    prompt_source: PromptSource | None = None
     json_mode = False
     dry_run = False
     index = 0
@@ -257,26 +259,32 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         if argument == "--prompt":
             raise PratError("--prompt requires the --prompt=TEXT form.", code="invalid_arguments")
         if argument.startswith("--prompt="):
-            if prompt is not None:
-                raise PratError("Provide exactly one prompt.", code="invalid_arguments")
-            prompt = argument.removeprefix("--prompt=")
-            prompt_option = True
+            prompt_source = _add_prompt_source(
+                prompt_source, PromptSource("inline", argument.removeprefix("--prompt="))
+            )
             index += 1
             continue
         name, equals, inline = argument.partition("=")
         field = _RUN_VALUE_FLAGS.get(name)
         if field is not None:
             value, index = _run_option_value(prat_arguments, index, name, equals, inline)
-            values[field] = value
+            if field == "file":
+                prompt_source = _add_prompt_source(
+                    prompt_source, PromptSource("file", _text_option(value, name))
+                )
+            else:
+                values[field] = value
             continue
         if argument.startswith("-") and argument != "-":
             raise PratError(f"unrecognized argument: {argument}", code="invalid_arguments")
-        selector, prompt = _add_positional(selector, prompt, argument)
+        if selector is None:
+            selector = argument
+        else:
+            source = PromptSource("stdin") if argument == "-" else PromptSource("inline", argument)
+            prompt_source = _add_prompt_source(prompt_source, source)
         index += 1
     if selector is None:
         raise PratError("A selector is required.", code="invalid_arguments")
-    if prompt is None:
-        raise PratError("Provide exactly one prompt.", code="invalid_arguments")
     options = Options(
         model=_text_option(values.get("model"), "--model"),
         effort=_text_option(values.get("effort"), "--effort"),
@@ -288,8 +296,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     )
     return RunArguments(
         selector,
-        prompt,
-        not prompt_option and prompt == "-",
+        prompt_source,
         _text_option(values.get("config"), "--config"),
         _text_option(values.get("cwd"), "--cwd"),
         json_mode,
@@ -315,14 +322,10 @@ def _run_option_value(
     return arguments[index + 1], index + 2
 
 
-def _add_positional(
-    selector: str | None, prompt: str | None, argument: str
-) -> tuple[str | None, str | None]:
-    if selector is None:
-        return argument, prompt
-    if prompt is None:
-        return selector, argument
-    raise PratError("Provide exactly one prompt.", code="invalid_arguments")
+def _add_prompt_source(current: PromptSource | None, added: PromptSource) -> PromptSource:
+    if current is not None:
+        raise PratError("Provide exactly one prompt source.", code="invalid_arguments")
+    return added
 
 
 def _text_option(value: str | None, flag: str) -> str | None:
@@ -353,32 +356,6 @@ def _integer_option(value: str | None, flag: str) -> int | None:
     if str(number) != value or number <= 0:
         raise PratError(f"{flag} requires a positive integer.", code="invalid_arguments")
     return number
-
-
-def _prompt_bytes(argument: str, from_stdin: bool) -> bytes:
-    if from_stdin:
-        stream = getattr(sys.stdin, "buffer", sys.stdin)
-        value = stream.read(PROMPT_LIMIT + 1)
-        prompt = value.encode("utf-8") if isinstance(value, str) else value
-    else:
-        try:
-            prompt = argument.encode("utf-8")
-        except UnicodeEncodeError as error:
-            raise PratError("Prompt is not valid UTF-8.", code="invalid_arguments") from error
-    if not prompt:
-        raise PratError("Prompt must not be empty.", code="invalid_arguments")
-    if b"\0" in prompt:
-        raise PratError("Prompt must not contain NUL bytes.", code="invalid_arguments")
-    if len(prompt) > PROMPT_LIMIT:
-        raise PratError(f"Prompt exceeds the {PROMPT_LIMIT} byte limit.", code="invalid_arguments")
-    if from_stdin:
-        try:
-            prompt.decode("utf-8")
-        except UnicodeDecodeError as error:
-            raise PratError(
-                "Standard input prompt is not valid UTF-8.", code="invalid_arguments"
-            ) from error
-    return prompt
 
 
 def _run_cwd(value: str | None, invocation_cwd: Path) -> Path:
@@ -483,7 +460,7 @@ def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
         config = load_config(parsed.config, cwd=invocation_cwd)
         _validate_config_native_arguments(config)
         resolved = resolve_profile(config, parsed.selector, parsed.options)
-        prompt = _prompt_bytes(parsed.prompt, parsed.prompt_from_stdin)
+        prompt = acquire_prompt(parsed.prompt_source, invocation_cwd)
         cwd = _run_cwd(parsed.cwd, invocation_cwd)
         invocation = _build_invocation(resolved, prompt)
         if parsed.dry_run:
@@ -508,6 +485,21 @@ def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
         payload = result_dict(result)
         _emit_result(payload, json_mode=json_mode)
         return result.exit_code
+    except InputInterrupted as error:
+        exit_code = 128 + error.signum
+        payload = validation_error(error, "interrupted", exit_code)
+        payload["status"] = "interrupted"
+        if resolved is not None:
+            payload.update(
+                agent=resolved.agent.name,
+                profile=resolved.profile,
+                model=resolved.options.model,
+            )
+        if json_mode:
+            print(json.dumps(payload, ensure_ascii=False))
+        else:
+            print(f"prat: {error}", file=sys.stderr)
+        return exit_code
     except PratError as error:
         payload = validation_error(error, error.code, error.exit_code)
         if resolved is not None:

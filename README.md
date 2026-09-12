@@ -28,6 +28,8 @@ Run a built-in selector or a named profile with exactly one prompt:
 uv run prat cx "summarize the changes in this checkout"
 uv run prat --model gpt-5.6-luna simple --effort low --prompt="review this code"
 printf 'multiline\nprompt\n' | uv run prat cc -
+printf 'redirected prompt\n' | uv run prat cc
+uv run prat cx --file request.md
 uv run prat cc --max-budget-usd 1 --max-turns 3 "inspect this failure"
 uv run prat ag --effort high "finish the requested change"
 uv run prat oc --model provider/model "review this repository"
@@ -36,18 +38,31 @@ uv run prat claw --model provider/model "run the focused tests"
 uv run prat hm --effort high "review this repository"
 ```
 
-Run flags can appear before or after the selector. `--prompt=TEXT` is required for prompt text
-that starts with a dash. A lone `-` reads one UTF-8 prompt from stdin. Prompts must be nonempty,
-contain no NUL bytes, and fit within 1 MiB. Prat sends Claude, Codex, Antigravity, and OpenCode
-prompts through native stdin protocols. OpenClaw and Hermes use native stdin file options. Gemini
-and Copilot use a documented prompt option, while Cursor and Kiro use positional prompts after an
-end-of-options marker. These four argv transports are subject to the operating system's argv-size
-limit, which can be lower than Prat's 1 MiB input limit. Prompts are never passed through a shell or
-the inherited terminal.
+Run flags can appear before or after the selector. Supply exactly one explicit prompt source:
+positional text, `--prompt=TEXT`, `-f PATH` / `--file PATH`, or stdin through positional `-` or
+`--file -`. `--prompt=TEXT` is required for text that starts with a dash, and `--prompt=-` remains
+literal text. With no explicit source, Prat reads stdin when it is redirected; at a terminal it
+reports how to provide a prompt instead of asking interactively. An explicit source takes
+precedence over incidental redirected stdin, which is left unread.
+
+All prompt sources must contain UTF-8 text that is not empty or whitespace-only, has no NUL bytes,
+and fits within 1 MiB. Prat reads at most one extra byte to detect overflow. Named files must be
+regular files; symlinks to regular files work, while directories and special files are rejected.
+Relative prompt-file paths resolve from the directory where `prat` was invoked, independently of
+`--cwd`. Missing, unreadable, invalid, and oversized input exits 2 without launching an agent.
+
+Prat sends Claude, Codex, Antigravity, and OpenCode prompts through native stdin protocols.
+OpenClaw and Hermes use native stdin file options. Gemini and Copilot use a documented prompt
+option, while Cursor and Kiro use positional prompts after an end-of-options marker. These four
+argv transports are subject to the operating system's argv-size limit, which can be lower than
+Prat's 1 MiB input limit. Prompts are never passed through a shell or the inherited terminal.
 
 Use `--cwd PATH` to select the agent working directory. Relative config and working-directory
-paths resolve from the directory where `prat` was invoked. `--timeout` is a wall-clock deadline
-for the child and output draining, and defaults to 600 seconds.
+paths resolve from the directory where `prat` was invoked. Input acquisition waits for EOF and is
+not charged to the agent timeout. SIGINT or SIGTERM during input acquisition exits as interrupted
+without launching an agent. `--timeout` is a wall-clock deadline for agent execution and output
+draining, and defaults to 600 seconds. A timed-out or failed run can leave edits in the working
+directory.
 
 `--dry-run` validates the complete invocation and shows its argv without launching the agent.
 Prompts carried through stdin appear only as a byte count. Gemini, Copilot, Cursor, and Kiro carry
@@ -94,8 +109,8 @@ including validation and runtime failures:
 }
 ```
 
-Run statuses are `success`, `error`, `timeout`, or `interrupted`. Invalid arguments and config
-exit 2; missing and non-executable commands exit 127 and 126; timeouts exit 124; interruption
+Run statuses are `success`, `error`, `timeout`, or `interrupted`. Invalid arguments, config, and
+prompt input exit 2; missing and non-executable commands exit 127 and 126; timeouts exit 124; interruption
 exits `128 + signal`; native nonzero codes are otherwise preserved. Provider, protocol, output,
 and I/O failures exit 1. A dry-run JSON object instead has `dry_run: true`, resolved identity,
 `argv`, `cwd`, `timeout`, and `stdin_bytes`; it does not claim a run status or usage.
