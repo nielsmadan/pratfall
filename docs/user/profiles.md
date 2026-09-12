@@ -46,3 +46,10 @@ prat --config config.toml profiles
 
 `config init` creates a new example exclusively and fails if the destination exists. Ordinary runs
 never write configuration.
+
+New built-in names become reserved when upgrading. In this release, profiles named `openhands`,
+`oh`, `warp`, `wp`, `iflow`, `if`, `qwen`, `qw`, `amp`, `reasonix`, `rx`, `droid`, `dr`, `kimi`,
+`km`, `vibe`, `mv`, `crush`, `cr`, `devin`, `dv`, `cortex`, or `co` must be renamed, for example
+`[profiles.oh]` to `[profiles.my-openhands]`. Keep the profile's `agent` and options, update commands that invoke its
+old name, then run `prat config validate`. A collision reports
+`profiles.NAME: name is reserved; choose a different profile name.`

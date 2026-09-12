@@ -13,13 +13,20 @@
    fields.
 
 The adapter registry binds command builders, convenience decoders, and optional incremental
-consumer factories. Codex, Copilot, Antigravity, and OpenCode share a strict byte-oriented JSONL
-framer, while each adapter owns only its protocol transitions. The runner does not know provider
+consumer factories. Codex, Copilot, Antigravity, OpenCode, Warp, Qwen, Amp and Kimi share a strict
+byte-oriented JSONL framer. OpenHands has a separate bounded consumer for its mixed SDK events
+and native prose. Each adapter owns its protocol transitions. The runner does not know provider
 schemas, and adapters do not own process lifecycle. It feeds cleanup bytes before finalizing once;
 after a hard local output failure it drains stdout without reparsing it. The standard-library-only
 runtime keeps source and Homebrew installation free of vendored Python resources.
 Encoding or presentation failures detected after the parent exits still trigger bounded cleanup of
 the owned process group, because descendants can remain after the native parent closes its pipes.
+An existence probe (`killpg(group, 0)`) returning EPERM keeps the group pending within those
+existing deadlines. Apple's [XNU group-signal implementation](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_sig.c#L1709)
+excludes zombie members and can return EPERM while the last members exit. A source-entry-point
+regression run observed SIGTERM succeed followed by EPERM from the next zero-signal probe. Cleanup waits for a later
+disappearance observation; persistent probe denial still fails cleanup, and permission failures
+from SIGTERM or SIGKILL remain explicit errors.
 
 stdout is reserved for final text or one JSON object. Native stderr and Pratfall progress go to
 stderr. Opt-in progress uses static activity categories through a bounded nonblocking sink, which

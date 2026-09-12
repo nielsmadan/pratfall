@@ -21,18 +21,26 @@ Every source must be valid UTF-8, nonempty and not whitespace-only, contain no N
 within 1 MiB. Named files must be regular files; symlinks to regular files work, while missing,
 unreadable, directory, and special-file inputs fail with exit 2 before an agent starts. Relative
 file paths resolve from the directory where Prat was invoked, independently of `--cwd`. Gemini,
-Copilot, Cursor, and Kiro carry prompts in argv and can hit an operating-system argv limit below
+Copilot, Cursor, Kiro, OpenHands, Warp, iFlow and Devin carry prompts in argv and can hit an operating-system argv limit below
 1 MiB.
+
+Crush 0.93.1 receives the original prompt bytes on stdin and adds two trailing newline characters
+when it constructs its native prompt. Reasonix, Kimi and Vibe trim surrounding whitespace
+natively. Prat supplies the same acquired bytes for each prompt source before these native
+transformations.
 
 Run options can appear before or after the selector. `--model`, `--effort`, `--fast`, `--no-fast`,
 `--timeout`,
 `--max-budget-usd`, `--max-turns`, and `--max-ai-credits` override supported profile fields.
+Claude and Vibe support USD budgets; Vibe maps the value to native `--max-price`. These controls
+retain native counting and overshoot behavior. Vibe's `--max-tokens` is native passthrough only.
+Cortex supports `max_turns` with native per-conversation-round counting.
 Fast overrides are supported by Claude and Codex. Omitting both flags preserves native behavior;
 `--no-fast` is a real false override. Conflicting fast flags fail before launch.
 `--cwd PATH` changes the child working directory. `--dry-run` acquires and validates the selected
 input, then prints the resolved argv without launching the agent. Prompts carried through stdin
-appear only as a byte count. Gemini, Copilot, Cursor, and Kiro carry the prompt in argv, so their
-previews include it.
+appear only as a byte count. Gemini, Copilot, Cursor, Kiro, OpenHands, Warp, iFlow and Devin carry the prompt in
+argv, so their previews include it.
 
 Use `--progress` to print bounded elapsed-time and activity updates on stderr while an agent runs.
 Structured streaming adapters report only static categories such as reasoning, tool use, and
@@ -51,7 +59,8 @@ Those results can also contain partial final output and any accounting decoded b
 In particular, Codex assistant messages completed before EOF or the outer timeout are preserved,
 but an unfinished turn still fails rather than becoming a synthetic success.
 
-Codex, Copilot, Antigravity, and OpenCode JSONL output is decoded as it arrives. Prat limits each
+Codex, Copilot, Antigravity, OpenCode, Warp, Qwen, Amp and Kimi JSONL output is decoded as it arrives. OpenHands
+decodes its mixed SDK events and native status/summary text incrementally. Prat limits each
 physical event and retained answer/protocol state to 8 MiB and retains at most 16,384 logical
 records. Discarded events do not count toward a cumulative trace limit, so long runs with many
 small progress events can exceed 8 MiB in total. Other structured JSON and text adapters retain

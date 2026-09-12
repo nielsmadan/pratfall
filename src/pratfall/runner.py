@@ -332,17 +332,20 @@ def _terminate_and_drain(
             break
     _signal_group(process.pid, signal.SIGKILL)
     kill_deadline = time.monotonic() + FINAL_DRAIN_GRACE
-    while time.monotonic() < kill_deadline and selector.get_map():
-        for key, _ in selector.select(0.05):
+    while time.monotonic() < kill_deadline:
+        wait = min(0.05, max(0.0, kill_deadline - time.monotonic()))
+        for key, _ in selector.select(wait):
             _read_ready(selector, key, output, output_limits)
+        parent_reaped = process.poll() is not None
+        if parent_reaped and not selector.get_map() and not _process_group_exists(process.pid):
+            return
     for key in list(selector.get_map().values()):
         selector.unregister(key.fileobj)
         cast(BinaryIO, key.fileobj).close()
-    try:
-        process.wait(timeout=FINAL_DRAIN_GRACE)
-    except subprocess.TimeoutExpired:
-        _signal_group(process.pid, signal.SIGKILL)
-        process.wait()
+    if process.poll() is None:
+        raise OSError("agent process could not be reaped")
+    if _process_group_exists(process.pid):
+        raise OSError("could not verify owned process-group cleanup before the deadline")
 
 
 def _force_cleanup(process: subprocess.Popen[bytes]) -> None:
@@ -380,6 +383,8 @@ def _process_group_exists(process_group: int) -> bool:
         os.killpg(process_group, 0)
     except ProcessLookupError:
         return False
+    except PermissionError:
+        return True
     return True
 
 

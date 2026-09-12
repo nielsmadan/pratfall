@@ -30,6 +30,10 @@ It is native run accounting, not a subscription-billing guarantee. Unknown model
 null rather than falling back to the requested model or zero. Copilot credits are not converted to
 USD.
 
+Reasonix's requested `model` selects a configured provider name. Amp, OpenHands and Vibe have no
+generic model override. For text adapters, `output` contains complete native stdout with terminal
+CR/LF removed; banners and progress can be part of that text.
+
 Usage contains nullable `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`,
 `output_tokens`, and `reasoning_output_tokens` fields when a native protocol reports them. Unknown
 usage stays null.
@@ -56,3 +60,9 @@ Agent capability records include `fast`. Doctor inventory records include nullab
 `version_error` fields, separate from `available`. Without `doctor --versions`, both version fields
 remain null and no configured command is launched. Ordinary probe failures leave doctor at exit 0.
 An interrupted version probe adds interrupted management status and exits with `128 + signal`.
+
+Qwen reports models only from root assistant messages and takes usage from the final native result.
+Amp also uses only optional final result usage and reports no model identity or USD cost. Reasonix
+reports native input/output/cache-read counts; its cache-creation field means cache misses and its
+USD cost alias may have another currency, so cache-write counts and cost_usd stay null. Reasonix
+recovery_paused is an error outcome even when native_exit_code is zero, with its partial result retained.

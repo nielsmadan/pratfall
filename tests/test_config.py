@@ -356,3 +356,42 @@ def test_init_reports_parent_creation_failure(tmp_path: Path) -> None:
     file = write_config(tmp_path, "existing file")
     with pytest.raises(PratError, match="cannot create config"):
         init_config(file / "config.toml")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "openhands",
+        "oh",
+        "warp",
+        "wp",
+        "iflow",
+        "if",
+        "qwen",
+        "qw",
+        "amp",
+        "reasonix",
+        "rx",
+        "droid",
+        "dr",
+        "kimi",
+        "km",
+        "vibe",
+        "mv",
+        "crush",
+        "cr",
+        "devin",
+        "dv",
+        "cortex",
+        "co",
+    ],
+)
+def test_new_agent_profile_collisions_have_exact_migration_diagnostic(
+    tmp_path: Path, name: str
+) -> None:
+    path = write_config(tmp_path, f'version=1\n[profiles.{name}]\nagent="codex"\n')
+    with pytest.raises(PratError) as failure:
+        load_config(path)
+    assert str(failure.value) == (
+        f"{path}: profiles.{name}: name is reserved; choose a different profile name."
+    )

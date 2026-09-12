@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import selectors
 import shlex
 import signal
@@ -57,22 +58,190 @@ AGENTS = {
     "openclaw": "openclaw",
     "hermes": "hermes",
     "opencode": "opencode",
+    "openhands": "openhands",
+    "warp": "oz",
+    "iflow": "iflow",
+    "qwen": "qwen",
+    "amp": "amp",
+    "reasonix": "reasonix",
+    "droid": "droid",
+    "kimi": "kimi",
+    "vibe": "vibe",
+    "crush": "crush",
+    "devin": "devin",
+    "cortex": "cortex",
 }
 ALIASES = {
     "cc": "claude",
     "cx": "codex",
     "gm": "gemini",
     "ag": "antigravity",
+    "agy": "antigravity",
     "cp": "copilot",
     "ki": "kiro",
     "cu": "cursor",
     "claw": "openclaw",
     "hm": "hermes",
     "oc": "opencode",
+    "oh": "openhands",
+    "wp": "warp",
+    "if": "iflow",
+    "qw": "qwen",
+    "rx": "reasonix",
+    "dr": "droid",
+    "km": "kimi",
+    "mv": "vibe",
+    "cr": "crush",
+    "dv": "devin",
+    "co": "cortex",
 }
 
 
+VERSION_ARGS = {name: ["--version"] for name in AGENTS} | {"amp": ["version"]}
+_EFFORT_VALUES = {
+    "claude": ["low", "medium", "high", "xhigh", "max"],
+    "codex": None,
+    "antigravity": ["low", "medium", "high"],
+    "copilot": ["low", "medium", "high", "xhigh", "max"],
+    "kiro": ["low", "medium", "high", "xhigh", "max"],
+    "openclaw": None,
+    "hermes": ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"],
+    "opencode": None,
+    "reasonix": None,
+    "droid": ["none", "dynamic", "off", "minimal", "low", "medium", "high", "xhigh", "max"],
+    "cortex": ["minimal", "low", "medium", "high", "max"],
+}
+_BUDGETS = {
+    "claude": ["max_budget_usd", "max_turns"],
+    "copilot": ["max_ai_credits"],
+    "hermes": ["max_turns"],
+    "qwen": ["max_turns"],
+    "vibe": ["max_budget_usd", "max_turns"],
+    "cortex": ["max_turns"],
+}
+_STDIN_PREFIXES = {
+    "qwen": ["--output-format", "stream-json"],
+    "amp": ["--execute", "--stream-json"],
+    "reasonix": ["run", "--output-format", "json"],
+    "droid": ["exec", "--output-format", "json"],
+    "kimi": [
+        "--print",
+        "--input-format",
+        "text",
+        "--output-format",
+        "stream-json",
+        "--final-message-only",
+    ],
+    "vibe": ["--prompt", "--output", "json"],
+    "crush": ["run", "--quiet"],
+    "cortex": [],
+}
+_STDIN_SUFFIXES = {"cortex": ["exec", "--file", "-"]}
+
+
+_NATIVE_PREFIXES = {
+    "openhands": ["--headless", "--json"],
+    "warp": ["agent", "run", "--output-format", "ndjson"],
+    "iflow": [],
+    "devin": ["-p"],
+}
+_NATIVE_OPTIONS = {
+    "crush": {"--model": 1, "--verbose": 0, "-v": 0, "--debug": 0, "-d": 0},
+    "devin": {"--model": 1, "--permission-mode": 1},
+    "cortex": {"--model": 1, "--effort": 1, "--max-turns": 1, "--connection": 1, "-c": 1},
+    "droid": {"--model": 1, "--reasoning-effort": 1, "--auto": 1},
+    "kimi": {"--model": 1, "--thinking": 0, "--no-thinking": 0, "--plan": 0, "--debug": 0},
+    "vibe": {
+        "--max-turns": 1,
+        "--max-price": 1,
+        "--max-tokens": 1,
+        "--enabled-tools": 1,
+        "--disabled-tools": 1,
+    },
+    "openhands": {"--override-with-envs": 0},
+    "warp": {
+        "--model": 1,
+        "--name": 1,
+        "-n": 1,
+        "--strict-mcp-startup": 0,
+        "--mcp-startup-timeout": 1,
+    },
+    "iflow": {"--model": 1, "--thinking": 0, "--plan": 0, "--default": 0},
+    "qwen": {
+        "--model": 1,
+        "--max-session-turns": 1,
+        "--debug": 0,
+        "-d": 0,
+        "--approval-mode": 1,
+        "--system-prompt": 1,
+        "--append-system-prompt": 1,
+    },
+    "amp": {"--stream-json-thinking": 0},
+    "reasonix": {
+        "--model": 1,
+        "--effort": 1,
+        "--permission-mode": 1,
+        "--max-steps": 1,
+        "--show-thinking": 0,
+    },
+}
+
+
+def _native_options(agent: str, arguments: list[str]) -> None:
+    options = _NATIVE_OPTIONS[agent]
+    permission_mode = "ask"
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        name, equals, value = argument.partition("=")
+        if agent == "warp" and argument.startswith("-n") and argument != "-n":
+            index += 1
+            continue
+        assert name in options, f"unexpected {agent} option: {argument!r}"
+        arity = options[name]
+        if equals:
+            assert arity == 1, f"unexpected {agent} option value: {argument!r}"
+        else:
+            assert index + arity < len(arguments), f"missing {agent} option value: {argument!r}"
+        if agent == "reasonix" and name == "--permission-mode":
+            permission_mode = value if equals else arguments[index + 1]
+        index += 1 if equals else 1 + arity
+    if agent == "reasonix" and permission_mode == "plan":
+        print("--permission-mode plan requires an interactive session", file=sys.stderr)
+        raise SystemExit(2)
+
+
+def _checked_argv_prompt(agent: str, arguments: list[str], data: bytes) -> str:
+    prefix = _NATIVE_PREFIXES[agent]
+    assert arguments[: len(prefix)] == prefix, f"incorrect {agent} invocation: {arguments!r}"
+    assert len(arguments) > len(prefix), f"missing {agent} prompt"
+    assert data == b"", f"unexpected {agent} stdin"
+    if agent == "devin":
+        assert len(arguments) >= 3 and arguments[-2] == "--", "incorrect devin delimiter"
+        _native_options(agent, arguments[len(prefix) : -2])
+        return arguments[-1]
+    prompt_flag = "--task=" if agent == "openhands" else "--prompt="
+    assert arguments[-1].startswith(prompt_flag), f"incorrect {agent} prompt transport"
+    _native_options(agent, arguments[len(prefix) : -1])
+    return arguments[-1][len(prompt_flag) :]
+
+
 def _prompt(agent: str, arguments: list[str], data: bytes) -> str:
+    if agent in _NATIVE_PREFIXES:
+        return _checked_argv_prompt(agent, arguments, data)
+    if agent in _STDIN_PREFIXES:
+        prefix = _STDIN_PREFIXES[agent]
+        assert arguments[: len(prefix)] == prefix, f"incorrect {agent} invocation: {arguments!r}"
+        suffix = _STDIN_SUFFIXES.get(agent, [])
+        if suffix:
+            assert arguments[-len(suffix) :] == suffix, f"incorrect {agent} stdin transport"
+        end = len(arguments) - len(suffix)
+        _native_options(agent, arguments[len(prefix) : end])
+        prompt = data.decode("utf-8")
+        assert prompt.strip(), f"missing {agent} stdin prompt"
+        if agent == "crush":
+            return prompt + "\n\n"
+        return prompt.strip() if agent in {"reasonix", "kimi", "vibe"} else prompt
     if agent == "antigravity":
         return json.loads(data)["message"]["content"]
     if agent in {"gemini", "copilot"}:
@@ -82,7 +251,97 @@ def _prompt(agent: str, arguments: list[str], data: bytes) -> str:
     return data.decode()
 
 
+def _answer_droid(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "duration_ms": 10,
+                "num_turns": 1,
+                "result": answer,
+                "session_id": "qa-session",
+            }
+        )
+    )
+
+
+def _answer_kimi(answer: str) -> None:
+    print(json.dumps({"role": "assistant", "content": answer}))
+
+
+def _answer_vibe(answer: str) -> None:
+    print(
+        json.dumps(
+            [
+                {
+                    "id": "user",
+                    "sessionId": "qa-session",
+                    "turnId": "turn",
+                    "createdAt": 1,
+                    "updatedAt": 1,
+                    "generationStatus": "completed",
+                    "relatedEntryId": None,
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "text", "text": "native prompt"}],
+                    "source": "turn_start",
+                    "userDisplayContent": None,
+                },
+                {
+                    "id": "answer",
+                    "sessionId": "qa-session",
+                    "turnId": "turn",
+                    "createdAt": 2,
+                    "updatedAt": 2,
+                    "generationStatus": "completed",
+                    "relatedEntryId": None,
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": answer}],
+                    "source": "harness",
+                    "userDisplayContent": None,
+                },
+            ]
+        )
+    )
+
+
+def _openhands_startup() -> None:
+    print(
+        "OpenHands CLI terminal UI may not work correctly in this environment: "
+        "Rich detected a non-interactive or unsupported terminal; interactive UI may not render correctly"
+    )
+    print(
+        "To override Rich's detection, you can set TTY_INTERACTIVE=1 (and optionally TTY_COMPATIBLE=1)."
+    )
+    print("Initializing agent...")
+    print("✓ Hooks loaded")
+    print("✓ Agent initialized with model: native-model")
+    print("Agent is working")
+
+
+def _openhands_summary() -> None:
+    print("Agent finished")
+    print("──────── CONVERSATION SUMMARY ────────")
+    print("Number of agent messages: 1")
+    print("Last message sent by the agent:")
+    print("╭─ Agent ─────────────────────╮")
+    print("│ echoed native summary text │")
+    print("╰────────────────────────────╯")
+    print("──────────────────────────────────────")
+    print("Goodbye! 👋")
+    print("Conversation ID: 12345678123456781234567812345678")
+    print("Hint: run openhands --resume 12345678-1234-5678-1234-567812345678")
+    print("to resume this conversation.")
+
+
 def _answer(agent: str, answer: str) -> None:
+    emitter = {"droid": _answer_droid, "kimi": _answer_kimi, "vibe": _answer_vibe}.get(agent)
+    if emitter is not None:
+        emitter(answer)
+        return
     if agent == "claude":
         print(
             json.dumps(
@@ -168,6 +427,118 @@ def _answer(agent: str, answer: str) -> None:
                 }
             )
         )
+    elif agent == "openhands":
+        _openhands_startup()
+        print(
+            json.dumps(
+                {
+                    "kind": "MessageEvent",
+                    "source": "agent",
+                    "id": "answer",
+                    "llm_message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": answer}],
+                    },
+                }
+            )
+        )
+        _openhands_summary()
+    elif agent == "warp":
+        print(json.dumps({"type": "tool_error", "error": "recoverable tool failure"}))
+        print(json.dumps({"type": "agent", "text": answer}))
+    elif agent == "qwen":
+        print(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "uuid": "qwen-message",
+                    "session_id": "qa-session",
+                    "parent_tool_use_id": None,
+                    "message": {
+                        "id": "qwen-message",
+                        "type": "message",
+                        "role": "assistant",
+                        "usage": {"input_tokens": 3, "output_tokens": 2},
+                        "content": [{"type": "text", "text": answer}],
+                        "model": "qwen-native",
+                    },
+                }
+            )
+        )
+        print(
+            json.dumps(
+                {
+                    "type": "result",
+                    "uuid": "qwen-result",
+                    "duration_api_ms": 9,
+                    "permission_denials": [],
+                    "session_id": "qa-session",
+                    "duration_ms": 10,
+                    "num_turns": 1,
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": answer,
+                    "usage": {"input_tokens": 3, "output_tokens": 2, "cache_read_input_tokens": 1},
+                }
+            )
+        )
+    elif agent == "amp":
+        print(
+            json.dumps(
+                {
+                    "type": "system",
+                    "subtype": "init",
+                    "agent_mode": "native-mode",
+                    "cwd": os.getcwd(),
+                    "session_id": "qa-session",
+                    "tools": [],
+                    "mcp_servers": [],
+                }
+            )
+        )
+        print(
+            json.dumps(
+                {
+                    "type": "result",
+                    "session_id": "qa-session",
+                    "duration_ms": 10,
+                    "num_turns": 1,
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": answer,
+                    "usage": {
+                        "input_tokens": 3,
+                        "output_tokens": 2,
+                        "cache_read_input_tokens": 1,
+                        "cache_creation_input_tokens": 4,
+                    },
+                }
+            )
+        )
+    elif agent == "reasonix":
+        print(
+            json.dumps(
+                {
+                    "type": "result",
+                    "session_id": "qa-session",
+                    "duration_ms": 10,
+                    "num_turns": 1,
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": answer,
+                    "usage": {
+                        "input_tokens": 3,
+                        "output_tokens": 2,
+                        "cache_read_input_tokens": 1,
+                        "cache_creation_input_tokens": 7,
+                    },
+                    "cost_complete": True,
+                    "display_complete": True,
+                    "currency": "CNY",
+                    "total_cost_usd": 2.5,
+                }
+            )
+        )
     elif agent == "cursor":
         print(
             json.dumps(
@@ -229,9 +600,246 @@ def _answer(agent: str, answer: str) -> None:
         print(answer)
 
 
+def _jsonl(*events: object) -> str:
+    return "".join(json.dumps(event) + "\n" for event in events)
+
+
+def _assistant(text: str, model: str, parent: str | None = None) -> dict[str, object]:
+    return {
+        "type": "assistant",
+        "parent_tool_use_id": parent,
+        "message": {
+            "content": [{"type": "text", "text": text}],
+            "model": model,
+            "usage": {"input_tokens": 900, "output_tokens": 700},
+        },
+    }
+
+
+def _fake_openhands_case(prompt: str) -> int:
+    _openhands_startup()
+    if prompt == "QA_A12.conversation_error":
+        print(
+            _jsonl(
+                {"kind": "ConversationErrorEvent", "code": "APIError", "detail": "setup failed"}
+            ),
+            end="",
+        )
+    else:
+        for reasoning in (None, "private reasoning"):
+            print(
+                _jsonl(
+                    {
+                        "kind": "MessageEvent",
+                        "source": "agent",
+                        "llm_message": {
+                            "role": "assistant",
+                            "content": [],
+                            "reasoning_content": reasoning,
+                        },
+                    },
+                    {
+                        "kind": "MessageEvent",
+                        "source": "user",
+                        "llm_message": {
+                            "role": "user",
+                            "content": [{"type": "text", "text": "Continue working."}],
+                        },
+                    },
+                ),
+                end="",
+            )
+        if prompt == "QA_A12.recovery":
+            print(
+                _jsonl(
+                    {
+                        "kind": "MessageEvent",
+                        "source": "agent",
+                        "llm_message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "OPENHANDS_RECOVERED"}],
+                        },
+                    }
+                ),
+                end="",
+            )
+        else:
+            assert prompt == "QA_A12.missing_terminal"
+    _openhands_summary()
+    print('{"kind":"ConversationErrorEvent","detail":"echoed summary text"}')
+    return 0
+
+
+def _fake_a_tier(agent: str, prompt: str) -> int | None:
+    if re.match(r"QA_A[0-9]{2}\.", prompt) is None:
+        return None
+    prompt = prompt.rstrip("\n")
+    if agent == "openhands" and prompt in {
+        "QA_A12.recovery",
+        "QA_A12.conversation_error",
+        "QA_A12.missing_terminal",
+    }:
+        return _fake_openhands_case(prompt)
+    fixtures = {
+        ("qwen", "QA_A09.qwen_failure"): (
+            _jsonl(
+                _assistant("QWEN_PARTIAL", "root-model"),
+                {
+                    "type": "result",
+                    "subtype": "error_during_execution",
+                    "is_error": True,
+                    "error": {"message": "controlled qwen failure"},
+                    "usage": "malformed optional metadata",
+                },
+            ),
+            0,
+        ),
+        ("amp", "QA_A09.amp_failure"): (
+            _jsonl(
+                _assistant("AMP_PARTIAL", "not-a-reported-model"),
+                {
+                    "type": "result",
+                    "subtype": "error_during_execution",
+                    "is_error": True,
+                    "error": "controlled amp failure",
+                    "usage": "malformed optional metadata",
+                },
+            ),
+            0,
+        ),
+        ("droid", "QA_A09.droid_failure"): (
+            _jsonl(
+                {
+                    "type": "result",
+                    "subtype": "error_during_execution",
+                    "is_error": True,
+                    "result": "DROID_PARTIAL",
+                    "usage": {"untrusted": float("nan")},
+                }
+            ),
+            0,
+        ),
+        ("qwen", "QA_A10.recovery"): (
+            _jsonl(
+                _assistant("ROOT_DRAFT", "root-model"),
+                {
+                    "type": "result",
+                    "subtype": "error_during_execution",
+                    "is_error": True,
+                    "error": {"message": "recoverable child failure"},
+                },
+                _assistant("CHILD_TEXT", "child-model", "tool-1"),
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "QWEN_RECOVERED",
+                    "usage": {
+                        "input_tokens": 37,
+                        "output_tokens": 11,
+                        "cache_read_input_tokens": 5,
+                    },
+                },
+            ),
+            0,
+        ),
+        ("kimi", "QA_A13.kimi_empty"): ("", 0),
+        ("warp", "QA_A13.warp_empty"): (
+            _jsonl(
+                {"type": "agent_reasoning", "text": "private reasoning"},
+                {"type": "tool_error", "error": "recoverable tool failure"},
+            ),
+            0,
+        ),
+        ("kimi", "QA_A13.kimi_native_failure"): (
+            _jsonl({"role": "assistant", "content": "KIMI_PARTIAL"}) + "native plain-text error\n",
+            17,
+        ),
+        ("warp", "QA_A13.warp_native_failure"): (
+            _jsonl(
+                {"type": "agent", "text": "WARP_PARTIAL"},
+                {"type": "tool_error", "error": "native tool failure"},
+            ),
+            17,
+        ),
+        ("droid", "QA_A14.numeric_width"): ('{"value":' + "9" * 129 + "}\n", 0),
+        ("reasonix", "QA_A14.nesting"): ("[" * 10_000 + "0" + "]" * 10_000 + "\n", 0),
+        ("vibe", "QA_A14.unicode"): ('[{"type":"notice","text":"\\ud800"}]\n', 0),
+    }
+    for subtype, case in (("success", "aliases"), ("recovery_paused", "paused")):
+        fixtures["reasonix", f"QA_A11.{case}"] = (
+            _jsonl(
+                {
+                    "type": "result",
+                    "subtype": subtype,
+                    "is_error": False,
+                    "result": "REASONIX_PARTIAL" if case == "paused" else "REASONIX_SUCCESS",
+                    "usage": {
+                        "input_tokens": 13,
+                        "output_tokens": 5,
+                        "cache_read_input_tokens": 3,
+                        "cache_creation_input_tokens": 99,
+                    },
+                    "currency": "CNY",
+                    "total_cost_usd": 2.5,
+                    "cost_complete": True,
+                    "display_complete": True,
+                }
+            ),
+            0,
+        )
+    for text_agent in ("iflow", "crush", "devin", "cortex"):
+        for outcome, returncode in (("success", 0), ("failure", 17)):
+            fixtures[text_agent, f"QA_A15.{text_agent}_{outcome}"] = (
+                "native banner\nError: quoted example\nTEXT_CAPTURE\r\n",
+                returncode,
+            )
+    if agent == "vibe" and prompt == "QA_A09.vibe_projection":
+        history = [
+            {
+                "id": "answer",
+                "sessionId": "qa-session",
+                "turnId": "turn",
+                "createdAt": 2,
+                "updatedAt": 2,
+                "generationStatus": "completed",
+                "relatedEntryId": None,
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "text", "text": text} for text in ("VIBE_ONE", "VIBE_TWO")],
+                "source": "harness",
+                "userDisplayContent": None,
+            }
+        ]
+        history.append({**history[0], "id": "empty", "content": []})
+        history.append(
+            {
+                **history[0],
+                "id": "user",
+                "role": "user",
+                "content": [{"type": "text", "text": "USER"}],
+            }
+        )
+        print(json.dumps(history))
+        return 0
+    fixture = fixtures.get((agent, prompt))
+    if fixture is None:
+        raise ValueError(f"Unknown A-tier fixture for {agent}: {prompt!r}")
+    output, returncode = fixture
+    print(output, end="")
+    return returncode
+
+
 def _fake_native(agent: str, arguments: list[str]) -> int:  # noqa: PLR0911, PLR0912, PLR0915
     _record_owner()
-    if "--version" in arguments:
+    version_fixture = (
+        agent == "codex"
+        and len(arguments) == 5
+        and arguments[0] in {"QA_VERSION_TIMEOUT", "QA_VERSION_OVERFLOW", "QA_VERSION_INTERRUPT"}
+        and arguments[4:] == VERSION_ARGS[agent]
+    )
+    if arguments == VERSION_ARGS[agent] or version_fixture:
+        assert sys.stdin.buffer.read() == b""
         record = {"agent": agent, "argv": arguments, "version_probe": True}
         log_path = Path(os.environ["PRAT_QA_LOG"])
         descriptor = os.open(log_path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
@@ -240,7 +848,7 @@ def _fake_native(agent: str, arguments: list[str]) -> int:  # noqa: PLR0911, PLR
         finally:
             os.close(descriptor)
         mode = arguments[0] if arguments else ""
-        if mode.startswith("QA_VERSION_"):
+        if version_fixture:
             lock_path, ready_path, go_path = map(Path, arguments[1:4])
             subprocess.Popen(
                 [
@@ -278,6 +886,9 @@ def _fake_native(agent: str, arguments: list[str]) -> int:  # noqa: PLR0911, PLR
         os.write(descriptor, (json.dumps(record, ensure_ascii=False) + "\n").encode())
     finally:
         os.close(descriptor)
+    a_tier_exit = _fake_a_tier(agent, prompt)
+    if a_tier_exit is not None:
+        return a_tier_exit
     if prompt.startswith("QA_PROVIDER_FAILURE"):
         print(
             json.dumps(
@@ -541,8 +1152,7 @@ def _record_owner() -> None:
 def _write_fakes(root: Path, python: Path, script: Path) -> Path:
     directory = root / "bin"
     directory.mkdir(exist_ok=True)
-    for executable in AGENTS.values():
-        agent = next(name for name, command in AGENTS.items() if command == executable)
+    for agent, executable in AGENTS.items():
         wrapper = directory / executable
         wrapper.write_text(
             "#!/bin/sh\nexec "
@@ -1168,6 +1778,453 @@ def _entry_point_versions(
     return wheel_version, sdist_version
 
 
+@dataclass(frozen=True)
+class _ProtocolExpectation:
+    case: str
+    agent: str
+    output: str = ""
+    exit_code: int = 0
+    native_exit_code: int = 0
+    error_code: str | None = None
+    error_message: str | None = None
+    tokens: tuple[int, int, int] | None = None
+    models: tuple[str, ...] | None = None
+
+
+_PROTOCOL_EXPECTATIONS = (
+    _ProtocolExpectation(
+        "A09.qwen_failure",
+        "qwen",
+        "QWEN_PARTIAL",
+        1,
+        error_code="provider_error",
+        error_message="controlled qwen failure",
+        models=("root-model",),
+    ),
+    _ProtocolExpectation(
+        "A09.amp_failure",
+        "amp",
+        "AMP_PARTIAL",
+        1,
+        error_code="provider_error",
+        error_message="controlled amp failure",
+    ),
+    _ProtocolExpectation(
+        "A09.droid_failure",
+        "droid",
+        "DROID_PARTIAL",
+        1,
+        error_code="provider_error",
+        error_message="Droid reported a failed result.",
+    ),
+    _ProtocolExpectation("A09.vibe_projection", "vibe", "VIBE_ONE\n\nVIBE_TWO"),
+    _ProtocolExpectation(
+        "A10.recovery",
+        "qwen",
+        "QWEN_RECOVERED",
+        tokens=(37, 11, 5),
+        models=("root-model",),
+    ),
+    _ProtocolExpectation(
+        "A11.paused",
+        "reasonix",
+        "REASONIX_PARTIAL",
+        1,
+        error_code="provider_error",
+        error_message="Reasonix run ended with recovery_paused.",
+        tokens=(13, 5, 3),
+    ),
+    _ProtocolExpectation("A11.aliases", "reasonix", "REASONIX_SUCCESS", tokens=(13, 5, 3)),
+    _ProtocolExpectation("A12.recovery", "openhands", "OPENHANDS_RECOVERED"),
+    _ProtocolExpectation(
+        "A12.conversation_error",
+        "openhands",
+        exit_code=1,
+        error_code="provider_error",
+        error_message="setup failed",
+    ),
+    _ProtocolExpectation(
+        "A12.missing_terminal",
+        "openhands",
+        exit_code=1,
+        error_code="protocol_error",
+        error_message="OpenHands stream ended without a terminal assistant event.",
+    ),
+    _ProtocolExpectation("A13.kimi_empty", "kimi"),
+    _ProtocolExpectation("A13.warp_empty", "warp"),
+    _ProtocolExpectation(
+        "A13.kimi_native_failure",
+        "kimi",
+        "KIMI_PARTIAL",
+        17,
+        17,
+        "native_exit",
+        "Kimi exited with status 17.",
+    ),
+    _ProtocolExpectation(
+        "A13.warp_native_failure",
+        "warp",
+        "WARP_PARTIAL",
+        17,
+        17,
+        "native_exit",
+        "Warp exited with status 17.",
+    ),
+    _ProtocolExpectation(
+        "A14.numeric_width",
+        "droid",
+        exit_code=1,
+        error_code="protocol_error",
+        error_message="Invalid Droid JSON document.",
+    ),
+    _ProtocolExpectation(
+        "A14.nesting",
+        "reasonix",
+        exit_code=1,
+        error_code="protocol_error",
+        error_message="Invalid Reasonix JSON document.",
+    ),
+    _ProtocolExpectation(
+        "A14.unicode",
+        "vibe",
+        exit_code=1,
+        error_code="output_encoding",
+        error_message="Agent output contains invalid Unicode text.",
+    ),
+    *(
+        _ProtocolExpectation(
+            f"A15.{agent}_{outcome}",
+            agent,
+            "native banner\nError: quoted example\nTEXT_CAPTURE",
+            exit_code,
+            exit_code,
+            "native_exit" if exit_code else None,
+            f"{label} exited with status 17." if exit_code else None,
+        )
+        for agent, label in (
+            ("iflow", "iFlow"),
+            ("crush", "Crush"),
+            ("devin", "Devin"),
+            ("cortex", "Cortex Code"),
+        )
+        for outcome, exit_code in (("success", 0), ("failure", 17))
+    ),
+)
+
+
+def _assert_protocol_result(
+    completed: subprocess.CompletedProcess[bytes], expected: _ProtocolExpectation
+) -> dict[str, object]:
+    result = _assert_result(
+        completed,
+        returncode=expected.exit_code,
+        status="error" if expected.exit_code else "success",
+        native_exit_code=expected.native_exit_code,
+        error_code=expected.error_code,
+        error_message=expected.error_message,
+    )
+    assert result["agent"] == expected.agent
+    assert result["profile"] is result["model"] is result["cost_usd"] is None
+    assert result["output"] == expected.output
+    assert result["reported_models"] == (list(expected.models) if expected.models else None)
+    usage = None
+    if expected.tokens is not None:
+        input_tokens, output_tokens, cached_input_tokens = expected.tokens
+        usage = {
+            "input_tokens": input_tokens,
+            "cached_input_tokens": cached_input_tokens,
+            "cache_write_input_tokens": None,
+            "output_tokens": output_tokens,
+            "reasoning_output_tokens": None,
+        }
+    assert result["usage"] == usage
+    assert b"Traceback" not in completed.stderr
+    return result
+
+
+def _exercise_a_protocols(prat: Path, root: Path, config: Path) -> dict[str, object]:
+    results = {}
+    log = root / "native.jsonl"
+    for expected in _PROTOCOL_EXPECTATIONS:
+        before = len(_calls(log))
+        completed = _run(
+            prat, root, [expected.agent, f"QA_{expected.case}", "--json"], config=config
+        )
+        _assert_protocol_result(completed, expected)
+        calls = _calls(log)[before:]
+        assert len(calls) == 1 and calls[0]["agent"] == expected.agent
+        results[expected.case] = {
+            "status": "Pass",
+            "result": _compact_result(completed),
+            "native": calls[0],
+        }
+    return results
+
+
+def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, object]:
+    before = len(_calls(root / "native.jsonl"))
+    completed = _run(prat, root, ["agents", "--json"], config=config)
+    payload = _json_result(completed)
+    assert completed.returncode == 0 and payload["schema_version"] == 1
+    records = {record["name"]: record for record in payload["agents"]}
+    assert len(payload["agents"]) == len(records) == 22
+    assert set(records) == set(AGENTS)
+    for name, record in records.items():
+        assert record["command"] == [AGENTS[name]]
+        assert record["aliases"] == [alias for alias, agent in ALIASES.items() if agent == name]
+        assert record["capabilities"] == {
+            "model": name not in {"openhands", "amp", "vibe"},
+            "effort": name in _EFFORT_VALUES,
+            "effort_values": _EFFORT_VALUES.get(name),
+            "budgets": _BUDGETS.get(name, []),
+            "fast": name in {"claude", "codex"},
+        }
+    assert len(ALIASES) == 22 and not set(ALIASES).intersection(AGENTS)
+    doctor = _run(prat, root, ["doctor", "--json"], config=config)
+    inventory = _json_result(doctor)
+    assert doctor.returncode == 0 and inventory["schema_version"] == 1
+    assert [record["agent"] for record in inventory["agents"]] == list(AGENTS)
+    assert all(
+        record["available"] and record["version"] is record["version_error"] is None
+        for record in inventory["agents"]
+    )
+    assert len(_calls(root / "native.jsonl")) == before
+    return {"status": "Pass", "agents": payload, "doctor": inventory, "native_launches": 0}
+
+
+def _exercise_a_sources(prat: Path, root: Path, config: Path) -> dict[str, object]:
+    prompt = "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+    prompt_file = root / "consumer" / "a-tier prompt 雪.md"
+    prompt_file.write_bytes(prompt.encode())
+    run_cwd = root / "a-tier cwd 雪"
+    run_cwd.mkdir(exist_ok=True)
+    observations = {}
+    log = root / "native.jsonl"
+    for agent in ("devin", "qwen"):
+        for source, arguments, stdin in (
+            ("inline", [f"--prompt={prompt}"], None),
+            ("file", ["--file", prompt_file.name], None),
+            ("redirected", [], prompt.encode()),
+            ("positional_dash", ["-"], prompt.encode()),
+            ("file_dash", ["--file", "-"], prompt.encode()),
+        ):
+            before = len(_calls(log))
+            completed = _run(
+                prat,
+                root,
+                [agent, *arguments, "--cwd", str(run_cwd), "--json"],
+                stdin=stdin,
+                config=config,
+            )
+            result = _assert_result(
+                completed, returncode=0, status="success", native_exit_code=0, error_code=None
+            )
+            expected = {
+                "agent": agent,
+                "argv": ["-p", "--", prompt]
+                if agent == "devin"
+                else ["--output-format", "stream-json"],
+                "stdin": "" if agent == "devin" else prompt,
+                "prompt": prompt,
+                "cwd": str(run_cwd),
+            }
+            assert _calls(log)[before:] == [expected]
+            assert json.loads(result["output"]) == expected
+            observations[f"{agent}.{source}"] = {
+                "native": expected,
+                "result": _compact_result(completed),
+            }
+    assert not (run_cwd / "a-tier-injected").exists()
+    return {"status": "Pass", "cases": observations, "side_effect": False}
+
+
+def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
+    python = prat.with_name("python")
+    script = Path(__file__).resolve()
+    wrapper = root / "native prefix $HOME.py"
+    literal = "literal $HOME ; $(touch prefix-injected)"
+    wrapper.write_text(
+        f"import runpy, sys\nassert sys.argv[1] == {literal!r}\n"
+        "sys.argv = [sys.argv[0], *sys.argv[2:]]\n"
+        f"runpy.run_path({str(script)!r}, run_name='__main__')\n",
+        encoding="utf-8",
+    )
+    prefix = [str(python), str(wrapper), literal, "--fake-native", "qwen"]
+    config = root / "a-tier profile.toml"
+    config.write_text(
+        f"version = 1\n[defaults]\ntimeout = 7\n[agents.qwen]\ncommand = {json.dumps(prefix)}\n"
+        '[profiles.new-profile]\nagent = "qw"\nmodel = "profile-model"\nmax_turns = 3\n'
+        'native_args = ["--debug"]\n',
+        encoding="utf-8",
+    )
+    before = len(_calls(root / "native.jsonl"))
+    profiles = _run(prat, root, ["profiles", "--json"], config=config)
+    assert profiles.returncode == 0
+    assert _json_result(profiles) == {
+        "schema_version": 1,
+        "profiles": [
+            {
+                "name": "new-profile",
+                "agent": "qwen",
+                "options": {
+                    "model": "profile-model",
+                    "effort": None,
+                    "fast": None,
+                    "timeout": 7.0,
+                    "max_turns": 3,
+                    "max_budget_usd": None,
+                    "max_ai_credits": None,
+                    "native_args": ["--debug"],
+                },
+            }
+        ],
+    }
+    prompt = "profile literal 雪"
+    run_cwd = root / "a-tier cwd 雪"
+    run_cwd.mkdir(exist_ok=True)
+    arguments = [
+        "new-profile",
+        prompt,
+        "--model",
+        "cli-model",
+        "--max-turns",
+        "9",
+        "--timeout",
+        "4",
+        "--cwd",
+        str(run_cwd),
+        "--json",
+    ]
+    native = ["--approval-mode", "plan"]
+    expected_argv = [
+        "--output-format",
+        "stream-json",
+        "--model",
+        "cli-model",
+        "--max-session-turns",
+        "9",
+        *native,
+    ]
+    dry_run = _run(prat, root, [*arguments, "--dry-run", "--", *native], config=config)
+    assert dry_run.returncode == 0
+    assert _json_result(dry_run) == {
+        "schema_version": 1,
+        "dry_run": True,
+        "agent": "qwen",
+        "profile": "new-profile",
+        "model": "cli-model",
+        "fast": None,
+        "argv": [*prefix, *expected_argv],
+        "cwd": str(run_cwd),
+        "timeout": 4.0,
+        "stdin_bytes": len(prompt.encode()),
+    }
+    assert len(_calls(root / "native.jsonl")) == before
+    completed = _run(prat, root, [*arguments, "--", *native], config=config)
+    result = _assert_result(
+        completed, returncode=0, status="success", native_exit_code=0, error_code=None
+    )
+    expected_call = {
+        "agent": "qwen",
+        "argv": expected_argv,
+        "stdin": prompt,
+        "prompt": prompt,
+        "cwd": str(run_cwd),
+    }
+    assert result["agent"] == "qwen" and result["profile"] == "new-profile"
+    assert result["model"] == "cli-model"
+    assert json.loads(result["output"]) == expected_call
+    assert _calls(root / "native.jsonl")[before:] == [expected_call]
+    assert not (run_cwd / "prefix-injected").exists()
+    return {
+        "status": "Pass",
+        "profiles": _json_result(profiles),
+        "preview": _json_result(dry_run),
+        "result": _compact_result(completed),
+        "native": expected_call,
+        "preview_native_launches": 0,
+        "side_effect": False,
+    }
+
+
+def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, object]:
+    before = len(_calls(root / "native.jsonl"))
+    controls = {}
+    for selector, arguments, message in (
+        ("oh", ["--model", "chosen"], "model: OpenHands does not support a model override."),
+        ("amp", ["--effort", "high"], "effort: Amp does not support an effort override."),
+        ("mv", ["--model", "chosen"], "model: Mistral Vibe does not support a model override."),
+        ("km", ["--effort", "high"], "effort: Kimi does not support an effort override."),
+        ("rx", ["--max-turns", "3"], "max_turns: Reasonix does not support this budget."),
+        ("cr", ["--fast"], "fast: Crush does not support a fast-mode override."),
+    ):
+        completed = _run(
+            prat, root, [selector, "invalid control", *arguments, "--json"], config=config
+        )
+        _assert_result(
+            completed,
+            returncode=2,
+            status="error",
+            native_exit_code=None,
+            error_code="invalid_config",
+            error_message=f"{config}: selector {selector!r}.{message}",
+        )
+        controls[selector] = _compact_result(completed)
+    collisions = {}
+    for name in ("oh", "vibe"):
+        collision = root / f"collision-{name}.toml"
+        collision.write_text(f'version = 1\n[profiles.{name}]\nagent = "codex"\n', encoding="utf-8")
+        completed = _run(
+            prat, root, ["cx", "unused profile blocks invocation", "--json"], config=collision
+        )
+        _assert_result(
+            completed,
+            returncode=2,
+            status="error",
+            native_exit_code=None,
+            error_code="invalid_config",
+            error_message=f"{collision}: profiles.{name}: name is reserved; choose a different profile name.",
+        )
+        collisions[name] = _compact_result(completed)
+    assert len(_calls(root / "native.jsonl")) == before
+    return {
+        "A06.controls": {"status": "Pass", "cases": controls, "native_launches": 0},
+        "A07.collisions": {"status": "Pass", "cases": collisions, "native_launches": 0},
+    }
+
+
+def _exercise_versions(prat: Path, root: Path, config: Path) -> dict[str, object]:
+    log = root / "native.jsonl"
+    calls_before = len(_calls(log))
+    discovery = _run(prat, root, ["doctor", "--json"], config=config)
+    assert discovery.returncode == 0
+    assert len(_calls(log)) == calls_before
+    versions = _run(prat, root, ["doctor", "--versions", "--json"], config=config)
+    version_payload = _json_result(versions)
+    version_calls = _calls(log)[calls_before:]
+    assert versions.returncode == 0 and len(version_calls) == len(AGENTS)
+    assert version_calls == [
+        {"agent": agent, "argv": VERSION_ARGS[agent], "version_probe": True} for agent in AGENTS
+    ]
+    records = {record["agent"]: record for record in version_payload["agents"]}
+    assert list(records) == list(AGENTS)
+    for agent, record in records.items():
+        assert record["available"] is True
+        assert record["version"] == (None if agent == "hermes" else f"{agent} opaque version 1.0")
+        assert record["version_error"] == (
+            "Version probe exited with status 17." if agent == "hermes" else None
+        )
+    return {
+        "status": "Pass",
+        "discovery_exit": discovery.returncode,
+        "discovery_native_launches": 0,
+        "versions_exit": versions.returncode,
+        "version_probe_argv": [call["argv"] for call in version_calls],
+        "opaque_codex_version": records["codex"]["version"],
+        "hermes_version_error": records["hermes"]["version_error"],
+    }
+
+
 def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     prat: Path,
     root: Path,
@@ -1368,28 +2425,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         "unsupported_native_launches": 0,
     }
 
-    calls_before = len(_calls(log))
-    discovery = _run(prat, root, ["doctor", "--json"], config=config)
-    assert discovery.returncode == 0
-    assert len(_calls(log)) == calls_before
-    versions = _run(prat, root, ["doctor", "--versions", "--json"], config=config)
-    version_payload = _json_result(versions)
-    version_calls = _calls(log)[calls_before:]
-    assert versions.returncode == 0 and len(version_calls) == len(AGENTS)
-    assert all(call["argv"] == ["--version"] for call in version_calls)
-    records = {record["agent"]: record for record in version_payload["agents"]}
-    assert records["codex"]["version"] == "codex opaque version 1.0"
-    assert records["hermes"]["version"] is None
-    assert "status 17" in records["hermes"]["version_error"]
-    results["E06"] = {
-        "status": "Pass",
-        "discovery_exit": discovery.returncode,
-        "discovery_native_launches": 0,
-        "versions_exit": versions.returncode,
-        "version_probe_argv": [call["argv"] for call in version_calls],
-        "opaque_codex_version": records["codex"]["version"],
-        "hermes_version_error": records["hermes"]["version_error"],
-    }
+    results["E06"] = _exercise_versions(prat, root, config)
 
     version_cases: dict[str, object] = {}
     for mode, interrupt in (
@@ -1576,6 +2612,38 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     }
 
 
+def _exercise_routes(prat: Path, root: Path, config: Path) -> dict[str, object]:
+    log = root / "native.jsonl"
+    routes = {agent: agent for agent in AGENTS} | ALIASES
+    routed: dict[str, str] = {}
+    for selector, agent in routes.items():
+        before = len(_calls(log))
+        completed = _run(prat, root, [selector, f"route {selector}", "--json"], config=config)
+        result = _json_result(completed)
+        calls = _calls(log)[before:]
+        assert len(calls) == 1
+        call = calls[0]
+        assert completed.returncode == result["exit_code"] == result["native_exit_code"] == 0
+        assert result["status"] == "success" and result["error"] is None
+        assert result["agent"] == call["agent"] == agent
+        expected_prompt = f"route {selector}" + ("\n\n" if agent == "crush" else "")
+        assert json.loads(result["output"])["prompt"] == expected_prompt
+        assert call["prompt"] == expected_prompt
+        if agent in _NATIVE_PREFIXES:
+            if agent == "devin":
+                assert call["argv"] == ["-p", "--", f"route {selector}"]
+            else:
+                flag = "--task=" if agent == "openhands" else "--prompt="
+                assert call["argv"] == [*_NATIVE_PREFIXES[agent], f"{flag}route {selector}"]
+            assert call["stdin"] == ""
+        elif agent in _STDIN_PREFIXES:
+            assert call["argv"] == [*_STDIN_PREFIXES[agent], *_STDIN_SUFFIXES.get(agent, [])]
+            assert call["stdin"] == f"route {selector}"
+        routed[selector] = str(result["agent"])
+    assert routed == routes
+    return {"status": "Pass", "routed": routed}
+
+
 def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     prat: Path,
     sdist_prat: Path,
@@ -1667,19 +2735,7 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     }
     results["Q04"] = {"status": "Pass", "result": _compact_result(completed), "native": call}
 
-    routed: dict[str, str] = {}
-    for alias, agent in ALIASES.items():
-        completed = _run(prat, root, [alias, f"route {alias}", "--json"], config=config)
-        result = _json_result(completed)
-        call = _calls(log)[-1]
-        assert completed.returncode == result["exit_code"] == result["native_exit_code"] == 0
-        assert result["status"] == "success" and result["error"] is None
-        assert result["agent"] == call["agent"] == agent
-        assert json.loads(result["output"])["prompt"] == f"route {alias}"
-        assert call["prompt"] == f"route {alias}"
-        routed[alias] = str(result["agent"])
-    assert routed == ALIASES
-    results["Q05"] = {"status": "Pass", "routed": routed}
+    results["Q05"] = _exercise_routes(prat, root, config)
 
     completed = _run(prat, root, ["cx", "missing config default", "--json"], path=fake_bin)
     result = _assert_result(
@@ -2109,6 +3165,24 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
 
     _exercise_enhancements(prat, root, config, python, script, log, results)
 
+    for artifact, entry_point in (("wheel", prat), ("sdist", sdist_prat)):
+        a_results = {
+            "A01.inventory": _exercise_a_inventory(entry_point, root, config),
+            "A02.routes": results["Q05"]
+            if artifact == "wheel"
+            else _exercise_routes(entry_point, root, config),
+            "A03.profile": _exercise_a_profile(entry_point, root),
+            "A04.sources": _exercise_a_sources(entry_point, root, config),
+            "A08.versions": results["E06"]
+            if artifact == "wheel"
+            else _exercise_versions(entry_point, root, config),
+            **_exercise_a_rejections(entry_point, root, config),
+            **_exercise_a_protocols(entry_point, root, config),
+        }
+        for case, observation in a_results.items():
+            aggregate = results.setdefault(case, {"status": "Pass", "artifacts": {}})
+            aggregate["artifacts"][artifact] = observation
+
     assert _runtime_identity(repository, prat, sdist_prat, wheel, sdist) == runtime_identity
     runtime_diff = subprocess.check_output(
         ["git", "diff", "--binary", base_revision, "--", "src/pratfall"],
@@ -2145,8 +3219,15 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
 
 
 def main() -> int:
+    if not __debug__:
+        print(
+            "qa_installed.py requires active assertions; run Python without -O or PYTHONOPTIMIZE.",
+            file=sys.stderr,
+        )
+        return 2
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fake-native")
+    parser.add_argument("--fake-native", nargs=argparse.REMAINDER)
+    parser.add_argument("native_tail", nargs=argparse.REMAINDER)
     parser.add_argument("--lock-holder", nargs=2, type=Path)
     parser.add_argument("--prat", type=Path)
     parser.add_argument("--sdist-prat", type=Path)
@@ -2156,9 +3237,11 @@ def main() -> int:
     parser.add_argument("--expected-version")
     parser.add_argument("--work-dir", type=Path)
     parser.add_argument("--output", type=Path)
-    args, native_arguments = parser.parse_known_args()
+    args = parser.parse_args()
     if args.fake_native:
-        return _fake_native(args.fake_native, native_arguments)
+        return _fake_native(args.fake_native[0], [*args.fake_native[1:], *args.native_tail])
+    if args.native_tail:
+        parser.error("unexpected positional arguments")
     if args.lock_holder:
         return _lock_holder(*args.lock_holder)
     if not all(

@@ -1,0 +1,5022 @@
+{
+  "schema_version": 1,
+  "identity": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "Python 3.13.6",
+    "base_revision": "98a615b59ed656a8f9dca1934341763b3b7e3832",
+    "runtime_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "wheel_sha256": "6353dedc8c27b5a0fabc9c5a96fb9905d60f1636d19aab909e276aa73830c630",
+    "sdist_sha256": "f9b6359f2393e89ae327d1b9ae6a2b09cbac4710b0ee5056b572ed83bda84591",
+    "wheel_prat": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/prat",
+    "sdist_prat": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-sdist/bin/prat",
+    "script_sha256": "1c4e8ba734dac2b3e4be107f4c5377843b78dae49c1eea9f52ae020c5e86e775",
+    "source_module_root": "$REPO/src/pratfall",
+    "wheel_module_root": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/lib/python3.13/site-packages/pratfall",
+    "sdist_module_root": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-sdist/lib/python3.13/site-packages/pratfall",
+    "source_runtime_files": {
+      "__init__.py": "d42c98fa979c19e45c9b15092257de57272d897201798a82d5ee4b4b21da92ef",
+      "__main__.py": "7269cb66d60f16270f7c2d31dd7bea50cae0cb587b00c45eb95385e0097d2289",
+      "adapters/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapters/accounting.py": "bc2722e92a6bf5a2baed99b58433bfda7aa73badcd8f9d0cac76f6582c137cf5",
+      "adapters/amp.py": "0385f7ece9636c0987054a7f58b8579f8eac440483238f6c6d2027a0f7ba9f82",
+      "adapters/antigravity.py": "185895df8da3e2fc610202c33b5aa31623c35764b6a95d669da5acac45847018",
+      "adapters/claude.py": "0574ebf812439d5bf2620f8f1026501e5c26468156f909bc0aabf2fe8fe1c938",
+      "adapters/codex.py": "f23825baf6031bec38f40d3f8c7dfc0ad6c049dbda4ecf0c4211da64d64b4cb6",
+      "adapters/copilot.py": "de3c31a395d2901320e5b326998efbfaf512ad8e765bef4e899f647fbe71527b",
+      "adapters/cortex.py": "77ca392ea2f115056f98e9fa25447dfd9d5d7021dabed74dca6993a1b48cea94",
+      "adapters/crush.py": "20f1dec1e57ae53e7b6ef160e51f650da6b846dffca333c4017afbf9d70601a2",
+      "adapters/cursor.py": "27bf6e55877948aad77e18d8d463d7ab4a142ed223df8d82662b531409818739",
+      "adapters/devin.py": "bbff49cfca4ad3e8596a79bdd8dadcea1707f8b6c81abe8c0eb661a9856a5926",
+      "adapters/droid.py": "b32336bc56975d3a906f4af345e1ebff107b6e8331b684b472c4582dd1fa55ad",
+      "adapters/gemini.py": "9af8855ef2123ef1196830576734e7a26022533f4d2de6ce582bfd409994d37d",
+      "adapters/hermes.py": "5ca352a240a45d9334da3f7627b447dfa301a1572b4b991630a9ce6bc810747c",
+      "adapters/iflow.py": "2c0fe9ce38ed4a5f72120a5f6b8d986c8b5ef3cb58b388e8c801b148004e33a8",
+      "adapters/kimi.py": "6d5a8cdc11704a7cf30daf45fc5e9c08560eaf8e7a4a8aad22c765a0d915fe2c",
+      "adapters/kiro.py": "f85958c30282e39f9cd522e9e9639efc882b6ad7f922fa8fcdbd7167ad06580d",
+      "adapters/native_args.py": "eb2d079e0b19a2a9e46245da970cf550fa04a0820498a53b51976d441936e8f5",
+      "adapters/openclaw.py": "fb94256416010f9cb678e260b6c0ff0b2ef74e5094994250d6c580007e54b4a7",
+      "adapters/opencode.py": "1114bb0bcb5119c3ce8234505ccf9ddca0dbbd7c6a4ec483c7697cd9fabf79bc",
+      "adapters/openhands.py": "786059dd4981e1b91477cf7d119a483593485a76a7d4a8999823b6a78cdc2415",
+      "adapters/qwen.py": "a93f40e281e7d922156d453f32856e66123989c1175c09c7888b38cad33842d0",
+      "adapters/reasonix.py": "8b61163403ff1b89da758619380ee02a77b6c0ddcf9f8faef48c9a417be20356",
+      "adapters/registry.py": "5ab9bf47922ca97fe3a28a8a9b541de3e31d077ae73d920c6496b02ab4741129",
+      "adapters/vibe.py": "2cc7e0aec352e940490b4ac4f80a2ce0685e8d19c6cefc8b0651c82e4ed4515b",
+      "adapters/warp.py": "255aa41823a843f3f8a30d77c402d440ee541e02901e450dedf20de7d7802cc2",
+      "adapters/whole_json.py": "7afd2881ab44b64db979fa79ae2dfa72a8d566ebf178f912c31b26a5d6c9ee4c",
+      "catalog.py": "c07ee67270fc8f4dde93ab02e1f21dfd048d17e614a3e4413605002e08386489",
+      "cli.py": "df84faccb8d826a5563d9d41fcc2859afe8346c5cae03556e5d2c3c514d6a899",
+      "config.py": "85501d2e2613bffdf27a40a091a14aed3d3c0996860f30dec4603dd7cc993f04",
+      "consumer.py": "2246c53866fce808c60f1c43d81b394793b7cad57c5f59af363d5c94493bb87c",
+      "errors.py": "069bb4167db447528a78939d900e7ade3e55f81a3098ed87c9b8e8d764c40612",
+      "models.py": "000337f572c5a5e5b1169bf91a42505a87f980383ada4903bab23f66c3c475dd",
+      "output.py": "f8abdc6fc28f571b2ee6deef12a5ce5fffddb6612e15d7f28923b44daf87060c",
+      "prompt_input.py": "7a5da20719e2506cf88947b8a314c93865e2e53f6885e94642f187cd18da555b",
+      "runner.py": "756a49c1351feb865fe18619a8773ab17bc753f9aa49ec608a6f491ff4bd2318"
+    },
+    "wheel_installed_runtime_files": {
+      "__init__.py": "d42c98fa979c19e45c9b15092257de57272d897201798a82d5ee4b4b21da92ef",
+      "__main__.py": "7269cb66d60f16270f7c2d31dd7bea50cae0cb587b00c45eb95385e0097d2289",
+      "adapters/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapters/accounting.py": "bc2722e92a6bf5a2baed99b58433bfda7aa73badcd8f9d0cac76f6582c137cf5",
+      "adapters/amp.py": "0385f7ece9636c0987054a7f58b8579f8eac440483238f6c6d2027a0f7ba9f82",
+      "adapters/antigravity.py": "185895df8da3e2fc610202c33b5aa31623c35764b6a95d669da5acac45847018",
+      "adapters/claude.py": "0574ebf812439d5bf2620f8f1026501e5c26468156f909bc0aabf2fe8fe1c938",
+      "adapters/codex.py": "f23825baf6031bec38f40d3f8c7dfc0ad6c049dbda4ecf0c4211da64d64b4cb6",
+      "adapters/copilot.py": "de3c31a395d2901320e5b326998efbfaf512ad8e765bef4e899f647fbe71527b",
+      "adapters/cortex.py": "77ca392ea2f115056f98e9fa25447dfd9d5d7021dabed74dca6993a1b48cea94",
+      "adapters/crush.py": "20f1dec1e57ae53e7b6ef160e51f650da6b846dffca333c4017afbf9d70601a2",
+      "adapters/cursor.py": "27bf6e55877948aad77e18d8d463d7ab4a142ed223df8d82662b531409818739",
+      "adapters/devin.py": "bbff49cfca4ad3e8596a79bdd8dadcea1707f8b6c81abe8c0eb661a9856a5926",
+      "adapters/droid.py": "b32336bc56975d3a906f4af345e1ebff107b6e8331b684b472c4582dd1fa55ad",
+      "adapters/gemini.py": "9af8855ef2123ef1196830576734e7a26022533f4d2de6ce582bfd409994d37d",
+      "adapters/hermes.py": "5ca352a240a45d9334da3f7627b447dfa301a1572b4b991630a9ce6bc810747c",
+      "adapters/iflow.py": "2c0fe9ce38ed4a5f72120a5f6b8d986c8b5ef3cb58b388e8c801b148004e33a8",
+      "adapters/kimi.py": "6d5a8cdc11704a7cf30daf45fc5e9c08560eaf8e7a4a8aad22c765a0d915fe2c",
+      "adapters/kiro.py": "f85958c30282e39f9cd522e9e9639efc882b6ad7f922fa8fcdbd7167ad06580d",
+      "adapters/native_args.py": "eb2d079e0b19a2a9e46245da970cf550fa04a0820498a53b51976d441936e8f5",
+      "adapters/openclaw.py": "fb94256416010f9cb678e260b6c0ff0b2ef74e5094994250d6c580007e54b4a7",
+      "adapters/opencode.py": "1114bb0bcb5119c3ce8234505ccf9ddca0dbbd7c6a4ec483c7697cd9fabf79bc",
+      "adapters/openhands.py": "786059dd4981e1b91477cf7d119a483593485a76a7d4a8999823b6a78cdc2415",
+      "adapters/qwen.py": "a93f40e281e7d922156d453f32856e66123989c1175c09c7888b38cad33842d0",
+      "adapters/reasonix.py": "8b61163403ff1b89da758619380ee02a77b6c0ddcf9f8faef48c9a417be20356",
+      "adapters/registry.py": "5ab9bf47922ca97fe3a28a8a9b541de3e31d077ae73d920c6496b02ab4741129",
+      "adapters/vibe.py": "2cc7e0aec352e940490b4ac4f80a2ce0685e8d19c6cefc8b0651c82e4ed4515b",
+      "adapters/warp.py": "255aa41823a843f3f8a30d77c402d440ee541e02901e450dedf20de7d7802cc2",
+      "adapters/whole_json.py": "7afd2881ab44b64db979fa79ae2dfa72a8d566ebf178f912c31b26a5d6c9ee4c",
+      "catalog.py": "c07ee67270fc8f4dde93ab02e1f21dfd048d17e614a3e4413605002e08386489",
+      "cli.py": "df84faccb8d826a5563d9d41fcc2859afe8346c5cae03556e5d2c3c514d6a899",
+      "config.py": "85501d2e2613bffdf27a40a091a14aed3d3c0996860f30dec4603dd7cc993f04",
+      "consumer.py": "2246c53866fce808c60f1c43d81b394793b7cad57c5f59af363d5c94493bb87c",
+      "errors.py": "069bb4167db447528a78939d900e7ade3e55f81a3098ed87c9b8e8d764c40612",
+      "models.py": "000337f572c5a5e5b1169bf91a42505a87f980383ada4903bab23f66c3c475dd",
+      "output.py": "f8abdc6fc28f571b2ee6deef12a5ce5fffddb6612e15d7f28923b44daf87060c",
+      "prompt_input.py": "7a5da20719e2506cf88947b8a314c93865e2e53f6885e94642f187cd18da555b",
+      "runner.py": "756a49c1351feb865fe18619a8773ab17bc753f9aa49ec608a6f491ff4bd2318"
+    },
+    "sdist_installed_runtime_files": {
+      "__init__.py": "d42c98fa979c19e45c9b15092257de57272d897201798a82d5ee4b4b21da92ef",
+      "__main__.py": "7269cb66d60f16270f7c2d31dd7bea50cae0cb587b00c45eb95385e0097d2289",
+      "adapters/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapters/accounting.py": "bc2722e92a6bf5a2baed99b58433bfda7aa73badcd8f9d0cac76f6582c137cf5",
+      "adapters/amp.py": "0385f7ece9636c0987054a7f58b8579f8eac440483238f6c6d2027a0f7ba9f82",
+      "adapters/antigravity.py": "185895df8da3e2fc610202c33b5aa31623c35764b6a95d669da5acac45847018",
+      "adapters/claude.py": "0574ebf812439d5bf2620f8f1026501e5c26468156f909bc0aabf2fe8fe1c938",
+      "adapters/codex.py": "f23825baf6031bec38f40d3f8c7dfc0ad6c049dbda4ecf0c4211da64d64b4cb6",
+      "adapters/copilot.py": "de3c31a395d2901320e5b326998efbfaf512ad8e765bef4e899f647fbe71527b",
+      "adapters/cortex.py": "77ca392ea2f115056f98e9fa25447dfd9d5d7021dabed74dca6993a1b48cea94",
+      "adapters/crush.py": "20f1dec1e57ae53e7b6ef160e51f650da6b846dffca333c4017afbf9d70601a2",
+      "adapters/cursor.py": "27bf6e55877948aad77e18d8d463d7ab4a142ed223df8d82662b531409818739",
+      "adapters/devin.py": "bbff49cfca4ad3e8596a79bdd8dadcea1707f8b6c81abe8c0eb661a9856a5926",
+      "adapters/droid.py": "b32336bc56975d3a906f4af345e1ebff107b6e8331b684b472c4582dd1fa55ad",
+      "adapters/gemini.py": "9af8855ef2123ef1196830576734e7a26022533f4d2de6ce582bfd409994d37d",
+      "adapters/hermes.py": "5ca352a240a45d9334da3f7627b447dfa301a1572b4b991630a9ce6bc810747c",
+      "adapters/iflow.py": "2c0fe9ce38ed4a5f72120a5f6b8d986c8b5ef3cb58b388e8c801b148004e33a8",
+      "adapters/kimi.py": "6d5a8cdc11704a7cf30daf45fc5e9c08560eaf8e7a4a8aad22c765a0d915fe2c",
+      "adapters/kiro.py": "f85958c30282e39f9cd522e9e9639efc882b6ad7f922fa8fcdbd7167ad06580d",
+      "adapters/native_args.py": "eb2d079e0b19a2a9e46245da970cf550fa04a0820498a53b51976d441936e8f5",
+      "adapters/openclaw.py": "fb94256416010f9cb678e260b6c0ff0b2ef74e5094994250d6c580007e54b4a7",
+      "adapters/opencode.py": "1114bb0bcb5119c3ce8234505ccf9ddca0dbbd7c6a4ec483c7697cd9fabf79bc",
+      "adapters/openhands.py": "786059dd4981e1b91477cf7d119a483593485a76a7d4a8999823b6a78cdc2415",
+      "adapters/qwen.py": "a93f40e281e7d922156d453f32856e66123989c1175c09c7888b38cad33842d0",
+      "adapters/reasonix.py": "8b61163403ff1b89da758619380ee02a77b6c0ddcf9f8faef48c9a417be20356",
+      "adapters/registry.py": "5ab9bf47922ca97fe3a28a8a9b541de3e31d077ae73d920c6496b02ab4741129",
+      "adapters/vibe.py": "2cc7e0aec352e940490b4ac4f80a2ce0685e8d19c6cefc8b0651c82e4ed4515b",
+      "adapters/warp.py": "255aa41823a843f3f8a30d77c402d440ee541e02901e450dedf20de7d7802cc2",
+      "adapters/whole_json.py": "7afd2881ab44b64db979fa79ae2dfa72a8d566ebf178f912c31b26a5d6c9ee4c",
+      "catalog.py": "c07ee67270fc8f4dde93ab02e1f21dfd048d17e614a3e4413605002e08386489",
+      "cli.py": "df84faccb8d826a5563d9d41fcc2859afe8346c5cae03556e5d2c3c514d6a899",
+      "config.py": "85501d2e2613bffdf27a40a091a14aed3d3c0996860f30dec4603dd7cc993f04",
+      "consumer.py": "2246c53866fce808c60f1c43d81b394793b7cad57c5f59af363d5c94493bb87c",
+      "errors.py": "069bb4167db447528a78939d900e7ade3e55f81a3098ed87c9b8e8d764c40612",
+      "models.py": "000337f572c5a5e5b1169bf91a42505a87f980383ada4903bab23f66c3c475dd",
+      "output.py": "f8abdc6fc28f571b2ee6deef12a5ce5fffddb6612e15d7f28923b44daf87060c",
+      "prompt_input.py": "7a5da20719e2506cf88947b8a314c93865e2e53f6885e94642f187cd18da555b",
+      "runner.py": "756a49c1351feb865fe18619a8773ab17bc753f9aa49ec608a6f491ff4bd2318"
+    },
+    "wheel_archive_runtime_files": {
+      "__init__.py": "d42c98fa979c19e45c9b15092257de57272d897201798a82d5ee4b4b21da92ef",
+      "__main__.py": "7269cb66d60f16270f7c2d31dd7bea50cae0cb587b00c45eb95385e0097d2289",
+      "adapters/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapters/accounting.py": "bc2722e92a6bf5a2baed99b58433bfda7aa73badcd8f9d0cac76f6582c137cf5",
+      "adapters/amp.py": "0385f7ece9636c0987054a7f58b8579f8eac440483238f6c6d2027a0f7ba9f82",
+      "adapters/antigravity.py": "185895df8da3e2fc610202c33b5aa31623c35764b6a95d669da5acac45847018",
+      "adapters/claude.py": "0574ebf812439d5bf2620f8f1026501e5c26468156f909bc0aabf2fe8fe1c938",
+      "adapters/codex.py": "f23825baf6031bec38f40d3f8c7dfc0ad6c049dbda4ecf0c4211da64d64b4cb6",
+      "adapters/copilot.py": "de3c31a395d2901320e5b326998efbfaf512ad8e765bef4e899f647fbe71527b",
+      "adapters/cortex.py": "77ca392ea2f115056f98e9fa25447dfd9d5d7021dabed74dca6993a1b48cea94",
+      "adapters/crush.py": "20f1dec1e57ae53e7b6ef160e51f650da6b846dffca333c4017afbf9d70601a2",
+      "adapters/cursor.py": "27bf6e55877948aad77e18d8d463d7ab4a142ed223df8d82662b531409818739",
+      "adapters/devin.py": "bbff49cfca4ad3e8596a79bdd8dadcea1707f8b6c81abe8c0eb661a9856a5926",
+      "adapters/droid.py": "b32336bc56975d3a906f4af345e1ebff107b6e8331b684b472c4582dd1fa55ad",
+      "adapters/gemini.py": "9af8855ef2123ef1196830576734e7a26022533f4d2de6ce582bfd409994d37d",
+      "adapters/hermes.py": "5ca352a240a45d9334da3f7627b447dfa301a1572b4b991630a9ce6bc810747c",
+      "adapters/iflow.py": "2c0fe9ce38ed4a5f72120a5f6b8d986c8b5ef3cb58b388e8c801b148004e33a8",
+      "adapters/kimi.py": "6d5a8cdc11704a7cf30daf45fc5e9c08560eaf8e7a4a8aad22c765a0d915fe2c",
+      "adapters/kiro.py": "f85958c30282e39f9cd522e9e9639efc882b6ad7f922fa8fcdbd7167ad06580d",
+      "adapters/native_args.py": "eb2d079e0b19a2a9e46245da970cf550fa04a0820498a53b51976d441936e8f5",
+      "adapters/openclaw.py": "fb94256416010f9cb678e260b6c0ff0b2ef74e5094994250d6c580007e54b4a7",
+      "adapters/opencode.py": "1114bb0bcb5119c3ce8234505ccf9ddca0dbbd7c6a4ec483c7697cd9fabf79bc",
+      "adapters/openhands.py": "786059dd4981e1b91477cf7d119a483593485a76a7d4a8999823b6a78cdc2415",
+      "adapters/qwen.py": "a93f40e281e7d922156d453f32856e66123989c1175c09c7888b38cad33842d0",
+      "adapters/reasonix.py": "8b61163403ff1b89da758619380ee02a77b6c0ddcf9f8faef48c9a417be20356",
+      "adapters/registry.py": "5ab9bf47922ca97fe3a28a8a9b541de3e31d077ae73d920c6496b02ab4741129",
+      "adapters/vibe.py": "2cc7e0aec352e940490b4ac4f80a2ce0685e8d19c6cefc8b0651c82e4ed4515b",
+      "adapters/warp.py": "255aa41823a843f3f8a30d77c402d440ee541e02901e450dedf20de7d7802cc2",
+      "adapters/whole_json.py": "7afd2881ab44b64db979fa79ae2dfa72a8d566ebf178f912c31b26a5d6c9ee4c",
+      "catalog.py": "c07ee67270fc8f4dde93ab02e1f21dfd048d17e614a3e4413605002e08386489",
+      "cli.py": "df84faccb8d826a5563d9d41fcc2859afe8346c5cae03556e5d2c3c514d6a899",
+      "config.py": "85501d2e2613bffdf27a40a091a14aed3d3c0996860f30dec4603dd7cc993f04",
+      "consumer.py": "2246c53866fce808c60f1c43d81b394793b7cad57c5f59af363d5c94493bb87c",
+      "errors.py": "069bb4167db447528a78939d900e7ade3e55f81a3098ed87c9b8e8d764c40612",
+      "models.py": "000337f572c5a5e5b1169bf91a42505a87f980383ada4903bab23f66c3c475dd",
+      "output.py": "f8abdc6fc28f571b2ee6deef12a5ce5fffddb6612e15d7f28923b44daf87060c",
+      "prompt_input.py": "7a5da20719e2506cf88947b8a314c93865e2e53f6885e94642f187cd18da555b",
+      "runner.py": "756a49c1351feb865fe18619a8773ab17bc753f9aa49ec608a6f491ff4bd2318"
+    },
+    "sdist_archive_runtime_files": {
+      "__init__.py": "d42c98fa979c19e45c9b15092257de57272d897201798a82d5ee4b4b21da92ef",
+      "__main__.py": "7269cb66d60f16270f7c2d31dd7bea50cae0cb587b00c45eb95385e0097d2289",
+      "adapters/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "adapters/accounting.py": "bc2722e92a6bf5a2baed99b58433bfda7aa73badcd8f9d0cac76f6582c137cf5",
+      "adapters/amp.py": "0385f7ece9636c0987054a7f58b8579f8eac440483238f6c6d2027a0f7ba9f82",
+      "adapters/antigravity.py": "185895df8da3e2fc610202c33b5aa31623c35764b6a95d669da5acac45847018",
+      "adapters/claude.py": "0574ebf812439d5bf2620f8f1026501e5c26468156f909bc0aabf2fe8fe1c938",
+      "adapters/codex.py": "f23825baf6031bec38f40d3f8c7dfc0ad6c049dbda4ecf0c4211da64d64b4cb6",
+      "adapters/copilot.py": "de3c31a395d2901320e5b326998efbfaf512ad8e765bef4e899f647fbe71527b",
+      "adapters/cortex.py": "77ca392ea2f115056f98e9fa25447dfd9d5d7021dabed74dca6993a1b48cea94",
+      "adapters/crush.py": "20f1dec1e57ae53e7b6ef160e51f650da6b846dffca333c4017afbf9d70601a2",
+      "adapters/cursor.py": "27bf6e55877948aad77e18d8d463d7ab4a142ed223df8d82662b531409818739",
+      "adapters/devin.py": "bbff49cfca4ad3e8596a79bdd8dadcea1707f8b6c81abe8c0eb661a9856a5926",
+      "adapters/droid.py": "b32336bc56975d3a906f4af345e1ebff107b6e8331b684b472c4582dd1fa55ad",
+      "adapters/gemini.py": "9af8855ef2123ef1196830576734e7a26022533f4d2de6ce582bfd409994d37d",
+      "adapters/hermes.py": "5ca352a240a45d9334da3f7627b447dfa301a1572b4b991630a9ce6bc810747c",
+      "adapters/iflow.py": "2c0fe9ce38ed4a5f72120a5f6b8d986c8b5ef3cb58b388e8c801b148004e33a8",
+      "adapters/kimi.py": "6d5a8cdc11704a7cf30daf45fc5e9c08560eaf8e7a4a8aad22c765a0d915fe2c",
+      "adapters/kiro.py": "f85958c30282e39f9cd522e9e9639efc882b6ad7f922fa8fcdbd7167ad06580d",
+      "adapters/native_args.py": "eb2d079e0b19a2a9e46245da970cf550fa04a0820498a53b51976d441936e8f5",
+      "adapters/openclaw.py": "fb94256416010f9cb678e260b6c0ff0b2ef74e5094994250d6c580007e54b4a7",
+      "adapters/opencode.py": "1114bb0bcb5119c3ce8234505ccf9ddca0dbbd7c6a4ec483c7697cd9fabf79bc",
+      "adapters/openhands.py": "786059dd4981e1b91477cf7d119a483593485a76a7d4a8999823b6a78cdc2415",
+      "adapters/qwen.py": "a93f40e281e7d922156d453f32856e66123989c1175c09c7888b38cad33842d0",
+      "adapters/reasonix.py": "8b61163403ff1b89da758619380ee02a77b6c0ddcf9f8faef48c9a417be20356",
+      "adapters/registry.py": "5ab9bf47922ca97fe3a28a8a9b541de3e31d077ae73d920c6496b02ab4741129",
+      "adapters/vibe.py": "2cc7e0aec352e940490b4ac4f80a2ce0685e8d19c6cefc8b0651c82e4ed4515b",
+      "adapters/warp.py": "255aa41823a843f3f8a30d77c402d440ee541e02901e450dedf20de7d7802cc2",
+      "adapters/whole_json.py": "7afd2881ab44b64db979fa79ae2dfa72a8d566ebf178f912c31b26a5d6c9ee4c",
+      "catalog.py": "c07ee67270fc8f4dde93ab02e1f21dfd048d17e614a3e4413605002e08386489",
+      "cli.py": "df84faccb8d826a5563d9d41fcc2859afe8346c5cae03556e5d2c3c514d6a899",
+      "config.py": "85501d2e2613bffdf27a40a091a14aed3d3c0996860f30dec4603dd7cc993f04",
+      "consumer.py": "2246c53866fce808c60f1c43d81b394793b7cad57c5f59af363d5c94493bb87c",
+      "errors.py": "069bb4167db447528a78939d900e7ade3e55f81a3098ed87c9b8e8d764c40612",
+      "models.py": "000337f572c5a5e5b1169bf91a42505a87f980383ada4903bab23f66c3c475dd",
+      "output.py": "f8abdc6fc28f571b2ee6deef12a5ce5fffddb6612e15d7f28923b44daf87060c",
+      "prompt_input.py": "7a5da20719e2506cf88947b8a314c93865e2e53f6885e94642f187cd18da555b",
+      "runner.py": "756a49c1351feb865fe18619a8773ab17bc753f9aa49ec608a6f491ff4bd2318"
+    },
+    "wheel_module_outside_source": true,
+    "sdist_module_outside_source": true,
+    "wheel_runtime_matches_source": true,
+    "sdist_runtime_matches_source": true,
+    "wheel_archive_matches_installed": true,
+    "sdist_archive_matches_installed": true
+  },
+  "scenarios": {
+    "Q01": {
+      "status": "Pass",
+      "version": "prat 0.1.0",
+      "help": "usage: prat [-h] [--config PATH] [--json] [--version]\n            {agents,profiles,doctor,config} ...\n\nRun installed coding agents through named profiles.\n\npositional arguments:\n  {agents,profiles,doctor,config}\n    agents              List built-in agent selectors and supported settings.\n    profiles            List configured profiles and their resolved settings.\n    doctor              Locate agent executables without running them or\n                        checking credentials.\n    config              Manage the global TOML config.\n\noptions:\n  -h, --help            show this help message and exit\n  --config PATH         Use this config path (relative to invocation cwd).\n  --json                Print a JSON management result.\n  --version             show program's version number and exit\n\nrun syntax:\n  prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]\n\nrun options:\n  --prompt=TEXT           Pass prompt text, including text beginning with a dash.\n  -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.\n  --model MODEL           Override the profile model.\n  --effort EFFORT         Override the native effort setting.\n  --fast / --no-fast      Enable or disable supported native fast mode for this run.\n  --timeout SECONDS       Set the wall-clock deadline.\n  --max-budget-usd USD    Set a supported native USD budget.\n  --max-turns COUNT       Set a supported native turn limit.\n  --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.\n  --cwd PATH              Set the agent working directory.\n  --config PATH           Use this config path.\n  --json                  Print one normalized JSON result.\n  --progress              Print bounded live activity updates on stderr.\n  --dry-run               Resolve and print the invocation without launching it.\n\nexamples:\n  prat cx \"review this change\"\n  prat simple \"review this change\" --effort low\n  printf 'multiline prompt\\n' | prat cc -\n  prat cc --file prompt.md\n  prat cc --prompt=-leading-dash\n"
+    },
+    "Q02": {
+      "status": "Pass",
+      "version": "prat 0.1.0"
+    },
+    "Q03": {
+      "status": "Pass",
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "native": {
+        "agent": "claude",
+        "argv": [
+          "-p",
+          "--output-format",
+          "json"
+        ],
+        "stdin": "fix this bug",
+        "prompt": "fix this bug",
+        "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+      }
+    },
+    "Q04": {
+      "status": "Pass",
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "native": {
+        "agent": "codex",
+        "argv": [
+          "exec",
+          "--json",
+          "--model",
+          "profile-model",
+          "-c",
+          "model_reasoning_effort=\"medium\"",
+          "--sandbox",
+          "read-only",
+          "-"
+        ],
+        "stdin": "rebase git",
+        "prompt": "rebase git",
+        "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+      }
+    },
+    "Q05": {
+      "status": "Pass",
+      "routed": {
+        "claude": "claude",
+        "codex": "codex",
+        "gemini": "gemini",
+        "antigravity": "antigravity",
+        "copilot": "copilot",
+        "kiro": "kiro",
+        "cursor": "cursor",
+        "openclaw": "openclaw",
+        "hermes": "hermes",
+        "opencode": "opencode",
+        "openhands": "openhands",
+        "warp": "warp",
+        "iflow": "iflow",
+        "qwen": "qwen",
+        "amp": "amp",
+        "reasonix": "reasonix",
+        "droid": "droid",
+        "kimi": "kimi",
+        "vibe": "vibe",
+        "crush": "crush",
+        "devin": "devin",
+        "cortex": "cortex",
+        "cc": "claude",
+        "cx": "codex",
+        "gm": "gemini",
+        "ag": "antigravity",
+        "agy": "antigravity",
+        "cp": "copilot",
+        "ki": "kiro",
+        "cu": "cursor",
+        "claw": "openclaw",
+        "hm": "hermes",
+        "oc": "opencode",
+        "oh": "openhands",
+        "wp": "warp",
+        "if": "iflow",
+        "qw": "qwen",
+        "rx": "reasonix",
+        "dr": "droid",
+        "km": "kimi",
+        "mv": "vibe",
+        "cr": "crush",
+        "dv": "devin",
+        "co": "cortex"
+      }
+    },
+    "Q06": {
+      "status": "Pass",
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      }
+    },
+    "Q07": {
+      "status": "Pass",
+      "init_exit": 0,
+      "refusal_exit": 2,
+      "refusal": "prat: $REPO/.cache/prat-a-tier-qa._o3mgaks/run/init.toml: already exists; edit it or choose another --config path.",
+      "validate_exit": 0,
+      "profiles": [
+        {
+          "name": "simple",
+          "agent": "codex",
+          "options": {
+            "model": "gpt-5.6-luna",
+            "effort": "low",
+            "timeout": 600.0,
+            "max_budget_usd": null,
+            "max_turns": null,
+            "max_ai_credits": null,
+            "fast": null,
+            "native_args": []
+          }
+        }
+      ]
+    },
+    "Q08": {
+      "status": "Pass",
+      "native": {
+        "agent": "claude",
+        "argv": [
+          "-p",
+          "--output-format",
+          "json",
+          "--model",
+          "cli-model",
+          "--effort",
+          "high",
+          "--max-budget-usd",
+          "4.0",
+          "--max-turns",
+          "5",
+          "--permission-mode",
+          "plan"
+        ],
+        "stdin": "precedence",
+        "prompt": "precedence",
+        "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+      },
+      "resolved": {
+        "schema_version": 1,
+        "dry_run": true,
+        "agent": "claude",
+        "profile": "override",
+        "model": "cli-model",
+        "fast": null,
+        "argv": [
+          "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+          "$REPO/scripts/qa_installed.py",
+          "--fake-native",
+          "claude",
+          "-p",
+          "--output-format",
+          "json",
+          "--model",
+          "cli-model",
+          "--effort",
+          "high",
+          "--max-budget-usd",
+          "4.0",
+          "--max-turns",
+          "5",
+          "--permission-mode",
+          "plan"
+        ],
+        "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer",
+        "timeout": 3.0,
+        "stdin_bytes": 10
+      }
+    },
+    "Q09": {
+      "status": "Pass",
+      "prompt": "-leading $HOME $(touch injected) ; ✓\nsecond line",
+      "side_effect": false
+    },
+    "Q10": {
+      "status": "Pass",
+      "argv_transport": {
+        "schema_version": 1,
+        "dry_run": true,
+        "agent": "gemini",
+        "profile": null,
+        "model": null,
+        "fast": null,
+        "argv": [
+          "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+          "$REPO/scripts/qa_installed.py",
+          "--fake-native",
+          "gemini",
+          "--output-format",
+          "json",
+          "--prompt=DRY_$HOME_$(touch dry-injected)_ß"
+        ],
+        "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer",
+        "timeout": 7.0,
+        "stdin_bytes": 0
+      },
+      "stdin_transport": {
+        "schema_version": 1,
+        "dry_run": true,
+        "agent": "codex",
+        "profile": null,
+        "model": null,
+        "fast": null,
+        "argv": [
+          "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+          "$REPO/scripts/qa_installed.py",
+          "--fake-native",
+          "codex",
+          "exec",
+          "--json",
+          "-"
+        ],
+        "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer",
+        "timeout": 7.0,
+        "stdin_bytes": 34
+      },
+      "native_launches": 0,
+      "side_effect": false
+    },
+    "Q11": {
+      "status": "Pass",
+      "success": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "failure": {
+        "returncode": 17,
+        "status": "error",
+        "native_exit_code": 17,
+        "error": {
+          "code": "native_exit",
+          "message": "Codex exited with status 17."
+        }
+      }
+    },
+    "Q12": {
+      "status": "Pass",
+      "errors": [
+        {
+          "returncode": 2,
+          "status": "error",
+          "native_exit_code": null,
+          "error": {
+            "code": "invalid_config",
+            "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/invalid.toml: unknown field 'unknown'."
+          }
+        },
+        {
+          "returncode": 2,
+          "status": "error",
+          "native_exit_code": null,
+          "error": {
+            "code": "invalid_config",
+            "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/unsupported.toml: profiles.bad.effort: Gemini does not support an effort override."
+          }
+        },
+        {
+          "returncode": 2,
+          "status": "error",
+          "native_exit_code": null,
+          "error": {
+            "code": "invalid_arguments",
+            "message": "Unknown selector 'unknown'; run 'prat agents' or 'prat profiles' to list choices."
+          }
+        }
+      ],
+      "native_launches": 0
+    },
+    "Q13": {
+      "status": "Pass",
+      "missing": {
+        "returncode": 127,
+        "status": "error",
+        "native_exit_code": null,
+        "error": {
+          "code": "executable_not_found",
+          "message": "Executable '$REPO/.cache/prat-a-tier-qa._o3mgaks/run/missing-agent' was not found."
+        }
+      },
+      "non_executable": {
+        "returncode": 126,
+        "status": "error",
+        "native_exit_code": null,
+        "error": {
+          "code": "executable_not_executable",
+          "message": "Executable '$REPO/.cache/prat-a-tier-qa._o3mgaks/run/blocked-agent' cannot be executed."
+        }
+      }
+    },
+    "Q14": {
+      "status": "Pass",
+      "provider": {
+        "returncode": 1,
+        "status": "error",
+        "native_exit_code": 0,
+        "error": {
+          "code": "provider_error",
+          "message": "controlled provider failure"
+        }
+      },
+      "truncated": {
+        "returncode": 1,
+        "status": "error",
+        "native_exit_code": 0,
+        "error": {
+          "code": "protocol_error",
+          "message": "Codex stream ended without turn.completed."
+        }
+      },
+      "recovery": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      }
+    },
+    "Q15": {
+      "status": "Pass",
+      "timeout": {
+        "returncode": 124,
+        "status": "timeout",
+        "native_exit_code": -15,
+        "error": {
+          "code": "timeout",
+          "message": "Agent exceeded the 1 second timeout."
+        }
+      },
+      "interrupt": {
+        "returncode": 130,
+        "status": "interrupted",
+        "native_exit_code": -15,
+        "error": {
+          "code": "interrupted",
+          "message": "Interrupted by signal 2."
+        }
+      },
+      "pending_observed": true,
+      "descendant_locks_released": true,
+      "recovery": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      }
+    },
+    "Q16": {
+      "status": "Pass",
+      "result": {
+        "returncode": 124,
+        "status": "timeout",
+        "native_exit_code": 0,
+        "error": {
+          "code": "timeout",
+          "message": "Agent exceeded the 1 second timeout."
+        }
+      },
+      "pending_observed": true,
+      "descendant_lock_released": true
+    },
+    "Q17": {
+      "status": "Pass",
+      "stdout_limit": {
+        "returncode": 1,
+        "status": "error",
+        "error": {
+          "code": "stdout_limit_exceeded",
+          "message": "Agent output event exceeded 8388608 bytes."
+        },
+        "captured_json_bytes": 325,
+        "captured_json_sha256": "47848d15827a771658c8177e2e2f2650a17b0d315bb6df804e6f174fd2a82fbf"
+      },
+      "stdout_pending_observed": true,
+      "stdout_descendant_lock_released": true,
+      "stderr_limit": {
+        "returncode": 1,
+        "status": "error",
+        "error": {
+          "code": "stderr_limit_exceeded",
+          "message": "Agent stderr exceeded 2097152 bytes."
+        },
+        "captured_stderr_bytes": 2097223,
+        "captured_stderr_sha256": "4ff6946aa0f9b2104a40a56dde138eee07a844e44c46acd341d93f3d7b19a49f"
+      },
+      "stderr_pending_observed": true,
+      "stderr_descendant_lock_released": true,
+      "invalid_utf8": {
+        "returncode": 1,
+        "status": "error",
+        "native_exit_code": 0,
+        "error": {
+          "code": "output_encoding",
+          "message": "Agent stdout is not valid UTF-8."
+        }
+      },
+      "oversized_prompt": {
+        "returncode": 2,
+        "status": "error",
+        "native_exit_code": null,
+        "error": {
+          "code": "invalid_arguments",
+          "message": "Prompt exceeds the 1048576 byte limit."
+        }
+      }
+    },
+    "E01": {
+      "status": "Pass",
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "prompt_utf8_bytes": 18,
+      "prompt_sha256": "1937477a22cad0a377f7e88f1e05dde9caa498267171935a0bb1563555322190",
+      "native_cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/enhancement-cwd",
+      "profile": "simple"
+    },
+    "E02": {
+      "status": "Pass",
+      "forms": [
+        "automatic_pipe",
+        "positional_dash",
+        "file_dash"
+      ],
+      "prompt_sha256": "d6bb6539743f88179085b1744a404128e379f8fada9388ba38a76c5943a67aa2",
+      "explicit_sources_ignored_incidental_pipe": true
+    },
+    "E03": {
+      "status": "Pass",
+      "case_exit_codes": {
+        "inline_and_file": 2,
+        "two_files": 2,
+        "missing_file": 2,
+        "invalid_utf8": 2,
+        "oversize": 2,
+        "fifo": 2
+      },
+      "error_messages": {
+        "inline_and_file": "Provide exactly one prompt source.",
+        "two_files": "Provide exactly one prompt source.",
+        "missing_file": "Cannot open prompt file $REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer/missing-prompt.txt: No such file or directory.",
+        "invalid_utf8": "Prompt file is not valid UTF-8.",
+        "oversize": "Prompt exceeds the 1048576 byte limit.",
+        "fifo": "Prompt file is not a regular file: $REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer/prompt.fifo"
+      },
+      "native_launches": 0
+    },
+    "E04": {
+      "status": "Pass",
+      "forms": {
+        "implicit_sigint": {
+          "returncode": 130,
+          "pending_before_signal": true,
+          "native_launches": 0,
+          "error": {
+            "code": "interrupted",
+            "message": "Interrupted by signal 2."
+          }
+        },
+        "positional_sigterm": {
+          "returncode": 143,
+          "pending_before_signal": true,
+          "native_launches": 0,
+          "error": {
+            "code": "interrupted",
+            "message": "Interrupted by signal 15."
+          }
+        },
+        "file_dash_sigint": {
+          "returncode": 130,
+          "pending_before_signal": true,
+          "native_launches": 0,
+          "error": {
+            "code": "interrupted",
+            "message": "Interrupted by signal 2."
+          }
+        }
+      }
+    },
+    "E05": {
+      "status": "Pass",
+      "codex_native_argv": [
+        [
+          "exec",
+          "--json",
+          "-"
+        ],
+        [
+          "exec",
+          "--json",
+          "-c",
+          "service_tier=\"priority\"",
+          "-"
+        ],
+        [
+          "exec",
+          "--json",
+          "-c",
+          "service_tier=\"default\"",
+          "-"
+        ],
+        [
+          "exec",
+          "--json",
+          "-c",
+          "service_tier=\"default\"",
+          "-"
+        ],
+        [
+          "exec",
+          "--json",
+          "-c",
+          "service_tier=\"priority\"",
+          "-"
+        ]
+      ],
+      "claude_native_argv": [
+        "-p",
+        "--output-format",
+        "json",
+        "--settings",
+        "{\"fastMode\": true}"
+      ],
+      "unsupported_exit": 2,
+      "unsupported_native_launches": 0
+    },
+    "E06": {
+      "status": "Pass",
+      "discovery_exit": 0,
+      "discovery_native_launches": 0,
+      "versions_exit": 0,
+      "version_probe_argv": [
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ]
+      ],
+      "opaque_codex_version": "codex opaque version 1.0",
+      "hermes_version_error": "Version probe exited with status 17."
+    },
+    "E07": {
+      "status": "Pass",
+      "cases": {
+        "QA_VERSION_TIMEOUT": {
+          "returncode": 0,
+          "pending_observed": true,
+          "descendant_lock_released_before_emergency_cleanup": true,
+          "result": {
+            "schema_version": 1,
+            "agents": [
+              {
+                "agent": "claude",
+                "executable": "claude",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/claude",
+                "available": true,
+                "version": "claude opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "codex",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": "Agent exceeded the 3 second timeout."
+              },
+              {
+                "agent": "gemini",
+                "executable": "gemini",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/gemini",
+                "available": true,
+                "version": "gemini opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "antigravity",
+                "executable": "agy",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/agy",
+                "available": true,
+                "version": "antigravity opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "copilot",
+                "executable": "copilot",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/copilot",
+                "available": true,
+                "version": "copilot opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "kiro",
+                "executable": "kiro-cli",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/kiro-cli",
+                "available": true,
+                "version": "kiro opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "cursor",
+                "executable": "agent",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/agent",
+                "available": true,
+                "version": "cursor opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "openclaw",
+                "executable": "openclaw",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/openclaw",
+                "available": true,
+                "version": "openclaw opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "hermes",
+                "executable": "hermes",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/hermes",
+                "available": true,
+                "version": null,
+                "version_error": "Version probe exited with status 17."
+              },
+              {
+                "agent": "opencode",
+                "executable": "opencode",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/opencode",
+                "available": true,
+                "version": "opencode opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "openhands",
+                "executable": "openhands",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/openhands",
+                "available": true,
+                "version": "openhands opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "warp",
+                "executable": "oz",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/oz",
+                "available": true,
+                "version": "warp opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "iflow",
+                "executable": "iflow",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/iflow",
+                "available": true,
+                "version": "iflow opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "qwen",
+                "executable": "qwen",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/qwen",
+                "available": true,
+                "version": "qwen opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "amp",
+                "executable": "amp",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/amp",
+                "available": true,
+                "version": "amp opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "reasonix",
+                "executable": "reasonix",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/reasonix",
+                "available": true,
+                "version": "reasonix opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "droid",
+                "executable": "droid",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/droid",
+                "available": true,
+                "version": "droid opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "kimi",
+                "executable": "kimi",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/kimi",
+                "available": true,
+                "version": "kimi opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "vibe",
+                "executable": "vibe",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/vibe",
+                "available": true,
+                "version": "vibe opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "crush",
+                "executable": "crush",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/crush",
+                "available": true,
+                "version": "crush opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "devin",
+                "executable": "devin",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/devin",
+                "available": true,
+                "version": "devin opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "cortex",
+                "executable": "cortex",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/cortex",
+                "available": true,
+                "version": "cortex opaque version 1.0",
+                "version_error": null
+              }
+            ]
+          }
+        },
+        "QA_VERSION_OVERFLOW": {
+          "returncode": 0,
+          "pending_observed": true,
+          "descendant_lock_released_before_emergency_cleanup": true,
+          "result": {
+            "schema_version": 1,
+            "agents": [
+              {
+                "agent": "claude",
+                "executable": "claude",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/claude",
+                "available": true,
+                "version": "claude opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "codex",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": "Agent stdout exceeded 65536 bytes."
+              },
+              {
+                "agent": "gemini",
+                "executable": "gemini",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/gemini",
+                "available": true,
+                "version": "gemini opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "antigravity",
+                "executable": "agy",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/agy",
+                "available": true,
+                "version": "antigravity opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "copilot",
+                "executable": "copilot",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/copilot",
+                "available": true,
+                "version": "copilot opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "kiro",
+                "executable": "kiro-cli",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/kiro-cli",
+                "available": true,
+                "version": "kiro opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "cursor",
+                "executable": "agent",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/agent",
+                "available": true,
+                "version": "cursor opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "openclaw",
+                "executable": "openclaw",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/openclaw",
+                "available": true,
+                "version": "openclaw opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "hermes",
+                "executable": "hermes",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/hermes",
+                "available": true,
+                "version": null,
+                "version_error": "Version probe exited with status 17."
+              },
+              {
+                "agent": "opencode",
+                "executable": "opencode",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/opencode",
+                "available": true,
+                "version": "opencode opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "openhands",
+                "executable": "openhands",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/openhands",
+                "available": true,
+                "version": "openhands opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "warp",
+                "executable": "oz",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/oz",
+                "available": true,
+                "version": "warp opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "iflow",
+                "executable": "iflow",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/iflow",
+                "available": true,
+                "version": "iflow opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "qwen",
+                "executable": "qwen",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/qwen",
+                "available": true,
+                "version": "qwen opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "amp",
+                "executable": "amp",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/amp",
+                "available": true,
+                "version": "amp opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "reasonix",
+                "executable": "reasonix",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/reasonix",
+                "available": true,
+                "version": "reasonix opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "droid",
+                "executable": "droid",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/droid",
+                "available": true,
+                "version": "droid opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "kimi",
+                "executable": "kimi",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/kimi",
+                "available": true,
+                "version": "kimi opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "vibe",
+                "executable": "vibe",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/vibe",
+                "available": true,
+                "version": "vibe opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "crush",
+                "executable": "crush",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/crush",
+                "available": true,
+                "version": "crush opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "devin",
+                "executable": "devin",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/devin",
+                "available": true,
+                "version": "devin opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "cortex",
+                "executable": "cortex",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/cortex",
+                "available": true,
+                "version": "cortex opaque version 1.0",
+                "version_error": null
+              }
+            ]
+          }
+        },
+        "QA_VERSION_INTERRUPT": {
+          "returncode": 130,
+          "pending_observed": true,
+          "descendant_lock_released_before_emergency_cleanup": true,
+          "result": {
+            "schema_version": 1,
+            "agents": [
+              {
+                "agent": "claude",
+                "executable": "claude",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/claude",
+                "available": true,
+                "version": "claude opaque version 1.0",
+                "version_error": null
+              },
+              {
+                "agent": "codex",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": "Interrupted by signal 2."
+              },
+              {
+                "agent": "gemini",
+                "executable": "gemini",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/gemini",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "antigravity",
+                "executable": "agy",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/agy",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "copilot",
+                "executable": "copilot",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/copilot",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "kiro",
+                "executable": "kiro-cli",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/kiro-cli",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "cursor",
+                "executable": "agent",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/agent",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "openclaw",
+                "executable": "openclaw",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/openclaw",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "hermes",
+                "executable": "hermes",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/hermes",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "opencode",
+                "executable": "opencode",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/opencode",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "openhands",
+                "executable": "openhands",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/openhands",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "warp",
+                "executable": "oz",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/oz",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "iflow",
+                "executable": "iflow",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/iflow",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "qwen",
+                "executable": "qwen",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/qwen",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "amp",
+                "executable": "amp",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/amp",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "reasonix",
+                "executable": "reasonix",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/reasonix",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "droid",
+                "executable": "droid",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/droid",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "kimi",
+                "executable": "kimi",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/kimi",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "vibe",
+                "executable": "vibe",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/vibe",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "crush",
+                "executable": "crush",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/crush",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "devin",
+                "executable": "devin",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/devin",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "cortex",
+                "executable": "cortex",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/bin/cortex",
+                "available": true,
+                "version": null,
+                "version_error": null
+              }
+            ],
+            "status": "interrupted",
+            "exit_code": 130,
+            "error": {
+              "code": "interrupted",
+              "message": "Interrupted by signal 2."
+            }
+          }
+        }
+      }
+    },
+    "E08": {
+      "status": "Pass",
+      "agents": {
+        "claude": {
+          "requested_model": "requested",
+          "reported_models": [
+            "claude-primary",
+            "claude-helper"
+          ],
+          "cost_usd": 0
+        },
+        "gemini": {
+          "requested_model": "requested",
+          "reported_models": [
+            "gemini-primary",
+            "gemini-helper"
+          ],
+          "cost_usd": null
+        },
+        "copilot": {
+          "requested_model": "requested",
+          "reported_models": [
+            "copilot-native"
+          ],
+          "cost_usd": null
+        },
+        "openclaw": {
+          "requested_model": "requested",
+          "reported_models": [
+            "provider/model"
+          ],
+          "cost_usd": 1.25
+        }
+      }
+    },
+    "E09": {
+      "status": "Pass",
+      "latest_step_cost_sum": 2.5,
+      "input_tokens_distinct_steps": 6,
+      "reported_models": null
+    },
+    "E10": {
+      "status": "Pass",
+      "installed_case": "EOF after completed assistant message",
+      "result": {
+        "returncode": 1,
+        "status": "error",
+        "native_exit_code": 0,
+        "error": {
+          "code": "protocol_error",
+          "message": "Codex stream ended without turn.completed."
+        }
+      },
+      "partial_output": "PARTIAL_KEEP"
+    },
+    "E11": {
+      "status": "Pass",
+      "disposable_event_count": 9,
+      "physical_bytes_per_event_including_lf": 1048612,
+      "discarded_trace_physical_bytes_including_json_envelopes_and_lf": 9437508,
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "answer": "STREAM_OK"
+    },
+    "E12": {
+      "status": "Pass",
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "native_pending_when_progress_observed": true,
+      "release_observed_before_emergency_cleanup": true,
+      "stdout_json_objects": 1,
+      "progress_stderr": "prat: launching Codex\nprat: 0.0s starting\nprat: 1.1s answering\nfake diagnostic: codex\nprat: Codex finished with status success in 1110ms\n"
+    },
+    "E13": {
+      "status": "Not run",
+      "reason": "Adversarial stream assertions use focused decoder and subprocess tests."
+    },
+    "E14": {
+      "status": "Not run",
+      "reason": "Adversarial stderr transport assertions use focused subprocess tests."
+    },
+    "E15": {
+      "status": "Pass",
+      "failure": {
+        "returncode": 1,
+        "status": "error",
+        "native_exit_code": 0,
+        "error": {
+          "code": "provider_error",
+          "message": "controlled provider failure"
+        }
+      },
+      "failure_output": "",
+      "fresh_invocation": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "automatic_retry": false,
+      "observed_native_invocations": 2,
+      "observed_prompts": [
+        "QA_PROVIDER_FAILURE",
+        "fresh retry"
+      ]
+    },
+    "A01.inventory": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "agents": {
+            "schema_version": 1,
+            "agents": [
+              {
+                "name": "claude",
+                "label": "Claude Code",
+                "aliases": [
+                  "cc"
+                ],
+                "command": [
+                  "claude"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ],
+                  "budgets": [
+                    "max_budget_usd",
+                    "max_turns"
+                  ],
+                  "fast": true
+                }
+              },
+              {
+                "name": "codex",
+                "label": "Codex",
+                "aliases": [
+                  "cx"
+                ],
+                "command": [
+                  "codex"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": true
+                }
+              },
+              {
+                "name": "gemini",
+                "label": "Gemini",
+                "aliases": [
+                  "gm"
+                ],
+                "command": [
+                  "gemini"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "antigravity",
+                "label": "Antigravity",
+                "aliases": [
+                  "ag",
+                  "agy"
+                ],
+                "command": [
+                  "agy"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "low",
+                    "medium",
+                    "high"
+                  ],
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "copilot",
+                "label": "Copilot",
+                "aliases": [
+                  "cp"
+                ],
+                "command": [
+                  "copilot"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ],
+                  "budgets": [
+                    "max_ai_credits"
+                  ],
+                  "fast": false
+                }
+              },
+              {
+                "name": "kiro",
+                "label": "Kiro",
+                "aliases": [
+                  "ki"
+                ],
+                "command": [
+                  "kiro-cli"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ],
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "cursor",
+                "label": "Cursor",
+                "aliases": [
+                  "cu"
+                ],
+                "command": [
+                  "agent"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "openclaw",
+                "label": "OpenClaw",
+                "aliases": [
+                  "claw"
+                ],
+                "command": [
+                  "openclaw"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "hermes",
+                "label": "Hermes",
+                "aliases": [
+                  "hm"
+                ],
+                "command": [
+                  "hermes"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "none",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max",
+                    "ultra"
+                  ],
+                  "budgets": [
+                    "max_turns"
+                  ],
+                  "fast": false
+                }
+              },
+              {
+                "name": "opencode",
+                "label": "OpenCode",
+                "aliases": [
+                  "oc"
+                ],
+                "command": [
+                  "opencode"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "openhands",
+                "label": "OpenHands",
+                "aliases": [
+                  "oh"
+                ],
+                "command": [
+                  "openhands"
+                ],
+                "capabilities": {
+                  "model": false,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "warp",
+                "label": "Warp",
+                "aliases": [
+                  "wp"
+                ],
+                "command": [
+                  "oz"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "iflow",
+                "label": "iFlow",
+                "aliases": [
+                  "if"
+                ],
+                "command": [
+                  "iflow"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "qwen",
+                "label": "Qwen Code",
+                "aliases": [
+                  "qw"
+                ],
+                "command": [
+                  "qwen"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [
+                    "max_turns"
+                  ],
+                  "fast": false
+                }
+              },
+              {
+                "name": "amp",
+                "label": "Amp",
+                "aliases": [],
+                "command": [
+                  "amp"
+                ],
+                "capabilities": {
+                  "model": false,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "reasonix",
+                "label": "Reasonix",
+                "aliases": [
+                  "rx"
+                ],
+                "command": [
+                  "reasonix"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "droid",
+                "label": "Droid",
+                "aliases": [
+                  "dr"
+                ],
+                "command": [
+                  "droid"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "none",
+                    "dynamic",
+                    "off",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ],
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "kimi",
+                "label": "Kimi",
+                "aliases": [
+                  "km"
+                ],
+                "command": [
+                  "kimi"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "vibe",
+                "label": "Mistral Vibe",
+                "aliases": [
+                  "mv"
+                ],
+                "command": [
+                  "vibe"
+                ],
+                "capabilities": {
+                  "model": false,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [
+                    "max_budget_usd",
+                    "max_turns"
+                  ],
+                  "fast": false
+                }
+              },
+              {
+                "name": "crush",
+                "label": "Crush",
+                "aliases": [
+                  "cr"
+                ],
+                "command": [
+                  "crush"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "devin",
+                "label": "Devin",
+                "aliases": [
+                  "dv"
+                ],
+                "command": [
+                  "devin"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "cortex",
+                "label": "Cortex Code",
+                "aliases": [
+                  "co"
+                ],
+                "command": [
+                  "cortex"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "max"
+                  ],
+                  "budgets": [
+                    "max_turns"
+                  ],
+                  "fast": false
+                }
+              }
+            ]
+          },
+          "doctor": {
+            "schema_version": 1,
+            "agents": [
+              {
+                "agent": "claude",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "codex",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "gemini",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "antigravity",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "copilot",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "kiro",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "cursor",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "openclaw",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "hermes",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "opencode",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "openhands",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "warp",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "iflow",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "qwen",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "amp",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "reasonix",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "droid",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "kimi",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "vibe",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "crush",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "devin",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "cortex",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              }
+            ]
+          },
+          "native_launches": 0
+        },
+        "sdist": {
+          "status": "Pass",
+          "agents": {
+            "schema_version": 1,
+            "agents": [
+              {
+                "name": "claude",
+                "label": "Claude Code",
+                "aliases": [
+                  "cc"
+                ],
+                "command": [
+                  "claude"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ],
+                  "budgets": [
+                    "max_budget_usd",
+                    "max_turns"
+                  ],
+                  "fast": true
+                }
+              },
+              {
+                "name": "codex",
+                "label": "Codex",
+                "aliases": [
+                  "cx"
+                ],
+                "command": [
+                  "codex"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": true
+                }
+              },
+              {
+                "name": "gemini",
+                "label": "Gemini",
+                "aliases": [
+                  "gm"
+                ],
+                "command": [
+                  "gemini"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "antigravity",
+                "label": "Antigravity",
+                "aliases": [
+                  "ag",
+                  "agy"
+                ],
+                "command": [
+                  "agy"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "low",
+                    "medium",
+                    "high"
+                  ],
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "copilot",
+                "label": "Copilot",
+                "aliases": [
+                  "cp"
+                ],
+                "command": [
+                  "copilot"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ],
+                  "budgets": [
+                    "max_ai_credits"
+                  ],
+                  "fast": false
+                }
+              },
+              {
+                "name": "kiro",
+                "label": "Kiro",
+                "aliases": [
+                  "ki"
+                ],
+                "command": [
+                  "kiro-cli"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ],
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "cursor",
+                "label": "Cursor",
+                "aliases": [
+                  "cu"
+                ],
+                "command": [
+                  "agent"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "openclaw",
+                "label": "OpenClaw",
+                "aliases": [
+                  "claw"
+                ],
+                "command": [
+                  "openclaw"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "hermes",
+                "label": "Hermes",
+                "aliases": [
+                  "hm"
+                ],
+                "command": [
+                  "hermes"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "none",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max",
+                    "ultra"
+                  ],
+                  "budgets": [
+                    "max_turns"
+                  ],
+                  "fast": false
+                }
+              },
+              {
+                "name": "opencode",
+                "label": "OpenCode",
+                "aliases": [
+                  "oc"
+                ],
+                "command": [
+                  "opencode"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "openhands",
+                "label": "OpenHands",
+                "aliases": [
+                  "oh"
+                ],
+                "command": [
+                  "openhands"
+                ],
+                "capabilities": {
+                  "model": false,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "warp",
+                "label": "Warp",
+                "aliases": [
+                  "wp"
+                ],
+                "command": [
+                  "oz"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "iflow",
+                "label": "iFlow",
+                "aliases": [
+                  "if"
+                ],
+                "command": [
+                  "iflow"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "qwen",
+                "label": "Qwen Code",
+                "aliases": [
+                  "qw"
+                ],
+                "command": [
+                  "qwen"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [
+                    "max_turns"
+                  ],
+                  "fast": false
+                }
+              },
+              {
+                "name": "amp",
+                "label": "Amp",
+                "aliases": [],
+                "command": [
+                  "amp"
+                ],
+                "capabilities": {
+                  "model": false,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "reasonix",
+                "label": "Reasonix",
+                "aliases": [
+                  "rx"
+                ],
+                "command": [
+                  "reasonix"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "droid",
+                "label": "Droid",
+                "aliases": [
+                  "dr"
+                ],
+                "command": [
+                  "droid"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "none",
+                    "dynamic",
+                    "off",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max"
+                  ],
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "kimi",
+                "label": "Kimi",
+                "aliases": [
+                  "km"
+                ],
+                "command": [
+                  "kimi"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "vibe",
+                "label": "Mistral Vibe",
+                "aliases": [
+                  "mv"
+                ],
+                "command": [
+                  "vibe"
+                ],
+                "capabilities": {
+                  "model": false,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [
+                    "max_budget_usd",
+                    "max_turns"
+                  ],
+                  "fast": false
+                }
+              },
+              {
+                "name": "crush",
+                "label": "Crush",
+                "aliases": [
+                  "cr"
+                ],
+                "command": [
+                  "crush"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "devin",
+                "label": "Devin",
+                "aliases": [
+                  "dv"
+                ],
+                "command": [
+                  "devin"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": false,
+                  "effort_values": null,
+                  "budgets": [],
+                  "fast": false
+                }
+              },
+              {
+                "name": "cortex",
+                "label": "Cortex Code",
+                "aliases": [
+                  "co"
+                ],
+                "command": [
+                  "cortex"
+                ],
+                "capabilities": {
+                  "model": true,
+                  "effort": true,
+                  "effort_values": [
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "max"
+                  ],
+                  "budgets": [
+                    "max_turns"
+                  ],
+                  "fast": false
+                }
+              }
+            ]
+          },
+          "doctor": {
+            "schema_version": 1,
+            "agents": [
+              {
+                "agent": "claude",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "codex",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "gemini",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "antigravity",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "copilot",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "kiro",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "cursor",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "openclaw",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "hermes",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "opencode",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "openhands",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "warp",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "iflow",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "qwen",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "amp",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "reasonix",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "droid",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "kimi",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "vibe",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "crush",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "devin",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              },
+              {
+                "agent": "cortex",
+                "executable": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "path": "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+                "available": true,
+                "version": null,
+                "version_error": null
+              }
+            ]
+          },
+          "native_launches": 0
+        }
+      }
+    },
+    "A02.routes": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "routed": {
+            "claude": "claude",
+            "codex": "codex",
+            "gemini": "gemini",
+            "antigravity": "antigravity",
+            "copilot": "copilot",
+            "kiro": "kiro",
+            "cursor": "cursor",
+            "openclaw": "openclaw",
+            "hermes": "hermes",
+            "opencode": "opencode",
+            "openhands": "openhands",
+            "warp": "warp",
+            "iflow": "iflow",
+            "qwen": "qwen",
+            "amp": "amp",
+            "reasonix": "reasonix",
+            "droid": "droid",
+            "kimi": "kimi",
+            "vibe": "vibe",
+            "crush": "crush",
+            "devin": "devin",
+            "cortex": "cortex",
+            "cc": "claude",
+            "cx": "codex",
+            "gm": "gemini",
+            "ag": "antigravity",
+            "agy": "antigravity",
+            "cp": "copilot",
+            "ki": "kiro",
+            "cu": "cursor",
+            "claw": "openclaw",
+            "hm": "hermes",
+            "oc": "opencode",
+            "oh": "openhands",
+            "wp": "warp",
+            "if": "iflow",
+            "qw": "qwen",
+            "rx": "reasonix",
+            "dr": "droid",
+            "km": "kimi",
+            "mv": "vibe",
+            "cr": "crush",
+            "dv": "devin",
+            "co": "cortex"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "routed": {
+            "claude": "claude",
+            "codex": "codex",
+            "gemini": "gemini",
+            "antigravity": "antigravity",
+            "copilot": "copilot",
+            "kiro": "kiro",
+            "cursor": "cursor",
+            "openclaw": "openclaw",
+            "hermes": "hermes",
+            "opencode": "opencode",
+            "openhands": "openhands",
+            "warp": "warp",
+            "iflow": "iflow",
+            "qwen": "qwen",
+            "amp": "amp",
+            "reasonix": "reasonix",
+            "droid": "droid",
+            "kimi": "kimi",
+            "vibe": "vibe",
+            "crush": "crush",
+            "devin": "devin",
+            "cortex": "cortex",
+            "cc": "claude",
+            "cx": "codex",
+            "gm": "gemini",
+            "ag": "antigravity",
+            "agy": "antigravity",
+            "cp": "copilot",
+            "ki": "kiro",
+            "cu": "cursor",
+            "claw": "openclaw",
+            "hm": "hermes",
+            "oc": "opencode",
+            "oh": "openhands",
+            "wp": "warp",
+            "if": "iflow",
+            "qw": "qwen",
+            "rx": "reasonix",
+            "dr": "droid",
+            "km": "kimi",
+            "mv": "vibe",
+            "cr": "crush",
+            "dv": "devin",
+            "co": "cortex"
+          }
+        }
+      }
+    },
+    "A03.profile": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "profiles": {
+            "schema_version": 1,
+            "profiles": [
+              {
+                "name": "new-profile",
+                "agent": "qwen",
+                "options": {
+                  "model": "profile-model",
+                  "effort": null,
+                  "timeout": 7.0,
+                  "max_budget_usd": null,
+                  "max_turns": 3,
+                  "max_ai_credits": null,
+                  "fast": null,
+                  "native_args": [
+                    "--debug"
+                  ]
+                }
+              }
+            ]
+          },
+          "preview": {
+            "schema_version": 1,
+            "dry_run": true,
+            "agent": "qwen",
+            "profile": "new-profile",
+            "model": "cli-model",
+            "fast": null,
+            "argv": [
+              "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python",
+              "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/native prefix $HOME.py",
+              "literal $HOME ; $(touch prefix-injected)",
+              "--fake-native",
+              "qwen",
+              "--output-format",
+              "stream-json",
+              "--model",
+              "cli-model",
+              "--max-session-turns",
+              "9",
+              "--approval-mode",
+              "plan"
+            ],
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪",
+            "timeout": 4.0,
+            "stdin_bytes": 19
+          },
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "qwen",
+            "argv": [
+              "--output-format",
+              "stream-json",
+              "--model",
+              "cli-model",
+              "--max-session-turns",
+              "9",
+              "--approval-mode",
+              "plan"
+            ],
+            "stdin": "profile literal 雪",
+            "prompt": "profile literal 雪",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+          },
+          "preview_native_launches": 0,
+          "side_effect": false
+        },
+        "sdist": {
+          "status": "Pass",
+          "profiles": {
+            "schema_version": 1,
+            "profiles": [
+              {
+                "name": "new-profile",
+                "agent": "qwen",
+                "options": {
+                  "model": "profile-model",
+                  "effort": null,
+                  "timeout": 7.0,
+                  "max_budget_usd": null,
+                  "max_turns": 3,
+                  "max_ai_credits": null,
+                  "fast": null,
+                  "native_args": [
+                    "--debug"
+                  ]
+                }
+              }
+            ]
+          },
+          "preview": {
+            "schema_version": 1,
+            "dry_run": true,
+            "agent": "qwen",
+            "profile": "new-profile",
+            "model": "cli-model",
+            "fast": null,
+            "argv": [
+              "$REPO/.cache/prat-a-tier-qa._o3mgaks/env-sdist/bin/python",
+              "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/native prefix $HOME.py",
+              "literal $HOME ; $(touch prefix-injected)",
+              "--fake-native",
+              "qwen",
+              "--output-format",
+              "stream-json",
+              "--model",
+              "cli-model",
+              "--max-session-turns",
+              "9",
+              "--approval-mode",
+              "plan"
+            ],
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪",
+            "timeout": 4.0,
+            "stdin_bytes": 19
+          },
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "qwen",
+            "argv": [
+              "--output-format",
+              "stream-json",
+              "--model",
+              "cli-model",
+              "--max-session-turns",
+              "9",
+              "--approval-mode",
+              "plan"
+            ],
+            "stdin": "profile literal 雪",
+            "prompt": "profile literal 雪",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+          },
+          "preview_native_launches": 0,
+          "side_effect": false
+        }
+      }
+    },
+    "A04.sources": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "cases": {
+            "devin.inline": {
+              "native": {
+                "agent": "devin",
+                "argv": [
+                  "-p",
+                  "--",
+                  "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+                ],
+                "stdin": "",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "devin.file": {
+              "native": {
+                "agent": "devin",
+                "argv": [
+                  "-p",
+                  "--",
+                  "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+                ],
+                "stdin": "",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "devin.redirected": {
+              "native": {
+                "agent": "devin",
+                "argv": [
+                  "-p",
+                  "--",
+                  "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+                ],
+                "stdin": "",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "devin.positional_dash": {
+              "native": {
+                "agent": "devin",
+                "argv": [
+                  "-p",
+                  "--",
+                  "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+                ],
+                "stdin": "",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "devin.file_dash": {
+              "native": {
+                "agent": "devin",
+                "argv": [
+                  "-p",
+                  "--",
+                  "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+                ],
+                "stdin": "",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "qwen.inline": {
+              "native": {
+                "agent": "qwen",
+                "argv": [
+                  "--output-format",
+                  "stream-json"
+                ],
+                "stdin": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "qwen.file": {
+              "native": {
+                "agent": "qwen",
+                "argv": [
+                  "--output-format",
+                  "stream-json"
+                ],
+                "stdin": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "qwen.redirected": {
+              "native": {
+                "agent": "qwen",
+                "argv": [
+                  "--output-format",
+                  "stream-json"
+                ],
+                "stdin": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "qwen.positional_dash": {
+              "native": {
+                "agent": "qwen",
+                "argv": [
+                  "--output-format",
+                  "stream-json"
+                ],
+                "stdin": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "qwen.file_dash": {
+              "native": {
+                "agent": "qwen",
+                "argv": [
+                  "--output-format",
+                  "stream-json"
+                ],
+                "stdin": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            }
+          },
+          "side_effect": false
+        },
+        "sdist": {
+          "status": "Pass",
+          "cases": {
+            "devin.inline": {
+              "native": {
+                "agent": "devin",
+                "argv": [
+                  "-p",
+                  "--",
+                  "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+                ],
+                "stdin": "",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "devin.file": {
+              "native": {
+                "agent": "devin",
+                "argv": [
+                  "-p",
+                  "--",
+                  "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+                ],
+                "stdin": "",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "devin.redirected": {
+              "native": {
+                "agent": "devin",
+                "argv": [
+                  "-p",
+                  "--",
+                  "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+                ],
+                "stdin": "",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "devin.positional_dash": {
+              "native": {
+                "agent": "devin",
+                "argv": [
+                  "-p",
+                  "--",
+                  "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+                ],
+                "stdin": "",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "devin.file_dash": {
+              "native": {
+                "agent": "devin",
+                "argv": [
+                  "-p",
+                  "--",
+                  "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n"
+                ],
+                "stdin": "",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "qwen.inline": {
+              "native": {
+                "agent": "qwen",
+                "argv": [
+                  "--output-format",
+                  "stream-json"
+                ],
+                "stdin": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "qwen.file": {
+              "native": {
+                "agent": "qwen",
+                "argv": [
+                  "--output-format",
+                  "stream-json"
+                ],
+                "stdin": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "qwen.redirected": {
+              "native": {
+                "agent": "qwen",
+                "argv": [
+                  "--output-format",
+                  "stream-json"
+                ],
+                "stdin": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "qwen.positional_dash": {
+              "native": {
+                "agent": "qwen",
+                "argv": [
+                  "--output-format",
+                  "stream-json"
+                ],
+                "stdin": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            },
+            "qwen.file_dash": {
+              "native": {
+                "agent": "qwen",
+                "argv": [
+                  "--output-format",
+                  "stream-json"
+                ],
+                "stdin": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "prompt": "-literal $HOME $(touch a-tier-injected) ; 雪\r\nsecond line\t \n",
+                "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/a-tier cwd 雪"
+              },
+              "result": {
+                "returncode": 0,
+                "status": "success",
+                "native_exit_code": 0,
+                "error": null
+              }
+            }
+          },
+          "side_effect": false
+        }
+      }
+    },
+    "A08.versions": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "discovery_exit": 0,
+          "discovery_native_launches": 0,
+          "versions_exit": 0,
+          "version_probe_argv": [
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ]
+          ],
+          "opaque_codex_version": "codex opaque version 1.0",
+          "hermes_version_error": "Version probe exited with status 17."
+        },
+        "sdist": {
+          "status": "Pass",
+          "discovery_exit": 0,
+          "discovery_native_launches": 0,
+          "versions_exit": 0,
+          "version_probe_argv": [
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ],
+            [
+              "--version"
+            ]
+          ],
+          "opaque_codex_version": "codex opaque version 1.0",
+          "hermes_version_error": "Version probe exited with status 17."
+        }
+      }
+    },
+    "A06.controls": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "cases": {
+            "oh": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'oh'.model: OpenHands does not support a model override."
+              }
+            },
+            "amp": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'amp'.effort: Amp does not support an effort override."
+              }
+            },
+            "mv": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'mv'.model: Mistral Vibe does not support a model override."
+              }
+            },
+            "km": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'km'.effort: Kimi does not support an effort override."
+              }
+            },
+            "rx": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'rx'.max_turns: Reasonix does not support this budget."
+              }
+            },
+            "cr": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'cr'.fast: Crush does not support a fast-mode override."
+              }
+            }
+          },
+          "native_launches": 0
+        },
+        "sdist": {
+          "status": "Pass",
+          "cases": {
+            "oh": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'oh'.model: OpenHands does not support a model override."
+              }
+            },
+            "amp": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'amp'.effort: Amp does not support an effort override."
+              }
+            },
+            "mv": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'mv'.model: Mistral Vibe does not support a model override."
+              }
+            },
+            "km": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'km'.effort: Kimi does not support an effort override."
+              }
+            },
+            "rx": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'rx'.max_turns: Reasonix does not support this budget."
+              }
+            },
+            "cr": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/config.toml: selector 'cr'.fast: Crush does not support a fast-mode override."
+              }
+            }
+          },
+          "native_launches": 0
+        }
+      }
+    },
+    "A07.collisions": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "cases": {
+            "oh": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/collision-oh.toml: profiles.oh: name is reserved; choose a different profile name."
+              }
+            },
+            "vibe": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/collision-vibe.toml: profiles.vibe: name is reserved; choose a different profile name."
+              }
+            }
+          },
+          "native_launches": 0
+        },
+        "sdist": {
+          "status": "Pass",
+          "cases": {
+            "oh": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/collision-oh.toml: profiles.oh: name is reserved; choose a different profile name."
+              }
+            },
+            "vibe": {
+              "returncode": 2,
+              "status": "error",
+              "native_exit_code": null,
+              "error": {
+                "code": "invalid_config",
+                "message": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/collision-vibe.toml: profiles.vibe: name is reserved; choose a different profile name."
+              }
+            }
+          },
+          "native_launches": 0
+        }
+      }
+    },
+    "A09.qwen_failure": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "provider_error",
+              "message": "controlled qwen failure"
+            }
+          },
+          "native": {
+            "agent": "qwen",
+            "argv": [
+              "--output-format",
+              "stream-json"
+            ],
+            "stdin": "QA_A09.qwen_failure",
+            "prompt": "QA_A09.qwen_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "provider_error",
+              "message": "controlled qwen failure"
+            }
+          },
+          "native": {
+            "agent": "qwen",
+            "argv": [
+              "--output-format",
+              "stream-json"
+            ],
+            "stdin": "QA_A09.qwen_failure",
+            "prompt": "QA_A09.qwen_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A09.amp_failure": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "provider_error",
+              "message": "controlled amp failure"
+            }
+          },
+          "native": {
+            "agent": "amp",
+            "argv": [
+              "--execute",
+              "--stream-json"
+            ],
+            "stdin": "QA_A09.amp_failure",
+            "prompt": "QA_A09.amp_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "provider_error",
+              "message": "controlled amp failure"
+            }
+          },
+          "native": {
+            "agent": "amp",
+            "argv": [
+              "--execute",
+              "--stream-json"
+            ],
+            "stdin": "QA_A09.amp_failure",
+            "prompt": "QA_A09.amp_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A09.droid_failure": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "provider_error",
+              "message": "Droid reported a failed result."
+            }
+          },
+          "native": {
+            "agent": "droid",
+            "argv": [
+              "exec",
+              "--output-format",
+              "json"
+            ],
+            "stdin": "QA_A09.droid_failure",
+            "prompt": "QA_A09.droid_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "provider_error",
+              "message": "Droid reported a failed result."
+            }
+          },
+          "native": {
+            "agent": "droid",
+            "argv": [
+              "exec",
+              "--output-format",
+              "json"
+            ],
+            "stdin": "QA_A09.droid_failure",
+            "prompt": "QA_A09.droid_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A09.vibe_projection": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "vibe",
+            "argv": [
+              "--prompt",
+              "--output",
+              "json"
+            ],
+            "stdin": "QA_A09.vibe_projection",
+            "prompt": "QA_A09.vibe_projection",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "vibe",
+            "argv": [
+              "--prompt",
+              "--output",
+              "json"
+            ],
+            "stdin": "QA_A09.vibe_projection",
+            "prompt": "QA_A09.vibe_projection",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A10.recovery": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "qwen",
+            "argv": [
+              "--output-format",
+              "stream-json"
+            ],
+            "stdin": "QA_A10.recovery",
+            "prompt": "QA_A10.recovery",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "qwen",
+            "argv": [
+              "--output-format",
+              "stream-json"
+            ],
+            "stdin": "QA_A10.recovery",
+            "prompt": "QA_A10.recovery",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A11.paused": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "provider_error",
+              "message": "Reasonix run ended with recovery_paused."
+            }
+          },
+          "native": {
+            "agent": "reasonix",
+            "argv": [
+              "run",
+              "--output-format",
+              "json"
+            ],
+            "stdin": "QA_A11.paused",
+            "prompt": "QA_A11.paused",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "provider_error",
+              "message": "Reasonix run ended with recovery_paused."
+            }
+          },
+          "native": {
+            "agent": "reasonix",
+            "argv": [
+              "run",
+              "--output-format",
+              "json"
+            ],
+            "stdin": "QA_A11.paused",
+            "prompt": "QA_A11.paused",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A11.aliases": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "reasonix",
+            "argv": [
+              "run",
+              "--output-format",
+              "json"
+            ],
+            "stdin": "QA_A11.aliases",
+            "prompt": "QA_A11.aliases",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "reasonix",
+            "argv": [
+              "run",
+              "--output-format",
+              "json"
+            ],
+            "stdin": "QA_A11.aliases",
+            "prompt": "QA_A11.aliases",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A12.recovery": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "openhands",
+            "argv": [
+              "--headless",
+              "--json",
+              "--task=QA_A12.recovery"
+            ],
+            "stdin": "",
+            "prompt": "QA_A12.recovery",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "openhands",
+            "argv": [
+              "--headless",
+              "--json",
+              "--task=QA_A12.recovery"
+            ],
+            "stdin": "",
+            "prompt": "QA_A12.recovery",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A12.conversation_error": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "provider_error",
+              "message": "setup failed"
+            }
+          },
+          "native": {
+            "agent": "openhands",
+            "argv": [
+              "--headless",
+              "--json",
+              "--task=QA_A12.conversation_error"
+            ],
+            "stdin": "",
+            "prompt": "QA_A12.conversation_error",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "provider_error",
+              "message": "setup failed"
+            }
+          },
+          "native": {
+            "agent": "openhands",
+            "argv": [
+              "--headless",
+              "--json",
+              "--task=QA_A12.conversation_error"
+            ],
+            "stdin": "",
+            "prompt": "QA_A12.conversation_error",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A12.missing_terminal": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "protocol_error",
+              "message": "OpenHands stream ended without a terminal assistant event."
+            }
+          },
+          "native": {
+            "agent": "openhands",
+            "argv": [
+              "--headless",
+              "--json",
+              "--task=QA_A12.missing_terminal"
+            ],
+            "stdin": "",
+            "prompt": "QA_A12.missing_terminal",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "protocol_error",
+              "message": "OpenHands stream ended without a terminal assistant event."
+            }
+          },
+          "native": {
+            "agent": "openhands",
+            "argv": [
+              "--headless",
+              "--json",
+              "--task=QA_A12.missing_terminal"
+            ],
+            "stdin": "",
+            "prompt": "QA_A12.missing_terminal",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A13.kimi_empty": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "kimi",
+            "argv": [
+              "--print",
+              "--input-format",
+              "text",
+              "--output-format",
+              "stream-json",
+              "--final-message-only"
+            ],
+            "stdin": "QA_A13.kimi_empty",
+            "prompt": "QA_A13.kimi_empty",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "kimi",
+            "argv": [
+              "--print",
+              "--input-format",
+              "text",
+              "--output-format",
+              "stream-json",
+              "--final-message-only"
+            ],
+            "stdin": "QA_A13.kimi_empty",
+            "prompt": "QA_A13.kimi_empty",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A13.warp_empty": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "warp",
+            "argv": [
+              "agent",
+              "run",
+              "--output-format",
+              "ndjson",
+              "--prompt=QA_A13.warp_empty"
+            ],
+            "stdin": "",
+            "prompt": "QA_A13.warp_empty",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "warp",
+            "argv": [
+              "agent",
+              "run",
+              "--output-format",
+              "ndjson",
+              "--prompt=QA_A13.warp_empty"
+            ],
+            "stdin": "",
+            "prompt": "QA_A13.warp_empty",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A13.kimi_native_failure": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "Kimi exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "kimi",
+            "argv": [
+              "--print",
+              "--input-format",
+              "text",
+              "--output-format",
+              "stream-json",
+              "--final-message-only"
+            ],
+            "stdin": "QA_A13.kimi_native_failure",
+            "prompt": "QA_A13.kimi_native_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "Kimi exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "kimi",
+            "argv": [
+              "--print",
+              "--input-format",
+              "text",
+              "--output-format",
+              "stream-json",
+              "--final-message-only"
+            ],
+            "stdin": "QA_A13.kimi_native_failure",
+            "prompt": "QA_A13.kimi_native_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A13.warp_native_failure": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "Warp exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "warp",
+            "argv": [
+              "agent",
+              "run",
+              "--output-format",
+              "ndjson",
+              "--prompt=QA_A13.warp_native_failure"
+            ],
+            "stdin": "",
+            "prompt": "QA_A13.warp_native_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "Warp exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "warp",
+            "argv": [
+              "agent",
+              "run",
+              "--output-format",
+              "ndjson",
+              "--prompt=QA_A13.warp_native_failure"
+            ],
+            "stdin": "",
+            "prompt": "QA_A13.warp_native_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A14.numeric_width": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "protocol_error",
+              "message": "Invalid Droid JSON document."
+            }
+          },
+          "native": {
+            "agent": "droid",
+            "argv": [
+              "exec",
+              "--output-format",
+              "json"
+            ],
+            "stdin": "QA_A14.numeric_width",
+            "prompt": "QA_A14.numeric_width",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "protocol_error",
+              "message": "Invalid Droid JSON document."
+            }
+          },
+          "native": {
+            "agent": "droid",
+            "argv": [
+              "exec",
+              "--output-format",
+              "json"
+            ],
+            "stdin": "QA_A14.numeric_width",
+            "prompt": "QA_A14.numeric_width",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A14.nesting": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "protocol_error",
+              "message": "Invalid Reasonix JSON document."
+            }
+          },
+          "native": {
+            "agent": "reasonix",
+            "argv": [
+              "run",
+              "--output-format",
+              "json"
+            ],
+            "stdin": "QA_A14.nesting",
+            "prompt": "QA_A14.nesting",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "protocol_error",
+              "message": "Invalid Reasonix JSON document."
+            }
+          },
+          "native": {
+            "agent": "reasonix",
+            "argv": [
+              "run",
+              "--output-format",
+              "json"
+            ],
+            "stdin": "QA_A14.nesting",
+            "prompt": "QA_A14.nesting",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A14.unicode": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "output_encoding",
+              "message": "Agent output contains invalid Unicode text."
+            }
+          },
+          "native": {
+            "agent": "vibe",
+            "argv": [
+              "--prompt",
+              "--output",
+              "json"
+            ],
+            "stdin": "QA_A14.unicode",
+            "prompt": "QA_A14.unicode",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 1,
+            "status": "error",
+            "native_exit_code": 0,
+            "error": {
+              "code": "output_encoding",
+              "message": "Agent output contains invalid Unicode text."
+            }
+          },
+          "native": {
+            "agent": "vibe",
+            "argv": [
+              "--prompt",
+              "--output",
+              "json"
+            ],
+            "stdin": "QA_A14.unicode",
+            "prompt": "QA_A14.unicode",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A15.iflow_success": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "iflow",
+            "argv": [
+              "--prompt=QA_A15.iflow_success"
+            ],
+            "stdin": "",
+            "prompt": "QA_A15.iflow_success",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "iflow",
+            "argv": [
+              "--prompt=QA_A15.iflow_success"
+            ],
+            "stdin": "",
+            "prompt": "QA_A15.iflow_success",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A15.iflow_failure": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "iFlow exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "iflow",
+            "argv": [
+              "--prompt=QA_A15.iflow_failure"
+            ],
+            "stdin": "",
+            "prompt": "QA_A15.iflow_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "iFlow exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "iflow",
+            "argv": [
+              "--prompt=QA_A15.iflow_failure"
+            ],
+            "stdin": "",
+            "prompt": "QA_A15.iflow_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A15.crush_success": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "crush",
+            "argv": [
+              "run",
+              "--quiet"
+            ],
+            "stdin": "QA_A15.crush_success",
+            "prompt": "QA_A15.crush_success\n\n",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "crush",
+            "argv": [
+              "run",
+              "--quiet"
+            ],
+            "stdin": "QA_A15.crush_success",
+            "prompt": "QA_A15.crush_success\n\n",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A15.crush_failure": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "Crush exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "crush",
+            "argv": [
+              "run",
+              "--quiet"
+            ],
+            "stdin": "QA_A15.crush_failure",
+            "prompt": "QA_A15.crush_failure\n\n",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "Crush exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "crush",
+            "argv": [
+              "run",
+              "--quiet"
+            ],
+            "stdin": "QA_A15.crush_failure",
+            "prompt": "QA_A15.crush_failure\n\n",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A15.devin_success": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "devin",
+            "argv": [
+              "-p",
+              "--",
+              "QA_A15.devin_success"
+            ],
+            "stdin": "",
+            "prompt": "QA_A15.devin_success",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "devin",
+            "argv": [
+              "-p",
+              "--",
+              "QA_A15.devin_success"
+            ],
+            "stdin": "",
+            "prompt": "QA_A15.devin_success",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A15.devin_failure": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "Devin exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "devin",
+            "argv": [
+              "-p",
+              "--",
+              "QA_A15.devin_failure"
+            ],
+            "stdin": "",
+            "prompt": "QA_A15.devin_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "Devin exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "devin",
+            "argv": [
+              "-p",
+              "--",
+              "QA_A15.devin_failure"
+            ],
+            "stdin": "",
+            "prompt": "QA_A15.devin_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A15.cortex_success": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "cortex",
+            "argv": [
+              "exec",
+              "--file",
+              "-"
+            ],
+            "stdin": "QA_A15.cortex_success",
+            "prompt": "QA_A15.cortex_success",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 0,
+            "status": "success",
+            "native_exit_code": 0,
+            "error": null
+          },
+          "native": {
+            "agent": "cortex",
+            "argv": [
+              "exec",
+              "--file",
+              "-"
+            ],
+            "stdin": "QA_A15.cortex_success",
+            "prompt": "QA_A15.cortex_success",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    },
+    "A15.cortex_failure": {
+      "status": "Pass",
+      "artifacts": {
+        "wheel": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "Cortex Code exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "cortex",
+            "argv": [
+              "exec",
+              "--file",
+              "-"
+            ],
+            "stdin": "QA_A15.cortex_failure",
+            "prompt": "QA_A15.cortex_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        },
+        "sdist": {
+          "status": "Pass",
+          "result": {
+            "returncode": 17,
+            "status": "error",
+            "native_exit_code": 17,
+            "error": {
+              "code": "native_exit",
+              "message": "Cortex Code exited with status 17."
+            }
+          },
+          "native": {
+            "agent": "cortex",
+            "argv": [
+              "exec",
+              "--file",
+              "-"
+            ],
+            "stdin": "QA_A15.cortex_failure",
+            "prompt": "QA_A15.cortex_failure",
+            "cwd": "$REPO/.cache/prat-a-tier-qa._o3mgaks/run/consumer"
+          }
+        }
+      }
+    }
+  },
+  "coordinator_verification": {
+    "completed_at": "2026-09-11T03:04:38.671699+02:00",
+    "full_original_result_sha256": "63eade4ec9df674bdef02583ecb8eece7477af466796ccd195f2f49bf4f0826b",
+    "just_check": {
+      "exit": 0,
+      "tests": 1397,
+      "seconds": 69.58
+    },
+    "just_coverage": {
+      "exit": 0,
+      "tests": 1381,
+      "seconds": 67.93,
+      "totals": {
+        "covered_lines": 3450,
+        "num_statements": 3666,
+        "percent_covered": 92.7735163504239,
+        "percent_covered_display": "93",
+        "missing_lines": 216,
+        "excluded_lines": 5,
+        "percent_statements_covered": 94.10801963993454,
+        "percent_statements_covered_display": "94",
+        "num_branches": 1288,
+        "num_partial_branches": 116,
+        "covered_branches": 1146,
+        "missing_branches": 142,
+        "percent_branches_covered": 88.9751552795031,
+        "percent_branches_covered_display": "89"
+      }
+    },
+    "just_docs_build": {
+      "exit": 0
+    },
+    "just_build": {
+      "exit": 0
+    },
+    "offline_artifact_procedure_exit": 0,
+    "qa_scripts_match_sdist": true,
+    "released_locks": 8,
+    "remaining_owner_records": 0,
+    "native_agent_executions": 0
+  }
+}

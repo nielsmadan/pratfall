@@ -69,6 +69,55 @@ AGENTS = (
         ),
     ),
     AgentSpec("opencode", "OpenCode", ("oc",), ("opencode",), Capabilities(effort=True)),
+    AgentSpec("openhands", "OpenHands", ("oh",), ("openhands",), Capabilities(model=False)),
+    AgentSpec("warp", "Warp", ("wp",), ("oz",)),
+    AgentSpec("iflow", "iFlow", ("if",), ("iflow",)),
+    AgentSpec(
+        "qwen", "Qwen Code", ("qw",), ("qwen",), Capabilities(budgets=frozenset({"max_turns"}))
+    ),
+    AgentSpec("amp", "Amp", (), ("amp",), Capabilities(model=False), version_args=("version",)),
+    AgentSpec("reasonix", "Reasonix", ("rx",), ("reasonix",), Capabilities(effort=True)),
+    AgentSpec(
+        "droid",
+        "Droid",
+        ("dr",),
+        ("droid",),
+        Capabilities(
+            effort=True,
+            effort_values=(
+                "none",
+                "dynamic",
+                "off",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+            ),
+        ),
+    ),
+    AgentSpec("kimi", "Kimi", ("km",), ("kimi",)),
+    AgentSpec(
+        "vibe",
+        "Mistral Vibe",
+        ("mv",),
+        ("vibe",),
+        Capabilities(model=False, budgets=frozenset({"max_turns", "max_budget_usd"})),
+    ),
+    AgentSpec("crush", "Crush", ("cr",), ("crush",)),
+    AgentSpec("devin", "Devin", ("dv",), ("devin",)),
+    AgentSpec(
+        "cortex",
+        "Cortex Code",
+        ("co",),
+        ("cortex",),
+        Capabilities(
+            effort=True,
+            effort_values=("minimal", "low", "medium", "high", "max"),
+            budgets=frozenset({"max_turns"}),
+        ),
+    ),
 )
 BY_NAME = MappingProxyType({agent.name: agent for agent in AGENTS})
 BY_SELECTOR = MappingProxyType(

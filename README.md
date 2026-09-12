@@ -1,8 +1,22 @@
 # Pratfall
 
 Pratfall provides the `prat` command for one-shot coding-agent invocations through named profiles.
-Claude Code, Codex, Gemini, Antigravity, Copilot, Kiro, Cursor, OpenClaw, Hermes, and OpenCode
-execution are available.
+Claude Code, Codex, Gemini, Antigravity, Copilot, Kiro, Cursor, OpenClaw, Hermes, OpenCode,
+OpenHands, Warp (Oz), iFlow, Qwen Code, Amp, Reasonix, Droid, Kimi CLI, Mistral Vibe, Crush,
+Devin, and Cortex Code (CoCo) execution are available.
+
+OpenHands requires existing native setup and its headless mode automatically approves actions.
+iFlow 0.5.19 also defaults to automatic approval for noninteractive prompts unless native settings
+or explicit modes override it. Warp uses the legacy `oz` command, documented through September
+2026; iFlow requires existing custom-API configuration after its hosted service retirement. See
+[agents and limitations](docs/user/agents.md) for supported controls and lifecycle details.
+Kimi CLI 1.50.0 print mode automatically approves tools; Droid exec defaults to read-only. Vibe
+inherits its native agent (default accepts edits) and denies headless approval callbacks. Vibe
+model/effort overrides are unsupported; choose its model through existing native settings or a
+trusted command prefix. Prat does not substitute the successor kimi-code for kimi-cli.
+Crush local run automatically approves actions; `CRUSH_CLIENT_SERVER` can select a server backend
+with a separate lifetime. Devin print requires an already trusted workspace. Cortex exec requires
+existing Snowflake account/connection/authentication, disables plan mode and rejects interactive asks.
 
 Requires Python 3.13 or newer. Development uses [uv](https://docs.astral.sh/uv/) and
 [just](https://github.com/casey/just):
@@ -56,10 +70,12 @@ Relative prompt-file paths resolve from the directory where `prat` was invoked, 
 `--cwd`. Missing, unreadable, invalid, oversized, and unavailable standard input exits 2 without
 launching an agent.
 
-Prat sends Claude, Codex, Antigravity, and OpenCode prompts through native stdin protocols.
-OpenClaw and Hermes use native stdin file options. Gemini and Copilot use a documented prompt
-option, while Cursor and Kiro use positional prompts after an end-of-options marker. These four
-argv transports are subject to the operating system's argv-size limit, which can be lower than
+Prat sends Claude, Codex, Antigravity, OpenCode, Qwen, Amp, Reasonix, Droid, Kimi, Vibe and Crush prompts
+through native stdin protocols. Reasonix, Kimi and Vibe trim surrounding whitespace natively.
+Crush receives the original input and adds two trailing newline characters natively.
+OpenClaw, Hermes and Cortex use native stdin file options. Gemini, Copilot, OpenHands, Warp and iFlow use
+native prompt options, while Cursor, Kiro and Devin use positional prompts after an end-of-options marker.
+These argv transports are subject to the operating system's argv-size limit, which can be lower than
 Prat's 1 MiB input limit. Prompts are never passed through a shell or the inherited terminal.
 
 Use `--cwd PATH` to select the agent working directory. Relative config and working-directory
@@ -71,8 +87,8 @@ directory. A later manual rerun starts a fresh invocation; Pratfall does not aut
 roll back edits.
 
 `--dry-run` validates the complete invocation and shows its argv without launching the agent.
-Prompts carried through stdin appear only as a byte count. Gemini, Copilot, Cursor, and Kiro carry
-the prompt in argv, so their previews include it:
+Prompts carried through stdin appear only as a byte count. Gemini, Copilot, Cursor, Kiro, OpenHands,
+Warp, iFlow and Devin carry the prompt in argv, so their previews include it:
 
 ```sh
 uv run prat simple "review this change" --dry-run
@@ -89,8 +105,10 @@ uv run prat cx "inspect only" -- --sandbox read-only --ephemeral
 uv run prat cc "make the requested edit" -- --permission-mode acceptEdits
 ```
 
-Standard output contains only the final assistant answer. Launch/completion progress and native
-diagnostics go to standard error. `--json` emits exactly one normalized result object for a run,
+Standard output contains normalized final text. Structured adapters select assistant text;
+text adapters capture complete native stdout, which can include banners or progress.
+Launch/completion progress and native stderr diagnostics go to standard error.
+`--json` emits exactly one normalized result object for a run,
 including validation and runtime failures:
 
 ```json
@@ -128,7 +146,8 @@ exits `128 + signal`; native nonzero codes are otherwise preserved. Provider, pr
 and I/O failures exit 1. A dry-run JSON object instead has `dry_run: true`, resolved identity,
 `argv`, `cwd`, `timeout`, and `stdin_bytes`; it does not claim a run status or usage.
 
-Codex, Copilot, Antigravity, and OpenCode JSONL is decoded incrementally. Each physical event and
+Codex, Copilot, Antigravity, OpenCode, Warp, Qwen, Amp and Kimi JSONL is decoded incrementally. OpenHands uses a
+separate incremental decoder for SDK events mixed with native status and summary text. Each physical event and
 the retained answer/protocol state are limited to 8 MiB, with at most 16,384 retained logical
 records. Discarded events have no cumulative trace limit. Whole-document JSON and text adapters
 retain the 8 MiB complete stdout limit; native stderr is limited to 2 MiB. Limit failures are
@@ -136,7 +155,8 @@ explicit and trigger process-group cleanup.
 
 `agents` lists canonical names, aliases, and supported settings. `doctor` reports which executable
 prefixes are available on PATH without launching them. `doctor --versions` additionally executes
-each available configured argv prefix followed by `--version`, one at a time, with empty stdin, a
+each available configured argv prefix followed by its version arguments (`version` for Amp,
+`--version` for other agents), one at a time, with empty stdin, a
 three-second deadline, and 64 KiB limits on each output stream. Configured wrappers are trusted and
 may have side effects. Version failures remain per-agent diagnostics and do not make doctor fail;
 an interruption stops later probes and exits with `128 + signal`. Neither form checks credentials.
@@ -178,16 +198,19 @@ Profile names use letters, digits, underscores, or hyphens, starting with a lett
 Built-in names, aliases, and management commands are reserved. Each profile requires an agent;
 there is no profile inheritance. Agent settings accept canonical names and a `command` array
 only. Profiles accept canonical agent names or aliases.
+When upgrading, [rename profiles that collide with newly reserved selectors](docs/user/profiles.md).
 
 Options are `model`, `effort`, `fast`, `timeout` (seconds), `native_args` (an argv array), and supported
-native budgets: Claude `max_budget_usd` and `max_turns`, Copilot `max_ai_credits`, and Hermes
-`max_turns`.
+native budgets: Claude and Vibe `max_budget_usd` and `max_turns`, Copilot `max_ai_credits`, and
+Hermes/Qwen/Cortex `max_turns`. Qwen forwards its native session-turn limit.
 Limits must be positive and finite; `max_turns` must be an integer. Unsupported options and
 unknown fields fail validation. Model IDs are passed through for agents that support model
 selection. Gemini and Cursor effort overrides are unsupported. Kiro
 accepts effort `low|medium|high|xhigh|max`; Hermes accepts
 `none|minimal|low|medium|high|xhigh|max|ultra`. Native effort enums are validated where known;
-other supported effort strings are left to the native CLI. Native permission defaults are
+Droid accepts the provider-specific union `none|dynamic|off|minimal|low|medium|high|xhigh|max`.
+Cortex accepts `minimal|low|medium|high|max`.
+Other supported effort strings are left to the native CLI. Native permission defaults are
 preserved unless explicitly overridden.
 
 Fast mode is verified only for Claude and Codex. Claude receives an invocation-only inline
@@ -204,7 +227,10 @@ native agent-turn limit. Prat passes both through without treating either as a t
 documentation does not specify exact overshoot behavior, so `max_budget_usd` should not be treated
 as a stronger spend guarantee than the native CLI provides. Codex has no verified invocation-wide
 token or spend cap, so Prat rejects budget fields for Codex. Copilot's `max_ai_credits` is a soft
-per-response native limit, and Prat does not reinterpret it as a hard run-wide cap.
+per-response native limit, and Prat does not reinterpret it as a hard run-wide cap. Vibe maps
+`max_budget_usd` to `--max-price` in dollars and interrupts when native usage exceeds the limit;
+its native `--max-tokens` counts cumulative prompt/completion tokens and is available only after
+`--`. Prat forwards these native limits without strengthening their guarantees.
 
 Native usage is nullable. Gemini sums each model's reported token snapshot and maps fresh input,
 cache reads, candidates, and thoughts without adding the duplicated per-role views. Antigravity
@@ -215,10 +241,27 @@ output token counts. Copilot 1.0.83 exposes AI-credit and duration metrics but n
 CLI JSON, while Cursor, Kiro text mode, and Hermes quiet mode do not provide token usage, so those
 adapters report `usage: null` rather than inferred values.
 
+Qwen and Amp use the last native result's usage without summing assistant-message snapshots.
+Reasonix maps input/output and cache-read counts; its cache-creation field means cache misses,
+so cache-write counts stay null. Reasonix's cost USD alias can carry another currency, so it
+also stays null. Qwen and Amp expose no verified USD total. Reasonix model selection names a
+configured provider, and its supported effort values depend on that provider. Amp has no generic
+model, effort or budget override; its native mode is not a model identifier. Amp's native default
+approves tools unless existing settings enable permissions. Reasonix paused recovery is reported
+as incomplete even when its native exit code is zero.
+
+Crush (`cr`), Devin (`dv`) and Cortex (`co`) return bounded complete native stdout with terminal
+CR/LF removed. Text can include banners/progress; native exit status determines success, including
+empty successful output. Prat does not infer errors or accounting from prose. All three support
+model selection; Cortex also supports effort and native turn limits. Optional native arguments
+are Crush `--verbose`/`-v` and `--debug`/`-d`, Devin `--permission-mode`, and Cortex
+`--connection`/`-c` for an existing Snowflake connection. No approval or trust bypass is injected.
+
 The requested `model` remains separate from `reported_models`, which contains distinct native
 model identifiers in observed order when the supported protocol exposes them. Claude reports the
-keys of `modelUsage`, Gemini the keys of `stats.models`, Copilot root completed-message models, and
-OpenClaw its provider/model identity. Other adapters report null. `cost_usd` is the native USD cost
+keys of `modelUsage`, Gemini the keys of `stats.models`, Copilot root completed-message models,
+OpenClaw its provider/model identity, and Qwen root assistant-message models. Other adapters report
+null. `cost_usd` is the native USD cost
 from Claude or OpenClaw, or the sum of OpenCode's latest snapshot for each step ID. Missing native
 data stays null, including an OpenCode run where any latest step cost is unknown. Zero is preserved.
 Pratfall does not calculate prices, convert Copilot credits, or promise that native cost equals a

@@ -1,0 +1,55 @@
+$ uv venv --offline --no-python-downloads --python 3.13 $REPO/.cache/prat-a-tier-qa._o3mgaks/build-env
+Using CPython 3.13.6
+Creating virtual environment at: .cache/prat-a-tier-qa._o3mgaks/build-env
+Activate with: source .cache/prat-a-tier-qa._o3mgaks/build-env/bin/activate
+$ uv pip install --offline --no-python-downloads --python $REPO/.cache/prat-a-tier-qa._o3mgaks/build-env/bin/python hatchling==1.32.0
+Using Python 3.13.6 environment at: .cache/prat-a-tier-qa._o3mgaks/build-env
+Resolved 6 packages in 9ms
+Installed 6 packages in 10ms
+ + hatchling==1.32.0
+ + packaging==26.3
+ + pathspec==1.1.1
+ + pluggy==1.6.0
+ + tomlkit==0.15.1
+ + trove-classifiers==2026.6.1.19
+$ uv build --offline --no-python-downloads --no-build-isolation --python $REPO/.cache/prat-a-tier-qa._o3mgaks/build-env/bin/python --sdist --out-dir $REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts
+Building source distribution...
+Successfully built .cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0.tar.gz
+$ uv build --offline --no-python-downloads --no-build-isolation --python $REPO/.cache/prat-a-tier-qa._o3mgaks/build-env/bin/python --wheel $REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0.tar.gz --out-dir $REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts
+Building wheel from source distribution...
+Successfully built .cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0-py3-none-any.whl
+$ uv venv --offline --no-python-downloads --python 3.13 $REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel
+Using CPython 3.13.6
+Creating virtual environment at: .cache/prat-a-tier-qa._o3mgaks/env-wheel
+Activate with: source .cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/activate
+$ uv pip install --offline --no-python-downloads --no-deps --python $REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/python $REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0-py3-none-any.whl
+Using Python 3.13.6 environment at: .cache/prat-a-tier-qa._o3mgaks/env-wheel
+Resolved 1 package in 2ms
+Prepared 1 package in 8ms
+Installed 1 package in 2ms
+ + pratfall==0.1.0 (from file://$REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0-py3-none-any.whl)
+$ uv venv --offline --no-python-downloads --python 3.13 $REPO/.cache/prat-a-tier-qa._o3mgaks/env-sdist
+Using CPython 3.13.6
+Creating virtual environment at: .cache/prat-a-tier-qa._o3mgaks/env-sdist
+Activate with: source .cache/prat-a-tier-qa._o3mgaks/env-sdist/bin/activate
+$ uv pip install --offline --no-python-downloads --python $REPO/.cache/prat-a-tier-qa._o3mgaks/env-sdist/bin/python hatchling==1.32.0
+Using Python 3.13.6 environment at: .cache/prat-a-tier-qa._o3mgaks/env-sdist
+Resolved 6 packages in 1ms
+Installed 6 packages in 6ms
+ + hatchling==1.32.0
+ + packaging==26.3
+ + pathspec==1.1.1
+ + pluggy==1.6.0
+ + tomlkit==0.15.1
+ + trove-classifiers==2026.6.1.19
+$ uv pip install --offline --no-python-downloads --no-build-isolation --no-deps --python $REPO/.cache/prat-a-tier-qa._o3mgaks/env-sdist/bin/python $REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0.tar.gz
+Using Python 3.13.6 environment at: .cache/prat-a-tier-qa._o3mgaks/env-sdist
+Resolved 1 package in 27ms
+   Building pratfall @ file://$REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0.tar.gz
+      Built pratfall @ file://$REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0.tar.gz
+Prepared 1 package in 199ms
+Installed 1 package in 2ms
+ + pratfall==0.1.0 (from file://$REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0.tar.gz)
+$ uv run --offline --no-python-downloads --frozen --no-sync python scripts/qa_installed.py --prat $REPO/.cache/prat-a-tier-qa._o3mgaks/env-wheel/bin/prat --sdist-prat $REPO/.cache/prat-a-tier-qa._o3mgaks/env-sdist/bin/prat --wheel $REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0-py3-none-any.whl --sdist $REPO/.cache/prat-a-tier-qa._o3mgaks/artifacts/pratfall-0.1.0.tar.gz --expected-version 0.1.0 --base-revision 98a615b59ed656a8f9dca1934341763b3b7e3832 --work-dir $REPO/.cache/prat-a-tier-qa._o3mgaks/run --output $REPO/.cache/prat-a-tier-qa._o3mgaks/results.json
+COMPLETED 62 passed, 2 not run; evidence: $REPO/.cache/prat-a-tier-qa._o3mgaks/results.json
+{"qa_root": "$REPO/.cache/prat-a-tier-qa._o3mgaks", "results": "$REPO/.cache/prat-a-tier-qa._o3mgaks/results.json"}

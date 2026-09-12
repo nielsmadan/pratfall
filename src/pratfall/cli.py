@@ -101,7 +101,7 @@ run options:
   --effort EFFORT         Override the native effort setting.
   --fast / --no-fast      Enable or disable supported native fast mode for this run.
   --timeout SECONDS       Set the wall-clock deadline.
-  --max-budget-usd USD    Set Claude's native API-call budget.
+  --max-budget-usd USD    Set a supported native USD budget.
   --max-turns COUNT       Set a supported native turn limit.
   --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
   --cwd PATH              Set the agent working directory.
@@ -135,7 +135,8 @@ examples:
                 "--versions",
                 action="store_true",
                 help=(
-                    "Execute each available configured command prefix with --version; "
+                    "Execute each available configured command prefix with its native version "
+                    "arguments (version for Amp, --version for other agents); "
                     "configured wrappers may have side effects."
                 ),
             )

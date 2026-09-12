@@ -1,0 +1,55 @@
+$ uv venv --offline --no-python-downloads --python 3.13 $REPO/.cache/prat-a-tier-qa.dw7q3mtb/build-env
+Using CPython 3.13.6
+Creating virtual environment at: .cache/prat-a-tier-qa.dw7q3mtb/build-env
+Activate with: source .cache/prat-a-tier-qa.dw7q3mtb/build-env/bin/activate
+$ uv pip install --offline --no-python-downloads --python $REPO/.cache/prat-a-tier-qa.dw7q3mtb/build-env/bin/python hatchling==1.32.0
+Using Python 3.13.6 environment at: .cache/prat-a-tier-qa.dw7q3mtb/build-env
+Resolved 6 packages in 12ms
+Installed 6 packages in 9ms
+ + hatchling==1.32.0
+ + packaging==26.3
+ + pathspec==1.1.1
+ + pluggy==1.6.0
+ + tomlkit==0.15.1
+ + trove-classifiers==2026.6.1.19
+$ uv build --offline --no-python-downloads --no-build-isolation --python $REPO/.cache/prat-a-tier-qa.dw7q3mtb/build-env/bin/python --sdist --out-dir $REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts
+Building source distribution...
+Successfully built .cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0.tar.gz
+$ uv build --offline --no-python-downloads --no-build-isolation --python $REPO/.cache/prat-a-tier-qa.dw7q3mtb/build-env/bin/python --wheel $REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0.tar.gz --out-dir $REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts
+Building wheel from source distribution...
+Successfully built .cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0-py3-none-any.whl
+$ uv venv --offline --no-python-downloads --python 3.13 $REPO/.cache/prat-a-tier-qa.dw7q3mtb/env-wheel
+Using CPython 3.13.6
+Creating virtual environment at: .cache/prat-a-tier-qa.dw7q3mtb/env-wheel
+Activate with: source .cache/prat-a-tier-qa.dw7q3mtb/env-wheel/bin/activate
+$ uv pip install --offline --no-python-downloads --no-deps --python $REPO/.cache/prat-a-tier-qa.dw7q3mtb/env-wheel/bin/python $REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0-py3-none-any.whl
+Using Python 3.13.6 environment at: .cache/prat-a-tier-qa.dw7q3mtb/env-wheel
+Resolved 1 package in 2ms
+Prepared 1 package in 8ms
+Installed 1 package in 3ms
+ + pratfall==0.1.0 (from file://$REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0-py3-none-any.whl)
+$ uv venv --offline --no-python-downloads --python 3.13 $REPO/.cache/prat-a-tier-qa.dw7q3mtb/env-sdist
+Using CPython 3.13.6
+Creating virtual environment at: .cache/prat-a-tier-qa.dw7q3mtb/env-sdist
+Activate with: source .cache/prat-a-tier-qa.dw7q3mtb/env-sdist/bin/activate
+$ uv pip install --offline --no-python-downloads --python $REPO/.cache/prat-a-tier-qa.dw7q3mtb/env-sdist/bin/python hatchling==1.32.0
+Using Python 3.13.6 environment at: .cache/prat-a-tier-qa.dw7q3mtb/env-sdist
+Resolved 6 packages in 1ms
+Installed 6 packages in 6ms
+ + hatchling==1.32.0
+ + packaging==26.3
+ + pathspec==1.1.1
+ + pluggy==1.6.0
+ + tomlkit==0.15.1
+ + trove-classifiers==2026.6.1.19
+$ uv pip install --offline --no-python-downloads --no-build-isolation --no-deps --python $REPO/.cache/prat-a-tier-qa.dw7q3mtb/env-sdist/bin/python $REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0.tar.gz
+Using Python 3.13.6 environment at: .cache/prat-a-tier-qa.dw7q3mtb/env-sdist
+Resolved 1 package in 23ms
+   Building pratfall @ file://$REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0.tar.gz
+      Built pratfall @ file://$REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0.tar.gz
+Prepared 1 package in 207ms
+Installed 1 package in 3ms
+ + pratfall==0.1.0 (from file://$REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0.tar.gz)
+$ uv run --offline --no-python-downloads --frozen --no-sync python scripts/qa_installed.py --prat $REPO/.cache/prat-a-tier-qa.dw7q3mtb/env-wheel/bin/prat --sdist-prat $REPO/.cache/prat-a-tier-qa.dw7q3mtb/env-sdist/bin/prat --wheel $REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0-py3-none-any.whl --sdist $REPO/.cache/prat-a-tier-qa.dw7q3mtb/artifacts/pratfall-0.1.0.tar.gz --expected-version 0.1.0 --base-revision abc330ec6d1c2b93b4da2edbd098101c1d521d81 --work-dir $REPO/.cache/prat-a-tier-qa.dw7q3mtb/run --output $REPO/.cache/prat-a-tier-qa.dw7q3mtb/results.json
+COMPLETED 62 passed, 2 not run; evidence: $REPO/.cache/prat-a-tier-qa.dw7q3mtb/results.json
+{"qa_root": "$REPO/.cache/prat-a-tier-qa.dw7q3mtb", "results": "$REPO/.cache/prat-a-tier-qa.dw7q3mtb/results.json"}

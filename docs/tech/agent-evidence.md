@@ -16,7 +16,7 @@ settings apply to that session; Prat passes the same single-key object with eith
 adds no override. Native account and model restrictions still apply, and settings files are never
 changed.
 
-All ten catalog entries use a conventional `--version` diagnostic. The configured prefix is kept
+Catalog entries use `--version` except Amp, whose diagnostic is the `version` subcommand. The configured prefix is kept
 literal. Prat treats the stripped stdout, or stderr when stdout is empty, as opaque strict UTF-8 and
 does not infer authentication. A nonzero exit, empty selected output, invalid selected encoding,
 timeout, or output overflow becomes a per-agent `version_error`. The default doctor path performs
@@ -39,6 +39,18 @@ published prices, and non-USD credits are not used as substitutes.
 | OpenClaw | `openclaw agent exec --json --message-file -` | `--model provider/model` | `--thinking` | Native timeout in seconds | [Agent exec](https://docs.openclaw.ai/cli/agent) and [result projection](https://github.com/openclaw/openclaw/blob/main/src/commands/agent-exec-result.ts) |
 | Hermes | `hermes chat --oneshot --quiet --query-file -` | `--model`, `--provider` | `--reasoning none\|minimal\|low\|medium\|high\|xhigh\|max\|ultra` | `--max-turns` | [CLI docs](https://hermes-agent.nousresearch.com/docs/reference/cli-commands), [source](https://github.com/NousResearch/hermes-agent/blob/main/cli.py) |
 | OpenCode | `opencode run --format json` with stdin prompt | `--model provider/model` | `--variant` (provider-specific string) | None verified | Installed 1.18.29 help, [run emitter](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/cli/cmd/run.ts), and [session processor](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/session/processor.ts) |
+| OpenHands | `openhands --headless --json --task=PROMPT` | Unsupported | Unsupported | None verified | [CLI 1.16.0 / SDK 1.21.0](#openhands-1160-sdk-1210) |
+| Warp | `oz agent run --output-format ndjson --prompt=PROMPT` | `--model` | Unsupported | None verified | [Legacy Oz source](#warp-legacy-oz-interface) |
+| iFlow | `iflow --prompt=PROMPT` | `--model` | Unsupported | None verified | [0.5.19 package](#iflow-0519) |
+| Qwen Code | `qwen --output-format stream-json` with stdin | `--model` | Unsupported | `--max-session-turns` | [0.23.3 source](#qwen-code-0233) |
+| Amp | `amp --execute --stream-json` with stdin | Unsupported | Unsupported | None verified | [Official docs](#amp) |
+| Reasonix | `reasonix run --output-format json` with stdin | `--model` configured provider | `--effort` | Native `--max-steps`, not normalized turns | [1.38.5 source](#reasonix-1385) |
+| Droid | `droid exec --output-format json` with stdin | `--model` | `--reasoning-effort` | None verified | [0.209.0 baseline](#droid-02090-baseline) |
+| Kimi CLI | `kimi --print --input-format text --output-format stream-json --final-message-only` with stdin | `--model` | Unsupported | None verified | [1.50.0 source](#kimi-cli-1500) |
+| Mistral Vibe | `vibe --prompt --output json` with stdin | Unsupported | Unsupported | `--max-turns`, `--max-price` | [2.25.2 source](#mistral-vibe-2252) |
+| Crush | `crush run --quiet` with stdin | `--model` | Unsupported | None verified | [0.93.1 source](#crush-0931) |
+| Devin | `devin -p -- PROMPT` | `--model` | Unsupported | None verified | [3000.10.21 baseline](#devin-30001021-baseline) |
+| Cortex Code / CoCo | `cortex exec --file -` with stdin | `--model` | `--effort minimal\|low\|medium\|high\|max` | `--max-turns` | [1.1.78 baseline](#cortex-code-coco-1178-baseline) |
 
 ## Verified output contracts
 
@@ -239,3 +251,336 @@ Use `gh` to read GitHub sources. Root cached Codex source under
 `.cache/research/codex-exec-events.rs` for this checkout. `jina-fetch` caches docs and prints
 their exact paths; extract short verbatim anchors from those cached files when schema text
 matters. Never use a summarizer's reconstructed command as sole evidence for exact argv.
+
+## A-tier contracts frozen on 2026-09-11
+
+The following contracts were established by static primary-source and package inspection before
+writing their adapters and independent fake-native fixtures. No native agent, including help or
+version, was executed. Fixtures establish Prat's behavior against these contracts, not compatibility
+with every installed release. Version probes use `--version` except Amp's `version`; normal
+doctor still only locates executables. Accounting is normalized only where the individual
+contracts below establish a mapping; missing fields remain null.
+
+### OpenHands 1.16.0 / SDK 1.21.0
+
+The [CLI manifest](https://github.com/OpenHands/OpenHands-CLI/blob/1.16.0/pyproject.toml)
+pins `openhands-sdk==1.21.0`. The
+[parser](https://github.com/OpenHands/OpenHands-CLI/blob/1.16.0/openhands_cli/argparsers/main_parser.py)
+accepts argparse string `--task`; Prat sends `--headless --json --task=PROMPT`, with empty stdin.
+The equals form protects dash-leading and multiline prompt data. The
+[prompt helper](https://github.com/OpenHands/OpenHands-CLI/blob/1.16.0/openhands_cli/utils.py)
+uses the task directly; native `--file` adds context instructions and therefore cannot transport
+Prat's input file unchanged. OS argv limits can reject a prompt below Prat's input limit.
+
+The [entrypoint](https://github.com/OpenHands/OpenHands-CLI/blob/1.16.0/openhands_cli/entrypoint.py)
+and [terminal compatibility check](https://github.com/OpenHands/OpenHands-CLI/blob/1.16.0/openhands_cli/terminal_compat.py)
+print a fixed non-TTY warning and `TTY_INTERACTIVE` override hint to stdout even in headless mode.
+[Setup](https://github.com/OpenHands/OpenHands-CLI/blob/1.16.0/openhands_cli/setup.py)
+prints `Initializing agent...`, optional `✓ Hooks loaded`, and `✓ Agent initialized with model:`
+followed by the native model. Prat discards this banner and any Rich-wrapped model continuation
+lines until the next SDK record or known status line; it never uses banner text as model accounting.
+The [environment warning](https://github.com/OpenHands/OpenHands-CLI/blob/1.16.0/openhands_cli/stores/agent_store.py)
+uses stderr. The entrypoint prints goodbye, conversation ID and resume hints after the summary;
+these remain in the discarded summary section. Unexpected startup failures still fail through
+native exit or missing terminal evidence.
+
+The same helper prints `json.dumps(event.model_dump())` as individual lines. The
+[runner](https://github.com/OpenHands/OpenHands-CLI/blob/1.16.0/openhands_cli/tui/core/conversation_runner.py)
+also prints `Agent is working` and `Agent finished`. The
+[headless app](https://github.com/OpenHands/OpenHands-CLI/blob/1.16.0/openhands_cli/tui/textual_app.py)
+then prints a Rich rule headed `CONVERSATION SUMMARY`, counts, and a panel containing arbitrary
+last-message text. JSON mode does not suppress that summary. Prat accepts the verified initialization and status framing
+and discards the bounded summary section beginning with its rule, without parsing echoed panel
+text as SDK events. Other prose before the summary is a protocol error. Every physical line,
+including discarded prose, has the existing event-byte bound; retained text and diagnostics share
+StateBudget. This framing is confined to the OpenHands consumer.
+
+[SDK response dispatch](https://github.com/OpenHands/software-agent-sdk/blob/v1.21.0/openhands-sdk/openhands/sdk/agent/response_dispatch.py)
+finishes on `kind: MessageEvent`, `source: agent`, `llm_message.role: assistant`, with at least one
+nonblank text block. Prat concatenates `llm_message.content` blocks having `type: text` and string
+`text`, excluding image/reasoning data. The dispatcher's no-content handler also emits well-formed
+empty or reasoning-only agent messages before a corrective user message and continued work.
+Validated messages without nonblank text are nonterminal; a later terminal event is still required
+at EOF. Malformed assistant content remains a protocol error. Alternatively,
+[FinishAction](https://github.com/OpenHands/software-agent-sdk/blob/v1.21.0/openhands-sdk/openhands/sdk/tool/builtins/finish.py)
+is terminal: `kind: ActionEvent`, `source: agent`, `tool_name: finish`,
+`action: {kind: FinishAction, message: STRING}`. A second terminal event is a protocol error;
+first terminal text survives. Finish can itself describe inability to perform a task, so Prat
+makes no success judgment from generated prose. Native exit zero alone is insufficient.
+
+[ConversationErrorEvent](https://github.com/OpenHands/software-agent-sdk/blob/v1.21.0/openhands-sdk/openhands/sdk/event/conversation_error.py)
+has `code` and `detail` strings and indicates a conversation-level failure, even when the CLI
+catches the SDK exception and exits zero. It outranks protocol errors and retains earlier text.
+`AgentErrorEvent` is a recoverable tool observation. Other known SDK kinds (system, observation,
+state, token, streaming, condensation, hook, completion-log, pause and ACP events) carry no final
+answer here. Unknown kinds and malformed relevant fields fail closed.
+
+The only accepted native option is `--override-with-envs` (arity zero), verified in the
+[shared parser](https://github.com/OpenHands/OpenHands-CLI/blob/1.16.0/openhands_cli/argparsers/util.py).
+It selects already-configured native environment model/auth settings. There is no direct model,
+effort, fast or normalized budget flag. Prompt/file, headless/JSON, session/resume/last, config,
+confirmation and administrative selectors are reserved or rejected. Headless forces `NeverConfirm`
+and disables the critic; Prat preserves that automatic approval behavior. Existing native setup is
+required; this adapter neither performs setup nor changes native settings.
+
+### Warp legacy Oz interface
+
+The [official CLI reference](https://docs.warp.dev/reference/cli/) documents local `oz agent run`,
+model selection and legacy support through the end of September 2026. Source is pinned to
+[6f575836c02bd80a4b2de2755e952bec1793d3df](https://github.com/warpdotdev/warp/tree/6f575836c02bd80a4b2de2755e952bec1793d3df)
+(checked 2026-09-11), rather than an unverified installed binary version. The
+[Clap arguments](https://github.com/warpdotdev/warp/blob/6f575836c02bd80a4b2de2755e952bec1793d3df/crates/warp_cli/src/agent.rs)
+and [global parser](https://github.com/warpdotdev/warp/blob/6f575836c02bd80a4b2de2755e952bec1793d3df/crates/warp_cli/src/lib.rs)
+establish `agent run --output-format ndjson --prompt=PROMPT`, empty stdin, and optional
+`--model VALUE`. Prompt data remains literal argv and inherits OS argument-size limits.
+
+The [NDJSON emitter](https://github.com/warpdotdev/warp/blob/6f575836c02bd80a4b2de2755e952bec1793d3df/app/src/ai/agent_sdk/driver/output.rs)
+emits `type: agent, text: STRING` for completed agent messages. Prat joins these messages in order
+with newlines; there is no message ID or terminal-result record, so repeated text is preserved.
+Native success and EOF complete the stream, including an empty stream. `agent_reasoning` is
+separate; `tool_error` is recoverable. Known tool, todo, subagent, system and artifact records are
+excluded. Unknown types and malformed agent records are protocol errors, retaining earlier text.
+No synthetic terminal marker or inferred prose error is used.
+
+Accepted native flags are `--name`/`-n` (one value), `--strict-mcp-startup` (zero), and
+`--mcp-startup-timeout` (one value). Prompt/file/saved-prompt, output/model, cwd/config/profile,
+conversation, cloud/environment/runner/executor/harness, sharing and session lifetime controls are
+reserved or rejected. Native authentication and permission defaults remain active. There is no
+verified one-shot replacement using the newer `warp` TUI. Recheck these sources at release time;
+Prat does not remove this adapter by date or silently substitute another command.
+
+### iFlow 0.5.19
+
+The [published npm metadata](https://registry.npmjs.org/@iflow-ai/iflow-cli/0.5.19)
+identifies `bundle/entry.js`, which loads `bundle/iflow.js`. The downloaded package's SHA-1 is
+`d406e81748593c37ef464ff99cc5b495d77a76ce`; its bytes were inspected without installing or
+executing them. Its bundled CLI declares `prompt`/`p` and `model`/`m` as string options. The
+bundled parser handles `--KEY=VALUE` using a suffix match accepting newlines (`[\s\S]*`), and the
+CLI's own prompt preprocessing converts dash-leading split prompt arguments to equals form.
+This establishes exact `--prompt=PROMPT`, empty stdin and optional `--model VALUE`, including
+Unicode, leading dashes, literal shell syntax and newlines. OS argv limits still apply.
+
+Prat captures bounded native stdout, removing only terminal CR/LF. It cannot promise final-only
+text or infer provider failures from prose; native exit status decides success. Accepted native
+flags `--thinking`, `--plan`, and `--default` each take zero values. These are native modes, not a
+generic effort ladder. Prompt/interactive/continue/resume, model, output/file/stream/ACP/server,
+config/cwd and budget/timeout selectors are reserved or rejected. No normalized budgets are
+exposed in this initial adapter.
+
+Static configuration assembly resolves approval mode from native settings first, then explicit
+modes; otherwise a noninteractive prompt selects `YOLO`. Thus the pinned package's default is
+verified automatic approval, replacing the earlier uncertainty. `--default` and `--plan` can be
+chosen explicitly through native arguments; Prat adds neither an approval mode nor a bypass.
+Native startup can update its own settings; Prat does not perform or suppress that native behavior.
+The [official retirement FAQ](https://vibex.iflow.cn/t/topic/4819) dates maintenance end to
+2026-03-20 and hosted service shutdown to 2026-04-17, and confirms existing installations can
+continue with custom APIs. Existing BYOK configuration is required; Prat does not migrate it.
+
+### Qwen Code 0.23.3
+
+The pinned [headless guide](https://github.com/QwenLM/qwen-code/blob/v0.23.3/docs/users/features/headless.md)
+and [option declarations](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/config/top-level-options.ts)
+establish `qwen --output-format stream-json` with plain text stdin. Prat maps model to `--model`
+and max_turns to `--max-session-turns`; effort, fast and spend budgets are unsupported.
+Accepted native flags are `--debug`/`-d` (zero values), `--approval-mode`, `--system-prompt` and
+`--append-system-prompt` (one value each). Prompt/input/output, native model/turn/budget controls,
+config/cwd, continuation/session, ACP/serve and fallback selectors are reserved or rejected.
+The version diagnostic uses `--version`. Existing native permissions apply; unresolved interactive
+approval requests are denied in headless mode. No approval bypass is added.
+
+The [message types](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/nonInteractive/types.ts)
+and [result builder](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/nonInteractive/io/BaseJsonOutputAdapter.ts)
+define root assistant text/model fields under `message`, with `parent_tool_use_id: null`.
+Child assistant records, thinking and tools cannot replace root text or reported models. Root
+model identifiers are retained in observed order. Final result usage is authoritative: input,
+output and optional cache-read token counts are normalized without adding message snapshots.
+Cache writes and USD cost remain unknown.
+
+A success requires result subtype `success`, `is_error: false` and a result string. Failures use
+`error_during_execution` or `error_max_turns`, `is_error: true` and an error object with a message.
+The [stream emitter](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/nonInteractive/io/StreamJsonOutputAdapter.ts)
+can emit intermediate subagent error results without a parent discriminator. The
+[root run loop](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/nonInteractiveCli.ts)
+waits for background task completion before emitting its final result (lines 3077–3184), and
+emits a result on its failure path (3249–3305). The last valid result therefore governs; repeated
+results are accepted, malformed records remain errors, and assistant text alone cannot complete
+successfully. Only known system, user and stream-event records are ignored. JSONL bounds apply.
+These contracts were statically checked on 2026-09-11 before accepting fake executable fixtures.
+
+### Amp
+
+The [streaming schema](https://ampcode.com/docs/cli/streaming-json), checked 2026-09-11,
+establishes `amp --execute --stream-json` with plain stdin. Only `--stream-json-thinking` (zero
+values) is accepted as an optional native flag. Input/output, model, config/cwd, thread/resume,
+executor/orb/runner and administrative selectors are reserved or rejected. Generic model, effort,
+fast and budgets are unsupported; native mode is not a model identifier. The documented
+[version probe](https://ampcode.com/docs/cli) is `amp version`.
+
+Amp's last message is one result: success/false with a result string, or
+error_during_execution/error_max_turns/true with an error string. Matching system errors also
+fail. Duplicate results and records after a result are protocol errors. Root assistant text can
+survive failure; child text, tool, thinking and redacted-thinking blocks are excluded. Optional
+result usage maps input/output/cache-read/cache-creation counts; absent accounting stays null,
+without summing assistant snapshots. Reported models and USD cost remain unknown. JSONL bounds
+apply. Fixtures were accepted only after this schema review.
+
+[Execute mode](https://ampcode.com/docs/cli/execute-mode) inherits native authentication. The
+[current permission default](https://ampcode.com/news/neo) executes tools without prompts unless
+existing native settings enable permissions. Prat adds no bypass and performs no native setup.
+
+### Reasonix 1.38.5
+
+The pinned [run parser](https://github.com/esengine/DeepSeek-Reasonix/blob/v1.38.5/internal/cli/cli.go)
+establishes `reasonix run --output-format json` with plain stdin, which the native reader trims.
+`--model` selects a configured provider name, and `--effort` passes a session effort override
+whose accepted levels depend on that provider. Accepted native options are `--max-steps` and
+`--permission-mode` (one value each), plus `--show-thinking` (zero). Max steps counts native
+rounds and is not normalized to max_turns. Prompt/print/output/events, model/effort, config/dir,
+resume/continue/copy/takeover, serve and administrative selectors are reserved or rejected.
+Version probing uses `--version`. Default headless ask permissions fail closed; Prat does not
+add autoapproval or configure providers. Native `--permission-mode plan` requires an interactive
+session and exits 2 from `run`; explicit passthrough preserves that native failure.
+
+The [whole JSON result](https://github.com/esengine/DeepSeek-Reasonix/blob/v1.38.5/internal/cli/run_output.go)
+and [completion classification](https://github.com/esengine/DeepSeek-Reasonix/blob/v1.38.5/internal/cli/run_completion.go)
+require type result, a result string and a known subtype/is_error combination. Only success/false
+completes successfully. Incomplete_read, recovery_paused and completion_uncertain have false
+is_error but remain incomplete; recovery_paused can exit zero. Error_during_execution has true
+is_error. Prat retains result text and usage while normalizing these failures.
+
+Input/output and cache_read_input_tokens are native counts. Cache_creation_input_tokens is filled
+from CacheMissTokens, so cache-write usage remains unknown. The estimated bit is telemetry;
+Prat does not calculate replacement counts. Total_cost_usd aliases total_cost in its reported
+currency, so cost_usd stays null. Reported models are unavailable. Whole-document bounds apply;
+excessive nesting/numeric width, nonfinite numbers and invalid Unicode produce normalized errors.
+These contracts were statically checked on 2026-09-11 before accepting fake executable fixtures.
+
+### Droid 0.209.0 baseline
+
+[Exec documentation](https://docs.factory.ai/droid-exec/overview), checked 2026-09-11, establishes
+`droid exec --output-format json` with plain stdin, `--model`, and `--reasoning-effort`.
+A successful object has type result, subtype success, is_error false and string result. A true
+is_error is a provider failure; native nonzero status takes precedence over decoding errors.
+No accounting fields are established. Missing/malformed envelopes fail; valid text survives
+optional metadata errors. Whole-document parsing is bounded and rejects duplicate keys, excessive
+numeric width/nesting, nonfinite numbers and invalid Unicode.
+
+Only `--auto` (one value: low/medium/high) is accepted as a native option. It is never injected;
+exec defaults to read-only. Prompt/file/input/output, model/effort, session/fork, cwd/worktree,
+config, mission/remote and administrative controls are reserved or rejected. Version probing uses
+`--version`; this is not a compatibility check. Existing native authentication is required.
+
+[Settings](https://docs.factory.ai/droid-cli/settings) documents the provider-dependent effort union
+`none|dynamic|off|minimal|low|medium|high|xhigh|max`. A model accepts only its subset; custom models
+control reasoning through their configured provider. These public contracts were frozen before
+accepting fixtures; no native binary was executed in this task.
+
+### Kimi CLI 1.50.0
+
+The pinned [parser](https://github.com/MoonshotAI/kimi-cli/blob/1.50.0/src/kimi_cli/cli/__init__.py)
+establishes `kimi --print --input-format text --output-format stream-json --final-message-only`
+with plain stdin and optional `--model`. Native stdin is trimmed. Accepted native options are
+`--thinking`, `--no-thinking`, `--plan`, and `--debug` (zero values). Thinking is boolean, so
+there is no generic effort mapping. Prompt/command, print/quiet/input/output, model, config/work-dir,
+session/resume/continue, ACP/wire/remote and administrative selectors are reserved or rejected.
+Version probing uses `--version`. Print mode implies AFK: tools are automatically approved and
+questions dismissed. Prat adds no approval flag. Support targets this kimi-cli version; the
+successor kimi-code is not substituted.
+
+The [final-only printer](https://github.com/MoonshotAI/kimi-cli/blob/1.50.0/src/kimi_cli/ui/print/visualize.py)
+emits JSONL with role assistant and string content, without a type or terminal-result marker.
+Prat keeps the latest assistant string; native exit zero plus EOF completes, including empty
+stdout because the printer suppresses empty final text. Step changes clear native buffered text;
+Prat can retain only text actually emitted. Repeated valid assistant messages replace earlier ones.
+Malformed records fail while retaining earlier text. [Print errors](https://github.com/MoonshotAI/kimi-cli/blob/1.50.0/src/kimi_cli/ui/print/__init__.py)
+can write plain text before native nonzero exit; native status remains authoritative. JSONL bounds
+apply. Model/accounting fields remain unknown. Source review preceded independent fixtures.
+
+### Mistral Vibe 2.25.2
+
+The pinned [parser](https://github.com/mistralai/mistral-vibe/blob/v2.25.2/vibe/cli/entrypoint.py)
+establishes `vibe --prompt --output json` with plain stdin. Bare `--prompt` selects programmatic
+mode; the native reader trims stdin. Model/effort have no verified CLI mapping and are unsupported;
+use native settings or a trusted command prefix selecting an existing `VIBE_ACTIVE_MODEL`.
+`max_turns` maps to `--max-turns`; `max_budget_usd` maps to `--max-price` in dollars. Native
+limits may interrupt after usage exceeds them, so Prat adds no stronger spending guarantee.
+Accepted native flags `--max-tokens`, `--enabled-tools`, and `--disabled-tools` each take one value.
+Max tokens counts cumulative prompt plus completion tokens; it is only native passthrough.
+Prompt/output, budgets, model/effort, agent/config/cwd/worktree/session/resume/continue, harness,
+setup/update and remote controls are reserved or rejected. `--teleport` is explicitly reserved:
+it may synchronize/push Git state and changes JSON to a remote-history object. No remote aliases
+are declared by the pinned parser. Version probing uses `--version`.
+
+The [programmatic formatter](https://github.com/mistralai/mistral-vibe/blob/v2.25.2/vibe/cli/programmatic.py)
+emits the complete public-history array using camelCase aliases. Its text projection searches
+backward for the last nonempty assistant message, joining text blocks with blank lines; empty
+later assistant messages cannot replace earlier text. A valid array without assistant text can
+succeed with empty output. There is no terminal event. Native errors and conversation-limit
+exhaustion raise before JSON finalization; native status takes precedence. Whole JSON guards apply.
+The [public history types](https://github.com/mistralai/mistral-vibe/blob/v2.25.2/vibe/app_server/models.py)
+separate message, reasoning, effect, callback, checkpoint and notice entries. Only assistant
+message text is returned; tool failures or notice prose do not prove a failed conversation.
+No model/accounting mapping is established. Default native agent accepts edits; programmatic
+approval callbacks are denied. Existing native settings/authentication remain active. These
+contracts were frozen before fixtures; no native execution or setup was performed.
+
+### Crush 0.93.1
+
+The pinned [run command](https://github.com/charmbracelet/crush/blob/v0.93.1/internal/cmd/run.go)
+establishes `crush run --quiet` with plain stdin and optional `--model VALUE`. Quiet hides the
+spinner. Prat sends the original UTF-8 bytes; native
+[`MaybePrependStdin`](https://github.com/charmbracelet/crush/blob/v0.93.1/internal/cmd/root.go#L918)
+adds two newline characters before the empty positional prompt, and `run` forwards that combined
+text without trimming. The independent fake records raw stdin separately from this native prompt.
+Accepted native options are `--verbose`/`-v` and `--debug`/`-d`, each with zero values;
+debug is inherited from the [root command](https://github.com/charmbracelet/crush/blob/v0.93.1/internal/cmd/root.go).
+Prompt/output/model/small-model, cwd/data-dir/config, session/continue, host/channels/server,
+permission-bypass and administrative selectors are reserved or rejected. Effort, fast and
+normalized budgets are unsupported. The version diagnostic is `--version`.
+
+The [local application](https://github.com/charmbracelet/crush/blob/v0.93.1/internal/app/app.go)
+automatically approves the noninteractive session. Existing provider configuration is required.
+`CRUSH_CLIENT_SERVER` can select a server backend whose lifetime is not owned by Prat's child
+process group; native model overrides there can update workspace preferences. Prat inherits
+these native behaviors without enabling a server, adding approval flags or editing settings itself.
+Output is bounded complete stdout with terminal CR/LF removed. Native exit status is authoritative;
+empty text can succeed, banners/progress are preserved, and prose cannot establish failure.
+Usage, reported models and USD cost remain null. Source verification on 2026-09-11 preceded fixtures.
+
+### Devin 3000.10.21 baseline
+
+The [command reference](https://docs.devin.ai/cli/reference/commands), checked 2026-09-11,
+establishes `devin -p -- PROMPT`: the entire UTF-8 prompt is one literal argv item, with empty
+stdin. `--model VALUE` and the optional native `--permission-mode VALUE` precede the delimiter.
+The native permission option has arity one and is never injected. Prompt-file/stdin markers are
+not inferred; OS argv-size limits apply. Print/prompt/file/output/export, model, config/cwd,
+continue/resume, trust-bypass, cloud/remote/executor and administrative controls are reserved or
+rejected. No generic effort, fast or budget controls are verified. Version probing uses `--version`.
+
+Print requires an already trusted workspace and existing native authentication. The
+[permission reference](https://docs.devin.ai/cli/reference/permissions) describes configurable
+tool approvals, but does not establish every print-mode approval outcome. Prat retains the native
+behavior and makes no stronger claim. It captures bounded native stdout, removing only terminal
+CR/LF; native exit status determines success, including empty successful output. Generated error
+prose has no semantic meaning to the decoder. Usage, reported models and cost remain null.
+These public contracts were frozen before accepting fixtures; no native CLI was executed.
+
+### Cortex Code / CoCo 1.1.78 baseline
+
+The [CLI reference](https://docs.snowflake.com/en/user-guide/cortex-code/cli-reference), checked
+2026-09-11, establishes executable `cortex`, invocation `exec --file -`, and plain stdin.
+Global `--model`, `--effort minimal|low|medium|high|max`, and `--max-turns` map the corresponding
+Prat options; native turns count each conversation round. Optional `--connection`/`-c` takes one
+value selecting an existing Snowflake connection. Global options precede `exec`. No fast or
+spending controls are verified. Prompt/print/file/output, model/effort/turns, workdir/config,
+session/resume/continue/private, plan/bypass, cloud/remote/executor and administrative controls
+are reserved or rejected. `--github` implies cloud execution and is also blocked. The version
+diagnostic is `--version`.
+
+Exec disables plan mode and rejects interactive asks. Existing Snowflake account, connection and
+[native authentication and policies](https://docs.snowflake.com/en/user-guide/cortex-code/security)
+are prerequisites. Native startup can update its own installation/settings; Prat performs no setup
+or configuration changes. JSONL framing/schema is unverified, so output is bounded complete native
+stdout with terminal CR/LF removed, including any banners/progress. Native status determines
+success; empty output can succeed, prose failures are not guessed, and no accounting is inferred.
+These contracts were frozen before fixtures, without native execution.

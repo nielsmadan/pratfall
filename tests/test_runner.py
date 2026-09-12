@@ -1,6 +1,8 @@
 import fcntl
 import os
+import selectors
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -9,10 +11,128 @@ from pathlib import Path
 
 import pytest
 
+import pratfall.runner as runner_module
 from pratfall.adapters import codex
 from pratfall.consumer import ConsumerLimits
 from pratfall.models import DecodedOutput, Invocation, ResultError
 from pratfall.runner import STDERR_LIMIT, STDOUT_LIMIT, OutputLimits, run
+
+
+def test_cleanup_rechecks_group_after_transient_probe_permission_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signals: list[int] = []
+
+    def killpg(group: int, chosen: int) -> None:
+        assert group == 123
+        signals.append(chosen)
+        if chosen == 0:
+            if signals.count(0) == 1:
+                raise PermissionError(1, "Operation not permitted")
+            raise ProcessLookupError
+
+    monkeypatch.setattr(runner_module.os, "killpg", killpg)
+    assert runner_module.cleanup_process_group(123) is None
+    assert signals == [signal.SIGTERM, 0, 0, 0]
+
+
+def test_cleanup_reports_persistent_probe_permission_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signals: list[int] = []
+
+    def killpg(group: int, chosen: int) -> None:
+        assert group == 123
+        signals.append(chosen)
+        if chosen == 0:
+            raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
+    monkeypatch.setattr(runner_module, "FINAL_DRAIN_GRACE", 0)
+    monkeypatch.setattr(runner_module.os, "killpg", killpg)
+    assert runner_module.cleanup_process_group(123) == (
+        "could not verify owned process-group cleanup before the deadline"
+    )
+    assert signals == [signal.SIGTERM, 0, signal.SIGKILL, 0]
+
+
+@pytest.mark.parametrize("denied", [signal.SIGTERM, signal.SIGKILL])
+def test_cleanup_preserves_signal_permission_failure(
+    monkeypatch: pytest.MonkeyPatch, denied: signal.Signals
+) -> None:
+    signals: list[int] = []
+
+    def killpg(group: int, chosen: int) -> None:
+        assert group == 123
+        signals.append(chosen)
+        if chosen in (0, denied):
+            raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
+    monkeypatch.setattr(runner_module.os, "killpg", killpg)
+    assert runner_module.cleanup_process_group(123) == "[Errno 1] Operation not permitted"
+    assert signals == (
+        [signal.SIGTERM] if denied == signal.SIGTERM else [signal.SIGTERM, 0, signal.SIGKILL]
+    )
+
+
+@pytest.mark.parametrize(
+    ("denied_signal", "persistent_probe", "cleanup_error"),
+    [
+        (None, False, None),
+        (None, True, "could not verify owned process-group cleanup before the deadline"),
+        (signal.SIGTERM, False, "[Errno 1] Operation not permitted"),
+        (signal.SIGKILL, False, "[Errno 1] Operation not permitted"),
+    ],
+)
+def test_timeout_verifies_cleanup_after_parent_exits_and_pipes_close(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    denied_signal: signal.Signals | None,
+    persistent_probe: bool,
+    cleanup_error: str | None,
+) -> None:
+    original_drain = runner_module._drain
+    signals: list[int] = []
+
+    def drain_until_timeout(
+        process: subprocess.Popen[bytes],
+        selector: selectors.BaseSelector,
+        output: runner_module._OutputState,
+        deadline: float,
+        context: runner_module._RunContext,
+    ) -> tuple[ResultError | None, bool]:
+        assert original_drain(process, selector, output, deadline, context) == (None, False)
+        assert process.poll() == 0
+        assert not selector.get_map()
+        return None, True
+
+    def killpg(_group: int, chosen: int) -> None:
+        signals.append(chosen)
+        if chosen == denied_signal:
+            raise PermissionError(1, "Operation not permitted")
+        if chosen == 0:
+            if persistent_probe or signals.count(0) == 1:
+                raise PermissionError(1, "Operation not permitted")
+            raise ProcessLookupError
+
+    monkeypatch.setattr(runner_module, "_drain", drain_until_timeout)
+    monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
+    monkeypatch.setattr(runner_module, "FINAL_DRAIN_GRACE", 0.15)
+    monkeypatch.setattr(runner_module.os, "killpg", killpg)
+    result = run(python("pass"), tmp_path, 5)
+
+    message = "Agent exceeded the 5 second timeout."
+    if cleanup_error is not None:
+        message += f" Process-group cleanup failed: {cleanup_error}."
+    assert result.error == ResultError("timeout", message)
+    assert result.timed_out is True
+    assert result.native_exit_code == 0
+    assert result.duration_ms < 1_000
+    assert signals[0] == signal.SIGTERM
+    assert signal.SIGKILL in signals
+    if denied_signal is None:
+        assert signals.count(0) >= (1 if persistent_probe else 2)
 
 
 def python(code: str, stdin: bytes = b"") -> Invocation:

@@ -14,8 +14,20 @@ process lifecycle behavior. It uses fake native executables and spends no infere
 - A Git revision that identifies the runtime baseline.
 
 The harness is [scripts/qa_installed.py](../../../scripts/qa_installed.py). Its fake executables
-emit the protocol shapes recorded in `tests/test_run_cli.py`; they do not import Pratfall. The
-consumer working directory and both environments remain outside `src/`.
+emit the protocol shapes recorded in `tests/test_run_cli.py` and the per-agent test files; they do
+not import Pratfall. OpenHands, Warp and iFlow fakes independently enforce mandatory argv, empty
+stdin, prompt equals syntax, and finite native option arity before emitting source-backed output.
+Qwen, Amp, Reasonix, Droid, Kimi, Vibe, Crush and Cortex fakes enforce their independent stdin
+invocation and option contracts. Devin enforces print mode, its native delimiter, one literal
+argv prompt and empty stdin. Cortex checks global options before `exec --file -` and rejects
+cloud controls, including `--github`.
+Crush records exact raw stdin separately from the native prompt, which adds two trailing newlines.
+Canonical and alias routes cover all 22 agents and 22 aliases, including both `ag` and `agy`.
+They compare complete expected argv for the new agents; Amp is reached by its canonical name.
+Probe expectations are per-agent (`version` for Amp, `--version` for others).
+Probe detection matches the complete argv, including explicit lifecycle fixtures, so a literal
+Devin prompt such as `--version` remains prompt text.
+The consumer working directory and both environments remain outside `src/`.
 
 For E04, a QA-only bootstrap uses the installed environment's Python interpreter to execute the
 installed `prat` entry-point file. It observes Python signal-handler installation and writes a
@@ -80,7 +92,39 @@ the harness records their byte counts, hashes, normalized errors, pending observ
 descendant-lock release.
 
 The wheel entry point runs Q01–Q17 and the core E01–E12/E15 enhancement paths. Both wheel and sdist
-entry points are version-checked, and source, archive, and installed runtime manifests must match.
+entry points run the focused A cases below and are version-checked. Source, archive, and installed
+runtime manifests must match. Every A result contains separate `artifacts.wheel` and
+`artifacts.sdist` observations. Wheel route and version observations reuse Q05 and E06; the sdist
+executes those contracts separately. These are planned assertions until a run record records them.
+
+| Harness IDs | Installed assertions |
+| --- | --- |
+| `A01.inventory`, `A02.routes` | Exact capabilities, commands and aliases for all 22 agents; 44 routes each launch once; ordinary doctor launches none |
+| `A03.profile` | Qwen alias profile, literal configured prefix, CLI precedence, cwd, management JSON and dry-run without launch |
+| `A04.sources` | Devin argv and Qwen stdin through inline, file, redirected input, positional `-`, and `--file -`; exact argv/input, CRLF, Unicode, dash-leading text and paths containing spaces |
+| `A06.controls`, `A07.collisions` | Unsupported model/effort/fast/turn controls and newly reserved canonical/alias profile names fail before launch with actionable errors |
+| `A08.versions` | Exact per-agent probe argv and diagnostics, including Amp `version` and isolated Hermes failure |
+| `A09.qwen_failure`, `A09.amp_failure`, `A09.droid_failure` | Verified provider failures survive malformed optional metadata and retain available answer/model fields |
+| `A09.vibe_projection` | Empty last assistant leaves earlier nonempty text intact; text blocks join with blank lines and user text is excluded |
+| `A10.recovery` | Qwen intermediate child error followed by root success; child text/models excluded and final usage replaces assistant snapshots |
+| `A11.paused`, `A11.aliases` | Reasonix paused native-zero failure and successful accounting; known tokens retained, cache-creation/USD aliases remain null |
+| `A12.recovery`, `A12.conversation_error`, `A12.missing_terminal` | OpenHands pinned startup/status/summary framing, empty/reasoning-only intermediates and correction; conversation failure and missing completion cannot become success |
+| `A13.kimi_empty`, `A13.warp_empty`, `A13.kimi_native_failure`, `A13.warp_native_failure` | Valid empty EOF completion and native failure retaining partial text; Kimi plain-text error cannot replace the native exit status |
+| `A14.numeric_width`, `A14.nesting`, `A14.unicode` | Representative Droid numeric width, Reasonix excessive nesting and Vibe Unicode failures normalize without traceback |
+| `A15.AGENT_success`, `A15.AGENT_failure` | iFlow, Crush, Devin and Cortex preserve complete native text and native status, including banners and error-like prose |
+
+`A03.profile` supplies the matrix's dry-run portion of A06; `A04.sources` supplies A05's literal
+transport cases. Existing Q/E checks supply shared input validation, lifecycle, timeout, signal,
+process-group cleanup and live progress evidence for matrix A16–A17. Runtime manifest and artifact
+identity checks supply A18. No lifecycle cross product is repeated for every adapter.
+
+The 25 protocol/text A cases are representative installed observations. Full hostile numeric,
+nesting, nonfinite and Unicode matrices remain source-level tests in `tests/test_reasonix.py`,
+`tests/test_droid.py` and `tests/test_vibe.py`. Per-agent tests also cover every-byte framing and
+retained-state limits. `scripts/test_qa_installed.py` checks the harness through a source entry
+point and deliberately rejects incorrect oracle fields; those tests do not establish artifact
+installation or live vendor compatibility.
+
 Focused decoder and subprocess tests supplement E08's malformed/failure variants and E10's
 timeout/TERM-drain variant, and cover the adversarial byte-transport cases E13 and E14:
 
@@ -126,7 +170,8 @@ a recovery mechanism from normalized output when native events were not retained
 
 ## Evaluation and cleanup
 
-Every Q01–Q17 assertion and installed core E scenario must pass. Pending process evidence requires
+Every Q01–Q17 assertion, installed core E scenario, and both artifact observations for each A case
+must pass. Pending process evidence requires
 that `prat` is still running while a same-group descendant holds an exclusive advisory lock;
 cleanup requires acquiring that lock after completion and before the harness's emergency cleanup.
 E04 also requires installed-entry-point signal readiness before the harness sends its signal. E11
@@ -147,3 +192,8 @@ uses a disposable XDG config directory, restores no global state, and leaves no 
 - [2026-09-09 verification after final review fixes](runs/2026-09-09-final-review.md)
 - [2026-09-10 CLI enhancement installed QA](runs/2026-09-10-enhancements.md)
 - [2026-09-10 final enhancement artifact verification](runs/2026-09-10-enhancements-final.md)
+
+- [2026-09-11 A-tier initial installed failure](runs/2026-09-11-a-tier-initial.md)
+- [2026-09-11 A-tier installed retest](runs/2026-09-11-a-tier-retest.md)
+
+- [2026-09-11 final A-tier artifact verification](runs/2026-09-11-a-tier-final.md)

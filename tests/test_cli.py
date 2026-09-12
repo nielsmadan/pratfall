@@ -754,3 +754,38 @@ def test_module_entry_point_works_outside_repo(tmp_path: Path) -> None:
     )
     assert result.returncode == 0
     assert result.stdout == f"prat {__version__}\n"
+
+
+def test_new_agents_probe_independent_version_argv_with_empty_stdin(
+    native_contract_config: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATH", "")
+    log = native_contract_config.parent / "native-calls.jsonl"
+    assert main(["--config", str(native_contract_config), "doctor", "--json"]) == 0
+    discovery = json.loads(capsys.readouterr().out)
+    assert all(record["version"] is None for record in discovery["agents"])
+    assert not log.exists()
+    assert main(["--config", str(native_contract_config), "doctor", "--versions", "--json"]) == 0
+    inventory = json.loads(capsys.readouterr().out)
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert {call["agent"]: call["argv"] for call in calls} == {
+        "openhands": ["--version"],
+        "warp": ["--version"],
+        "iflow": ["--version"],
+        "qwen": ["--version"],
+        "amp": ["version"],
+        "reasonix": ["--version"],
+        "droid": ["--version"],
+        "kimi": ["--version"],
+        "vibe": ["--version"],
+        "crush": ["--version"],
+        "devin": ["--version"],
+        "cortex": ["--version"],
+    }
+    assert len(calls) == 12
+    for record in inventory["agents"]:
+        if record["agent"] in {call["agent"] for call in calls}:
+            assert record["version"] == f"{record['agent']} opaque version 1.0"
+            assert record["version_error"] is None

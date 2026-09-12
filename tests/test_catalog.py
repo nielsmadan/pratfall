@@ -19,6 +19,18 @@ from pratfall.errors import PratError
         ("claw", "openclaw"),
         ("hm", "hermes"),
         ("oc", "opencode"),
+        ("oh", "openhands"),
+        ("wp", "warp"),
+        ("if", "iflow"),
+        ("qw", "qwen"),
+        ("amp", "amp"),
+        ("rx", "reasonix"),
+        ("dr", "droid"),
+        ("km", "kimi"),
+        ("mv", "vibe"),
+        ("cr", "crush"),
+        ("dv", "devin"),
+        ("co", "cortex"),
     ],
 )
 def test_aliases_resolve_to_canonical_agent(selector: str, canonical: str) -> None:
@@ -26,8 +38,8 @@ def test_aliases_resolve_to_canonical_agent(selector: str, canonical: str) -> No
     assert get_agent(canonical).name == canonical
 
 
-def test_registry_has_ten_agents_and_unique_selectors() -> None:
-    assert len(AGENTS) == 10
+def test_registry_has_completed_agents_and_unique_selectors() -> None:
+    assert len(AGENTS) == 22
     assert set(ADAPTERS) == set(BY_NAME)
     assert len(BY_SELECTOR) == sum(len(agent.aliases) + 1 for agent in AGENTS)
     assert RESERVED_NAMES.issuperset({"agents", "profiles", "doctor", "config", *BY_SELECTOR})
@@ -46,7 +58,10 @@ def test_kiro_supports_current_native_model_and_effort_options() -> None:
 
 def test_only_verified_agents_support_fast_mode() -> None:
     assert {agent.name for agent in AGENTS if agent.capabilities.fast} == {"claude", "codex"}
-    assert all(agent.version_args == ("--version",) for agent in AGENTS)
+    assert {agent.name: agent.version_args for agent in AGENTS} == {
+        name: (("version",) if name == "amp" else ("--version",)) for name in BY_NAME
+    }
+    assert BY_NAME["amp"].aliases == ()
 
 
 def test_unknown_agent_is_actionable() -> None:
