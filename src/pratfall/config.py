@@ -2,6 +2,7 @@ import math
 import os
 import re
 import tomllib
+from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
 from types import MappingProxyType
@@ -130,21 +131,59 @@ def merge_options(*layers: Options) -> Options:
     return parse_options(values, "options")
 
 
-def validate_capabilities(agent: AgentSpec, options: Options, label: str) -> None:
+def validate_capabilities(
+    agent: AgentSpec,
+    options: Options,
+    label: str,
+    *,
+    labels: Mapping[str, str] | None = None,
+) -> None:
+    fields = {name: f"{label}.{name}" for name in OPTION_FIELDS}
+    if labels is not None:
+        fields.update(labels)
     caps = agent.capabilities
     if options.model is not None and not caps.model:
-        raise PratError(f"{label}.model: {agent.label} does not support a model override.")
+        raise PratError(f"{fields['model']}: {agent.label} does not support a model override.")
     if options.effort is not None:
         if not caps.effort:
-            raise PratError(f"{label}.effort: {agent.label} does not support an effort override.")
+            raise PratError(
+                f"{fields['effort']}: {agent.label} does not support an effort override."
+            )
         if caps.effort_values and options.effort not in caps.effort_values:
             allowed = ", ".join(caps.effort_values)
-            raise PratError(f"{label}.effort: {agent.label} accepts: {allowed}.")
+            raise PratError(f"{fields['effort']}: {agent.label} accepts: {allowed}.")
     for field in ("max_budget_usd", "max_turns", "max_ai_credits"):
         if getattr(options, field) is not None and field not in caps.budgets:
-            raise PratError(f"{label}.{field}: {agent.label} does not support this budget.")
+            raise PratError(f"{fields[field]}: {agent.label} does not support this budget.")
     if options.fast is not None and not caps.fast:
-        raise PratError(f"{label}.fast: {agent.label} does not support a fast-mode override.")
+        raise PratError(f"{fields['fast']}: {agent.label} does not support a fast-mode override.")
+
+
+def option_labels(
+    config: Config, selector: str, overrides: Options | None = None
+) -> dict[str, str]:
+    labels = {
+        name: f"{source}: defaults.{name} (selector {selector!r})"
+        for name, source in config.default_sources.items()
+    }
+    profile = config.profiles.get(selector)
+    if profile is not None:
+        labels.update(
+            {
+                name: f"{profile.source or config.path}: profiles.{selector}.{name}"
+                for name, value in asdict(profile.options).items()
+                if value is not None
+            }
+        )
+    if overrides is not None:
+        labels.update(
+            {
+                name: f"command line: selector {selector!r}.{name}"
+                for name, value in asdict(overrides).items()
+                if value is not None
+            }
+        )
+    return labels
 
 
 def _commands(table: dict[str, object], path: Path) -> dict[str, tuple[str, ...]]:
@@ -167,7 +206,7 @@ def _commands(table: dict[str, object], path: Path) -> dict[str, tuple[str, ...]
     return commands
 
 
-def _profiles(table: dict[str, object], path: Path, defaults: Options) -> dict[str, Profile]:
+def _profiles(table: dict[str, object], path: Path) -> dict[str, Profile]:
     profiles: dict[str, Profile] = {}
     for name, value in table.items():
         label = f"{path}: profiles.{name}"
@@ -187,17 +226,15 @@ def _profiles(table: dict[str, object], path: Path, defaults: Options) -> dict[s
         options = parse_options(
             {key: val for key, val in settings.items() if key != "agent"}, label
         )
-        validate_capabilities(agent, merge_options(defaults, options), label)
-        profiles[name] = Profile(agent=agent.name, options=options)
+        profiles[name] = Profile(agent=agent.name, options=options, source=path)
     return profiles
 
 
-def load_config(explicit: str | Path | None = None, *, cwd: Path | None = None) -> Config:
-    path = config_path(explicit, cwd=cwd)
+def _load_file(path: Path, *, required: bool) -> Config:
     try:
         contents = path.read_text(encoding="utf-8")
     except FileNotFoundError as error:
-        if explicit is None:
+        if not required:
             return Config(path=path)
         raise PratError(f"{path}: config file does not exist.") from error
     except (OSError, UnicodeError) as error:
@@ -213,8 +250,69 @@ def load_config(explicit: str | Path | None = None, *, cwd: Path | None = None) 
         _table(table.get("defaults", {}), f"{path}: defaults"), f"{path}: defaults"
     )
     commands = _commands(_table(table.get("agents", {}), f"{path}: agents"), path)
-    profiles = _profiles(_table(table.get("profiles", {}), f"{path}: profiles"), path, defaults)
-    return Config(path, True, defaults, MappingProxyType(commands), MappingProxyType(profiles))
+    profiles = _profiles(_table(table.get("profiles", {}), f"{path}: profiles"), path)
+    return Config(
+        path=path,
+        exists=True,
+        defaults=defaults,
+        commands=MappingProxyType(commands),
+        profiles=MappingProxyType(profiles),
+        sources=(path,),
+        default_sources=MappingProxyType(
+            {name: path for name, value in asdict(defaults).items() if value is not None}
+        ),
+    )
+
+
+def _merge_configs(global_config: Config, local_config: Config) -> Config:
+    if not local_config.exists:
+        return global_config
+    collisions = sorted(global_config.profiles.keys() & local_config.profiles.keys())
+    warnings = tuple(
+        f"{local_config.path}: profile {name!r} replaces the profile from {global_config.path}."
+        for name in collisions
+    )
+    return Config(
+        path=local_config.path,
+        exists=True,
+        defaults=merge_options(global_config.defaults, local_config.defaults),
+        commands=MappingProxyType(dict(global_config.commands) | dict(local_config.commands)),
+        profiles=MappingProxyType(dict(global_config.profiles) | dict(local_config.profiles)),
+        sources=global_config.sources + local_config.sources,
+        warnings=warnings,
+        default_sources=MappingProxyType(
+            dict(global_config.default_sources) | dict(local_config.default_sources)
+        ),
+    )
+
+
+def _same_file(first: Path, second: Path) -> bool:
+    if first == second:
+        return True
+    try:
+        return first.samefile(second)
+    except OSError:
+        return False
+
+
+def load_config(explicit: str | Path | None = None, *, cwd: Path | None = None) -> Config:
+    global_path = config_path(cwd=cwd)
+    local_path = config_path(explicit if explicit is not None else ".pratfile", cwd=cwd)
+    if _same_file(global_path, local_path):
+        config = _load_file(local_path, required=explicit is not None)
+    else:
+        config = _merge_configs(
+            _load_file(global_path, required=False),
+            _load_file(local_path, required=explicit is not None),
+        )
+    for name, profile in config.profiles.items():
+        validate_capabilities(
+            BY_NAME[profile.agent],
+            merge_options(config.defaults, profile.options),
+            f"{profile.source}: profiles.{name}",
+            labels=option_labels(config, name),
+        )
+    return config
 
 
 def resolve_profile(
@@ -242,7 +340,12 @@ def resolve_profile(
         profile_options,
         overrides if overrides is not None else Options(),
     )
-    validate_capabilities(agent, options, f"{config.path}: selector {selector!r}")
+    validate_capabilities(
+        agent,
+        options,
+        f"{config.path}: selector {selector!r}",
+        labels=option_labels(config, selector, overrides),
+    )
     return ResolvedProfile(
         agent,
         profile_name,

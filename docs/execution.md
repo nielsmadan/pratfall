@@ -13,9 +13,14 @@ protocol evidence and version-specific quirks live in the [agent references](ref
 ## Dispatch boundary
 
 - [cli.py](../src/pratfall/cli.py) validates configuration, selected native options, and the child
-  working directory before acquiring the prompt. [config.py:220](../src/pratfall/config.py#L220)
-  resolves invocation options over profile options, global defaults, and built-in defaults;
-  all configured profiles are validated.
+  working directory before acquiring the prompt. [config.py](../src/pratfall/config.py) merges
+  the global file with the invocation directory's `.pratfile`, or the local file selected by
+  `--config`. Local profiles replace global profiles by name. Invocation options override profile
+  options, local defaults, global defaults, and built-in defaults; all effective profiles are
+  validated. Command paths, profile fields, and inherited defaults retain their defining file's
+  location. Aliases of the global file load once through the selected local path, preserving that
+  path's command base. The CLI sends duplicate-profile warnings to stderr before reading the prompt
+  or launching an agent, using its nonblocking sink when progress is enabled.
 - [catalog.py](../src/pratfall/catalog.py) holds immutable capabilities, not provider model lists.
   [registry.py:42](../src/pratfall/adapters/registry.py#L42) is the adapter assembly point: command
   builder, validator, decoder, and optional incremental consumer factory.

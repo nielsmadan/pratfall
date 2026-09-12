@@ -37,8 +37,11 @@ retain native counting and overshoot behavior. Vibe's `--max-tokens` is native p
 Cortex supports `max_turns` with native per-conversation-round counting.
 Fast overrides are supported by Claude and Codex. Omitting both flags preserves native behavior;
 `--no-fast` is a real false override. Conflicting fast flags fail before launch.
-`--cwd PATH` changes the child working directory. `--dry-run` acquires and validates the selected
-input, then prints the resolved argv without launching the agent. Prompts carried through stdin
+`--config PATH` selects a local config to merge over the global config, replacing automatic
+`.pratfile` discovery in the invocation directory. See [configuration merging](profiles.md).
+`--cwd PATH` changes the child working directory and does not change config discovery.
+`--dry-run` acquires and validates the selected input, then prints the resolved argv without
+launching the agent. Prompts carried through stdin
 appear only as a byte count. Gemini, Copilot, Cursor, Kiro, OpenHands, Warp, iFlow and Devin carry the prompt in
 argv, so their previews include it.
 

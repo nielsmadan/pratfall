@@ -71,12 +71,167 @@ def test_relative_paths_use_invocation_cwd(tmp_path: Path, monkeypatch: pytest.M
     assert config_path("other.toml", cwd=tmp_path) == tmp_path / "other.toml"
 
 
-def test_explicit_file_wins_over_default(tmp_path: Path) -> None:
+def test_explicit_file_merges_over_global_and_replaces_automatic_local(tmp_path: Path) -> None:
     default = init_config()
+    (tmp_path / ".pratfile").write_text('version=1\n[profiles.auto]\nagent="codex"\n')
     path = write_config(tmp_path, 'version=1\n[profiles.other]\nagent="gm"\n')
-    assert list(load_config(path).profiles) == ["other"]
-    assert list(load_config().profiles) == ["simple"]
+    assert list(load_config(path).profiles) == ["simple", "other"]
+    assert list(load_config().profiles) == ["simple", "auto"]
     assert config_path() == default
+
+
+def test_local_config_works_without_global_and_does_not_search_parents(tmp_path: Path) -> None:
+    local = tmp_path / ".pratfile"
+    local.write_text('version=1\n[profiles.local]\nagent="cc"\n')
+    config = load_config(cwd=tmp_path)
+    assert config.path == local
+    assert config.sources == (local,)
+    assert config.exists is True
+    assert resolve_profile(config, "local").agent.name == "claude"
+    child = tmp_path / "child"
+    child.mkdir()
+    assert load_config(cwd=child).exists is False
+
+
+def test_local_defaults_commands_and_profiles_merge_by_their_boundaries(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text(
+        'version=1\n[defaults]\nmodel="global-model"\neffort="low"\ntimeout=90\n'
+        'fast=true\nnative_args=["--verbose"]\n'
+        '[agents.codex]\ncommand=["./global-wrapper", "codex"]\n'
+        '[agents.claude]\ncommand=["./old-wrapper"]\n'
+        '[profiles.shared]\nagent="cc"\nmodel="old-model"\nmax_turns=4\n'
+        '[profiles.global-only]\nagent="cx"\ntimeout=70\n'
+    )
+    local_path = tmp_path / ".pratfile"
+    local_path.write_text(
+        'version=1\n[defaults]\nmodel="local-model"\ntimeout=30\nfast=false\nnative_args=[]\n'
+        '[agents.codex]\n[agents.claude]\ncommand=["./local-wrapper", "claude"]\n'
+        '[profiles.shared]\nagent="cx"\neffort="high"\n'
+        '[profiles.local-only]\nagent="cc"\n'
+    )
+    config = load_config()
+    assert config.sources == (global_path, local_path)
+    assert set(config.profiles) == {"shared", "global-only", "local-only"}
+    shared = resolve_profile(config, "shared")
+    assert shared.agent.name == "codex"
+    assert shared.options == Options(
+        model="local-model", effort="high", timeout=30, fast=False, native_args=()
+    )
+    assert shared.command == (str(global_path.parent / "global-wrapper"), "codex")
+    assert resolve_profile(config, "local-only").command == (
+        str(tmp_path / "local-wrapper"),
+        "claude",
+    )
+    assert resolve_profile(config, "global-only").options == Options(
+        model="local-model", effort="low", timeout=70, fast=False, native_args=()
+    )
+    assert resolve_profile(config, "cx").options.timeout == 30
+    assert resolve_profile(config, "shared", Options(model="cli", timeout=12)).options == Options(
+        model="cli", effort="high", timeout=12, fast=False, native_args=()
+    )
+    assert config.warnings == (
+        f"{local_path}: profile 'shared' replaces the profile from {global_path}.",
+    )
+
+
+def test_profiles_are_validated_with_merged_defaults(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text('version=1\n[defaults]\neffort="invalid"\n[profiles.work]\nagent="cc"\n')
+    (tmp_path / ".pratfile").write_text('version=1\n[defaults]\neffort="low"\n')
+    assert resolve_profile(load_config(), "work").options.effort == "low"
+    (tmp_path / ".pratfile").write_text('version=1\n[defaults]\neffort="invalid"\n')
+    with pytest.raises(PratError, match=f"{tmp_path / '.pratfile'}: defaults.effort"):
+        load_config()
+
+
+def test_local_profiles_are_validated_against_inherited_defaults(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text("version=1\n[defaults]\nfast=true\n")
+    local = tmp_path / ".pratfile"
+    local.write_text('version=1\n[profiles.work]\nagent="gm"\n')
+    with pytest.raises(PratError, match=f"{global_path}: defaults.fast"):
+        load_config()
+
+
+@pytest.mark.parametrize("layer", ["global", "local"])
+@pytest.mark.parametrize("contents", ["version=1\n[", "version=2", "version=1\nunknown=true"])
+def test_invalid_layers_fail_with_source_context(tmp_path: Path, layer: str, contents: str) -> None:
+    global_path = init_config()
+    local_path = tmp_path / ".pratfile"
+    local_path.write_text("version=1\n")
+    invalid = global_path if layer == "global" else local_path
+    invalid.write_text(contents)
+    with pytest.raises(PratError) as caught:
+        load_config()
+    assert str(caught.value).startswith(str(invalid))
+
+
+def test_explicit_missing_file_fails_even_with_automatic_local(tmp_path: Path) -> None:
+    init_config()
+    (tmp_path / ".pratfile").write_text("version=1\n")
+    with pytest.raises(PratError, match=r"missing\.toml: config file does not exist"):
+        load_config("missing.toml")
+
+
+def test_automatic_local_read_errors_are_reported(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").mkdir()
+    with pytest.raises(PratError, match=r"\.pratfile: cannot read config"):
+        load_config()
+
+
+def test_selecting_global_explicitly_loads_it_once() -> None:
+    path = init_config()
+    config = load_config(path)
+    assert config.sources == (path,)
+    assert config.warnings == ()
+
+
+@pytest.mark.parametrize("alias_kind", ["file", "directory", "automatic"])
+def test_global_file_alias_loads_once_and_keeps_selected_command_base(
+    tmp_path: Path, alias_kind: str
+) -> None:
+    global_path = init_config()
+    global_path.write_text(
+        'version=1\n[defaults]\ntimeout=20\n[agents.codex]\ncommand=["./wrapper"]\n'
+        '[profiles.work]\nagent="codex"\n'
+    )
+    if alias_kind == "directory":
+        alias_dir = tmp_path / "linked-config"
+        alias_dir.symlink_to(global_path.parent, target_is_directory=True)
+        selected = alias_dir / "config.toml"
+    else:
+        selected = tmp_path / (".pratfile" if alias_kind == "automatic" else "alias.toml")
+        selected.symlink_to(global_path)
+    config = load_config(None if alias_kind == "automatic" else selected)
+    assert config.sources == (selected,)
+    assert config.path == selected
+    assert config.warnings == ()
+    resolved = resolve_profile(config, "work")
+    assert resolved.command == (str(selected.parent / "wrapper"),)
+    assert resolved.options.timeout == 20
+
+
+def test_local_false_override_keeps_its_source(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text("version=1\n[defaults]\nfast=true\n")
+    local = tmp_path / ".pratfile"
+    local.write_text("version=1\n[defaults]\nfast=false\n")
+    config = load_config()
+    assert resolve_profile(config, "cx").options.fast is False
+    with pytest.raises(PratError) as caught:
+        resolve_profile(config, "gm")
+    assert str(caught.value).startswith(f"{local}: defaults.fast (selector 'gm'):")
+
+
+def test_explicit_relative_path_resolves_commands_from_its_own_directory(tmp_path: Path) -> None:
+    settings = tmp_path / "settings"
+    settings.mkdir()
+    path = settings / "custom.toml"
+    path.write_text('version=1\n[agents.codex]\ncommand=["./wrapper"]\n')
+    assert resolve_profile(load_config("settings/custom.toml", cwd=tmp_path), "cx").command == (
+        str(settings / "wrapper"),
+    )
 
 
 def test_scalars_and_native_arguments_follow_precedence(tmp_path: Path) -> None:

@@ -156,6 +156,7 @@ def test_init_and_validate_management(tmp_path: Path, capsys: pytest.CaptureFixt
         "schema_version": 1,
         "path": str(path),
         "exists": True,
+        "sources": [str(path)],
         "valid": True,
     }
     assert main(["config", "validate", "--config", str(path)]) == 0
@@ -165,6 +166,143 @@ def test_init_and_validate_management(tmp_path: Path, capsys: pytest.CaptureFixt
 def test_default_validate_explains_missing_config(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["config", "validate"]) == 0
     assert "using built-in defaults" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("command", [["profiles"], ["config", "validate"], ["doctor"]])
+def test_management_merges_configs_and_warns_on_stderr(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], command: list[str]
+) -> None:
+    global_path = init_config()
+    local_path = tmp_path / ".pratfile"
+    local_path.write_text('version=1\n[profiles.simple]\nagent="cc"\nmodel="local-model"\n')
+    assert main([*command, "--json"]) == 0
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert result["schema_version"] == 1
+    assert captured.err == (
+        f"prat: warning: {local_path}: profile 'simple' replaces the profile from {global_path}.\n"
+    )
+    if command == ["profiles"]:
+        assert result["profiles"][0]["agent"] == "claude"
+        assert result["profiles"][0]["options"]["model"] == "local-model"
+    elif command == ["config", "validate"]:
+        assert result == {
+            "schema_version": 1,
+            "path": str(local_path),
+            "sources": [str(global_path), str(local_path)],
+            "exists": True,
+            "valid": True,
+        }
+    else:
+        assert len(result["agents"]) == len(AGENTS)
+
+
+def test_validate_text_reports_both_sources(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    global_path = init_config()
+    local_path = tmp_path / ".pratfile"
+    local_path.write_text("version=1\n")
+    assert main(["config", "validate"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out == f"Valid config: {global_path}, {local_path}\n"
+    assert captured.err == ""
+
+
+def test_config_path_and_init_keep_global_target_with_local_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    local_path = tmp_path / ".pratfile"
+    local_path.write_text("version=1\n")
+    global_path = tmp_path / "config-home/pratfall/config.toml"
+    assert main(["config", "path"]) == 0
+    assert capsys.readouterr().out == f"{global_path}\n"
+    assert main(["config", "init"]) == 0
+    assert capsys.readouterr().out == f"Created {global_path}\n"
+    assert global_path.is_file()
+    assert local_path.read_text() == "version=1\n"
+
+
+@pytest.mark.parametrize("source_layer", ["global", "local"])
+@pytest.mark.parametrize("selector", ["cc", "work"])
+def test_merged_native_validation_identifies_the_setting_source(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    source_layer: str,
+    selector: str,
+) -> None:
+    global_path = init_config()
+    local_path = tmp_path / ".pratfile"
+    source, other = (
+        (global_path, local_path) if source_layer == "global" else (local_path, global_path)
+    )
+    other.write_text(
+        'version=1\n[profiles.work]\nagent="cc"\n' if selector == "work" else "version=1\n"
+    )
+    source.write_text('version=1\n[defaults]\nnative_args=["--output-format", "text"]\n')
+    command = ["config", "validate"] if selector == "work" else [selector, "prompt", "--dry-run"]
+    assert main([*command, "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["message"].startswith(
+        f"{source}: defaults.native_args (selector {selector!r}):"
+    )
+
+
+@pytest.mark.parametrize("source_layer", ["global", "local"])
+@pytest.mark.parametrize("selector", ["gm", "work"])
+def test_inherited_capability_error_identifies_the_setting_source(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    source_layer: str,
+    selector: str,
+) -> None:
+    global_path = init_config()
+    local_path = tmp_path / ".pratfile"
+    source, other = (
+        (global_path, local_path) if source_layer == "global" else (local_path, global_path)
+    )
+    source.write_text("version=1\n[defaults]\nfast=true\n")
+    other.write_text(
+        'version=1\n[profiles.work]\nagent="gm"\n' if selector == "work" else "version=1\n"
+    )
+    assert main([selector, "prompt", "--dry-run", "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_config"
+    assert result["error"]["message"].startswith(
+        f"{source}: defaults.fast (selector {selector!r}):"
+    )
+
+
+def test_cli_override_error_identifies_command_line(capsys: pytest.CaptureFixture[str]) -> None:
+    path = init_config()
+    path.write_text("version=1\n[defaults]\nfast=true\n")
+    assert main(["gm", "prompt", "--no-fast", "--dry-run", "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["message"].startswith("command line: selector 'gm'.fast:")
+
+
+def test_validation_reports_single_source_for_global_file_alias(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = init_config()
+    alias = tmp_path / "alias.toml"
+    alias.symlink_to(path)
+    assert main(["config", "validate", "--config", str(alias), "--json"]) == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert json.loads(captured.out)["sources"] == [str(alias)]
+
+
+def test_local_profile_replaces_global_native_arguments_before_validation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    global_path = init_config()
+    global_path.write_text(
+        'version=1\n[profiles.work]\nagent="cc"\nnative_args=["--output-format", "text"]\n'
+    )
+    (tmp_path / ".pratfile").write_text('version=1\n[profiles.work]\nagent="cx"\n')
+    assert main(["config", "validate", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["valid"] is True
 
 
 def test_config_validate_checks_resolved_native_arguments(
@@ -179,7 +317,7 @@ def test_config_validate_checks_resolved_native_arguments(
     assert main(["config", "validate", "--config", str(path), "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
     assert result["error"]["code"] == "invalid_config"
-    assert f"{path}: profiles.bad.native_args" in result["error"]["message"]
+    assert f"{path}: defaults.native_args (selector 'bad')" in result["error"]["message"]
     assert "controlled by prat" in result["error"]["message"]
 
 

@@ -18,7 +18,7 @@ from typing import Literal, NoReturn
 from pratfall import __version__
 from pratfall.adapters.registry import ADAPTERS
 from pratfall.catalog import AGENTS, MANAGEMENT_COMMANDS
-from pratfall.config import config_path, init_config, load_config, resolve_profile
+from pratfall.config import config_path, init_config, load_config, option_labels, resolve_profile
 from pratfall.consumer import ByteConsumer
 from pratfall.errors import PratError
 from pratfall.models import Config, DecodedOutput, Invocation, Options, ResolvedProfile, ResultError
@@ -76,7 +76,7 @@ def _common_flags(parser: argparse.ArgumentParser) -> None:
         "--config",
         metavar="PATH",
         default=argparse.SUPPRESS,
-        help="Use this config path (relative to invocation cwd).",
+        help="Merge PATH over global config instead of .pratfile (relative to invocation cwd).",
     )
     parser.add_argument(
         "--json",
@@ -107,7 +107,7 @@ run options:
   --max-turns COUNT       Set a supported native turn limit.
   --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
   --cwd PATH              Set the agent working directory.
-  --config PATH           Use this config path.
+  --config PATH           Merge PATH over global config instead of .pratfile.
   --json                  Print one normalized JSON result.
   --progress              Print bounded live activity updates on stderr.
   --dry-run               Resolve and print the invocation without launching it.
@@ -142,15 +142,13 @@ examples:
                     "configured wrappers may have side effects."
                 ),
             )
-    config = subparsers.add_parser(
-        "config", help="Manage the global TOML config.", allow_abbrev=False
-    )
+    config = subparsers.add_parser("config", help="Manage TOML configuration.", allow_abbrev=False)
     _common_flags(config)
     config_commands = config.add_subparsers(
         dest="config_command", required=True, parser_class=Parser
     )
     for name, help_text in (
-        ("path", "Print the selected config path."),
+        ("path", "Print the global config path, or --config PATH."),
         ("init", "Create an example config; fail if the path already exists."),
         ("validate", "Validate every configured profile without launching an agent."),
     ):
@@ -356,23 +354,49 @@ def _doctor_line(record: dict[str, object], *, versions: bool) -> str:
     return f"{line} version={json.dumps(record['version'], ensure_ascii=False)}"
 
 
-def _validate_native_arguments(resolved: ResolvedProfile) -> None:
+def _validate_native_arguments(resolved: ResolvedProfile, label: str) -> None:
     adapter = ADAPTERS.get(resolved.agent.name)
     if adapter is None:
         return
-    if adapter.validate_resolved is not None:
-        adapter.validate_resolved(resolved)
-    else:
-        adapter.validate(resolved.options.native_args or ())
+    try:
+        if adapter.validate_resolved is not None:
+            adapter.validate_resolved(resolved)
+        else:
+            adapter.validate(resolved.options.native_args or ())
+    except PratError as error:
+        raise PratError(f"{label}: {error}", code=error.code, exit_code=error.exit_code) from error
 
 
 def _validate_config_native_arguments(config: Config) -> None:
     for name in config.profiles:
         resolved = resolve_profile(config, name)
+        source = config.profiles[name].source or config.path
+        label = option_labels(config, name).get(
+            "native_args", f"{source}: profiles.{name}.native_args"
+        )
         try:
-            _validate_native_arguments(resolved)
+            _validate_native_arguments(resolved, label)
         except PratError as error:
-            raise PratError(f"{config.path}: profiles.{name}.native_args: {error}") from error
+            raise PratError(str(error)) from error
+
+
+def _config_warnings(config: Config, *, progress: bool = False) -> None:
+    if not config.warnings:
+        return
+    try:
+        if progress:
+            with _StderrSink() as sink:
+                for warning in config.warnings:
+                    sink.line(f"prat: warning: {warning}")
+        else:
+            for warning in config.warnings:
+                print(f"prat: warning: {warning}", file=sys.stderr)
+            sys.stderr.flush()
+    except (AttributeError, OSError, ValueError) as error:
+        _silence_broken_stream("stderr")
+        raise PratError(
+            f"Cannot write config warnings: {error}.", code="output_io_error", exit_code=1
+        ) from error
 
 
 def _dispatch(args: argparse.Namespace) -> int:
@@ -385,6 +409,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     else:
         config = load_config(args.config)
         _validate_config_native_arguments(config)
+        _config_warnings(config)
         if args.command == "agents":
             _agents(args.json)
         elif args.command == "profiles":
@@ -393,9 +418,14 @@ def _dispatch(args: argparse.Namespace) -> int:
             return _doctor(config, args.json, versions=args.versions)
         else:
             _emit(
-                {"path": str(config.path), "exists": config.exists, "valid": True},
+                {
+                    "path": str(config.path),
+                    "sources": [str(path) for path in config.sources],
+                    "exists": config.exists,
+                    "valid": True,
+                },
                 [
-                    f"Valid config: {config.path}"
+                    f"Valid config: {', '.join(str(path) for path in config.sources)}"
                     if config.exists
                     else f"No config at {config.path}; using built-in defaults."
                 ],
@@ -804,8 +834,12 @@ def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
         json_mode = parsed.json
         config = load_config(parsed.config, cwd=invocation_cwd)
         _validate_config_native_arguments(config)
+        _config_warnings(config, progress=parsed.progress)
         resolved = resolve_profile(config, parsed.selector, parsed.options)
-        _validate_native_arguments(resolved)
+        label = option_labels(config, parsed.selector, parsed.options).get(
+            "native_args", f"selector {parsed.selector!r}.native_args"
+        )
+        _validate_native_arguments(resolved, label)
         cwd = _run_cwd(parsed.cwd, invocation_cwd)
         prompt = acquire_prompt(parsed.prompt_source, invocation_cwd)
         invocation = _build_invocation(resolved, prompt)

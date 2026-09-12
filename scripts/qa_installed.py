@@ -2162,7 +2162,7 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
             status="error",
             native_exit_code=None,
             error_code="invalid_config",
-            error_message=f"{config}: selector {selector!r}.{message}",
+            error_message=f"command line: selector {selector!r}.{message}",
         )
         controls[selector] = _compact_result(completed)
     collisions = {}

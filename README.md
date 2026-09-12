@@ -186,12 +186,17 @@ Missing optional agents do not make the inventory command fail. `profiles` lists
 
 ## Profiles and configuration
 
-Configuration lives at `$XDG_CONFIG_HOME/pratfall/config.toml`, or
-`~/.config/pratfall/config.toml` when XDG_CONFIG_HOME is absent or empty. Use `--config PATH`
-before or after management commands to select another file:
+Global configuration lives at `$XDG_CONFIG_HOME/pratfall/config.toml`, or
+`~/.config/pratfall/config.toml` when XDG_CONFIG_HOME is absent or empty. Prat also reads a
+TOML `.pratfile` in the invocation directory and merges it over the global configuration.
+It does not search parent directories; `--cwd` only changes the agent's working directory.
+Use `--config PATH` before or after a selector or management command to select a local file
+instead of `.pratfile`. Relative paths resolve from the invocation directory. The selected
+file is still merged over the global configuration.
 
 ```sh
 uv run prat config path
+uv run prat --config .pratfile config init
 uv run prat --config example.toml config init
 uv run prat --config example.toml config validate
 uv run prat --config example.toml profiles --json
@@ -199,8 +204,10 @@ uv run prat --config example.toml profiles --json
 
 `config init` creates missing directories with owner-only permissions and exclusively creates an
 owner-readable and writable example file; it fails if the file already exists. Ordinary
-commands never write configuration. A missing default file is valid; a missing explicitly
-selected file is an error. Existing files require `version = 1`.
+commands never write configuration. `config path` and `config init` target the global file
+unless `--config PATH` is supplied. `config validate` checks the effective merged configuration
+and reports the loaded files. Missing global and automatic local files are valid; a missing
+explicitly selected file is an error. Existing files require `version = 1` and use the same schema:
 
 ```toml
 version = 1
@@ -223,6 +230,15 @@ Built-in names, aliases, and management commands are reserved. Each profile requ
 there is no profile inheritance. Agent settings accept canonical names and a `command` array
 only. Profiles accept canonical agent names or aliases.
 When upgrading, [rename profiles that collide with newly reserved selectors](docs/user/profiles.md).
+
+Global and local `[defaults]` merge field by field, with local values taking precedence.
+Local `[agents.NAME].command` arrays replace the global command for that agent.
+Profiles from both files are available. When both define the same profile name, the entire
+local profile replaces the global profile, and Prat prints a warning naming the profile and
+both files to stderr, including with `--json`. Omitted local profile fields inherit the merged
+defaults. Relative executable paths remain relative to the file that defines the command.
+Validation errors identify the source of inherited settings. A local path aliasing the global
+file loads it once, preserving the selected path's base for relative commands.
 
 ## Agent controls and accounting
 
@@ -303,15 +319,18 @@ enforcing the exact configured wall deadline itself. Explicit `--fallback` nativ
 a model override and remain native OpenClaw behavior; Pratfall does not retry. Hermes uses quiet
 chat mode and never enables its `-z` permission bypass implicitly.
 
-Scalar precedence is invocation overrides, then profile, then defaults. Native argument arrays
-replace the lower-precedence array, including when the replacement is empty. Executable prefixes
+Scalar precedence is invocation overrides, then the selected profile, then local defaults,
+then global defaults. Native argument arrays replace the lower-precedence array, including when
+the replacement is empty. Executable prefixes
 come only from `[agents.NAME]`. Relative executable paths containing `/` are resolved relative to
 the config file; bare executable names use PATH. Arguments are kept as literal strings, without
-shell interpolation, variable expansion, or tilde expansion. All profiles are validated even
-when another selector is used. Unused executables need not be installed.
+shell interpolation, variable expansion, or tilde expansion. All effective profiles are validated
+even when another selector is used. Unused executables need not be installed.
 
 Management `--json` emits one object with `schema_version: 1`. Agent and doctor inventories use
 `agents`; profile listings use `profiles`; config operations report `path` plus their result.
+Config validation also reports `sources`, the loaded files in global-to-local order; its `path`
+is the highest-precedence loaded file, or the global path when neither file exists.
 Doctor records contain nullable `version` and `version_error` fields in addition to availability.
 Errors return status `error`, `exit_code`, and `error` with a stable `code` and readable `message`.
 Invalid syntax or configuration exits with 2. Help and version output remain text.

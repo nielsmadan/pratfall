@@ -39,6 +39,7 @@ class Options:
 class Profile:
     agent: str
     options: Options = Options()
+    source: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,9 @@ class Config:
     defaults: Options = Options()
     commands: Mapping[str, tuple[str, ...]] = field(default_factory=lambda: MappingProxyType({}))
     profiles: Mapping[str, Profile] = field(default_factory=lambda: MappingProxyType({}))
+    sources: tuple[Path, ...] = ()
+    warnings: tuple[str, ...] = ()
+    default_sources: Mapping[str, Path] = field(default_factory=lambda: MappingProxyType({}))
 
 
 @dataclass(frozen=True)

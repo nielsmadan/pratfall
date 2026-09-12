@@ -17,6 +17,7 @@ import pytest
 from pratfall import cli as cli_module
 from pratfall import runner as runner_module
 from pratfall.cli import main
+from pratfall.config import init_config
 from pratfall.models import DecodedOutput, ResultError, Usage
 from pratfall.prompt_input import PROMPT_LIMIT
 from pratfall.runner import ProcessResult
@@ -204,6 +205,76 @@ def test_claude_text_dispatch_prints_only_final_answer(
     assert captured.out == "Claude: hello\n"
     assert "claude diagnostic" in captured.err
     assert '"type": "result"' not in captured.out
+
+
+@pytest.mark.parametrize("local_name", [".pratfile", "custom.toml"])
+@pytest.mark.parametrize("mode", [[], ["--json"], ["--json", "--progress"]])
+def test_run_uses_local_profile_and_global_wrapper_from_invocation_directory(
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    local_name: str,
+    mode: list[str],
+) -> None:
+    monkeypatch.setenv("PATH", "")
+    fake_config = write_agent(tmp_path, "codex", CODEX_SUCCESS, profile="work")
+    global_path = init_config()
+    global_path.write_text(fake_config.read_text())
+    local_path = tmp_path / local_name
+    local_path.write_text('version=1\n[profiles.work]\nagent="cx"\nmodel="local-model"\n')
+    child = tmp_path / "child"
+    child.mkdir()
+    (child / ".pratfile").write_text("invalid child config")
+    config_flags = [] if local_name == ".pratfile" else ["--config", local_name]
+    if config_flags:
+        (tmp_path / ".pratfile").write_text("invalid automatic config")
+    assert main(["work", "prompt", "--cwd", str(child), *config_flags, *mode]) == 0
+    captured = capfd.readouterr()
+    if "--json" in mode:
+        result = json.loads(captured.out)
+        assert result["status"] == "success"
+        assert result["model"] == "local-model"
+        answer = json.loads(result["output"])
+    else:
+        answer = json.loads(captured.out)
+    assert answer == {
+        "argv": ["exec", "--json", "--model", "local-model", "-"],
+        "prompt": "prompt",
+        "cwd": str(child),
+    }
+    warning = (
+        f"prat: warning: {local_path}: profile 'work' replaces the profile from {global_path}.\n"
+    )
+    assert captured.err.count(warning) == 1
+    assert "native diagnostic\n" in captured.err
+
+
+@pytest.mark.parametrize("flags", [[], ["--progress"]])
+def test_config_warning_failure_returns_json_error_before_reading_input(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    flags: list[str],
+) -> None:
+    init_config()
+    (tmp_path / ".pratfile").write_text('version=1\n[profiles.simple]\nagent="cx"\n')
+    monkeypatch.setattr(sys, "stderr", BrokenOutput())
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["simple", "-", "--json", *flags]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "output_io_error"
+    assert "Cannot write config warnings" in result["error"]["message"]
+
+
+def test_invalid_local_config_fails_before_reading_prompt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / ".pratfile").write_text("version=2\n")
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", "-", "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_config"
+    assert ".pratfile: version must be the integer 1" in result["error"]["message"]
 
 
 def test_claude_native_zero_exit_provider_failure_is_normalized(
@@ -1060,8 +1131,10 @@ def _lock_is_available(lock_path: Path) -> bool:
     return True
 
 
+@pytest.mark.parametrize("collision", [False, True])
 def test_progress_full_stderr_before_launch_does_not_block_or_change_flags(
     tmp_path: Path,
+    collision: bool,
 ) -> None:
     marker = tmp_path / "full-before-launch"
     group_path = tmp_path / "full-before-launch.group"
@@ -1069,7 +1142,11 @@ def test_progress_full_stderr_before_launch_does_not_block_or_change_flags(
         f"import os;from pathlib import Path;Path({str(marker)!r}).touch();"
         f"Path({str(group_path)!r}).write_text(str(os.getpgrp()));" + CODEX_SUCCESS
     )
-    config = write_agent(tmp_path, "codex", fixture)
+    config = write_agent(tmp_path, "codex", fixture, profile="work")
+    if collision:
+        global_path = tmp_path / "xdg/pratfall/config.toml"
+        global_path.parent.mkdir(parents=True)
+        global_path.write_text('version=1\n[profiles.work]\nagent="codex"\n')
     read_descriptor, write_descriptor = os.pipe()
     original_flags = fcntl.fcntl(write_descriptor, fcntl.F_GETFL)
     _fill_pipe(write_descriptor)
