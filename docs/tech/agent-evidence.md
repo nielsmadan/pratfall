@@ -4,10 +4,14 @@ Verified 2026-09-09 for the initial implementation. This is a working evidence r
 adapter tasks replace uncertainties with verified contracts. Installed help was read without
 model inference. Native CLI releases can change these interfaces.
 
-Fast mode and version probes were verified separately on 2026-09-10. Codex 0.153.4's configuration
-schema accepts `service_tier` strings; Prat maps true to the invocation override
-`-c service_tier="priority"` and false to `-c service_tier="default"`. Claude's fast-mode guide
-documents noninteractive `--settings '{"fastMode": true}'`, and its CLI reference says inline
+Fast mode and version probes were established on 2026-09-10 through primary-source review and
+fake-executable tests, not new live native runs. Codex 0.153.4's
+[configuration schema](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/core/config.schema.json)
+accepts `service_tier` strings; Prat maps true to the invocation override
+`-c service_tier="priority"` and false to `-c service_tier="default"`. Claude's
+[fast-mode guide](https://code.claude.com/docs/en/fast-mode#toggle-fast-mode) documents
+noninteractive `--settings '{"fastMode": true}'`, and its
+[CLI reference](https://code.claude.com/docs/en/cli-reference) says inline
 settings apply to that session; Prat passes the same single-key object with either boolean. Omission
 adds no override. Native account and model restrictions still apply, and settings files are never
 changed.
@@ -18,22 +22,23 @@ does not infer authentication. A nonzero exit, empty selected output, invalid se
 timeout, or output overflow becomes a per-agent `version_error`. The default doctor path performs
 discovery only.
 
-Native accounting mappings were verified separately on 2026-09-10. Prat exposes only observed
-model identifiers and native USD cost fields described below. Missing data remains null; requested
-models, published prices, and non-USD credits are not used as substitutes.
+Native accounting mappings were established on 2026-09-10 through the linked primary sources and
+fake-executable decoder tests, not new live native runs. Prat exposes only observed model
+identifiers and native USD cost fields described below. Missing data remains null; requested models,
+published prices, and non-USD credits are not used as substitutes.
 
 | Agent | Native invocation | Model | Effort | Native limits | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | Claude Code | `claude -p --output-format json` | `--model` | `--effort` | `--max-budget-usd`, `--max-turns` | Installed 2.1.266, [CLI reference](https://code.claude.com/docs/en/cli-reference), and [Agent SDK result type](https://platform.claude.com/docs/en/agent-sdk/typescript#sdkresultmessage) |
 | Codex | `codex exec --json` | `--model` | `-c model_reasoning_effort="LEVEL"` | No verified total-token/spend cap | Installed 0.153.4, [noninteractive docs](https://developers.openai.com/codex/noninteractive), [event source](https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs) |
-| Gemini | `gemini --output-format json --prompt=PROMPT` | `--model` | Unsupported | None verified | [Headless reference](https://geminicli.com/docs/cli/headless) and cached formatter source/tests |
-| Antigravity | `agy --input-format stream-json --output-format stream-json` with one stdin user event | `--model` | `--effort low\|medium\|high` | `--print-timeout` belongs to native print mode and is reserved | Installed 1.1.11 and [headless docs](https://antigravity.google/docs/cli/headless) |
+| Gemini | `gemini --output-format json --prompt=PROMPT` | `--model` | Unsupported | None verified | [Headless reference](https://geminicli.com/docs/cli/headless) and [UI telemetry source](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/telemetry/uiTelemetry.ts) |
+| Antigravity | `agy --input-format stream-json --output-format stream-json` with one stdin user event; requires 1.1.15+ | `--model` | `--effort low\|medium\|high` | No verified native timeout for stdin stream mode | [1.1.15 changelog](https://github.com/google-antigravity/antigravity-cli/blob/main/CHANGELOG.md) and [stdin stream docs](https://antigravity.google/docs/cli/headless#stream-prompts-from-stdin); installed 1.1.11 predates this interface |
 | Copilot | `copilot --output-format=json --prompt=PROMPT` | `--model` | `--effort low\|medium\|high\|xhigh\|max` | `--max-ai-credits`, soft per-response cap | [CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference) and published 1.0.83 package source |
 | Kiro | `kiro-cli chat --no-interactive --wrap never -- PROMPT` | `--model` | `--effort low\|medium\|high\|xhigh\|max` | None verified | [CLI reference](https://kiro.dev/docs/reference/cli-commands/), [headless](https://kiro.dev/docs/cli/headless/), and statically inspected 2.21.2 package |
 | Cursor | `agent --print --output-format json agent -- PROMPT` | `--model` | Unsupported | None verified | [Parameters](https://cursor.com/docs/cli/reference/parameters), [output format](https://cursor.com/docs/cli/reference/output-format), and published 2026.09.08 package source |
-| OpenClaw | `openclaw agent exec --json --message-file -` | `--model provider/model` | `--thinking` | Native timeout in seconds | [Agent exec](https://docs.openclaw.ai/cli/agent) |
+| OpenClaw | `openclaw agent exec --json --message-file -` | `--model provider/model` | `--thinking` | Native timeout in seconds | [Agent exec](https://docs.openclaw.ai/cli/agent) and [result projection](https://github.com/openclaw/openclaw/blob/main/src/commands/agent-exec-result.ts) |
 | Hermes | `hermes chat --oneshot --quiet --query-file -` | `--model`, `--provider` | `--reasoning none\|minimal\|low\|medium\|high\|xhigh\|max\|ultra` | `--max-turns` | [CLI docs](https://hermes-agent.nousresearch.com/docs/reference/cli-commands), [source](https://github.com/NousResearch/hermes-agent/blob/main/cli.py) |
-| OpenCode | `opencode run --format json` with stdin prompt | `--model provider/model` | `--variant` (provider-specific string) | None verified | Installed 1.18.29 help and cached `run.ts`/session source |
+| OpenCode | `opencode run --format json` with stdin prompt | `--model provider/model` | `--variant` (provider-specific string) | None verified | Installed 1.18.29 help, [run emitter](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/cli/cmd/run.ts), and [session processor](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/session/processor.ts) |
 
 ## Verified output contracts
 
@@ -88,14 +93,19 @@ native USD total in this interface.
 The headless docs' single-JSON example has `status: SUCCESS`, `response: STRING`,
 `conversation_id`, `duration_seconds`, `num_turns`, and `usage` with input/output/thinking,
 cache-read and total tokens. Failures have `status: ERROR`, an `error` string and nonzero exit.
-The native default wait is five minutes; `--print-timeout` accepts duration strings such as
-`15m`. JSON mode is sufficient; its JSONL mode instead uses `event` with nested `result`.
+The documented five-minute `--print-timeout` examples use print mode through `-p`. They do not
+establish timeout behavior for stdin stream mode. Antigravity 1.1.28 also changed print-timeout to
+return partial output with a warning and successful exit, so Prat does not infer timeout from
+native stderr or forward that print-only option.
 
-Prat uses the documented stdin stream mode, writes one `user` event, then closes stdin. The stream
-must begin with `init` and contain exactly one terminal `result`. Only that result's response is
-returned; step text, tools, and subagent metadata are omitted. Its cumulative single-turn usage
-maps input, cache-read, output, and thinking counts directly. `SUCCESS` completes; failure states
-remain provider failures and `WAITING` or `RUNNING` cannot serve as terminal evidence.
+The native changelog introduces stdin stream mode in 1.1.15. The locally recorded 1.1.11 predates
+that interface and is not live evidence for it. The documented mode consumes prompts until stdin
+closes and returns one result per prompt. Prat writes one `user` event, closes stdin, requires an
+`init` followed by exactly one terminal `result`, and enforces its configured outer deadline. Only the
+terminal response is returned; step text, tools, and subagent metadata are omitted. Its cumulative
+single-turn usage maps input, cache-read, output, and thinking counts directly. `SUCCESS`
+completes; failure states remain provider failures and `WAITING` or `RUNNING` cannot serve as
+terminal evidence. Native stdin-stream timeout semantics remain unverified.
 
 ### OpenCode
 
@@ -116,9 +126,11 @@ replaces earlier copies, and distinct steps are summed. OpenCode already separat
 cache reads/writes and text output from reasoning; Prat preserves that split. `tool-calls` continues
 the run, `stop` is completion, and `length`, `content-filter`, `error`, or `unknown` finishes are
 reported as incomplete provider failures.
-Each step-finish part also has a native `cost`. Prat applies the same latest-snapshot rule by part ID
-and sums distinct current steps once. Missing/null latest cost makes the aggregate unknown; malformed
-non-null values or aggregate overflow are protocol errors. Run events expose no verified model ID.
+Each step-finish part also has a native `cost`, as recorded by the
+[session processor](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/session/processor.ts).
+Prat applies the same latest-snapshot rule by part ID and sums distinct current steps once.
+Missing/null latest cost makes the aggregate unknown; malformed non-null values or aggregate
+overflow are protocol errors. Run events expose no verified model ID.
 
 ### Kiro
 
@@ -189,9 +201,11 @@ and `isCommentary` fields of their native types; additive fields remain allowed.
 object or payload marked `isError: true` is failure evidence even when `ok` or `status` contradicts
 it.
 
-Nullable native `provider`, `model`, and `costUsd` provide accounting. Prat joins provider/model when
-both exist, uses the model alone when provider is absent, and reports no model when the provider has
-no model. It passes through only finite nonnegative native USD cost.
+The native
+[result projection](https://github.com/openclaw/openclaw/blob/main/src/commands/agent-exec-result.ts)
+exposes nullable `provider`, `model`, and `costUsd` accounting. Prat joins provider/model when both
+exist, uses the model alone when provider is absent, and reports no model when the provider has no
+model. It passes through only finite nonnegative native USD cost.
 
 Prat passes its exact positive deadline to the process runner. Because current `agent exec`
 accepts only whole-second timeout strings and internally ceilings milliseconds, its native timeout

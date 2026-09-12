@@ -9,7 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from pratfall.models import Invocation
+from pratfall.adapters import codex
+from pratfall.consumer import ConsumerLimits
+from pratfall.models import DecodedOutput, Invocation, ResultError
 from pratfall.runner import STDERR_LIMIT, STDOUT_LIMIT, OutputLimits, run
 
 
@@ -176,6 +178,16 @@ def test_timeout_kills_process_group_that_ignores_term(tmp_path: Path) -> None:
     assert 2_100 <= result.duration_ms < 4_000
 
 
+def test_timeout_does_not_wait_unused_term_grace_after_group_exits(tmp_path: Path) -> None:
+    executable = tmp_path / "prompt-exit"
+    executable.write_text(f"#!{sys.executable}\nimport time\ntime.sleep(30)\n", encoding="utf-8")
+    executable.chmod(0o755)
+    result = run(Invocation((str(executable),), b""), tmp_path, 0.1)
+    assert result.timed_out is True
+    assert result.native_exit_code == -signal.SIGTERM
+    assert result.duration_ms < 1_500
+
+
 @pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])
 def test_runner_converts_cancellation_and_restores_handler(
     tmp_path: Path, chosen: signal.Signals
@@ -214,3 +226,208 @@ def test_repeated_interrupt_escalates_without_stranding_child(tmp_path: Path) ->
     assert result.interrupted_by == signal.SIGINT
     assert result.native_exit_code == -signal.SIGKILL
     assert result.duration_ms < 2_000
+
+
+def test_runner_streams_stdout_to_consumer_without_retaining_trace(tmp_path: Path) -> None:
+    stream = (
+        '{"type":"item.completed","item":{"id":"answer","type":"agent_message",'
+        '"text":"done"}}\n'
+        '{"type":"turn.completed","usage":{"input_tokens":1,'
+        '"cached_input_tokens":0,"output_tokens":2}}\n'
+    )
+    result = run(
+        python(f"import os;os.write(1,{stream.encode()!r})"),
+        tmp_path,
+        5,
+        consumer=codex.consumer(),
+    )
+    assert result.stdout == b""
+    assert result.decoded is not None
+    assert result.decoded.output == "done"
+    assert result.error is None
+
+
+def test_runner_finishes_consumer_once_after_stdout_closes(tmp_path: Path) -> None:
+    class CountingConsumer:
+        def __init__(self) -> None:
+            self.feeds: list[bytes] = []
+            self.finishes = 0
+
+        def feed(self, data: bytes) -> str | None:
+            self.feeds.append(data)
+            return None
+
+        def finish(self) -> DecodedOutput:
+            self.finishes += 1
+            return DecodedOutput(output=b"".join(self.feeds).decode())
+
+    consumer = CountingConsumer()
+    result = run(python("print('answer',end='')"), tmp_path, 5, consumer=consumer)
+    assert consumer.finishes == 1
+    assert result.stdout == b""
+    assert result.decoded == DecodedOutput(output="answer")
+
+
+def test_finish_time_limit_cleans_descendant_and_preserves_decoded_output(tmp_path: Path) -> None:
+    lock_path = tmp_path / "stream-descendant.lock"
+    pid_path = tmp_path / "stream-descendant.pid"
+    descendant = (
+        "import fcntl,os,sys,time;"
+        "lock=open(sys.argv[2],'wb');fcntl.flock(lock,fcntl.LOCK_EX);"
+        "open(sys.argv[3],'w').write(str(os.getpid()));"
+        "os.close(1);os.close(2);os.write(int(sys.argv[1]),b'1');"
+        "os.close(int(sys.argv[1]));time.sleep(30)"
+    )
+    answer = (
+        b'{"type":"item.completed","item":{"id":"a","type":"agent_message","text":"partial"}}\n'
+    )
+    code = (
+        "import os,subprocess,sys;"
+        "ready_read,ready_write=os.pipe();"
+        f"subprocess.Popen([sys.executable,'-c',{descendant!r},str(ready_write),"
+        f"{str(lock_path)!r},{str(pid_path)!r}],pass_fds=(ready_write,));"
+        "os.close(ready_write);os.read(ready_read,1);os.close(ready_read);"
+        f"os.write(1,{answer!r}+b'x'*256+b'\\r')"
+    )
+    try:
+        result = run(
+            python(code),
+            tmp_path,
+            5,
+            consumer=codex.consumer(ConsumerLimits(event_bytes=256, state_bytes=1024, records=10)),
+        )
+        assert result.error is not None
+        assert result.error.code == "stdout_limit_exceeded"
+        assert result.decoded is not None
+        assert result.decoded.output == "partial"
+        assert result.stdout == b""
+        assert_process_terminated(int(pid_path.read_text()), lock_path)
+    finally:
+        if pid_path.exists():
+            with suppress(ProcessLookupError):
+                os.kill(int(pid_path.read_text()), signal.SIGKILL)
+
+
+def test_missing_terminal_limit_outranks_native_exit_and_cleans_descendant(
+    tmp_path: Path,
+) -> None:
+    lock_path = tmp_path / "missing-terminal-descendant.lock"
+    pid_path = tmp_path / "missing-terminal-descendant.pid"
+    descendant = (
+        "import fcntl,os,sys,time;"
+        "lock=open(sys.argv[2],'wb');fcntl.flock(lock,fcntl.LOCK_EX);"
+        "open(sys.argv[3],'w').write(str(os.getpid()));"
+        "os.close(1);os.close(2);os.write(int(sys.argv[1]),b'1');"
+        "os.close(int(sys.argv[1]));time.sleep(30)"
+    )
+    answer = (
+        b'{"type":"item.completed","item":{"id":"","type":"agent_message","text":"answer12345"}}\n'
+    )
+    code = (
+        "import os,subprocess,sys;"
+        "ready_read,ready_write=os.pipe();"
+        f"subprocess.Popen([sys.executable,'-c',{descendant!r},str(ready_write),"
+        f"{str(lock_path)!r},{str(pid_path)!r}],pass_fds=(ready_write,));"
+        "os.close(ready_write);os.read(ready_read,1);os.close(ready_read);"
+        f"os.write(1,{answer!r});sys.exit(17)"
+    )
+    try:
+        result = run(
+            python(code),
+            tmp_path,
+            5,
+            consumer=codex.consumer(ConsumerLimits(event_bytes=256, state_bytes=11, records=10)),
+        )
+        assert result.error == ResultError(
+            "stdout_limit_exceeded", "Agent retained output state exceeded 11 bytes."
+        )
+        assert result.native_exit_code == 17
+        assert result.decoded is not None
+        assert result.decoded.output == "answer12345"
+        assert_process_terminated(int(pid_path.read_text()), lock_path)
+    finally:
+        if pid_path.exists():
+            with suppress(ProcessLookupError):
+                os.kill(int(pid_path.read_text()), signal.SIGKILL)
+
+
+def test_progress_failure_terminates_child_and_preserves_streamed_answer(tmp_path: Path) -> None:
+    lock_path = tmp_path / "progress-child.lock"
+    pid_path = tmp_path / "progress-child.pid"
+    code = (
+        "import fcntl,json,time;"
+        f"lock=open({str(lock_path)!r},'wb');fcntl.flock(lock,fcntl.LOCK_EX);"
+        f"open({str(pid_path)!r},'w').write(str(__import__('os').getpid()));"
+        "print(json.dumps({'type':'item.completed','item':"
+        "{'id':'a','type':'agent_message','text':'partial'}}),flush=True);time.sleep(30)"
+    )
+    calls = 0
+
+    def fail_progress(_elapsed: int, _category: str) -> None:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            raise BrokenPipeError("closed progress pipe")
+
+    try:
+        result = run(
+            python(code),
+            tmp_path,
+            10,
+            consumer=codex.consumer(),
+            progress=fail_progress,
+        )
+        assert result.error is not None
+        assert result.error.code == "output_io_error"
+        assert result.decoded is not None
+        assert result.decoded.output == "partial"
+        assert_process_terminated(int(pid_path.read_text()), lock_path)
+    finally:
+        if pid_path.exists():
+            with suppress(ProcessLookupError):
+                os.kill(int(pid_path.read_text()), signal.SIGKILL)
+
+
+@pytest.mark.parametrize("interrupt", [False, True])
+def test_timeout_and_interruption_feed_term_cleanup_bytes_to_consumer(
+    tmp_path: Path, interrupt: bool
+) -> None:
+    ready = tmp_path / "cleanup-bytes-ready"
+    payload = (
+        b'{"type":"item.completed","item":{"id":"a","type":"agent_message",'
+        b'"text":"cleanup answer"}}\n'
+        b'{"type":"turn.completed","usage":{"input_tokens":1,'
+        b'"cached_input_tokens":0,"output_tokens":1}}\n'
+    )
+    code = (
+        "import os,signal,time;"
+        f"payload={payload!r};"
+        "signal.signal(signal.SIGTERM,lambda *_:(os.write(1,payload),os._exit(0)));"
+        f"open({str(ready)!r},'w').write('ready');"
+        "time.sleep(30)"
+    )
+    sender: threading.Thread | None = None
+    if interrupt:
+
+        def send() -> None:
+            while not ready.exists():
+                time.sleep(0.01)
+            os.kill(os.getpid(), signal.SIGINT)
+
+        sender = threading.Thread(target=send)
+        sender.start()
+    result = run(
+        python(code),
+        tmp_path,
+        5 if interrupt else 0.2,
+        consumer=codex.consumer(),
+    )
+    if sender is not None:
+        sender.join()
+    assert result.decoded is not None
+    assert result.decoded.output == "cleanup answer"
+    assert result.decoded.error is None
+    if interrupt:
+        assert result.interrupted_by == signal.SIGINT
+    else:
+        assert result.timed_out is True

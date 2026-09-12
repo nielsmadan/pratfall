@@ -15,6 +15,7 @@ from pratfall.adapters import (
     opencode,
 )
 from pratfall.catalog import BY_NAME
+from pratfall.consumer import ConsumerFailure, ConsumerLimits
 from pratfall.errors import PratError
 from pratfall.models import DecodedOutput, Options, ResolvedProfile, ResultError, Usage
 
@@ -26,7 +27,7 @@ def resolved(agent: str, options: Options | None = None) -> ResolvedProfile:
 
 
 def codex_stream(*events: object) -> str:
-    return "\n".join(json.dumps(event) for event in events) + "\n"
+    return "\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n"
 
 
 def codex_usage(**changes: object) -> dict[str, object]:
@@ -1040,6 +1041,33 @@ def test_openclaw_malformed_provider_drops_model_but_preserves_cost(provider: ob
     assert decoded.error == ResultError("protocol_error", "OpenClaw provider is malformed.")
 
 
+@pytest.mark.parametrize("model_value", [None, "missing"])
+@pytest.mark.parametrize("provider", ["", 3])
+def test_openclaw_validates_provider_without_a_model(model_value: object, provider: object) -> None:
+    value = openclaw_result(model=model_value, provider=provider, costUsd=0.25)
+    if model_value == "missing":
+        del value["model"]
+    decoded = openclaw.decode(json.dumps(value))
+    assert decoded.reported_models is None
+    assert decoded.cost_usd == 0.25
+    assert decoded.error == ResultError("protocol_error", "OpenClaw provider is malformed.")
+
+
+@pytest.mark.parametrize("model_value", [None, "missing"])
+@pytest.mark.parametrize("provider_value", [None, "missing"])
+def test_openclaw_missing_accounting_identity_remains_unknown(
+    model_value: object, provider_value: object
+) -> None:
+    value = openclaw_result(model=model_value, provider=provider_value)
+    if model_value == "missing":
+        del value["model"]
+    if provider_value == "missing":
+        del value["provider"]
+    decoded = openclaw.decode(json.dumps(value))
+    assert decoded.reported_models is None
+    assert decoded.error is None
+
+
 def test_openclaw_provider_failure_preserves_accounting_and_outranks_malformed_cost() -> None:
     decoded = openclaw.decode(
         json.dumps(
@@ -1921,3 +1949,495 @@ def test_opencode_rejects_incomplete_and_malformed_streams(stream: str) -> None:
     decoded = opencode.decode(stream)
     assert decoded.error is not None
     assert decoded.error.code in {"protocol_error", "provider_error"}
+
+
+@pytest.mark.parametrize(
+    "stream",
+    [
+        "",
+        codex_stream({"type": "future"}),
+        codex_stream(
+            {"type": "error", "error": {"name": "ProviderError", "data": {"message": "x"}}}
+        ),
+        codex_stream(
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "step",
+                    "type": "step-finish",
+                    "reason": "stop",
+                    "cost": 0,
+                    "tokens": opencode_usage(output=-1),
+                },
+            }
+        ),
+    ],
+)
+def test_opencode_unknown_or_invalid_usage_remains_unknown(stream: str) -> None:
+    assert opencode.decode(stream).usage is None
+
+
+def test_opencode_real_zero_usage_snapshot_is_reported() -> None:
+    decoded = opencode.decode(
+        codex_stream(
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "step",
+                    "type": "step-finish",
+                    "reason": "stop",
+                    "cost": 0,
+                    "tokens": opencode_usage(
+                        total=0,
+                        input=0,
+                        output=0,
+                        reasoning=0,
+                        cache={"read": 0, "write": 0},
+                    ),
+                },
+            }
+        )
+    )
+    assert decoded.usage == Usage(0, 0, 0, 0, 0)
+    assert decoded.error is None
+
+
+@pytest.mark.parametrize(
+    ("factory", "stream"),
+    [
+        (
+            codex.consumer,
+            codex_stream(
+                {
+                    "type": "item.completed",
+                    "item": {"id": "", "type": "agent_message", "text": "answer12345"},
+                }
+            ),
+        ),
+        (
+            copilot.consumer,
+            codex_stream(
+                {
+                    "type": "assistant.message",
+                    "data": {"messageId": "", "content": "answer12345"},
+                }
+            ),
+        ),
+        (
+            opencode.consumer,
+            codex_stream(
+                {
+                    "type": "text",
+                    "part": {
+                        "id": "",
+                        "type": "text",
+                        "text": "answer12345",
+                        "time": {"end": 1},
+                    },
+                }
+            ),
+        ),
+    ],
+)
+def test_missing_terminal_diagnostic_counts_against_retained_state(
+    factory: object, stream: str
+) -> None:
+    incremental = factory(ConsumerLimits(event_bytes=1024, state_bytes=11, records=10))
+    incremental.feed(stream.encode())
+    with pytest.raises(ConsumerFailure) as failure:
+        incremental.finish()
+    assert failure.value.decoded is not None
+    assert failure.value.decoded.output == "answer12345"
+    assert failure.value.error == ResultError(
+        "stdout_limit_exceeded", "Agent retained output state exceeded 11 bytes."
+    )
+
+
+@pytest.mark.parametrize(
+    ("factory", "first", "rejected"),
+    [
+        (
+            codex.consumer,
+            {
+                "type": "item.completed",
+                "item": {"id": "", "type": "agent_message", "text": "12345"},
+            },
+            {
+                "type": "item.completed",
+                "item": {"id": "x", "type": "agent_message", "text": "6"},
+            },
+        ),
+        (
+            copilot.consumer,
+            {"type": "assistant.message", "data": {"messageId": "", "content": "12345"}},
+            {"type": "assistant.message", "data": {"messageId": "x", "content": "6"}},
+        ),
+        (
+            opencode.consumer,
+            {
+                "type": "text",
+                "part": {"id": "", "type": "text", "text": "12345", "time": {"end": 1}},
+            },
+            {
+                "type": "text",
+                "part": {"id": "x", "type": "text", "text": "6", "time": {"end": 1}},
+            },
+        ),
+    ],
+)
+def test_prior_state_failure_survives_finalization_with_exhausted_budget(
+    factory: object, first: object, rejected: object
+) -> None:
+    incremental = factory(ConsumerLimits(event_bytes=1024, state_bytes=5, records=10))
+    incremental.feed(codex_stream(first).encode())
+    with pytest.raises(ConsumerFailure) as failure:
+        incremental.feed(codex_stream(rejected).encode())
+    assert failure.value.error == ResultError(
+        "stdout_limit_exceeded", "Agent retained output state exceeded 5 bytes."
+    )
+    with pytest.raises(ConsumerFailure) as finalized:
+        incremental.finish()
+    assert finalized.value.error == failure.value.error
+    assert finalized.value.decoded is not None
+    assert finalized.value.decoded.output == "12345"
+
+
+@pytest.mark.parametrize(
+    ("decoder", "first", "rejected"),
+    [
+        (
+            copilot.decode,
+            {"type": "assistant.message", "data": {"messageId": "a", "content": "old"}},
+            {"type": "assistant.message", "data": {"messageId": "b", "content": "x"}},
+        ),
+        (
+            opencode.decode,
+            {
+                "type": "text",
+                "part": {"id": "a", "type": "text", "text": "old", "time": {"end": 1}},
+            },
+            {
+                "type": "text",
+                "part": {"id": "b", "type": "text", "text": "x", "time": {"end": 1}},
+            },
+        ),
+    ],
+)
+def test_rejected_new_message_does_not_publish_ordering_entry(
+    decoder: object, first: object, rejected: object
+) -> None:
+    factory = copilot.consumer if decoder is copilot.decode else opencode.consumer
+    incremental = factory(ConsumerLimits(event_bytes=1024, state_bytes=4, records=10))
+    incremental.feed(codex_stream(first).encode())
+    with pytest.raises(ConsumerFailure) as failure:
+        incremental.feed(codex_stream(rejected).encode())
+    assert failure.value.error == ResultError(
+        "stdout_limit_exceeded", "Agent retained output state exceeded 4 bytes."
+    )
+    with pytest.raises(ConsumerFailure) as finalized:
+        incremental.finish()
+    assert finalized.value.error == failure.value.error
+    assert finalized.value.decoded is not None
+    assert finalized.value.decoded.output == "old"
+
+
+@pytest.mark.parametrize(
+    ("factory", "stream", "expected"),
+    [
+        (
+            codex.consumer,
+            codex_stream(
+                {
+                    "type": "item.completed",
+                    "item": {"id": "雪", "type": "agent_message", "text": "café 雪"},
+                },
+                {"type": "turn.completed", "usage": codex_usage()},
+            ).rstrip("\n"),
+            "café 雪",
+        ),
+        (
+            copilot.consumer,
+            codex_stream(
+                {
+                    "type": "assistant.message",
+                    "data": {"messageId": "雪", "content": "café 雪"},
+                },
+                copilot_result(),
+            ).rstrip("\n"),
+            "café 雪",
+        ),
+        (
+            antigravity.consumer,
+            codex_stream(
+                {"event": "init", "init": {}},
+                {
+                    "event": "result",
+                    "result": {
+                        "status": "SUCCESS",
+                        "response": "café 雪",
+                        "usage": antigravity_usage(),
+                    },
+                },
+            ).rstrip("\n"),
+            "café 雪",
+        ),
+        (
+            opencode.consumer,
+            codex_stream(
+                {
+                    "type": "text",
+                    "part": {
+                        "id": "雪",
+                        "type": "text",
+                        "text": "café 雪",
+                        "time": {"end": 1},
+                    },
+                },
+                {
+                    "type": "step_finish",
+                    "part": {
+                        "id": "step",
+                        "type": "step-finish",
+                        "reason": "stop",
+                        "cost": 0,
+                        "tokens": opencode_usage(),
+                    },
+                },
+            ).rstrip("\n"),
+            "café 雪",
+        ),
+    ],
+)
+def test_jsonl_consumers_accept_every_byte_boundary_and_final_record(
+    factory: object, stream: str, expected: str
+) -> None:
+    assert "雪".encode() in stream.encode()
+    incremental = factory()
+    for byte in stream.encode("utf-8"):
+        incremental.feed(bytes((byte,)))
+    decoded = incremental.finish()
+    assert decoded.output == expected
+    assert decoded.error is None
+
+
+def test_jsonl_event_bound_counts_blank_unknown_and_crlf_records() -> None:
+    limits = ConsumerLimits(event_bytes=8, state_bytes=1024, records=10)
+    accepted = codex.consumer(limits)
+    accepted.feed(b"        \r\n")
+    assert accepted.finish().error is not None
+
+    oversized = codex.consumer(limits)
+    with pytest.raises(ConsumerFailure) as failure:
+        oversized.feed(b"         \n")
+    assert failure.value.error == ResultError(
+        "stdout_limit_exceeded", "Agent output event exceeded 8 bytes."
+    )
+
+
+def test_jsonl_state_replacement_refunds_prior_text_and_duplicate_records() -> None:
+    limits = ConsumerLimits(event_bytes=1024, state_bytes=20, records=3)
+    incremental = copilot.consumer(limits)
+    incremental.feed(
+        codex_stream(
+            {
+                "type": "assistant.message_delta",
+                "data": {"messageId": "id", "deltaContent": "1234567890"},
+            },
+            {
+                "type": "assistant.message",
+                "data": {"messageId": "id", "content": "x", "model": "m"},
+            },
+            {
+                "type": "assistant.message",
+                "data": {"messageId": "id", "content": "y", "model": "m"},
+            },
+            copilot_result(),
+        ).encode()
+    )
+    decoded = incremental.finish()
+    assert decoded.output == "y"
+    assert decoded.reported_models == ("m",)
+    assert decoded.error is None
+
+
+def test_copilot_many_tiny_and_empty_deltas_share_one_logical_record() -> None:
+    incremental = copilot.consumer(ConsumerLimits(event_bytes=1024, state_bytes=5000, records=2))
+    events = [
+        {
+            "type": "assistant.message_delta",
+            "data": {"messageId": "one", "deltaContent": "x" if index % 2 else ""},
+        }
+        for index in range(4000)
+    ]
+    events.append(copilot_result())
+    incremental.feed(codex_stream(*events).encode())
+    decoded = incremental.finish()
+    assert decoded.output == "x" * 2000
+    assert decoded.error is None
+
+
+def test_copilot_answer_join_separator_respects_state_byte_limit() -> None:
+    incremental = copilot.consumer(ConsumerLimits(event_bytes=1024, state_bytes=5, records=3))
+    incremental.feed(
+        codex_stream(
+            {"type": "assistant.message", "data": {"messageId": "a", "content": "aa"}}
+        ).encode()
+    )
+    with pytest.raises(ConsumerFailure) as failure:
+        incremental.feed(
+            codex_stream(
+                {"type": "assistant.message", "data": {"messageId": "b", "content": "b"}}
+            ).encode()
+        )
+    assert failure.value.error == ResultError(
+        "stdout_limit_exceeded", "Agent retained output state exceeded 5 bytes."
+    )
+
+
+def test_jsonl_bounds_retained_records_and_answer_join_separators() -> None:
+    records = copilot.consumer(ConsumerLimits(event_bytes=1024, state_bytes=1024, records=1))
+    with pytest.raises(ConsumerFailure) as failure:
+        records.feed(
+            codex_stream(
+                {"type": "assistant.message", "data": {"messageId": "a", "content": ""}},
+                {"type": "assistant.message", "data": {"messageId": "b", "content": ""}},
+            ).encode()
+        )
+    assert failure.value.error.code == "stdout_limit_exceeded"
+
+    answer = codex.consumer(ConsumerLimits(event_bytes=1024, state_bytes=6, records=10))
+    answer.feed(
+        codex_stream(
+            {
+                "type": "item.completed",
+                "item": {"id": "", "type": "agent_message", "text": "aa"},
+            },
+            {
+                "type": "turn.completed",
+                "usage": {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0},
+            },
+        ).encode()
+    )
+    with pytest.raises(ConsumerFailure) as failure:
+        answer.feed(
+            codex_stream(
+                {
+                    "type": "item.completed",
+                    "item": {"id": "", "type": "agent_message", "text": "b"},
+                },
+            ).encode()
+        )
+    assert failure.value.error == ResultError(
+        "stdout_limit_exceeded", "Agent retained output state exceeded 6 bytes."
+    )
+
+
+def test_jsonl_rejects_unpaired_surrogate_excessive_nesting_and_numeric_width() -> None:
+    surrogate = codex.decode(
+        '{"type":"item.completed","item":{"id":"x","type":"agent_message","text":"\\ud800"}}\n'
+    )
+    nested = codex.decode("[" * 2000 + "]" * 2000 + "\n")
+    numeric = codex.decode('{"type":"future","value":' + "1" * 129 + "}\n")
+    assert surrogate.error is not None and surrogate.error.code == "output_encoding"
+    assert nested.error is not None and nested.error.code == "protocol_error"
+    assert numeric.error is not None and numeric.error.code == "protocol_error"
+
+
+def test_jsonl_total_discarded_trace_has_no_cumulative_cap() -> None:
+    unknown = json.dumps({"type": "future", "discarded": "x" * (1024 * 1024)}) + "\n"
+    decoded = codex.decode(
+        unknown * 9 + codex_stream({"type": "turn.completed", "usage": codex_usage()})
+    )
+    assert decoded.output == ""
+    assert decoded.error is None
+
+
+def test_late_provider_failures_outrank_duplicate_terminal_protocol_errors() -> None:
+    copilot_decoded = copilot.decode(codex_stream(copilot_result(), copilot_result(1)))
+    antigravity_decoded = antigravity.decode(
+        codex_stream(
+            {"event": "init", "init": {}},
+            {
+                "event": "result",
+                "result": {
+                    "status": "SUCCESS",
+                    "response": "answer",
+                    "usage": antigravity_usage(),
+                },
+            },
+            {
+                "event": "result",
+                "result": {
+                    "status": "ERROR",
+                    "response": "later",
+                    "error": "failed later",
+                    "usage": antigravity_usage(),
+                },
+            },
+        )
+    )
+    codex_incremental = codex.consumer()
+    codex_incremental.feed(
+        codex_stream(
+            {
+                "type": "item.completed",
+                "item": {"id": "answer", "type": "agent_message", "text": "answer"},
+            },
+            {"type": "turn.completed", "usage": codex_usage()},
+            {"type": "turn.failed", "error": {"message": "failed later"}},
+        ).encode()
+    )
+    codex_decoded = codex_incremental.finish()
+    opencode_incremental = opencode.consumer()
+    opencode_incremental.feed(
+        codex_stream(
+            {
+                "type": "text",
+                "part": {
+                    "id": "answer",
+                    "type": "text",
+                    "text": "answer",
+                    "time": {"end": 1},
+                },
+            },
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "step",
+                    "type": "step-finish",
+                    "reason": "stop",
+                    "cost": 0.25,
+                    "tokens": opencode_usage(),
+                },
+            },
+            {
+                "type": "error",
+                "error": {"name": "ProviderError", "data": {"message": "failed later"}},
+            },
+        ).encode()
+    )
+    opencode_decoded = opencode_incremental.finish()
+    assert copilot_decoded.error == ResultError(
+        "provider_error", "Copilot reported an unsuccessful result."
+    )
+    assert antigravity_decoded.output == "answer"
+    assert antigravity_decoded.error == ResultError("provider_error", "failed later")
+    assert codex_decoded.output == "answer"
+    assert codex_decoded.usage == Usage(
+        input_tokens=24_901,
+        cached_input_tokens=8_960,
+        cache_write_input_tokens=0,
+        output_tokens=8,
+        reasoning_output_tokens=0,
+    )
+    assert codex_decoded.error == ResultError("provider_error", "failed later")
+    assert opencode_decoded.output == "answer"
+    assert opencode_decoded.usage == Usage(
+        input_tokens=10,
+        cached_input_tokens=3,
+        cache_write_input_tokens=1,
+        output_tokens=4,
+        reasoning_output_tokens=2,
+    )
+    assert opencode_decoded.cost_usd == 0.25
+    assert opencode_decoded.error == ResultError("provider_error", "failed later")

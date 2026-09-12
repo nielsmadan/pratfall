@@ -177,23 +177,18 @@ def _accounting(
     value: dict[str, object],
 ) -> tuple[tuple[str, ...] | None, int | float | None, ResultError | None]:
     reported_model, model_error = model(value.get("model"), "OpenClaw model")
-    provider = value.get("provider")
-    if reported_model is None:
+    reported_provider, provider_error = model(value.get("provider"), "OpenClaw provider")
+    if reported_model is None or provider_error is not None:
         reported_models = None
     else:
-        reported_provider, provider_error = model(provider, "OpenClaw provider")
-        model_error = model_error or provider_error
-        if provider_error is not None:
-            reported_models = None
-        else:
-            identifier = (
-                f"{reported_provider}/{reported_model}"
-                if reported_provider is not None
-                else reported_model
-            )
-            reported_models = (identifier,)
+        identifier = (
+            f"{reported_provider}/{reported_model}"
+            if reported_provider is not None
+            else reported_model
+        )
+        reported_models = (identifier,)
     cost_usd, cost_error = cost(value.get("costUsd"), "OpenClaw costUsd")
-    return reported_models, cost_usd, model_error or cost_error
+    return reported_models, cost_usd, model_error or provider_error or cost_error
 
 
 def _has_fallback(arguments: tuple[str, ...]) -> bool:

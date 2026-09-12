@@ -14,6 +14,7 @@ from pratfall.adapters import (
     openclaw,
     opencode,
 )
+from pratfall.consumer import ByteConsumer
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile
 
 
@@ -23,6 +24,7 @@ class Adapter:
     decode: Callable[[str], DecodedOutput]
     validate: Callable[[tuple[str, ...]], None]
     validate_resolved: Callable[[ResolvedProfile], None] | None = None
+    consumer: Callable[[], ByteConsumer] | None = None
 
 
 ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
@@ -32,6 +34,7 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
             module.decode,
             module.validate,
             openclaw.validate_resolved if name == "openclaw" else None,
+            module.consumer if name in {"codex", "copilot", "antigravity", "opencode"} else None,
         )
         for name, module in (
             ("claude", claude),

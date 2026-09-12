@@ -2,17 +2,24 @@ import fcntl
 import io
 import json
 import os
+import re
+import selectors
 import signal
 import subprocess
 import sys
 import time
 from contextlib import suppress
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
 
+from pratfall import cli as cli_module
+from pratfall import runner as runner_module
 from pratfall.cli import main
+from pratfall.models import DecodedOutput, ResultError
 from pratfall.prompt_input import PROMPT_LIMIT
+from pratfall.runner import ProcessResult
 
 
 class BrokenOutput:
@@ -697,6 +704,70 @@ def test_closed_stdin_is_a_normalized_input_error(
     assert "Cannot read standard input" in result["error"]["message"]
 
 
+def test_stdin_closed_before_startup_is_normalized_and_explicit_sources_work(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "native-launched"
+    config = write_agent(
+        tmp_path,
+        "codex",
+        f"from pathlib import Path;Path({str(marker)!r}).touch()\n{CODEX_SUCCESS}",
+    )
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text("file prompt", encoding="utf-8")
+    base = [
+        "/bin/sh",
+        "-c",
+        'exec 0<&-; exec "$@"',
+        "closed-stdin-probe",
+        sys.executable,
+        "-m",
+        "pratfall",
+    ]
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+    }
+
+    for source in ([], ["-"], ["--file", "-"]):
+        completed = subprocess.run(
+            [*base, "cx", *source, "--config", str(config), "--json"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        assert completed.returncode == result["exit_code"] == 2
+        assert result["status"] == "error"
+        assert result["error"]["code"] == "invalid_arguments"
+        assert "Cannot read standard input" in result["error"]["message"]
+        assert completed.stdout.count(b"\n") == 1
+        assert b"Traceback" not in completed.stderr
+        assert not marker.exists()
+
+    for source, expected in (
+        (["inline prompt"], "inline prompt"),
+        (["--file", str(prompt_file)], "file prompt"),
+    ):
+        completed = subprocess.run(
+            [*base, "cx", *source, "--config", str(config), "--json"],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+        result = json.loads(completed.stdout)
+        assert completed.returncode == result["exit_code"] == 0
+        assert result["status"] == "success"
+        assert json.loads(result["output"])["prompt"] == expected
+        assert marker.exists()
+        marker.unlink()
+
+
 @pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])
 def test_signal_while_reading_implicit_stdin_is_normalized_without_spawning(
     tmp_path: Path, chosen: signal.Signals
@@ -863,6 +934,616 @@ def test_runtime_failures_are_one_normalized_json_result(
     assert result["exit_code"] == expected_exit
     assert result["error"]["code"] == expected_error
     assert captured.out.count("\n") == 1
+
+
+def test_progress_is_live_bounded_and_preserves_one_final_json_object(tmp_path: Path) -> None:
+    ready = tmp_path / "progress-ready"
+    release = tmp_path / "progress-release"
+    fixture = f"""import json,time
+print(json.dumps({{"type":"item.completed","item":{{"id":"a","type":"agent_message","text":"done"}}}}), flush=True)
+open({str(ready)!r}, "w").write("ready")
+while not __import__("os").path.exists({str(release)!r}): time.sleep(0.01)
+print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1}}}}), flush=True)
+"""
+    config = write_agent(tmp_path, "codex", fixture)
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+    }
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "pratfall",
+            "cx",
+            "prompt",
+            "--progress",
+            "--json",
+            "--config",
+            str(config),
+        ],
+        cwd=tmp_path,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    stderr_data = bytearray()
+    selected = selectors.DefaultSelector()
+    try:
+        assert process.stderr is not None
+        selected.register(process.stderr, selectors.EVENT_READ)
+        deadline = time.monotonic() + 5
+        while b"answering" not in stderr_data and time.monotonic() < deadline:
+            if selected.select(0.1):
+                stderr_data.extend(os.read(process.stderr.fileno(), 4096))
+        assert ready.exists()
+        assert b"answering" in stderr_data
+        assert process.poll() is None
+        release.write_text("release", encoding="utf-8")
+        stdout, remaining_stderr = process.communicate(timeout=5)
+        result = json.loads(stdout)
+        all_stderr = bytes(stderr_data) + remaining_stderr
+        assert process.returncode == 0
+        assert result["output"] == "done"
+        assert stdout.count(b"\n") == 1
+        assert b"launching Codex" in all_stderr
+        assert b"starting" in all_stderr
+        assert b"finished with status success" in all_stderr
+        progress_lines = [line for line in all_stderr.splitlines() if b"s answering" in line]
+        assert len(progress_lines) == 1
+    finally:
+        selected.close()
+        if process.poll() is None:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+
+
+def _progress_env(tmp_path: Path) -> dict[str, str]:
+    return {
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+    }
+
+
+def _fill_pipe(write_descriptor: int) -> None:
+    flags = fcntl.fcntl(write_descriptor, fcntl.F_GETFL)
+    fcntl.fcntl(write_descriptor, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+    try:
+        while True:
+            os.write(write_descriptor, b"x" * 4096)
+    except BlockingIOError:
+        pass
+    finally:
+        fcntl.fcntl(write_descriptor, fcntl.F_SETFL, flags)
+
+
+def _lock_is_available(lock_path: Path) -> bool:
+    with lock_path.open("a+b") as stream:
+        try:
+            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        fcntl.flock(stream, fcntl.LOCK_UN)
+    return True
+
+
+def test_progress_full_stderr_before_launch_does_not_block_or_change_flags(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "full-before-launch"
+    group_path = tmp_path / "full-before-launch.group"
+    fixture = (
+        f"import os;from pathlib import Path;Path({str(marker)!r}).touch();"
+        f"Path({str(group_path)!r}).write_text(str(os.getpgrp()));" + CODEX_SUCCESS
+    )
+    config = write_agent(tmp_path, "codex", fixture)
+    read_descriptor, write_descriptor = os.pipe()
+    original_flags = fcntl.fcntl(write_descriptor, fcntl.F_GETFL)
+    _fill_pipe(write_descriptor)
+    process: subprocess.Popen[bytes] | None = None
+    started = time.monotonic()
+    try:
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "pratfall",
+                "cx",
+                "prompt",
+                "--progress",
+                "--json",
+                "--config",
+                str(config),
+            ],
+            cwd=tmp_path,
+            env=_progress_env(tmp_path),
+            stdout=subprocess.PIPE,
+            stderr=write_descriptor,
+            start_new_session=True,
+        )
+        stdout = process.communicate(timeout=5)[0]
+        result = json.loads(stdout)
+        assert process.returncode == 0
+        assert result["status"] == "success"
+        assert json.loads(result["output"])["prompt"] == "prompt"
+        assert stdout.count(b"\n") == 1
+        assert marker.exists()
+        assert time.monotonic() - started < 5
+        restored_flags = fcntl.fcntl(write_descriptor, fcntl.F_GETFL)
+        assert restored_flags & os.O_NONBLOCK == original_flags & os.O_NONBLOCK
+    finally:
+        if process is not None and process.poll() is None and group_path.exists():
+            with suppress(ProcessLookupError):
+                os.killpg(int(group_path.read_text()), signal.SIGKILL)
+        if process is not None and process.poll() is None:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+        os.close(write_descriptor)
+        os.close(read_descriptor)
+
+
+def test_progress_full_stderr_during_execution_does_not_stall_deadline_or_cleanup(
+    tmp_path: Path,
+) -> None:
+    ready = tmp_path / "full-during-ready"
+    release = tmp_path / "full-during-release"
+    lock_path = tmp_path / "full-during.lock"
+    group_path = tmp_path / "full-during.group"
+    fixture = f"""import fcntl,json,os,time
+lock = open({str(lock_path)!r}, "wb")
+fcntl.flock(lock, fcntl.LOCK_EX)
+open({str(group_path)!r}, "w").write(str(os.getpgrp()))
+print(json.dumps({{"type":"item.completed","item":{{"id":"a","type":"agent_message","text":"partial"}}}}), flush=True)
+open({str(ready)!r}, "w").write("ready")
+while not os.path.exists({str(release)!r}): time.sleep(0.01)
+time.sleep(30)
+"""
+    config = write_agent(tmp_path, "codex", fixture)
+    read_descriptor, write_descriptor = os.pipe()
+    original_flags = fcntl.fcntl(write_descriptor, fcntl.F_GETFL)
+    process: subprocess.Popen[bytes] | None = None
+    cleaned = False
+    started = time.monotonic()
+    try:
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "pratfall",
+                "cx",
+                "prompt",
+                "--progress",
+                "--timeout",
+                "1.2",
+                "--json",
+                "--config",
+                str(config),
+            ],
+            cwd=tmp_path,
+            env=_progress_env(tmp_path),
+            stdout=subprocess.PIPE,
+            stderr=write_descriptor,
+            start_new_session=True,
+        )
+        deadline = time.monotonic() + 2
+        while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists()
+        _fill_pipe(write_descriptor)
+        release.touch()
+        stdout = process.communicate(timeout=5)[0]
+        result = json.loads(stdout)
+        assert process.returncode == 124
+        assert result["status"] == "timeout"
+        assert result["output"] == "partial"
+        assert stdout.count(b"\n") == 1
+        assert time.monotonic() - started < 5
+        cleaned = _lock_is_available(lock_path)
+        assert cleaned
+        restored_flags = fcntl.fcntl(write_descriptor, fcntl.F_GETFL)
+        assert restored_flags & os.O_NONBLOCK == original_flags & os.O_NONBLOCK
+    finally:
+        if not cleaned and group_path.exists():
+            with suppress(ProcessLookupError):
+                os.killpg(int(group_path.read_text()), signal.SIGKILL)
+        if process is not None and process.poll() is None:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+        os.close(write_descriptor)
+        os.close(read_descriptor)
+
+
+@pytest.mark.parametrize("native_diagnostic", [False, True])
+def test_progress_final_stderr_failure_preserves_output_and_cleans_owned_descendant(
+    tmp_path: Path, native_diagnostic: bool
+) -> None:
+    ready = tmp_path / "final-failure-ready"
+    release = tmp_path / "final-failure-release"
+    lock_path = tmp_path / "final-failure.lock"
+    pid_path = tmp_path / "final-failure.pid"
+    group_path = tmp_path / "final-failure.group"
+    descendant = (
+        "import fcntl,os,sys,time;"
+        "lock=open(sys.argv[2],'wb');fcntl.flock(lock,fcntl.LOCK_EX);"
+        "open(sys.argv[3],'w').write(str(os.getpid()));"
+        "os.close(1);os.close(2);os.write(int(sys.argv[1]),b'1');"
+        "os.close(int(sys.argv[1]));time.sleep(30)"
+    )
+    diagnostic = "os.write(2,b'native diagnostic\\n')" if native_diagnostic else ""
+    fixture = f"""import json,os,subprocess,sys,time
+ready_read, ready_write = os.pipe()
+subprocess.Popen([sys.executable, "-c", {descendant!r}, str(ready_write), {str(lock_path)!r}, {str(pid_path)!r}], pass_fds=(ready_write,))
+os.close(ready_write)
+os.read(ready_read, 1)
+os.close(ready_read)
+open({str(group_path)!r}, "w").write(str(os.getpgrp()))
+open({str(ready)!r}, "w").write("ready")
+while not os.path.exists({str(release)!r}): time.sleep(0.01)
+print(json.dumps({{"type":"item.completed","item":{{"id":"a","type":"agent_message","text":"KEEP"}}}}), flush=True)
+print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1}}}}), flush=True)
+{diagnostic}
+"""
+    config = write_agent(tmp_path, "codex", fixture)
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "pratfall",
+            "cx",
+            "prompt",
+            "--progress",
+            "--json",
+            "--config",
+            str(config),
+        ],
+        cwd=tmp_path,
+        env=_progress_env(tmp_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    stderr_data = bytearray()
+    cleaned = False
+    try:
+        assert process.stderr is not None
+        selected = selectors.DefaultSelector()
+        selected.register(process.stderr, selectors.EVENT_READ)
+        deadline = time.monotonic() + 5
+        while (
+            (not ready.exists() or b"s starting" not in stderr_data)
+            and process.poll() is None
+            and time.monotonic() < deadline
+        ):
+            if selected.select(0.1):
+                stderr_data.extend(os.read(process.stderr.fileno(), 4096))
+        selected.close()
+        assert ready.exists()
+        assert b"s starting" in stderr_data
+        process.stderr.close()
+        process.stderr = None
+        release.touch()
+        stdout = process.communicate(timeout=6)[0]
+        result = json.loads(stdout)
+        assert process.returncode == 1
+        assert result["status"] == "error"
+        assert result["output"] == "KEEP"
+        assert result["native_exit_code"] == 0
+        assert result["error"]["code"] == "output_io_error"
+        assert stdout.count(b"\n") == 1
+        cleaned = _lock_is_available(lock_path)
+        assert cleaned
+    finally:
+        if not cleaned and group_path.exists():
+            with suppress(ProcessLookupError):
+                os.killpg(int(group_path.read_text()), signal.SIGKILL)
+        if process.poll() is None:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+
+
+@pytest.mark.parametrize("progress", [False, True])
+def test_invalid_native_stderr_cleans_owned_descendant_after_parent_exit(
+    tmp_path: Path, progress: bool
+) -> None:
+    ready = tmp_path / "encoding-failure-ready"
+    lock_path = tmp_path / "encoding-failure.lock"
+    group_path = tmp_path / "encoding-failure.group"
+    descendant = (
+        "import fcntl,os,sys,time;"
+        "lock=open(sys.argv[2],'wb');fcntl.flock(lock,fcntl.LOCK_EX);"
+        "os.close(1);os.close(2);os.write(int(sys.argv[1]),b'1');"
+        "os.close(int(sys.argv[1]));time.sleep(30)"
+    )
+    fixture = f"""import json,os,subprocess,sys
+ready_read, ready_write = os.pipe()
+subprocess.Popen([sys.executable, "-c", {descendant!r}, str(ready_write), {str(lock_path)!r}], pass_fds=(ready_write,))
+os.close(ready_write)
+os.read(ready_read, 1)
+os.close(ready_read)
+open({str(group_path)!r}, "w").write(str(os.getpgrp()))
+open({str(ready)!r}, "w").write("ready")
+print(json.dumps({{"type":"item.completed","item":{{"id":"a","type":"agent_message","text":"KEEP"}}}}), flush=True)
+print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1}}}}), flush=True)
+os.write(2, b"\\xff")
+"""
+    config = write_agent(tmp_path, "codex", fixture)
+    arguments = [
+        sys.executable,
+        "-m",
+        "pratfall",
+        "cx",
+        "prompt",
+        "--json",
+        "--config",
+        str(config),
+    ]
+    if progress:
+        arguments.append("--progress")
+    cleaned = False
+    process = subprocess.Popen(
+        arguments,
+        cwd=tmp_path,
+        env=_progress_env(tmp_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=6)
+        result = json.loads(stdout)
+        assert ready.read_text(encoding="utf-8") == "ready"
+        assert process.returncode == 1
+        assert result["status"] == "error"
+        assert result["output"] == "KEEP"
+        assert result["native_exit_code"] == 0
+        assert result["error"] == {
+            "code": "output_encoding",
+            "message": "Agent stderr is not valid UTF-8.",
+        }
+        assert stdout.count(b"\n") == 1
+        assert b"Traceback" not in stderr
+        cleaned = _lock_is_available(lock_path)
+        assert cleaned
+    finally:
+        if not cleaned and group_path.exists():
+            with suppress(ProcessLookupError):
+                os.killpg(int(group_path.read_text()), signal.SIGKILL)
+        if process.poll() is None:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+
+
+def _elapsed_progress(stderr: bytes) -> list[tuple[float, str]]:
+    pattern = re.compile(
+        rb"prat: ([0-9]+\.[0-9])s (starting|working|reasoning|using tools|answering|finishing)"
+    )
+    return [
+        (float(match.group(1)), match.group(2).decode())
+        for line in stderr.splitlines()
+        if (match := pattern.fullmatch(line)) is not None
+    ]
+
+
+def test_progress_coalesces_mixed_burst_and_emits_idle_heartbeat(tmp_path: Path) -> None:
+    ready = tmp_path / "heartbeat-ready"
+    release = tmp_path / "heartbeat-release"
+    group_path = tmp_path / "heartbeat.group"
+    payload_marker = "PROMPT-TOOL-ANSWER-CONTENT"
+    fixture = f"""import json,os,time
+events = [
+    {{"type":"thread.started","thread_id":"fixture"}},
+    {{"type":"turn.started"}},
+    {{"type":"item.started","item":{{"id":"reason","type":"reasoning"}}}},
+    {{"type":"item.updated","item":{{"id":"tool","type":"command_execution"}}}},
+    {{"type":"item.completed","item":{{"id":"answer","type":"agent_message","text":"done"}}}},
+    {{"type":"future.event","payload":{payload_marker!r}}},
+]
+for event in events: print(json.dumps(event), flush=True)
+open({str(group_path)!r}, "w").write(str(os.getpgrp()))
+open({str(ready)!r}, "w").write("ready")
+while not os.path.exists({str(release)!r}): time.sleep(0.01)
+print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0}}}}), flush=True)
+"""
+    config = write_agent(tmp_path, "codex", fixture)
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "pratfall",
+            "cx",
+            "prompt",
+            "--progress",
+            "--timeout",
+            "12",
+            "--json",
+            "--config",
+            str(config),
+        ],
+        cwd=tmp_path,
+        env=_progress_env(tmp_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    stderr_data = bytearray()
+    started = time.monotonic()
+    selected = selectors.DefaultSelector()
+    try:
+        assert process.stderr is not None
+        selected.register(process.stderr, selectors.EVENT_READ)
+        deadline = started + 8
+        while len(_elapsed_progress(stderr_data)) < 3 and time.monotonic() < deadline:
+            if selected.select(0.1):
+                stderr_data.extend(os.read(process.stderr.fileno(), 4096))
+        updates = _elapsed_progress(stderr_data)
+        assert ready.exists()
+        assert process.poll() is None
+        assert [category for _elapsed, category in updates[:3]] == [
+            "starting",
+            "answering",
+            "working",
+        ]
+        assert 4.5 <= updates[2][0] - updates[1][0] <= 6.5
+        release.touch()
+        stdout, remaining_stderr = process.communicate(timeout=5)
+        all_stderr = bytes(stderr_data) + remaining_stderr
+        result = json.loads(stdout)
+        final_updates = _elapsed_progress(all_stderr)
+        assert process.returncode == 0
+        assert result["status"] == "success"
+        assert result["output"] == "done"
+        assert payload_marker.encode() not in all_stderr
+        assert stdout.count(b"\n") == 1
+        assert all(current[0] - previous[0] >= 0.9 for previous, current in pairwise(final_updates))
+    finally:
+        selected.close()
+        if process.poll() is None:
+            release.touch()
+            if group_path.exists():
+                with suppress(ProcessLookupError):
+                    os.killpg(int(group_path.read_text()), signal.SIGKILL)
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+
+
+def test_final_presentation_cleanup_failure_stays_normalized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli_module, "cleanup_process_group", lambda _group: "permission denied")
+    process = ProcessResult(b"", b"", 0, 12, process_group=123)
+    updated = cli_module._after_run_presentation_failure(
+        process, BrokenPipeError("closed diagnostics")
+    )
+    assert updated.error == ResultError(
+        "output_io_error",
+        "Cannot write diagnostics to stderr: closed diagnostics. "
+        "Process-group cleanup failed: permission denied.",
+    )
+    assert updated.native_exit_code == 0
+
+
+def test_unverified_bounded_cleanup_preserves_primary_failure_and_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signals: list[signal.Signals] = []
+    monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
+    monkeypatch.setattr(runner_module, "FINAL_DRAIN_GRACE", 0)
+    monkeypatch.setattr(runner_module, "_process_group_exists", lambda _group: True)
+    monkeypatch.setattr(
+        runner_module, "_signal_group", lambda _group, chosen: signals.append(chosen)
+    )
+    cleanup_error = runner_module.cleanup_process_group(123)
+    assert signals == [signal.SIGTERM, signal.SIGKILL]
+    assert cleanup_error == "could not verify owned process-group cleanup before the deadline"
+
+    monkeypatch.setattr(cli_module, "cleanup_process_group", lambda _group: cleanup_error)
+    primary = ResultError("stdout_limit_exceeded", "primary output failure")
+    process = ProcessResult(
+        b"",
+        b"",
+        17,
+        12,
+        error=primary,
+        decoded=DecodedOutput(output="KEEP", error=primary),
+        process_group=123,
+    )
+    updated = cli_module._after_run_presentation_failure(
+        process, BrokenPipeError("closed diagnostics")
+    )
+    assert updated.error == ResultError(
+        "stdout_limit_exceeded",
+        "primary output failure Process-group cleanup failed: could not verify "
+        "owned process-group cleanup before the deadline.",
+    )
+    assert updated.native_exit_code == 17
+    assert updated.decoded is not None
+    assert updated.decoded.output == "KEEP"
+
+
+def test_quiet_run_has_no_elapsed_progress_events(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    assert main(["cx", "prompt", "--config", str(config), "--json"]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["status"] == "success"
+    assert "s starting" not in captured.err
+    assert "s working" not in captured.err
+
+
+def test_progress_with_closed_stderr_preserves_normalized_json_and_does_not_launch(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "launched"
+    config = write_agent(
+        tmp_path,
+        "codex",
+        f"from pathlib import Path;Path({str(marker)!r}).touch()",
+    )
+    bootstrap = """
+import os,sys
+os.close(2)
+from pratfall.cli import main
+raise SystemExit(main(sys.argv[1:]))
+"""
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+    }
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            bootstrap,
+            "cx",
+            "prompt",
+            "--progress",
+            "--json",
+            "--config",
+            str(config),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
+    result = json.loads(completed.stdout)
+    assert completed.returncode == 1
+    assert result["error"]["code"] == "output_io_error"
+    assert result["output"] == ""
+    assert not marker.exists()
+
+
+def test_progress_restores_stderr_flags_and_replays_native_diagnostics_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    diagnostics = tmp_path / "diagnostics.log"
+    with diagnostics.open("w", encoding="utf-8") as stream:
+        original_flags = fcntl.fcntl(stream.fileno(), fcntl.F_GETFL)
+        monkeypatch.setattr(sys, "stderr", stream)
+        assert main(["cx", "prompt", "--progress", "--json", "--config", str(config)]) == 0
+        restored_flags = fcntl.fcntl(stream.fileno(), fcntl.F_GETFL)
+    result = json.loads(capsys.readouterr().out)
+    written = diagnostics.read_text(encoding="utf-8")
+    assert result["status"] == "success"
+    assert restored_flags & os.O_NONBLOCK == original_flags & os.O_NONBLOCK
+    assert written.count("native diagnostic") == 1
+    assert "s starting" in written
+    assert "finished with status success" in written
 
 
 def test_missing_and_nonexecutable_agents_map_to_shell_exit_codes(

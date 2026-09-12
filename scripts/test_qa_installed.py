@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -48,6 +49,44 @@ def test_ready_go_observes_pending_before_releasing_producer(tmp_path: Path) -> 
     assert pending is True
     assert released is True
     assert go_path.read_text() == "go\n"
+
+
+def test_async_run_restricts_child_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "consumer").mkdir()
+    (tmp_path / "bin").mkdir()
+    ambient_bin = tmp_path / "ambient-bin"
+    ambient_bin.mkdir()
+    observed_path = tmp_path / "child-path.txt"
+    prat = tmp_path / "prat"
+    prat.write_text(
+        f"#!{sys.executable}\n"
+        "import fcntl, os, pathlib, sys, time\n"
+        f"pathlib.Path({str(observed_path)!r}).write_text(os.environ['PATH'])\n"
+        "controls = dict(\n"
+        "    item.split('=', 1) for item in ' '.join(sys.argv[1:]).split() if '=' in item\n"
+        ")\n"
+        "lock = pathlib.Path(controls['LOCK'])\n"
+        "ready = pathlib.Path(controls['READY'])\n"
+        "go = pathlib.Path(controls['GO'])\n"
+        "with lock.open('wb') as stream:\n"
+        "    fcntl.flock(stream, fcntl.LOCK_EX)\n"
+        "    ready.write_text('ready')\n"
+        "    while not go.exists():\n"
+        "        time.sleep(0.01)\n",
+        encoding="utf-8",
+    )
+    prat.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{ambient_bin}{os.pathsep}/usr/bin{os.pathsep}/bin")
+
+    fixture = qa._async_run(prat, tmp_path, tmp_path / "config.toml", "QA_PATH", "1")
+    completed, pending, released = qa._complete_async(fixture)
+
+    expected = f"{tmp_path / 'bin'}{os.pathsep}/usr/bin{os.pathsep}/bin"
+    assert completed.returncode == 0
+    assert pending is True
+    assert released is True
+    assert observed_path.read_text() == expected
+    assert str(ambient_bin) not in observed_path.read_text()
 
 
 def test_completed_parent_reports_leaking_separate_descendant_before_cleanup(
@@ -149,6 +188,129 @@ def test_result_check_rejects_false_pass() -> None:
             status="success",
             native_exit_code=0,
             error_code=None,
+        )
+
+
+def _input_error(message: str) -> subprocess.CompletedProcess[bytes]:
+    result = {
+        "schema_version": 1,
+        "status": "error",
+        "exit_code": 2,
+        "native_exit_code": None,
+        "reported_models": None,
+        "cost_usd": None,
+        "error": {"code": "invalid_arguments", "message": message},
+    }
+    return subprocess.CompletedProcess(["prat"], 2, json.dumps(result).encode() + b"\n", b"")
+
+
+def test_input_failure_oracle_rejects_swapped_and_generic_messages() -> None:
+    expected = "Provide exactly one prompt source."
+    qa._assert_input_failure(_input_error(expected), expected)
+
+    for wrong in (
+        "Prompt exceeds the 1048576 byte limit.",
+        "The prompt is invalid.",
+    ):
+        with pytest.raises(AssertionError):
+            qa._assert_input_failure(_input_error(wrong), expected)
+
+
+def _doctor_version_result(message: str) -> subprocess.CompletedProcess[bytes]:
+    result = {
+        "agents": [
+            {
+                "agent": "codex",
+                "available": True,
+                "path": "/isolated/python",
+                "version": None,
+                "version_error": message,
+            }
+        ]
+    }
+    return subprocess.CompletedProcess(["prat"], 0, json.dumps(result).encode() + b"\n", b"")
+
+
+def test_version_failure_oracle_rejects_swapped_and_generic_diagnostics() -> None:
+    timeout = qa._VERSION_CASE_ERRORS["QA_VERSION_TIMEOUT"]
+    overflow = qa._VERSION_CASE_ERRORS["QA_VERSION_OVERFLOW"]
+    qa._assert_version_cleanup_case(
+        _doctor_version_result(timeout),
+        "QA_VERSION_TIMEOUT",
+        pending=True,
+        released=True,
+    )
+
+    for wrong in (overflow, "Version probe failed."):
+        with pytest.raises(AssertionError):
+            qa._assert_version_cleanup_case(
+                _doctor_version_result(wrong),
+                "QA_VERSION_TIMEOUT",
+                pending=True,
+                released=True,
+            )
+
+
+def _input_entry_point(path: Path) -> None:
+    path.write_text(
+        "import json, signal\n"
+        "from pathlib import Path\n"
+        "def interrupted(signum, _frame):\n"
+        f"    assert list(Path({str(path.parent)!r}).glob('input-signal-*.ready'))\n"
+        '    print(json.dumps({"signal": signum}), flush=True)\n'
+        "    raise SystemExit(128 + signum)\n"
+        'interrupted.__module__ = "pratfall.prompt_input"\n'
+        "signal.signal(signal.SIGTERM, interrupted)\n"
+        "signal.pause()\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    path.with_name("python").symlink_to(sys.executable)
+
+
+def test_installed_entry_point_signal_waits_for_delayed_input_readiness(tmp_path: Path) -> None:
+    (tmp_path / "consumer").mkdir()
+    (tmp_path / "bin").mkdir()
+    prat = tmp_path / "prat"
+    _input_entry_point(prat)
+    started = time.monotonic()
+
+    completed, pending, calls_before = qa._stdin_pending_run(
+        prat,
+        tmp_path,
+        tmp_path / "config.toml",
+        [],
+        signal.SIGTERM,
+        startup_delay=0.25,
+        readiness_timeout=2,
+    )
+
+    assert time.monotonic() - started >= 0.2
+    assert completed.returncode == 143
+    assert json.loads(completed.stdout) == {"signal": 15}
+    assert pending is True
+    assert calls_before == 0
+
+
+def test_installed_entry_point_input_readiness_timeout_is_explicit(tmp_path: Path) -> None:
+    (tmp_path / "consumer").mkdir()
+    (tmp_path / "bin").mkdir()
+    prat = tmp_path / "prat"
+    prat.write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
+    prat.chmod(0o755)
+    prat.with_name("python").symlink_to(sys.executable)
+
+    with pytest.raises(
+        AssertionError,
+        match="installed entry point did not publish input SIGTERM readiness",
+    ):
+        qa._stdin_pending_run(
+            prat,
+            tmp_path,
+            tmp_path / "config.toml",
+            [],
+            signal.SIGTERM,
+            readiness_timeout=0.05,
         )
 
 

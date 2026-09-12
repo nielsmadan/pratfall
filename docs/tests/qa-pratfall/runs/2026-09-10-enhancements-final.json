@@ -1,0 +1,394 @@
+{
+  "schema_version": 1,
+  "run": {
+    "completed_at": "2026-09-10T12:11:29+02:00",
+    "revision": "ee0a1c5e584770ca142f13628aa441efb5b7a1a6",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "Python 3.13.6",
+    "offline_recipe_exit": 0,
+    "real_native_agent_test_calls": 0
+  },
+  "artifacts": {
+    "wheel_sha256": "63d40b2180a87c9e1b38f0d7557f62dd2d7f93b3554c967d6f8043331be98270",
+    "sdist_sha256": "5a939b87a38489d948635706126857ce7ce3757b1f3704d958fd67feba77da0d",
+    "executed_harness_sha256": "4ca2c4c6a3c38dd9fbc9d62c5995f3fe92c78ed24a8a1efad62e845005b15d07",
+    "full_results_sha256": "f770e107d9901d13629dfc3b016053b2045bbf52498d0ba0525f3924c75fca07",
+    "runtime_file_count": 25,
+    "canonical_runtime_manifest_sha256": "70a4872a0162d936492a591ad9efd444ec161d72eb9f953e9157317cb6a40d2e",
+    "all_source_archive_install_manifests_match": true,
+    "installed_modules_outside_source": true,
+    "current_qa_scripts_match_sdist": true
+  },
+  "checks": {
+    "just_check": {
+      "exit": 0,
+      "tests": 573,
+      "seconds": 43.84
+    },
+    "just_coverage": {
+      "exit": 0,
+      "tests": 573,
+      "seconds": 45.18,
+      "branch_enabled_total_coverage_percent": 90.38772213247172,
+      "branch_coverage_percent": 85.77494692144374,
+      "covered_branches": 808,
+      "num_branches": 942,
+      "required_percent": 80
+    },
+    "just_docs_build": {
+      "exit": 0,
+      "issues": 0
+    },
+    "just_build": {
+      "exit": 0,
+      "offline": true
+    },
+    "documented_offline_build_install_qa": {
+      "exit": 0,
+      "installed_passes": 30,
+      "not_run_in_installed_harness": [
+        "E13",
+        "E14"
+      ]
+    },
+    "supplemental_cases_in_final_full_suite": {
+      "status": "Pass",
+      "documented_focused_cases": 24
+    }
+  },
+  "installed_scenarios": {
+    "E01": {
+      "status": "Pass",
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "prompt_utf8_bytes": 18,
+      "prompt_sha256": "1937477a22cad0a377f7e88f1e05dde9caa498267171935a0bb1563555322190",
+      "native_cwd": "$REPO/.cache/prat-qa.NSg4CQ/run/enhancement-cwd",
+      "profile": "simple"
+    },
+    "E02": {
+      "status": "Pass",
+      "forms": [
+        "automatic_pipe",
+        "positional_dash",
+        "file_dash"
+      ],
+      "prompt_sha256": "d6bb6539743f88179085b1744a404128e379f8fada9388ba38a76c5943a67aa2",
+      "explicit_sources_ignored_incidental_pipe": true
+    },
+    "E03": {
+      "status": "Pass",
+      "case_exit_codes": {
+        "inline_and_file": 2,
+        "two_files": 2,
+        "missing_file": 2,
+        "invalid_utf8": 2,
+        "oversize": 2,
+        "fifo": 2
+      },
+      "error_messages": {
+        "inline_and_file": "Provide exactly one prompt source.",
+        "two_files": "Provide exactly one prompt source.",
+        "missing_file": "Cannot open prompt file $REPO/.cache/prat-qa.NSg4CQ/run/consumer/missing-prompt.txt: No such file or directory.",
+        "invalid_utf8": "Prompt file is not valid UTF-8.",
+        "oversize": "Prompt exceeds the 1048576 byte limit.",
+        "fifo": "Prompt file is not a regular file: $REPO/.cache/prat-qa.NSg4CQ/run/consumer/prompt.fifo"
+      },
+      "native_launches": 0
+    },
+    "E04": {
+      "status": "Pass",
+      "forms": {
+        "implicit_sigint": {
+          "returncode": 130,
+          "pending_before_signal": true,
+          "native_launches": 0,
+          "error": {
+            "code": "interrupted",
+            "message": "Interrupted by signal 2."
+          }
+        },
+        "positional_sigterm": {
+          "returncode": 143,
+          "pending_before_signal": true,
+          "native_launches": 0,
+          "error": {
+            "code": "interrupted",
+            "message": "Interrupted by signal 15."
+          }
+        },
+        "file_dash_sigint": {
+          "returncode": 130,
+          "pending_before_signal": true,
+          "native_launches": 0,
+          "error": {
+            "code": "interrupted",
+            "message": "Interrupted by signal 2."
+          }
+        }
+      },
+      "input_handler_readiness_markers_observed": 3
+    },
+    "E05": {
+      "status": "Pass",
+      "codex_native_argv": [
+        [
+          "exec",
+          "--json",
+          "-"
+        ],
+        [
+          "exec",
+          "--json",
+          "-c",
+          "service_tier=\"priority\"",
+          "-"
+        ],
+        [
+          "exec",
+          "--json",
+          "-c",
+          "service_tier=\"default\"",
+          "-"
+        ],
+        [
+          "exec",
+          "--json",
+          "-c",
+          "service_tier=\"default\"",
+          "-"
+        ],
+        [
+          "exec",
+          "--json",
+          "-c",
+          "service_tier=\"priority\"",
+          "-"
+        ]
+      ],
+      "claude_native_argv": [
+        "-p",
+        "--output-format",
+        "json",
+        "--settings",
+        "{\"fastMode\": true}"
+      ],
+      "unsupported_exit": 2,
+      "unsupported_native_launches": 0
+    },
+    "E06": {
+      "status": "Pass",
+      "discovery_exit": 0,
+      "discovery_native_launches": 0,
+      "versions_exit": 0,
+      "version_probe_argv": [
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ],
+        [
+          "--version"
+        ]
+      ],
+      "opaque_codex_version": "codex opaque version 1.0",
+      "hermes_version_error": "Version probe exited with status 17."
+    },
+    "E07": {
+      "status": "Pass",
+      "cases": {
+        "QA_VERSION_TIMEOUT": {
+          "returncode": 0,
+          "pending_observed": true,
+          "descendant_lock_released_before_emergency_cleanup": true,
+          "codex_version_error": "Agent exceeded the 3 second timeout."
+        },
+        "QA_VERSION_OVERFLOW": {
+          "returncode": 0,
+          "pending_observed": true,
+          "descendant_lock_released_before_emergency_cleanup": true,
+          "codex_version_error": "Agent stdout exceeded 65536 bytes."
+        },
+        "QA_VERSION_INTERRUPT": {
+          "returncode": 130,
+          "pending_observed": true,
+          "descendant_lock_released_before_emergency_cleanup": true,
+          "codex_version_error": "Interrupted by signal 2."
+        }
+      }
+    },
+    "E08": {
+      "status": "Pass",
+      "agents": {
+        "claude": {
+          "requested_model": "requested",
+          "reported_models": [
+            "claude-primary",
+            "claude-helper"
+          ],
+          "cost_usd": 0
+        },
+        "gemini": {
+          "requested_model": "requested",
+          "reported_models": [
+            "gemini-primary",
+            "gemini-helper"
+          ],
+          "cost_usd": null
+        },
+        "copilot": {
+          "requested_model": "requested",
+          "reported_models": [
+            "copilot-native"
+          ],
+          "cost_usd": null
+        },
+        "openclaw": {
+          "requested_model": "requested",
+          "reported_models": [
+            "provider/model"
+          ],
+          "cost_usd": 1.25
+        }
+      }
+    },
+    "E09": {
+      "status": "Pass",
+      "latest_step_cost_sum": 2.5,
+      "input_tokens_distinct_steps": 6,
+      "reported_models": null
+    },
+    "E10": {
+      "status": "Pass",
+      "installed_case": "EOF after completed assistant message",
+      "result": {
+        "returncode": 1,
+        "status": "error",
+        "native_exit_code": 0,
+        "error": {
+          "code": "protocol_error",
+          "message": "Codex stream ended without turn.completed."
+        }
+      },
+      "partial_output": "PARTIAL_KEEP"
+    },
+    "E11": {
+      "status": "Pass",
+      "disposable_event_count": 9,
+      "physical_bytes_per_event_including_lf": 1048612,
+      "discarded_trace_physical_bytes_including_json_envelopes_and_lf": 9437508,
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "answer": "STREAM_OK"
+    },
+    "E12": {
+      "status": "Pass",
+      "result": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "native_pending_when_progress_observed": true,
+      "release_observed_before_emergency_cleanup": true,
+      "stdout_json_objects": 1
+    },
+    "E13": {
+      "status": "Not run",
+      "reason": "Adversarial stream assertions use focused decoder and subprocess tests."
+    },
+    "E14": {
+      "status": "Not run",
+      "reason": "Adversarial stderr transport assertions use focused subprocess tests."
+    },
+    "E15": {
+      "status": "Pass",
+      "failure": {
+        "returncode": 1,
+        "status": "error",
+        "native_exit_code": 0,
+        "error": {
+          "code": "provider_error",
+          "message": "controlled provider failure"
+        }
+      },
+      "failure_output": "",
+      "fresh_invocation": {
+        "returncode": 0,
+        "status": "success",
+        "native_exit_code": 0,
+        "error": null
+      },
+      "automatic_retry": false,
+      "observed_native_invocations": 2,
+      "observed_prompts": [
+        "QA_PROVIDER_FAILURE",
+        "fresh retry"
+      ]
+    }
+  },
+  "base_scenarios": {
+    "Q01": "Pass",
+    "Q02": "Pass",
+    "Q03": "Pass",
+    "Q04": "Pass",
+    "Q05": "Pass",
+    "Q06": "Pass",
+    "Q07": "Pass",
+    "Q08": "Pass",
+    "Q09": "Pass",
+    "Q10": "Pass",
+    "Q11": "Pass",
+    "Q12": "Pass",
+    "Q13": "Pass",
+    "Q14": "Pass",
+    "Q15": "Pass",
+    "Q16": "Pass",
+    "Q17": "Pass"
+  },
+  "supplemental_coverage": {
+    "E08_failure_and_malformed_accounting": "Pass in final full decoder suite",
+    "E10_timeout_and_TERM_drain": "Pass in final full subprocess suite",
+    "E13": "Pass in final full decoder/subprocess suite",
+    "E14": "Pass in final full subprocess suite"
+  },
+  "cleanup": {
+    "advisory_locks_available_after_run": 8,
+    "owner_records_remaining": 0,
+    "scenario_cleanup_checked_before_emergency_cleanup": true
+  },
+  "limitations": [
+    "No authenticated native compatibility inference was performed.",
+    "E04 executes the installed entrypoint through a QA-only signal-readiness bootstrap."
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "run": {
+    "date": "2026-09-10",
+    "completed_at": "2026-09-10 11:08 CEST",
+    "base_revision": "2b6c5d2",
+    "runtime_diff_sha256": "7275ce2aa8ba32f958e7eb12ce4fc08ce6dabe8d903b9daf7a71c5212eab44d6",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "Python 3.13.6"
+  },
+  "artifacts": {
+    "wheel": {
+      "path": "dist/pratfall-0.1.0-py3-none-any.whl",
+      "sha256": "1d0fd37d3b9085af02adbd73ebbeb02459f3371a7550a3965d8aa9a9786e1bf7",
+      "entry_point_version": "prat 0.1.0"
+    },
+    "sdist": {
+      "path": "dist/pratfall-0.1.0.tar.gz",
+      "sha256": "0c571e24f2d10752b14b66666df73d1fdc2dd449e4a3d65b8ad7685c76e3290f",
+      "entry_point_version": "prat 0.1.0"
+    },
+    "runtime_identity": {
+      "file_count": 25,
+      "canonical_manifest_sha256": "de89b3cd76aa6a71ad4b1f62dd6c75564a673f3192b7e3bd610a32935fa07baa",
+      "source_matches_wheel_archive_and_install": true,
+      "source_matches_sdist_archive_and_install": true,
+      "wheel_install_outside_source": true,
+      "sdist_install_outside_source": true,
+      "verified_before_scenarios_and_unchanged_after": true
+    },
+    "installed_run_result_sha256": "b7126350feb8f4b4c932eba002c59e3e590a16108f020b224a031910528b977a",
+    "executed_harness_sha256": "b5699410061be13f113e0d816595040206af10a25c5b40062fa13bc5d0efad9b"
+  },
+  "checks": {
+    "just_check": {"exit": 0, "tests": 557, "seconds": 81.03},
+    "just_coverage": {
+      "exit": 0,
+      "tests": 557,
+      "seconds": 81.05,
+      "branch_enabled_total_coverage_percent": 89.95,
+      "required_percent": 80.0
+    },
+    "just_docs_build": {"exit": 0, "seconds": 0.27, "issues": 0},
+    "just_build": {"exit": 0},
+    "wheel_install": {"exit": 0},
+    "sdist_install": {
+      "exit": 0,
+      "build_backend": "hatchling 1.32.0 installed offline in the prepared environment"
+    },
+    "focused_decoder_and_subprocess": {"exit": 0, "tests": 24, "seconds": 13.87}
+  },
+  "scenarios": {
+    "Q01": {"status": "Pass", "evidence": "installed wheel"},
+    "Q02": {"status": "Pass", "evidence": "wheel and sdist entry points"},
+    "Q03": {"status": "Pass", "evidence": "installed wheel"},
+    "Q04": {"status": "Pass", "evidence": "installed wheel"},
+    "Q05": {"status": "Pass", "evidence": "installed wheel"},
+    "Q06": {"status": "Pass", "evidence": "installed wheel"},
+    "Q07": {"status": "Pass", "evidence": "installed wheel"},
+    "Q08": {"status": "Pass", "evidence": "installed wheel"},
+    "Q09": {"status": "Pass", "evidence": "installed wheel"},
+    "Q10": {"status": "Pass", "evidence": "installed wheel"},
+    "Q11": {"status": "Pass", "evidence": "installed wheel"},
+    "Q12": {"status": "Pass", "evidence": "installed wheel"},
+    "Q13": {"status": "Pass", "evidence": "installed wheel"},
+    "Q14": {"status": "Pass", "evidence": "installed wheel"},
+    "Q15": {"status": "Pass", "evidence": "installed wheel; pending and lock release observed"},
+    "Q16": {"status": "Pass", "evidence": "installed wheel; pending and lock release observed"},
+    "Q17": {"status": "Pass", "evidence": "installed wheel; limit cleanup locks observed"},
+    "E01": {"status": "Pass", "evidence": "installed wheel"},
+    "E02": {"status": "Pass", "evidence": "installed wheel"},
+    "E03": {"status": "Pass", "evidence": "installed wheel; six invalid sources, zero launches"},
+    "E04": {"status": "Pass", "evidence": "installed wheel; three pending input forms, zero launches"},
+    "E05": {"status": "Pass", "evidence": "installed wheel"},
+    "E06": {"status": "Pass", "evidence": "installed wheel"},
+    "E07": {
+      "status": "Pass",
+      "evidence": "installed wheel",
+      "timeout_exit": 0,
+      "overflow_exit": 0,
+      "interrupt_exit": 130,
+      "pending_observed_for_each": true,
+      "locks_released_before_emergency_cleanup": true
+    },
+    "E08": {
+      "status": "Pass",
+      "installed_evidence": "successful Claude, Gemini, Copilot, and OpenClaw metadata",
+      "supplemental_evidence": "failed and malformed accounting variants in focused decoder tests"
+    },
+    "E09": {"status": "Pass", "evidence": "installed wheel; latest OpenCode step costs summed to 2.5"},
+    "E10": {
+      "status": "Pass",
+      "installed_evidence": "Codex EOF retained PARTIAL_KEEP with protocol error",
+      "supplemental_evidence": "timeout and TERM-drain paths in focused subprocess tests"
+    },
+    "E11": {
+      "status": "Pass",
+      "evidence": "installed wheel",
+      "disposable_events": 9,
+      "physical_bytes_per_event_including_json_and_lf": 1048612,
+      "physical_trace_bytes_including_json_and_lf": 9437508,
+      "final_output": "STREAM_OK"
+    },
+    "E12": {
+      "status": "Pass",
+      "evidence": "installed wheel",
+      "progress_observed_while_native_pending": true,
+      "release_preceded_emergency_cleanup": true,
+      "stdout_json_objects": 1
+    },
+    "E13": {"status": "Pass", "evidence": "24-test focused decoder/subprocess run"},
+    "E14": {"status": "Pass", "evidence": "24-test focused decoder/subprocess run"},
+    "E15": {
+      "status": "Pass",
+      "evidence": "installed wheel",
+      "observed_native_invocations": 2,
+      "automatic_retry": false
+    }
+  },
+  "optional_compatibility": {
+    "Q18-Q20": "Not run; preserved 2026-09-09 records apply only to their recorded wheel and native Codex."
+  },
+  "findings": []
+}

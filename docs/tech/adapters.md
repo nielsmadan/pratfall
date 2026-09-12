@@ -1,12 +1,20 @@
 # Adapter reference
 
-Each adapter exposes three operations: validate trusted native arguments, build an immutable
-invocation, and decode complete bounded stdout after the process exits. `registry.py` is the only
-adapter assembly point.
+Each adapter validates trusted native arguments, builds an immutable invocation, and decodes native
+output. `registry.py` is the only adapter assembly point. Codex, Copilot, Antigravity, and OpenCode
+also expose an incremental consumer factory; their `decode(str)` entry points feed the same state
+machine used during process execution.
 
 Structured adapters require verified completion evidence and treat semantic provider failures as
 errors even when the process exits zero. Text adapters return bounded native stdout with terminal
 line endings removed and cannot separate a final answer from native banners or progress.
+
+The shared JSONL consumer owns strict UTF-8 decoding, physical line framing, and local bounds.
+Each record is limited to 8 MiB excluding LF or CRLF, live retained strings and answer separators
+share an 8 MiB state budget, and at most 16,384 live logical records are retained. Identifiers,
+models, diagnostics, token/cost snapshots, and bounded numeric values count while live; snapshot
+replacement refunds the prior payload. Unknown and whitespace events are still individually
+bounded but discarded without a cumulative trace cap.
 
 Capability metadata describes whether an adapter accepts `model`, `effort`, `fast`, and a small set of
 native budgets. It does not catalog provider model names. The normalized `model` field records the

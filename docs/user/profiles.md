@@ -21,8 +21,7 @@ effort = "low"
 ```
 
 A profile requires `agent`. It may set `model`, `effort`, `fast`, `timeout`, `native_args`, and
-agent-backed
-budget fields. Invocation flags override profiles, which override defaults. Native argument arrays
+agent-backed budget fields. Invocation flags override profiles, which override defaults. Native argument arrays
 replace the lower-precedence array. Profiles do not inherit from each other.
 
 `fast` is an optional boolean for Claude and Codex. `true` and `false` are both explicit overrides;

@@ -53,7 +53,8 @@ All prompt sources must contain UTF-8 text that is not empty or whitespace-only,
 and fits within 1 MiB. Prat reads at most one extra byte to detect overflow. Named files must be
 regular files; symlinks to regular files work, while directories and special files are rejected.
 Relative prompt-file paths resolve from the directory where `prat` was invoked, independently of
-`--cwd`. Missing, unreadable, invalid, and oversized input exits 2 without launching an agent.
+`--cwd`. Missing, unreadable, invalid, oversized, and unavailable standard input exits 2 without
+launching an agent.
 
 Prat sends Claude, Codex, Antigravity, and OpenCode prompts through native stdin protocols.
 OpenClaw and Hermes use native stdin file options. Gemini and Copilot use a documented prompt
@@ -66,7 +67,8 @@ paths resolve from the directory where `prat` was invoked. Input acquisition wai
 not charged to the agent timeout. SIGINT or SIGTERM during input acquisition exits as interrupted
 without launching an agent. `--timeout` is a wall-clock deadline for agent execution and output
 draining, and defaults to 600 seconds. A timed-out or failed run can leave edits in the working
-directory.
+directory. A later manual rerun starts a fresh invocation; Pratfall does not automatically retry or
+roll back edits.
 
 `--dry-run` validates the complete invocation and shows its argv without launching the agent.
 Prompts carried through stdin appear only as a byte count. Gemini, Copilot, Cursor, and Kiro carry
@@ -115,11 +117,22 @@ including validation and runtime failures:
 }
 ```
 
+Add `--progress` to a run for bounded elapsed-time and activity updates on stderr. Updates use
+static categories, never native payload text, and are coalesced to at most one line per second with
+a heartbeat at least every five seconds. A blocked stderr consumer does not stall the agent
+deadline. JSON mode still emits exactly one final object on stdout.
+
 Run statuses are `success`, `error`, `timeout`, or `interrupted`. Invalid arguments, config, and
 prompt input exit 2; missing and non-executable commands exit 127 and 126; timeouts exit 124; interruption
 exits `128 + signal`; native nonzero codes are otherwise preserved. Provider, protocol, output,
 and I/O failures exit 1. A dry-run JSON object instead has `dry_run: true`, resolved identity,
 `argv`, `cwd`, `timeout`, and `stdin_bytes`; it does not claim a run status or usage.
+
+Codex, Copilot, Antigravity, and OpenCode JSONL is decoded incrementally. Each physical event and
+the retained answer/protocol state are limited to 8 MiB, with at most 16,384 retained logical
+records. Discarded events have no cumulative trace limit. Whole-document JSON and text adapters
+retain the 8 MiB complete stdout limit; native stderr is limited to 2 MiB. Limit failures are
+explicit and trigger process-group cleanup.
 
 `agents` lists canonical names, aliases, and supported settings. `doctor` reports which executable
 prefixes are available on PATH without launching them. `doctor --versions` additionally executes
@@ -181,6 +194,10 @@ Fast mode is verified only for Claude and Codex. Claude receives an invocation-o
 `fastMode` setting; Codex receives an invocation-only `service_tier` setting (`priority` for true,
 `default` for false). Pratfall never edits either tool's settings files, changes models, or promises
 that the selected account can use faster service. Unsupported agents reject both true and false.
+
+Antigravity stdin stream mode requires native version 1.1.15 or later. Its documented
+`--print-timeout` behavior applies to print mode and is not verified for stdin streaming, so
+Pratfall enforces the configured outer deadline without forwarding that native option.
 
 Claude's `max_budget_usd` is its native API-call budget in US dollars, and `max_turns` is its
 native agent-turn limit. Prat passes both through without treating either as a token cap. Claude's

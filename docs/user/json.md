@@ -2,6 +2,7 @@
 
 Run mode `--json` writes exactly one versioned result object to stdout. Diagnostics remain on
 stderr. Config and argument failures also use this shape when `--json` is unambiguous.
+`--progress` adds bounded live activity on stderr without adding extra stdout objects or fields.
 
 ```json
 {
@@ -43,6 +44,8 @@ Provider and protocol failures exit 1 unless a native nonzero exit has precedenc
 Successfully decoded output, usage, reported models, and cost remain in failed or timed-out results.
 For Codex, a completed assistant message before an unfinished turn ends is returned as partial
 output, while the missing `turn.completed` remains a protocol error.
+Local output framing, state, encoding, and presentation failures also retain fields decoded before
+the failure when they are safe to present.
 
 `--dry-run --json` emits a preview with `dry_run`, resolved identity, argv, cwd, timeout, and stdin
 byte count rather than a run status. Prompts carried through argv appear in that preview. Management

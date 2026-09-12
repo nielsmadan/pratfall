@@ -8,7 +8,7 @@ when the native CLI supports model selection; Pratfall does not freeze a model c
 | Claude Code | `cc` | Structured result, token usage, modelUsage IDs, native USD cost; invocation-only fast override |
 | Codex | `cx` | Structured event stream and token usage; invocation-only fast override |
 | Gemini | `gm` | Structured result, token usage, and stats model IDs; no native cost or effort override |
-| Antigravity | `ag`, `agy` | Structured stream and cumulative usage |
+| Antigravity | `ag`, `agy` | Structured stream and cumulative usage; stdin mode requires 1.1.15+ |
 | Copilot | `cp` | Structured final text and root-message model IDs; no token counts or USD cost |
 | Kiro | `ki` | Text mode; usage unknown |
 | Cursor | `cu` | Validated JSON result envelope; usage unknown; no effort override |
@@ -29,3 +29,7 @@ their guarantees.
 Claude fast mode is passed as an inline `fastMode` setting for the current invocation. Codex fast
 mode is passed as `service_tier="priority"`; false selects `service_tier="default"`. Pratfall does
 not edit native settings, choose a different model, or infer account eligibility or pricing.
+
+Antigravity's documented `--print-timeout` examples apply to print mode. Its stdin-stream timeout
+contract is not verified, so Pratfall relies on its configured outer `--timeout` and strict terminal
+event checks instead of forwarding the print-only option.

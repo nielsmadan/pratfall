@@ -98,6 +98,11 @@ def _read_file(value: str, invocation_cwd: Path, state: _SignalState) -> bytes:
 
 def _read_stdin(state: _SignalState) -> bytes:
     stream = cast(BinaryIO | TextIO, getattr(sys.stdin, "buffer", sys.stdin))
+    if stream is None:
+        raise PratError(
+            "Cannot read standard input; provide exactly one prompt another way.",
+            code="invalid_arguments",
+        )
     try:
         descriptor = stream.fileno()
     except (AttributeError, OSError, ValueError):
