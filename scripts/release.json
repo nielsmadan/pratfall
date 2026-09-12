@@ -8,7 +8,7 @@
     ["just", "docs-build"],
     ["just", "build"]
   ],
-  "tools": ["git", "python3", "just", "uv", "uvx", "gh"],
+  "tools": ["git", "python3", "just", "uv", "uvx"],
   "stages": [
     {
       "files": ["pyproject.toml", "uv.lock", "CHANGELOG.md"],

@@ -330,35 +330,34 @@ def test_unexpected_preparation_path_is_rejected(checkout: Checkout) -> None:
     assert checkout.git("tag", "--list") == "v1.2.0"
 
 
-def test_publication_waits_for_matching_tag_and_reports_release(checkout: Checkout) -> None:
-    config = {"workflow": "release.yml", "repository": "owner/repo"}
-    responses = [
-        json.dumps(
-            [
-                {"databaseId": 1, "headBranch": "other", "url": "other"},
-                {"databaseId": 2, "headBranch": "v1.2.1", "url": "workflow-url"},
-            ]
-        ),
-        json.dumps({"status": "completed", "conclusion": "success"}),
-        "release-url",
-    ]
+def test_github_release_pushes_without_github_cli(checkout: Checkout) -> None:
+    checkout.config.update(workflow="release.yml", repository="owner/repo")
+    checkout.save_config()
+    checkout.commit("chore: configure GitHub publication")
+    original_run = release.run
+
+    def git_only(root: Path, *args: str, capture: bool = True) -> str:
+        if args[:3] == ("git", "remote", "get-url"):
+            return "git@github.com:owner/repo.git"
+        if args[0] == "gh":
+            raise AssertionError("Local releases must work without GitHub CLI")
+        return original_run(root, *args, capture=capture)
+
     with (
-        patch.object(release, "run", side_effect=responses) as runner,
+        patch.object(release, "__file__", str(checkout.root / "scripts/release.py")),
+        patch.object(release, "run", side_effect=git_only),
+        patch.dict(os.environ, checkout.env, clear=True),
+        patch.object(sys, "argv", ["release.py", "--yes"]),
         patch("sys.stdout", new_callable=io.StringIO) as output,
     ):
-        release.publication(checkout.root, config, "v1.2.1", "revision")
-    assert "Released: release-url" in output.getvalue()
-    assert "2" in runner.call_args_list[1].args
-
-
-def test_publication_failure_is_an_error(checkout: Checkout) -> None:
-    config = {"workflow": "release.yml", "repository": "owner/repo"}
-    responses = [
-        json.dumps([{"databaseId": 2, "headBranch": "v1.2.1", "url": "workflow-url"}]),
-        json.dumps({"status": "completed", "conclusion": "failure"}),
-    ]
-    with (
-        patch.object(release, "run", side_effect=responses),
-        pytest.raises(release.ReleaseError, match="failure: workflow-url"),
-    ):
-        release.publication(checkout.root, config, "v1.2.1", "revision")
+        release.main()
+    remote_head = checkout.git("ls-remote", "origin", "refs/heads/main").split()[0]
+    remote_tag = checkout.git("ls-remote", "origin", "refs/tags/v1.2.1^{}").split()[0]
+    assert remote_head == checkout.git("rev-parse", "HEAD")
+    assert remote_tag == remote_head
+    assert "Pushed v1.2.1. GitHub publication runs asynchronously." in output.getvalue()
+    assert "https://github.com/owner/repo/actions/workflows/release.yml" in output.getvalue()
+    assert (
+        "Release (when ready): https://github.com/owner/repo/releases/tag/v1.2.1"
+        in output.getvalue()
+    )
