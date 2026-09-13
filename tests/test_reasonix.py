@@ -182,7 +182,8 @@ def test_reasonix_accounting_does_not_mislabel_native_aliases() -> None:
     )
     assert decoded.output == "answer" and decoded.error is None
     assert decoded.usage == Usage(3, 1, None, 2)
-    assert decoded.reported_models is decoded.cost_usd is None
+    assert decoded.reported_models is None
+    assert decoded.cost_usd is None
 
 
 @pytest.mark.parametrize(

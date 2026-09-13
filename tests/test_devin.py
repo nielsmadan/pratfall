@@ -142,7 +142,9 @@ def test_devin_independent_native_contract(
 def test_devin_text_capture_removes_only_terminal_line_endings(output: str) -> None:
     decoded = devin.decode(output + "\r\n\n")
     assert decoded.output == output and decoded.error is None
-    assert decoded.usage is decoded.reported_models is decoded.cost_usd is None
+    assert decoded.usage is None
+    assert decoded.reported_models is None
+    assert decoded.cost_usd is None
 
 
 @pytest.mark.parametrize(

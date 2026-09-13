@@ -23,7 +23,7 @@ def test_named_file_is_opened_nonblocking_and_handlers_are_restored(
         return real_open(path, flags)
 
     previous = {chosen: signal.getsignal(chosen) for chosen in (signal.SIGINT, signal.SIGTERM)}
-    monkeypatch.setattr(prompt_input.os, "open", recording_open)
+    monkeypatch.setattr(os, "open", recording_open)
     assert acquire_prompt(PromptSource("file", str(prompt_file)), tmp_path) == b"prompt"
     assert opened == [os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)]
     assert {chosen: signal.getsignal(chosen) for chosen in previous} == previous

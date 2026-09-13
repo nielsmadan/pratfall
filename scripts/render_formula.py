@@ -26,7 +26,8 @@ def installed_version(content: str) -> tuple[int, int, int]:
     matches = FORMULA_VERSION_PATTERN.findall(content)
     if len(matches) != 1 or VERSION_PATTERN.fullmatch(matches[0]) is None:
         raise ValueError("Existing Homebrew formula has no unique trusted Pratfall version.")
-    return tuple(int(part) for part in matches[0].split("."))
+    major, minor, patch = matches[0].split(".")
+    return int(major), int(minor), int(patch)
 
 
 def render_file(version: str, sha256: str, template: Path, output: Path) -> bool:

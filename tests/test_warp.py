@@ -151,7 +151,9 @@ def test_warp_recovers_tool_errors_joins_agent_text_and_preserves_duplicates() -
 def test_warp_native_eof_protocol_allows_no_text(payload: str) -> None:
     decoded = warp.decode(payload)
     assert decoded.output == "" and decoded.error is None
-    assert decoded.usage is decoded.reported_models is decoded.cost_usd is None
+    assert decoded.usage is None
+    assert decoded.reported_models is None
+    assert decoded.cost_usd is None
 
 
 @pytest.mark.parametrize(

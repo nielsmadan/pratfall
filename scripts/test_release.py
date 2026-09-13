@@ -5,10 +5,15 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from release import Config
 
 SCRIPT = Path(__file__).with_name("release.py")
 SPEC = importlib.util.spec_from_file_location("release", SCRIPT)
@@ -34,7 +39,7 @@ class Checkout:
         (self.root / "scripts/prepare.py").write_text(
             "from pathlib import Path\nimport sys\nPath('VERSION').write_text(sys.argv[1] + '\\n')\n"
         )
-        self.config = {
+        self.config: Config = {
             "name": "Fixture",
             "branch": "main",
             "components": 3,
@@ -331,10 +336,11 @@ def test_unexpected_preparation_path_is_rejected(checkout: Checkout) -> None:
 
 
 def test_github_release_pushes_without_github_cli(checkout: Checkout) -> None:
-    checkout.config.update(workflow="release.yml", repository="owner/repo")
+    checkout.config["workflow"] = "release.yml"
+    checkout.config["repository"] = "owner/repo"
     checkout.save_config()
     checkout.commit("chore: configure GitHub publication")
-    original_run = release.run
+    original_run: Callable[..., str] = release.run
 
     def git_only(root: Path, *args: str, capture: bool = True) -> str:
         if args[:3] == ("git", "remote", "get-url"):

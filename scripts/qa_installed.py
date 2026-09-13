@@ -182,6 +182,26 @@ _NATIVE_OPTIONS = {
 }
 
 
+def _text(value: object) -> str:
+    assert isinstance(value, str)
+    return value
+
+
+def _texts(value: object) -> list[str]:
+    assert isinstance(value, list)
+    return [_text(item) for item in value]
+
+
+def _record(value: object) -> dict[str, object]:
+    assert isinstance(value, dict)
+    return value
+
+
+def _records(value: object) -> list[dict[str, object]]:
+    assert isinstance(value, list)
+    return [_record(item) for item in value]
+
+
 def _native_options(agent: str, arguments: list[str]) -> None:
     options = _NATIVE_OPTIONS[agent]
     permission_mode = "ask"
@@ -238,7 +258,7 @@ def _prompt(agent: str, arguments: list[str], data: bytes) -> str:
             return prompt + "\n\n"
         return prompt.strip() if agent in {"reasonix", "kimi", "vibe"} else prompt
     if agent == "antigravity":
-        return json.loads(data)["message"]["content"]
+        return _text(_record(json.loads(data)["message"])["content"])
     if agent in {"gemini", "copilot"}:
         return next(item.split("=", 1)[1] for item in arguments if item.startswith("--prompt="))
     if agent in {"cursor", "kiro"}:
@@ -1312,7 +1332,7 @@ def _run(
 
 
 def _json_result(completed: subprocess.CompletedProcess[bytes]) -> dict[str, object]:
-    return json.loads(completed.stdout)
+    return _record(json.loads(completed.stdout))
 
 
 def _assert_result(
@@ -1489,7 +1509,7 @@ def _assert_version_cleanup_case(
     payload = _json_result(completed)
     assert pending
     assert released
-    record = next(item for item in payload["agents"] if item["agent"] == "codex")
+    record = next(item for item in _records(payload["agents"]) if item["agent"] == "codex")
     assert record["available"] is True
     assert record["path"] is not None
     assert record["version"] is None
@@ -1938,7 +1958,7 @@ def _assert_protocol_result(
 
 
 def _exercise_a_protocols(prat: Path, root: Path, config: Path) -> dict[str, object]:
-    results = {}
+    results: dict[str, object] = {}
     log = root / "native.jsonl"
     for expected in _PROTOCOL_EXPECTATIONS:
         before = len(_calls(log))
@@ -1961,8 +1981,8 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
     completed = _run(prat, root, ["agents", "--json"], config=config)
     payload = _json_result(completed)
     assert completed.returncode == 0 and payload["schema_version"] == 1
-    records = {record["name"]: record for record in payload["agents"]}
-    assert len(payload["agents"]) == len(records) == 22
+    records = {_text(record["name"]): record for record in _records(payload["agents"])}
+    assert len(_records(payload["agents"])) == len(records) == 22
     assert set(records) == set(AGENTS)
     for name, record in records.items():
         assert record["command"] == [AGENTS[name]]
@@ -1978,10 +1998,10 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
     doctor = _run(prat, root, ["doctor", "--json"], config=config)
     inventory = _json_result(doctor)
     assert doctor.returncode == 0 and inventory["schema_version"] == 1
-    assert [record["agent"] for record in inventory["agents"]] == list(AGENTS)
+    assert [record["agent"] for record in _records(inventory["agents"])] == list(AGENTS)
     assert all(
         record["available"] and record["version"] is record["version_error"] is None
-        for record in inventory["agents"]
+        for record in _records(inventory["agents"])
     )
     assert len(_calls(root / "native.jsonl")) == before
     return {"status": "Pass", "agents": payload, "doctor": inventory, "native_launches": 0}
@@ -2024,7 +2044,7 @@ def _exercise_a_sources(prat: Path, root: Path, config: Path) -> dict[str, objec
                 "cwd": str(run_cwd),
             }
             assert _calls(log)[before:] == [expected]
-            assert json.loads(result["output"]) == expected
+            assert json.loads(_text(result["output"])) == expected
             observations[f"{agent}.{source}"] = {
                 "native": expected,
                 "result": _compact_result(completed),
@@ -2128,7 +2148,7 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
     }
     assert result["agent"] == "qwen" and result["profile"] == "new-profile"
     assert result["model"] == "cli-model"
-    assert json.loads(result["output"]) == expected_call
+    assert json.loads(_text(result["output"])) == expected_call
     assert _calls(root / "native.jsonl")[before:] == [expected_call]
     assert not (run_cwd / "prefix-injected").exists()
     return {
@@ -2201,7 +2221,7 @@ def _exercise_versions(prat: Path, root: Path, config: Path) -> dict[str, object
     assert version_calls == [
         {"agent": agent, "argv": VERSION_ARGS[agent], "version_probe": True} for agent in AGENTS
     ]
-    records = {record["agent"]: record for record in version_payload["agents"]}
+    records = {_text(record["agent"]): record for record in _records(version_payload["agents"])}
     assert list(records) == list(AGENTS)
     for agent, record in records.items():
         assert record["available"] is True
@@ -2340,7 +2360,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         "status": "Pass",
         "case_exit_codes": {name: case.returncode for name, case in invalid_cases.items()},
         "error_messages": {
-            name: result["error"]["message"] for name, result in invalid_results.items()
+            name: _record(result["error"])["message"] for name, result in invalid_results.items()
         },
         "native_launches": 0,
     }
@@ -2393,12 +2413,12 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     for case in fast_runs.values():
         _assert_result(case, returncode=0, status="success", native_exit_code=0, error_code=None)
     fast_calls = _calls(log)[-6:]
-    assert 'service_tier="' not in " ".join(fast_calls[0]["argv"])
-    assert fast_calls[1]["argv"][-3:-1] == ["-c", 'service_tier="priority"']
-    assert fast_calls[2]["argv"][-3:-1] == ["-c", 'service_tier="default"']
-    assert fast_calls[3]["argv"][-3:-1] == ["-c", 'service_tier="default"']
-    assert fast_calls[4]["argv"][-3:-1] == ["-c", 'service_tier="priority"']
-    assert fast_calls[5]["argv"][3:5] == ["--settings", '{"fastMode": true}']
+    assert 'service_tier="' not in " ".join(_texts(fast_calls[0]["argv"]))
+    assert _texts(fast_calls[1]["argv"])[-3:-1] == ["-c", 'service_tier="priority"']
+    assert _texts(fast_calls[2]["argv"])[-3:-1] == ["-c", 'service_tier="default"']
+    assert _texts(fast_calls[3]["argv"])[-3:-1] == ["-c", 'service_tier="default"']
+    assert _texts(fast_calls[4]["argv"])[-3:-1] == ["-c", 'service_tier="priority"']
+    assert _texts(fast_calls[5]["argv"])[3:5] == ["--settings", '{"fastMode": true}']
     calls_before = len(_calls(log))
     unsupported_fast = _run(
         prat, root, ["gm", "unsupported fast", "--fast", "--json"], config=config
@@ -2409,7 +2429,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         status="error",
         native_exit_code=None,
         error_code="invalid_config",
-        error_message=_json_result(unsupported_fast)["error"]["message"],
+        error_message=_text(_record(_json_result(unsupported_fast)["error"])["message"]),
     )
     assert len(_calls(log)) == calls_before
     results["E05"] = {
@@ -2506,11 +2526,11 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     )
     assert opencode_result["cost_usd"] == 2.5
     assert opencode_result["reported_models"] is None
-    assert opencode_result["usage"]["input_tokens"] == 6
+    assert _record(opencode_result["usage"])["input_tokens"] == 6
     results["E09"] = {
         "status": "Pass",
         "latest_step_cost_sum": opencode_result["cost_usd"],
-        "input_tokens_distinct_steps": opencode_result["usage"]["input_tokens"],
+        "input_tokens_distinct_steps": _record(opencode_result["usage"])["input_tokens"],
         "reported_models": opencode_result["reported_models"],
     }
 
@@ -2593,7 +2613,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     recovered_result = _assert_result(
         recovered, returncode=0, status="success", native_exit_code=0, error_code=None
     )
-    assert json.loads(recovered_result["output"])["prompt"] == "fresh retry"
+    assert json.loads(_text(recovered_result["output"]))["prompt"] == "fresh retry"
     retry_calls = _calls(log)[calls_before:]
     assert [call["prompt"] for call in retry_calls] == ["QA_PROVIDER_FAILURE", "fresh retry"]
     results["E15"] = {
@@ -2622,7 +2642,7 @@ def _exercise_routes(prat: Path, root: Path, config: Path) -> dict[str, object]:
         assert result["status"] == "success" and result["error"] is None
         assert result["agent"] == call["agent"] == agent
         expected_prompt = f"route {selector}" + ("\n\n" if agent == "crush" else "")
-        assert json.loads(result["output"])["prompt"] == expected_prompt
+        assert json.loads(_text(result["output"]))["prompt"] == expected_prompt
         assert call["prompt"] == expected_prompt
         if agent in _NATIVE_PREFIXES:
             if agent == "devin":
@@ -2695,7 +2715,7 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     assert result["status"] == "success" and result["agent"] == "claude"
     assert result["exit_code"] == result["native_exit_code"] == completed.returncode == 0
     assert result["error"] is None
-    assert json.loads(result["output"])["prompt"] == prompt
+    assert json.loads(_text(result["output"]))["prompt"] == prompt
     assert call == {
         "agent": "claude",
         "argv": ["-p", "--output-format", "json"],
@@ -2882,8 +2902,12 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     assert argv_json["dry_run"] is stdin_json["dry_run"] is True
     assert argv_json["agent"] == "gemini" and stdin_json["agent"] == "codex"
     assert argv_json["timeout"] == stdin_json["timeout"] == 7.0
-    assert argv_json["argv"][-1] == f"--prompt={dry_prompt}" and argv_json["stdin_bytes"] == 0
-    assert stdin_json["argv"][-1] == "-" and stdin_json["stdin_bytes"] == len(dry_prompt.encode())
+    assert (
+        _texts(argv_json["argv"])[-1] == f"--prompt={dry_prompt}" and argv_json["stdin_bytes"] == 0
+    )
+    assert _texts(stdin_json["argv"])[-1] == "-" and stdin_json["stdin_bytes"] == len(
+        dry_prompt.encode()
+    )
     assert len(_calls(log)) == calls_before and not (consumer / "dry-injected").exists()
     results["Q10"] = {
         "status": "Pass",
@@ -2906,7 +2930,7 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         error_code="native_exit",
         error_message="Codex exited with status 17.",
     )
-    assert json.loads(success_result["output"])["prompt"] == "json success"
+    assert json.loads(_text(success_result["output"]))["prompt"] == "json success"
     assert failure_result["output"] == "native failure answer"
     results["Q11"] = {
         "status": "Pass",
@@ -3023,7 +3047,7 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         recovery, returncode=0, status="success", native_exit_code=0, error_code=None
     )
     assert provider_result["output"] == truncated_result["output"] == ""
-    assert json.loads(recovery_result["output"])["prompt"] == "recovered"
+    assert json.loads(_text(recovery_result["output"]))["prompt"] == "recovered"
     results["Q14"] = {
         "status": "Pass",
         "provider": _compact_result(provider),
@@ -3059,7 +3083,7 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     retry_result = _assert_result(
         retry, returncode=0, status="success", native_exit_code=0, error_code=None
     )
-    assert json.loads(retry_result["output"])["prompt"] == "after interruption"
+    assert json.loads(_text(retry_result["output"]))["prompt"] == "after interruption"
     results["Q15"] = {
         "status": "Pass",
         "timeout": _compact_result(timeout_case),
@@ -3175,8 +3199,8 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
             **_exercise_a_protocols(entry_point, root, config),
         }
         for case, observation in a_results.items():
-            aggregate = results.setdefault(case, {"status": "Pass", "artifacts": {}})
-            aggregate["artifacts"][artifact] = observation
+            aggregate = _record(results.setdefault(case, {"status": "Pass", "artifacts": {}}))
+            _record(aggregate["artifacts"])[artifact] = observation
 
     assert _runtime_identity(repository, prat, sdist_prat, wheel, sdist) == runtime_identity
     runtime_diff = subprocess.check_output(

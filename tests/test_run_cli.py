@@ -1435,7 +1435,7 @@ os.write(2, b"\\xff")
             process.wait()
 
 
-def _elapsed_progress(stderr: bytes) -> list[tuple[float, str]]:
+def _elapsed_progress(stderr: bytes | bytearray) -> list[tuple[float, str]]:
     pattern = re.compile(
         rb"prat: ([0-9]+\.[0-9])s (starting|working|reasoning|using tools|answering|finishing)"
     )

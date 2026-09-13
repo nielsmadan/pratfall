@@ -137,7 +137,9 @@ def test_crush_independent_native_contract(
 def test_crush_text_capture_removes_only_terminal_line_endings(output: str) -> None:
     decoded = crush.decode(output + "\r\n\n")
     assert decoded.output == output and decoded.error is None
-    assert decoded.usage is decoded.reported_models is decoded.cost_usd is None
+    assert decoded.usage is None
+    assert decoded.reported_models is None
+    assert decoded.cost_usd is None
 
 
 @pytest.mark.parametrize("native_exit", [0, 17])

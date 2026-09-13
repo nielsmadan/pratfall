@@ -75,7 +75,7 @@ score = false
 
 [tool.mypy]
 python_version = "3.13"
-files = ["src/pratfall"]
+files = ["src", "tests", "scripts"]
 strict = true
 
 [tool.hatch.build.targets.wheel]

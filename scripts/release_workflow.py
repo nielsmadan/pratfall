@@ -19,7 +19,8 @@ def version(tag: str) -> tuple[int, int, int] | None:
     match = SEMVER_TAG.fullmatch(tag)
     if match is None:
         return None
-    return tuple(int(part) for part in match.groups())
+    major, minor, patch = match.groups()
+    return int(major), int(minor), int(patch)
 
 
 def previous_tag(current: str, tags: Sequence[str]) -> str | None:

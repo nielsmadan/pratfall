@@ -145,7 +145,9 @@ def test_openhands_mixed_framing_every_byte_boundary(event: object) -> None:
         incremental.feed(bytes((byte,)))
     decoded = incremental.finish()
     assert decoded.output == "café 雪" and decoded.error is None
-    assert decoded.usage is decoded.reported_models is decoded.cost_usd is None
+    assert decoded.usage is None
+    assert decoded.reported_models is None
+    assert decoded.cost_usd is None
 
 
 def test_openhands_text_blocks_are_concatenated_without_reasoning_or_images() -> None:

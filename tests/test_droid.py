@@ -140,7 +140,9 @@ def test_droid_independent_native_contract(
 def test_droid_success_requires_envelope_not_prose(answer: str) -> None:
     decoded = droid.decode(json.dumps(result(result=answer, usage={"input_tokens": 4}, model="x")))
     assert decoded.output == answer and decoded.error is None
-    assert decoded.usage is decoded.reported_models is decoded.cost_usd is None
+    assert decoded.usage is None
+    assert decoded.reported_models is None
+    assert decoded.cost_usd is None
 
 
 @pytest.mark.parametrize(

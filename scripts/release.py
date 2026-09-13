@@ -5,16 +5,46 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 SEMVER_PARTS = 3
 TWO_PART_VERSION = 2
+
+
+class Stage(TypedDict):
+    files: list[str]
+    commands: list[list[str]]
+    message: str
+
+
+class Config(TypedDict):
+    name: str
+    branch: str
+    components: int
+    initial_version: str
+    checks: list[list[str]]
+    tools: list[str]
+    stages: list[Stage]
+    publication: str
+    repository: NotRequired[str]
+    workflow: NotRequired[str]
+    suggest: NotRequired[list[str]]
+    draft: NotRequired[bool]
+
+
+class State(TypedDict):
+    head: str
+    refs: dict[str, str]
+    latest: str | None
+    messages: list[str]
+    ahead: str
 
 
 class ReleaseError(Exception):
     pass
 
 
-def run(root, *args, capture=True):
+def run(root: Path, *args: str, capture: bool = True) -> str:
     result = subprocess.run(args, cwd=root, text=True, capture_output=capture, check=False)
     if result.returncode:
         detail = (result.stderr or result.stdout or "").strip() if capture else ""
@@ -22,7 +52,7 @@ def run(root, *args, capture=True):
     return result.stdout.strip() if capture else ""
 
 
-def version_tuple(value, components):
+def version_tuple(value: str, components: int) -> tuple[int, ...]:
     value = value.removeprefix("v")
     pattern = r"(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)){" + str(components - 1) + "}"
     if not re.fullmatch(pattern, value):
@@ -30,7 +60,7 @@ def version_tuple(value, components):
     return tuple(int(part) for part in value.split("."))
 
 
-def bumped(base, kind, components):
+def bumped(base: tuple[int, ...], kind: str, components: int) -> str:
     parts = list(base)
     if kind == "patch" and components == TWO_PART_VERSION:
         raise ReleaseError("This project uses MAJOR.MINOR; choose minor or an exact version.")
@@ -40,7 +70,9 @@ def bumped(base, kind, components):
     return ".".join(map(str, parts))
 
 
-def suggested(base, messages, components):
+def suggested(
+    base: tuple[int, ...], messages: list[str], components: int
+) -> tuple[str | None, dict[str, int]]:
     counts = {"features": 0, "fixes": 0, "breaking": 0}
     for message in messages:
         header = message.splitlines()[0]
@@ -64,18 +96,18 @@ def suggested(base, messages, components):
     return bumped(base, kind, components), counts
 
 
-def remote_refs(root):
+def remote_refs(root: Path) -> dict[str, str]:
     result = run(root, "git", "ls-remote", "--heads", "--tags", "origin")
     return dict(line.split()[::-1] for line in result.splitlines())
 
 
-def clean(root):
+def clean(root: Path) -> None:
     status = run(root, "git", "status", "--porcelain", "--untracked-files=all")
     if status:
         raise ReleaseError("The checkout must be clean before releasing:\n" + status)
 
 
-def inspect(root, config):
+def inspect(root: Path, config: Config) -> State:
     clean(root)
     branch = run(root, "git", "symbolic-ref", "--short", "HEAD")
     if branch != config["branch"]:
@@ -129,7 +161,7 @@ def inspect(root, config):
     return {"head": head, "refs": refs, "latest": latest, "messages": messages, "ahead": ahead}
 
 
-def select_version(value, state, config):
+def select_version(value: str, state: State, config: Config) -> str:
     components = config["components"]
     base = version_tuple(state["latest"] or config["initial_version"], components)
     candidate = bumped(base, value, components) if value in {"patch", "minor", "major"} else value
@@ -139,7 +171,7 @@ def select_version(value, state, config):
     return ".".join(map(str, parsed))
 
 
-def preview(config, state, version, counts):
+def preview(config: Config, state: State, version: str | None, counts: dict[str, int]) -> None:
     print(f"\n{config['name']} release", flush=True)
     print(f"Current:   {state['latest'] or '(first release)'}")
     print(f"Proposed:  {'v' + version if version else '(no automatic bump)'}")
@@ -156,7 +188,9 @@ def preview(config, state, version, counts):
     print("Publish:   " + config["publication"])
 
 
-def confirm(config, state, version, counts):
+def confirm(
+    config: Config, state: State, version: str | None, counts: dict[str, int]
+) -> str | None:
     while True:
         preview(config, state, version, counts)
         answer = input(
@@ -175,7 +209,7 @@ def confirm(config, state, version, counts):
             print(error)
 
 
-def changed_paths(root):
+def changed_paths(root: Path) -> set[str]:
     paths = set()
     for arguments in [
         ["diff", "--name-only", "-z"],
@@ -186,7 +220,7 @@ def changed_paths(root):
     return paths - {""}
 
 
-def prepare(root, config, version):
+def prepare(root: Path, config: Config, version: str) -> None:
     for stage in config["stages"]:
         clean(root)
         values = {"version": version, "revision": run(root, "git", "rev-parse", "HEAD")}
@@ -220,7 +254,7 @@ def prepare(root, config, version):
         clean(root)
 
 
-def report_publication(config, tag):
+def report_publication(config: Config, tag: str) -> None:
     if not config.get("workflow"):
         print(f"Pushed {tag}. {config['publication']}")
         return
@@ -234,7 +268,9 @@ def report_publication(config, tag):
         print(f"Release (when ready): {url}/releases/tag/{tag}")
 
 
-def proposal(root, config, state, override):
+def proposal(
+    root: Path, config: Config, state: State, override: str | None
+) -> tuple[str | None, dict[str, int]]:
     components = config["components"]
     base = version_tuple(state["latest"] or config["initial_version"], components)
     version, counts = suggested(base, state["messages"], components)
@@ -248,7 +284,7 @@ def proposal(root, config, state, override):
     return version, counts
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Preview, confirm, and publish a release.")
     parser.add_argument("version", nargs="?", help="patch, minor, major, or an exact version")
     parser.add_argument(
@@ -259,7 +295,7 @@ def main():
     )
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
-    config = json.loads((root / "scripts/release.json").read_text())
+    config: Config = json.loads((root / "scripts/release.json").read_text())
     if not args.yes and not args.dry_run and not sys.stdin.isatty():
         raise ReleaseError(
             "Interactive confirmation needs a terminal; use --dry-run or explicit --yes."

@@ -163,7 +163,9 @@ def test_vibe_uses_last_nonempty_assistant_text_and_native_block_joining() -> No
     ]
     decoded = vibe.decode(json.dumps(history))
     assert decoded.output == "last\n\n\n\n雪" and decoded.error is None
-    assert decoded.usage is decoded.reported_models is decoded.cost_usd is None
+    assert decoded.usage is None
+    assert decoded.reported_models is None
+    assert decoded.cost_usd is None
 
 
 @pytest.mark.parametrize(

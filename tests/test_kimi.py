@@ -145,7 +145,9 @@ def test_kimi_last_assistant_message_and_split_unicode() -> None:
         consumer.feed(bytes([byte]))
     decoded = consumer.finish()
     assert decoded.output == "last 雪" and decoded.error is None
-    assert decoded.usage is decoded.reported_models is decoded.cost_usd is None
+    assert decoded.usage is None
+    assert decoded.reported_models is None
+    assert decoded.cost_usd is None
 
 
 @pytest.mark.parametrize(

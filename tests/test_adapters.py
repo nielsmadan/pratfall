@@ -1,4 +1,6 @@
 import json
+from collections.abc import Callable
+from types import ModuleType
 
 import pytest
 
@@ -15,7 +17,7 @@ from pratfall.adapters import (
     opencode,
 )
 from pratfall.catalog import BY_NAME
-from pratfall.consumer import ConsumerFailure, ConsumerLimits
+from pratfall.consumer import ByteConsumer, ConsumerFailure, ConsumerLimits
 from pratfall.errors import PratError
 from pratfall.models import DecodedOutput, Options, ResolvedProfile, ResultError, Usage
 
@@ -876,7 +878,7 @@ def test_hermes_builds_quiet_stdin_invocation_without_yolo() -> None:
     ],
 )
 def test_new_adapters_reject_owned_native_flags(
-    adapter: object, agent: str, arguments: tuple[str, ...]
+    adapter: ModuleType, agent: str, arguments: tuple[str, ...]
 ) -> None:
     with pytest.raises(PratError, match="controlled by prat"):
         adapter.build(resolved(agent, Options(native_args=arguments)), b"prompt")
@@ -898,7 +900,7 @@ def test_new_adapters_reject_owned_native_flags(
     ],
 )
 def test_new_adapters_reject_unvetted_native_arguments(
-    adapter: object, agent: str, arguments: tuple[str, ...], message: str
+    adapter: ModuleType, agent: str, arguments: tuple[str, ...], message: str
 ) -> None:
     with pytest.raises(PratError, match=message):
         adapter.build(resolved(agent, Options(native_args=arguments)), b"prompt")
@@ -914,7 +916,9 @@ def test_copilot_rejects_native_flags_that_persist_configuration(argument: str) 
 
 
 @pytest.mark.parametrize("adapter", [kiro, hermes])
-def test_text_adapters_preserve_stdout_and_remove_terminal_line_endings(adapter: object) -> None:
+def test_text_adapters_preserve_stdout_and_remove_terminal_line_endings(
+    adapter: ModuleType,
+) -> None:
     decoded = adapter.decode("banner\nfinal answer\r\n")
     assert decoded == DecodedOutput(output="banner\nfinal answer")
 
@@ -1627,7 +1631,7 @@ def test_opencode_latest_cost_snapshot_replaces_and_distinct_steps_sum_once() ->
 
 
 def test_opencode_unknown_latest_step_cost_makes_aggregate_unknown() -> None:
-    events = [
+    events: list[dict[str, object]] = [
         {
             "type": "step_finish",
             "part": {
@@ -1652,7 +1656,9 @@ def test_opencode_unknown_latest_step_cost_makes_aggregate_unknown() -> None:
     decoded = opencode.decode(codex_stream(*events))
     assert decoded.cost_usd is None
     assert decoded.error is None
-    events[-1]["part"].pop("cost")
+    part = events[-1]["part"]
+    assert isinstance(part, dict)
+    part.pop("cost")
     decoded = opencode.decode(codex_stream(*events))
     assert decoded.cost_usd is None
     assert decoded.error is None
@@ -1880,7 +1886,7 @@ def test_opencode_accepts_authentic_message_less_output_length_error() -> None:
     ],
 )
 def test_new_structured_adapters_allow_empty_completed_output(
-    decoder: object, payload: str
+    decoder: Callable[[str], DecodedOutput], payload: str
 ) -> None:
     decoded = decoder(payload)
     assert decoded.output == ""
@@ -2040,7 +2046,7 @@ def test_opencode_real_zero_usage_snapshot_is_reported() -> None:
     ],
 )
 def test_missing_terminal_diagnostic_counts_against_retained_state(
-    factory: object, stream: str
+    factory: Callable[[ConsumerLimits], ByteConsumer], stream: str
 ) -> None:
     incremental = factory(ConsumerLimits(event_bytes=1024, state_bytes=11, records=10))
     incremental.feed(stream.encode())
@@ -2086,7 +2092,7 @@ def test_missing_terminal_diagnostic_counts_against_retained_state(
     ],
 )
 def test_prior_state_failure_survives_finalization_with_exhausted_budget(
-    factory: object, first: object, rejected: object
+    factory: Callable[[ConsumerLimits], ByteConsumer], first: object, rejected: object
 ) -> None:
     incremental = factory(ConsumerLimits(event_bytes=1024, state_bytes=5, records=10))
     incremental.feed(codex_stream(first).encode())
@@ -2209,7 +2215,7 @@ def test_rejected_new_message_does_not_publish_ordering_entry(
     ],
 )
 def test_jsonl_consumers_accept_every_byte_boundary_and_final_record(
-    factory: object, stream: str, expected: str
+    factory: Callable[[], ByteConsumer], stream: str, expected: str
 ) -> None:
     assert "雪".encode() in stream.encode()
     incremental = factory()
@@ -2262,7 +2268,7 @@ def test_jsonl_state_replacement_refunds_prior_text_and_duplicate_records() -> N
 
 def test_copilot_many_tiny_and_empty_deltas_share_one_logical_record() -> None:
     incremental = copilot.consumer(ConsumerLimits(event_bytes=1024, state_bytes=5000, records=2))
-    events = [
+    events: list[dict[str, object]] = [
         {
             "type": "assistant.message_delta",
             "data": {"messageId": "one", "deltaContent": "x" if index % 2 else ""},

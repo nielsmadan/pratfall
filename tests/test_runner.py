@@ -31,7 +31,7 @@ def test_cleanup_rechecks_group_after_transient_probe_permission_error(
                 raise PermissionError(1, "Operation not permitted")
             raise ProcessLookupError
 
-    monkeypatch.setattr(runner_module.os, "killpg", killpg)
+    monkeypatch.setattr(os, "killpg", killpg)
     assert runner_module.cleanup_process_group(123) is None
     assert signals == [signal.SIGTERM, 0, 0, 0]
 
@@ -49,7 +49,7 @@ def test_cleanup_reports_persistent_probe_permission_error(
 
     monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
     monkeypatch.setattr(runner_module, "FINAL_DRAIN_GRACE", 0)
-    monkeypatch.setattr(runner_module.os, "killpg", killpg)
+    monkeypatch.setattr(os, "killpg", killpg)
     assert runner_module.cleanup_process_group(123) == (
         "could not verify owned process-group cleanup before the deadline"
     )
@@ -69,7 +69,7 @@ def test_cleanup_preserves_signal_permission_failure(
             raise PermissionError(1, "Operation not permitted")
 
     monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
-    monkeypatch.setattr(runner_module.os, "killpg", killpg)
+    monkeypatch.setattr(os, "killpg", killpg)
     assert runner_module.cleanup_process_group(123) == "[Errno 1] Operation not permitted"
     assert signals == (
         [signal.SIGTERM] if denied == signal.SIGTERM else [signal.SIGTERM, 0, signal.SIGKILL]
@@ -119,7 +119,7 @@ def test_timeout_verifies_cleanup_after_parent_exits_and_pipes_close(
     monkeypatch.setattr(runner_module, "_drain", drain_until_timeout)
     monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
     monkeypatch.setattr(runner_module, "FINAL_DRAIN_GRACE", 0.15)
-    monkeypatch.setattr(runner_module.os, "killpg", killpg)
+    monkeypatch.setattr(os, "killpg", killpg)
     result = run(python("pass"), tmp_path, 5)
 
     message = "Agent exceeded the 5 second timeout."

@@ -431,7 +431,11 @@ def test_retry_rejects_unverifiable_or_divergent_asset_digest(
 ) -> None:
     notes, assets, target = publication_files(tmp_path)
     release = metadata(notes, assets, target)
-    release["assets"][0]["digest"] = value
+    release_assets = release["assets"]
+    assert isinstance(release_assets, list)
+    first_asset = release_assets[0]
+    assert isinstance(first_asset, dict)
+    first_asset["digest"] = value
     with (
         patch.object(
             release_workflow.subprocess,

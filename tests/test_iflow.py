@@ -106,7 +106,9 @@ def test_iflow_cli_satisfies_independent_native_contract(
 def test_iflow_captures_stdout_without_inferred_semantic_failure(output: str) -> None:
     decoded = iflow.decode(output + "\r\n\n")
     assert decoded.output == output and decoded.error is None
-    assert decoded.usage is decoded.reported_models is decoded.cost_usd is None
+    assert decoded.usage is None
+    assert decoded.reported_models is None
+    assert decoded.cost_usd is None
 
 
 @pytest.mark.parametrize("native_exit", [0, 17])
