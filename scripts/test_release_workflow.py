@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 from unittest.mock import patch
 
@@ -92,6 +93,24 @@ def test_validate_tag_cli_accepts_the_push_event_commit_sha(tmp_path: Path) -> N
     assert completed.stdout.strip() == event_sha
 
 
+def test_retry_resolves_original_tag_after_main_advances(tmp_path: Path) -> None:
+    repository, release_commit = release_repository(tmp_path)
+    (repository / "source").write_text("workflow repair\n", encoding="utf-8")
+    git(repository, "add", "source")
+    git(repository, "commit", "-m", "fix: release workflow")
+    git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+    git(repository, "branch", "v1.2.3")
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "validate-tag", "v1.2.3"],
+        cwd=repository,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == release_commit
+
+
 def test_validate_tag_rejects_mismatched_event_commit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -105,18 +124,22 @@ def test_validate_tag_rejects_mismatched_event_commit(
         release_workflow.validate_tag("v1.2.3", git(repository, "rev-parse", "HEAD"))
 
 
+@pytest.mark.parametrize("check_event", [True, False])
 def test_validate_tag_rejects_lightweight_tag(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check_event: bool
 ) -> None:
     repository, _event_sha = release_repository(tmp_path)
     git(repository, "tag", "v1.2.4")
     monkeypatch.chdir(repository)
     with pytest.raises(release_workflow.WorkflowError, match="annotated tag"):
-        release_workflow.validate_tag("v1.2.4", git(repository, "rev-parse", "v1.2.4"))
+        release_workflow.validate_tag(
+            "v1.2.4", git(repository, "rev-parse", "v1.2.4") if check_event else None
+        )
 
 
+@pytest.mark.parametrize("check_event", [True, False])
 def test_validate_tag_rejects_commit_outside_origin_main(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check_event: bool
 ) -> None:
     repository, _event_sha = release_repository(tmp_path)
     git(repository, "checkout", "--orphan", "unmerged")
@@ -126,7 +149,50 @@ def test_validate_tag_rejects_commit_outside_origin_main(
     git(repository, "tag", "-a", "v2.0.0", "-m", "Release v2.0.0")
     monkeypatch.chdir(repository)
     with pytest.raises(release_workflow.WorkflowError, match="not contained"):
-        release_workflow.validate_tag("v2.0.0", git(repository, "rev-parse", "v2.0.0"))
+        release_workflow.validate_tag(
+            "v2.0.0", git(repository, "rev-parse", "v2.0.0") if check_event else None
+        )
+
+
+@pytest.mark.parametrize(
+    ("classifiers", "prerelease"),
+    [
+        (["Development Status :: 2 - Pre-Alpha"], True),
+        (["Development Status :: 3 - Alpha"], True),
+        (["Development Status :: 4 - Beta"], True),
+        (["Development Status :: 5 - Production/Stable"], False),
+        ([], False),
+    ],
+)
+def test_project_metadata_cli_reports_version_and_release_status(
+    tmp_path: Path, classifiers: list[str], prerelease: bool
+) -> None:
+    project = tmp_path / "pyproject.toml"
+    project.write_text(
+        f'[project]\nversion = "0.9.0"\nclassifiers = {json.dumps(classifiers)}\n',
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT), "project-metadata", "v0.9.0", str(project)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == f"version=0.9.0\nprerelease={str(prerelease).lower()}\n"
+
+
+@pytest.mark.parametrize(
+    ("tag", "error"),
+    [("v1.2.3", "does not match project version"), ("v0.9", "Invalid release tag")],
+)
+def test_project_metadata_rejects_invalid_or_mismatched_version(
+    tmp_path: Path, tag: str, error: str
+) -> None:
+    project = tmp_path / "pyproject.toml"
+    project.write_text('[project]\nversion = "0.9.0"\n', encoding="utf-8")
+    with pytest.raises(release_workflow.WorkflowError, match=error):
+        release_workflow.project_metadata(tag, project)
 
 
 def publication_files(tmp_path: Path) -> tuple[Path, list[str], str]:
@@ -155,6 +221,7 @@ def metadata(
     target: str,
     *,
     draft: bool = False,
+    prerelease: bool = False,
 ) -> dict[str, object]:
     return {
         "tagName": "v1.2.3",
@@ -162,17 +229,36 @@ def metadata(
         "body": notes.read_text(encoding="utf-8"),
         "targetCommitish": target,
         "isDraft": draft,
-        "isPrerelease": False,
+        "isPrerelease": prerelease,
         "isImmutable": False,
         "assets": [asset(path) for path in assets],
     }
 
 
-def test_first_publication_pins_target_and_creates_release(tmp_path: Path) -> None:
+@pytest.mark.parametrize("prerelease", [False, True])
+def test_first_publication_pins_target_and_creates_release(
+    tmp_path: Path, prerelease: bool
+) -> None:
     notes, assets, target = publication_files(tmp_path)
     responses = [result(1, stderr="release not found\n"), result()]
-    with patch.object(release_workflow.subprocess, "run", side_effect=responses) as runner:
-        release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
+    with (
+        patch.object(release_workflow.subprocess, "run", side_effect=responses) as runner,
+        patch.object(
+            sys,
+            "argv",
+            [
+                str(SCRIPT),
+                "publish",
+                "v1.2.3",
+                "pratfall 1.2.3",
+                str(notes),
+                target,
+                *assets,
+                *(["--prerelease"] if prerelease else []),
+            ],
+        ),
+    ):
+        release_workflow.main()
     assert runner.call_args_list[1].args == (
         (
             "gh",
@@ -187,15 +273,19 @@ def test_first_publication_pins_target_and_creates_release(tmp_path: Path) -> No
             "pratfall 1.2.3",
             "--notes-file",
             str(notes),
+            *(["--prerelease", "--latest=false"] if prerelease else []),
         ),
     )
 
 
-def test_retry_accepts_identical_release_without_mutation(tmp_path: Path) -> None:
+@pytest.mark.parametrize("prerelease", [False, True])
+def test_retry_accepts_identical_release_without_mutation(tmp_path: Path, prerelease: bool) -> None:
     notes, assets, target = publication_files(tmp_path)
-    response = result(stdout=json.dumps(metadata(notes, assets, target)))
+    response = result(stdout=json.dumps(metadata(notes, assets, target, prerelease=prerelease)))
     with patch.object(release_workflow.subprocess, "run", return_value=response) as runner:
-        release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
+        release_workflow.publish(
+            "v1.2.3", "pratfall 1.2.3", notes, target, assets, prerelease=prerelease
+        )
     assert runner.call_count == 1
     assert "isPrerelease" in runner.call_args.args[0][-1].split(",")
 
@@ -208,15 +298,24 @@ def test_partial_publication_uploads_only_missing_asset_without_clobber(tmp_path
     assert runner.call_args_list[1].args == (("gh", "release", "upload", "v1.2.3", assets[1]),)
 
 
-def test_matching_draft_is_published_after_missing_assets_upload(tmp_path: Path) -> None:
+@pytest.mark.parametrize("prerelease", [False, True])
+def test_matching_draft_is_published_after_missing_assets_upload(
+    tmp_path: Path, prerelease: bool
+) -> None:
     notes, assets, target = publication_files(tmp_path)
     responses = [
-        result(stdout=json.dumps(metadata(notes, assets[:1], target, draft=True))),
+        result(
+            stdout=json.dumps(
+                metadata(notes, assets[:1], target, draft=True, prerelease=prerelease)
+            )
+        ),
         result(),
         result(),
     ]
     with patch.object(release_workflow.subprocess, "run", side_effect=responses) as runner:
-        release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
+        release_workflow.publish(
+            "v1.2.3", "pratfall 1.2.3", notes, target, assets, prerelease=prerelease
+        )
     assert runner.call_args_list[2].args == (("gh", "release", "edit", "v1.2.3", "--draft=false"),)
 
 
@@ -236,10 +335,12 @@ def test_retry_rejects_divergent_release_metadata(tmp_path: Path, field: str) ->
 
 
 @pytest.mark.parametrize(
-    ("draft", "value"), [(False, True), (True, True), (False, None), (False, "false"), (False, 0)]
+    ("prerelease", "value"),
+    [(False, True), (True, False), (False, None), (False, "false"), (False, 0), (True, 1)],
 )
-def test_retry_rejects_prerelease_or_unavailable_prerelease_state(
-    tmp_path: Path, draft: bool, value: object
+@pytest.mark.parametrize("draft", [False, True])
+def test_retry_rejects_mismatched_or_unavailable_prerelease_state(
+    tmp_path: Path, draft: bool, prerelease: bool, value: object
 ) -> None:
     notes, assets, target = publication_files(tmp_path)
     release = metadata(notes, assets, target, draft=draft)
@@ -251,9 +352,11 @@ def test_retry_rejects_prerelease_or_unavailable_prerelease_state(
         patch.object(
             release_workflow.subprocess, "run", return_value=result(stdout=json.dumps(release))
         ) as runner,
-        pytest.raises(release_workflow.WorkflowError, match="non-prerelease"),
+        pytest.raises(release_workflow.WorkflowError, match="prerelease state differs"),
     ):
-        release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
+        release_workflow.publish(
+            "v1.2.3", "pratfall 1.2.3", notes, target, assets, prerelease=prerelease
+        )
     assert runner.call_count == 1
 
 
@@ -285,6 +388,50 @@ def test_release_lookup_error_does_not_attempt_creation(tmp_path: Path) -> None:
     ):
         release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
     assert runner.call_count == 1
+
+
+def test_workflow_coverage_step_runs_from_a_fresh_directory(tmp_path: Path) -> None:
+    workflow = SCRIPT.parent.parent / ".github/workflows/release.yml"
+    match = re.search(
+        r"      - name: Test with branch coverage\n        run: \|\n((?:          .*\n)+)",
+        workflow.read_text(encoding="utf-8"),
+    )
+    assert match is not None
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "tests/test_temporary_directory.py").write_text(
+        "def test_temporary_directory(tmp_path):\n"
+        "    result = tmp_path / 'result'\n"
+        "    result.write_text('passed')\n"
+        "    assert result.read_text() == 'passed'\n",
+        encoding="utf-8",
+    )
+    commands = tmp_path / "bin"
+    commands.mkdir()
+    uv = commands / "uv"
+    uv.write_text(
+        f"#!{sys.executable}\n"
+        "import os, sys\n"
+        "assert sys.argv[1:3] == ['run', 'pytest']\n"
+        "os.execv(sys.executable, [sys.executable, '-m', *sys.argv[2:]])\n",
+        encoding="utf-8",
+    )
+    uv.chmod(0o755)
+    environment = dict(os.environ, PATH=f"{commands}{os.pathsep}{os.defpath}")
+    environment.pop("PYTEST_ADDOPTS", None)
+    completed = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", textwrap.dedent(match[1])],
+        cwd=tmp_path,
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert "1 passed" in completed.stdout
+    results = list((tmp_path / ".cache/release/pytest").glob("*/result"))
+    assert results
+    assert all(path.read_text(encoding="utf-8") == "passed" for path in results)
 
 
 def test_all_workflow_actions_use_full_commit_pins() -> None:

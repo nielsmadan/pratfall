@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -41,18 +42,20 @@ def command(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return result
 
 
-def validate_tag(tag: str, event_sha: str) -> str:
+def validate_tag(tag: str, event_sha: str | None = None) -> str:
     if version(tag) is None:
         raise WorkflowError(f"Invalid release tag: {tag!r}")
-    object_type = command("git", "cat-file", "-t", tag).stdout.strip()
+    ref = f"refs/tags/{tag}"
+    object_type = command("git", "cat-file", "-t", ref).stdout.strip()
     if object_type != "tag":
         raise WorkflowError(f"Release ref {tag} must be an annotated tag, got {object_type!r}.")
-    release_commit = command("git", "rev-parse", f"{tag}^{{commit}}").stdout.strip()
-    event_commit = command("git", "rev-parse", f"{event_sha}^{{commit}}").stdout.strip()
-    if release_commit != event_commit:
-        raise WorkflowError(
-            f"Release event SHA {event_sha} does not identify {tag} commit {release_commit}."
-        )
+    release_commit = command("git", "rev-parse", f"{ref}^{{commit}}").stdout.strip()
+    if event_sha is not None:
+        event_commit = command("git", "rev-parse", f"{event_sha}^{{commit}}").stdout.strip()
+        if release_commit != event_commit:
+            raise WorkflowError(
+                f"Release event SHA {event_sha} does not identify {tag} commit {release_commit}."
+            )
     origin_main = command("git", "rev-parse", "refs/remotes/origin/main^{commit}").stdout.strip()
     ancestry = command(
         "git", "merge-base", "--is-ancestor", release_commit, origin_main, check=False
@@ -63,6 +66,27 @@ def validate_tag(tag: str, event_sha: str) -> str:
             f"({origin_main})."
         )
     return release_commit
+
+
+def project_metadata(tag: str, path: Path) -> tuple[str, bool]:
+    if version(tag) is None:
+        raise WorkflowError(f"Invalid release tag: {tag!r}")
+    project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
+    expected_version = tag.removeprefix("v")
+    if project["version"] != expected_version:
+        raise WorkflowError(
+            f"Tag version {expected_version!r} does not match project version "
+            f"{project['version']!r}."
+        )
+    prerelease = any(
+        classifier in project.get("classifiers", [])
+        for classifier in (
+            "Development Status :: 2 - Pre-Alpha",
+            "Development Status :: 3 - Alpha",
+            "Development Status :: 4 - Beta",
+        )
+    )
+    return expected_version, prerelease
 
 
 def _sha256(path: Path) -> str:
@@ -131,14 +155,16 @@ def _missing_assets(
 
 
 def _verify_metadata(
-    release: dict[str, object], tag: str, title: str, body: str, target: str
+    release: dict[str, object], tag: str, title: str, body: str, target: str, prerelease: bool
 ) -> None:
     if not isinstance(release.get("isDraft"), bool) or not isinstance(
         release.get("isImmutable"), bool
     ):
         raise WorkflowError("GitHub release mutability state is unavailable.")
-    if release.get("isPrerelease") is not False:
-        raise WorkflowError("GitHub release must be explicitly marked as non-prerelease.")
+    if release.get("isPrerelease") is not prerelease:
+        raise WorkflowError(
+            "GitHub release prerelease state differs from the expected publication."
+        )
     expected = {
         "tagName": tag,
         "name": title,
@@ -152,7 +178,15 @@ def _verify_metadata(
             )
 
 
-def publish(tag: str, title: str, notes: Path, target: str, assets: Sequence[str]) -> None:
+def publish(
+    tag: str,
+    title: str,
+    notes: Path,
+    target: str,
+    assets: Sequence[str],
+    *,
+    prerelease: bool = False,
+) -> None:
     if re.fullmatch(r"[0-9a-f]{40}", target) is None:
         raise WorkflowError(f"Release target must be a full commit SHA, got {target!r}.")
     body = notes.read_text(encoding="utf-8")
@@ -172,9 +206,10 @@ def publish(tag: str, title: str, notes: Path, target: str, assets: Sequence[str
             title,
             "--notes-file",
             str(notes),
+            *(["--prerelease", "--latest=false"] if prerelease else []),
         )
         return
-    _verify_metadata(release, tag, title, body, target)
+    _verify_metadata(release, tag, title, body, target, prerelease)
     missing = _missing_assets(release, expected)
     if missing:
         if release.get("isImmutable") is True:
@@ -191,13 +226,17 @@ def main() -> None:
     previous.add_argument("current")
     validation = subparsers.add_parser("validate-tag")
     validation.add_argument("tag")
-    validation.add_argument("event_sha", metavar="event-sha")
+    validation.add_argument("event_sha", metavar="event-sha", nargs="?")
+    metadata = subparsers.add_parser("project-metadata")
+    metadata.add_argument("tag")
+    metadata.add_argument("project", type=Path)
     publication = subparsers.add_parser("publish")
     publication.add_argument("tag")
     publication.add_argument("title")
     publication.add_argument("notes", type=Path)
     publication.add_argument("target")
     publication.add_argument("assets", nargs="+")
+    publication.add_argument("--prerelease", action="store_true")
     args = parser.parse_args()
     if args.operation == "previous-tag":
         tags = command("git", "tag", "--list").stdout.splitlines()
@@ -207,7 +246,12 @@ def main() -> None:
     if args.operation == "validate-tag":
         print(validate_tag(args.tag, args.event_sha))
         return
-    publish(args.tag, args.title, args.notes, args.target, args.assets)
+    if args.operation == "project-metadata":
+        project_version, prerelease = project_metadata(args.tag, args.project)
+        print(f"version={project_version}")
+        print(f"prerelease={str(prerelease).lower()}")
+        return
+    publish(args.tag, args.title, args.notes, args.target, args.assets, prerelease=args.prerelease)
 
 
 if __name__ == "__main__":
