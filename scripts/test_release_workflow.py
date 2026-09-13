@@ -205,6 +205,47 @@ def publication_files(tmp_path: Path) -> tuple[Path, list[str], str]:
     return notes, [str(wheel), str(sdist)], "a" * 40
 
 
+def test_remote_tag_keeps_original_commit_after_main_advances(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repository, release_commit = release_repository(tmp_path)
+    git(repository, "remote", "add", "origin", str(repository))
+    (repository / "source").write_text("workflow repair\n", encoding="utf-8")
+    git(repository, "add", "source")
+    git(repository, "commit", "-m", "fix: release workflow")
+    monkeypatch.chdir(repository)
+    release_workflow.verify_remote_tag("v1.2.3", release_commit)
+
+
+@pytest.mark.parametrize("state", ["moved", "lightweight", "missing"])
+def test_publication_rejects_changed_remote_tag_before_accessing_github(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
+    repository, release_commit = release_repository(tmp_path)
+    git(repository, "remote", "add", "origin", str(repository))
+    git(repository, "tag", "-d", "v1.2.3")
+    if state == "moved":
+        (repository / "source").write_text("other release\n", encoding="utf-8")
+        git(repository, "add", "source")
+        git(repository, "commit", "-m", "feat: other release")
+        git(repository, "tag", "-a", "v1.2.3", "-m", "Moved tag")
+    elif state == "lightweight":
+        git(repository, "tag", "v1.2.3")
+    notes, assets, _target = publication_files(tmp_path)
+    monkeypatch.chdir(repository)
+    error = "ls-remote.*failed" if state == "missing" else "must be annotated and identify"
+    with (
+        patch.object(release_workflow, "_release") as release_lookup,
+        pytest.raises(release_workflow.WorkflowError, match=error),
+    ):
+        release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, release_commit, assets)
+    release_lookup.assert_not_called()
+
+
+def remote_tag(target: str) -> subprocess.CompletedProcess[str]:
+    return result(stdout=f"{'b' * 40}\trefs/tags/v1.2.3\n{target}\trefs/tags/v1.2.3^{{}}\n")
+
+
 def asset(path: str) -> dict[str, object]:
     data = Path(path).read_bytes()
     return {
@@ -236,11 +277,11 @@ def metadata(
 
 
 @pytest.mark.parametrize("prerelease", [False, True])
-def test_first_publication_pins_target_and_creates_release(
+def test_first_publication_verifies_existing_tag_and_creates_release(
     tmp_path: Path, prerelease: bool
 ) -> None:
     notes, assets, target = publication_files(tmp_path)
-    responses = [result(1, stderr="release not found\n"), result()]
+    responses = [remote_tag(target), result(1, stderr="release not found\n"), result()]
     with (
         patch.object(release_workflow.subprocess, "run", side_effect=responses) as runner,
         patch.object(
@@ -259,7 +300,18 @@ def test_first_publication_pins_target_and_creates_release(
         ),
     ):
         release_workflow.main()
-    assert runner.call_args_list[1].args == (
+    assert runner.call_args_list[0].args == (
+        (
+            "git",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "origin",
+            "refs/tags/v1.2.3",
+            "refs/tags/v1.2.3^{}",
+        ),
+    )
+    assert runner.call_args_list[2].args == (
         (
             "gh",
             "release",
@@ -267,8 +319,6 @@ def test_first_publication_pins_target_and_creates_release(
             "v1.2.3",
             *assets,
             "--verify-tag",
-            "--target",
-            target,
             "--title",
             "pratfall 1.2.3",
             "--notes-file",
@@ -279,23 +329,33 @@ def test_first_publication_pins_target_and_creates_release(
 
 
 @pytest.mark.parametrize("prerelease", [False, True])
-def test_retry_accepts_identical_release_without_mutation(tmp_path: Path, prerelease: bool) -> None:
+@pytest.mark.parametrize("target_commitish", ["main", "a" * 40])
+def test_retry_accepts_identical_release_without_mutation(
+    tmp_path: Path, prerelease: bool, target_commitish: str
+) -> None:
     notes, assets, target = publication_files(tmp_path)
-    response = result(stdout=json.dumps(metadata(notes, assets, target, prerelease=prerelease)))
-    with patch.object(release_workflow.subprocess, "run", return_value=response) as runner:
+    responses = [
+        remote_tag(target),
+        result(stdout=json.dumps(metadata(notes, assets, target_commitish, prerelease=prerelease))),
+    ]
+    with patch.object(release_workflow.subprocess, "run", side_effect=responses) as runner:
         release_workflow.publish(
             "v1.2.3", "pratfall 1.2.3", notes, target, assets, prerelease=prerelease
         )
-    assert runner.call_count == 1
+    assert runner.call_count == 2
     assert "isPrerelease" in runner.call_args.args[0][-1].split(",")
 
 
 def test_partial_publication_uploads_only_missing_asset_without_clobber(tmp_path: Path) -> None:
     notes, assets, target = publication_files(tmp_path)
-    responses = [result(stdout=json.dumps(metadata(notes, assets[:1], target))), result()]
+    responses = [
+        remote_tag(target),
+        result(stdout=json.dumps(metadata(notes, assets[:1], target))),
+        result(),
+    ]
     with patch.object(release_workflow.subprocess, "run", side_effect=responses) as runner:
         release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
-    assert runner.call_args_list[1].args == (("gh", "release", "upload", "v1.2.3", assets[1]),)
+    assert runner.call_args_list[2].args == (("gh", "release", "upload", "v1.2.3", assets[1]),)
 
 
 @pytest.mark.parametrize("prerelease", [False, True])
@@ -304,6 +364,7 @@ def test_matching_draft_is_published_after_missing_assets_upload(
 ) -> None:
     notes, assets, target = publication_files(tmp_path)
     responses = [
+        remote_tag(target),
         result(
             stdout=json.dumps(
                 metadata(notes, assets[:1], target, draft=True, prerelease=prerelease)
@@ -316,22 +377,24 @@ def test_matching_draft_is_published_after_missing_assets_upload(
         release_workflow.publish(
             "v1.2.3", "pratfall 1.2.3", notes, target, assets, prerelease=prerelease
         )
-    assert runner.call_args_list[2].args == (("gh", "release", "edit", "v1.2.3", "--draft=false"),)
+    assert runner.call_args_list[3].args == (("gh", "release", "edit", "v1.2.3", "--draft=false"),)
 
 
-@pytest.mark.parametrize("field", ["name", "body", "targetCommitish", "tagName"])
+@pytest.mark.parametrize("field", ["name", "body", "tagName"])
 def test_retry_rejects_divergent_release_metadata(tmp_path: Path, field: str) -> None:
     notes, assets, target = publication_files(tmp_path)
     release = metadata(notes, assets, target)
     release[field] = "different"
     with (
         patch.object(
-            release_workflow.subprocess, "run", return_value=result(stdout=json.dumps(release))
+            release_workflow.subprocess,
+            "run",
+            side_effect=[remote_tag(target), result(stdout=json.dumps(release))],
         ) as runner,
         pytest.raises(release_workflow.WorkflowError, match=field),
     ):
         release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
-    assert runner.call_count == 1
+    assert runner.call_count == 2
 
 
 @pytest.mark.parametrize(
@@ -350,14 +413,16 @@ def test_retry_rejects_mismatched_or_unavailable_prerelease_state(
         release["isPrerelease"] = value
     with (
         patch.object(
-            release_workflow.subprocess, "run", return_value=result(stdout=json.dumps(release))
+            release_workflow.subprocess,
+            "run",
+            side_effect=[remote_tag(target), result(stdout=json.dumps(release))],
         ) as runner,
         pytest.raises(release_workflow.WorkflowError, match="prerelease state differs"),
     ):
         release_workflow.publish(
             "v1.2.3", "pratfall 1.2.3", notes, target, assets, prerelease=prerelease
         )
-    assert runner.call_count == 1
+    assert runner.call_count == 2
 
 
 @pytest.mark.parametrize("value", [None, "sha256:" + "0" * 64])
@@ -369,7 +434,9 @@ def test_retry_rejects_unverifiable_or_divergent_asset_digest(
     release["assets"][0]["digest"] = value
     with (
         patch.object(
-            release_workflow.subprocess, "run", return_value=result(stdout=json.dumps(release))
+            release_workflow.subprocess,
+            "run",
+            side_effect=[remote_tag(target), result(stdout=json.dumps(release))],
         ),
         pytest.raises(release_workflow.WorkflowError, match="divergent bytes"),
     ):
@@ -382,12 +449,12 @@ def test_release_lookup_error_does_not_attempt_creation(tmp_path: Path) -> None:
         patch.object(
             release_workflow.subprocess,
             "run",
-            return_value=result(1, stderr="HTTP 500: server error\n"),
+            side_effect=[remote_tag(target), result(1, stderr="HTTP 500: server error\n")],
         ) as runner,
         pytest.raises(release_workflow.WorkflowError, match="HTTP 500"),
     ):
         release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
-    assert runner.call_count == 1
+    assert runner.call_count == 2
 
 
 def test_workflow_coverage_step_runs_from_a_fresh_directory(tmp_path: Path) -> None:

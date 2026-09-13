@@ -158,6 +158,13 @@ commit, prerelease status and attached asset hashes to match. Identical assets s
 missing assets are uploaded without clobbering. A matching partial draft is published only after
 its assets are complete. Divergent or unverifiable state stops the workflow.
 
+Publication verifies the remote annotated tag's peeled commit against the verified build commit.
+GitHub release creation uses that existing tag with `--verify-tag`. The API's `target_commitish`
+field only controls creation of a missing tag; it does not identify an existing tag's commit.
+Supplying an older commit there can require workflow-write permission when workflow files differ
+from `main`, which the built-in Actions token cannot have. See GitHub's
+[release creation contract](https://docs.github.com/en/rest/releases/releases#create-a-release).
+
 ## Update Homebrew
 
 The formula uses Homebrew `python@3.13` and checksummed pure-Python wheels for Hatchling and its

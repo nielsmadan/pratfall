@@ -68,6 +68,18 @@ def validate_tag(tag: str, event_sha: str | None = None) -> str:
     return release_commit
 
 
+def verify_remote_tag(tag: str, target: str) -> None:
+    if version(tag) is None:
+        raise WorkflowError(f"Invalid release tag: {tag!r}")
+    ref = f"refs/tags/{tag}"
+    peeled = f"{ref}^{{}}"
+    refs = command("git", "ls-remote", "--exit-code", "--tags", "origin", ref, peeled)
+    if f"{target}\t{peeled}" not in refs.stdout.splitlines():
+        raise WorkflowError(
+            f"Remote release tag {tag} must be annotated and identify verified commit {target}."
+        )
+
+
 def project_metadata(tag: str, path: Path) -> tuple[str, bool]:
     if version(tag) is None:
         raise WorkflowError(f"Invalid release tag: {tag!r}")
@@ -106,7 +118,7 @@ def _expected_assets(assets: Sequence[str]) -> dict[str, tuple[Path, int, str]]:
 
 
 def _release(tag: str) -> dict[str, object] | None:
-    fields = "tagName,name,body,targetCommitish,isDraft,isPrerelease,isImmutable,assets"
+    fields = "tagName,name,body,isDraft,isPrerelease,isImmutable,assets"
     result = command("gh", "release", "view", tag, "--json", fields, check=False)
     if result.returncode == 0:
         try:
@@ -155,7 +167,7 @@ def _missing_assets(
 
 
 def _verify_metadata(
-    release: dict[str, object], tag: str, title: str, body: str, target: str, prerelease: bool
+    release: dict[str, object], tag: str, title: str, body: str, prerelease: bool
 ) -> None:
     if not isinstance(release.get("isDraft"), bool) or not isinstance(
         release.get("isImmutable"), bool
@@ -169,7 +181,6 @@ def _verify_metadata(
         "tagName": tag,
         "name": title,
         "body": body,
-        "targetCommitish": target,
     }
     for field, value in expected.items():
         if release.get(field) != value:
@@ -191,6 +202,7 @@ def publish(
         raise WorkflowError(f"Release target must be a full commit SHA, got {target!r}.")
     body = notes.read_text(encoding="utf-8")
     expected = _expected_assets(assets)
+    verify_remote_tag(tag, target)
     release = _release(tag)
     if release is None:
         command(
@@ -200,8 +212,6 @@ def publish(
             tag,
             *assets,
             "--verify-tag",
-            "--target",
-            target,
             "--title",
             title,
             "--notes-file",
@@ -209,7 +219,7 @@ def publish(
             *(["--prerelease", "--latest=false"] if prerelease else []),
         )
         return
-    _verify_metadata(release, tag, title, body, target, prerelease)
+    _verify_metadata(release, tag, title, body, prerelease)
     missing = _missing_assets(release, expected)
     if missing:
         if release.get("isImmutable") is True:
