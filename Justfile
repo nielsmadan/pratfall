@@ -65,15 +65,15 @@ build:
     @uv build --sdist
     @uv build --wheel dist/pratfall-*.tar.gz
 
-install-local:
-    @uv tool install .
+install:
+    @uv tool install --reinstall --force .
     @echo "Installed: $(command -v prat)"
 
-refresh-local:
-    @uv tool install --reinstall --force --no-cache .
-    @echo "Refreshed: $(command -v prat)"
+install-editable:
+    @uv tool install --reinstall --force --editable .
+    @echo "Installed (editable): $(command -v prat)"
 
-reset-local:
+uninstall:
     @uv tool uninstall pratfall
 
 clean:

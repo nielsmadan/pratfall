@@ -22,7 +22,7 @@ just test
 `just check` runs Ruff lint and formatting checks, Pylint cycle detection, strict mypy, and all
 tests, including the release helper tests under `scripts/`. `just setup` installs project
 dependencies and repository hooks; it does not install `prat` globally. Local tool installation is
-an explicit `just install-local` action.
+an explicit `just install` action.
 
 ## Architecture
 

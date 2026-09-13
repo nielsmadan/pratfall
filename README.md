@@ -43,10 +43,11 @@ just coverage
 just build
 ```
 
-Until the first release is published, use the source checkout as shown above. `just install-local`
-installs the checkout as a user-level uv tool; `just refresh-local` performs a no-cache reinstall,
-and `just reset-local` removes it. These recipes change the user's tool installation and are never
-run implicitly. Pratfall does not install or authenticate native agent commands.
+Until the first release is published, use the source checkout as shown above. `just install`
+installs or replaces the checkout as a user-level uv tool, including at the same version;
+`just install-editable` links the source instead, and `just uninstall` removes the installation.
+These recipes change the user's tool installation and are never run implicitly. Pratfall does not
+install or authenticate native agent commands.
 
 ## Running prompts
 

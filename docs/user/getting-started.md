@@ -15,9 +15,9 @@ uv run prat cx "summarize this checkout"
 ```
 
 For repository development, `just setup` installs all dependency groups and Lefthook repository
-hooks. `just install-local` installs the current source as a user-level uv tool, and
-`just refresh-local` performs a no-cache reinstall. Both are explicit machine changes. Use
-`just reset-local` to remove that tool installation.
+hooks. `just install` installs or replaces the current source as a user-level uv tool, including at
+the same version, and `just install-editable` links the source instead. Both are explicit machine
+changes. Use `just uninstall` to remove that tool installation.
 
 `prat doctor` only checks whether configured executable names resolve on `PATH`. It does not run an
 agent or verify credentials. `prat doctor --versions` opts into executing each available configured
