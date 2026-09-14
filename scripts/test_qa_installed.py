@@ -1,3 +1,4 @@
+import ast
 import importlib.util
 import json
 import os
@@ -8,6 +9,8 @@ import time
 from pathlib import Path
 
 import pytest
+
+from pratfall import catalog
 
 SCRIPT = Path(__file__).with_name("qa_installed.py")
 SPEC = importlib.util.spec_from_file_location("qa_installed", SCRIPT)
@@ -940,3 +943,144 @@ def test_a_tier_profile_and_rejections_through_source_entry_point(
     observations = qa._exercise_a_rejections(prat, tmp_path, config)
     assert set(observations) == {"A06.controls", "A07.collisions"}
     assert all(observation["status"] == "Pass" for observation in observations.values())
+
+
+def _harness_commands() -> dict[str, str]:
+    commands: dict[str, str] = qa.AGENTS
+    return commands
+
+
+def _harness_aliases() -> dict[str, str]:
+    aliases: dict[str, str] = qa.ALIASES
+    return aliases
+
+
+def _harness_version_args() -> dict[str, list[str]]:
+    version_args: dict[str, list[str]] = qa.VERSION_ARGS
+    return version_args
+
+
+def _harness_effort_values() -> dict[str, list[str] | None]:
+    effort_values: dict[str, list[str] | None] = qa._EFFORT_VALUES
+    return effort_values
+
+
+def _harness_budgets() -> dict[str, list[str]]:
+    budgets: dict[str, list[str]] = qa._BUDGETS
+    return budgets
+
+
+def _harness_without_model() -> frozenset[str]:
+    without_model: frozenset[str] = qa._NO_MODEL
+    return without_model
+
+
+def _harness_with_fast() -> frozenset[str]:
+    with_fast: frozenset[str] = qa._FAST
+    return with_fast
+
+
+def _harness_names() -> list[str]:
+    return list(_harness_commands())
+
+
+def _harness_command_lists() -> dict[str, list[str]]:
+    return {name: [command] for name, command in _harness_commands().items()}
+
+
+def _harness_alias_lists() -> dict[str, list[str]]:
+    owners = _harness_aliases()
+    return {
+        name: [alias for alias, owner in owners.items() if owner == name]
+        for name in _harness_commands()
+    }
+
+
+def _catalog_names() -> list[str]:
+    return [agent.name for agent in catalog.AGENTS]
+
+
+def _catalog_command_lists() -> dict[str, list[str]]:
+    return {agent.name: list(agent.command) for agent in catalog.AGENTS}
+
+
+def _catalog_aliases() -> dict[str, str]:
+    return {alias: agent.name for agent in catalog.AGENTS for alias in agent.aliases}
+
+
+def _catalog_alias_lists() -> dict[str, list[str]]:
+    return {agent.name: list(agent.aliases) for agent in catalog.AGENTS}
+
+
+def _catalog_version_args() -> dict[str, list[str]]:
+    return {agent.name: list(agent.version_args) for agent in catalog.AGENTS}
+
+
+def _catalog_effort_values() -> dict[str, list[str] | None]:
+    return {
+        agent.name: list(agent.capabilities.effort_values) or None
+        for agent in catalog.AGENTS
+        if agent.capabilities.effort
+    }
+
+
+def _catalog_budgets() -> dict[str, list[str]]:
+    return {
+        agent.name: sorted(agent.capabilities.budgets)
+        for agent in catalog.AGENTS
+        if agent.capabilities.budgets
+    }
+
+
+def _catalog_without_model() -> frozenset[str]:
+    return frozenset(agent.name for agent in catalog.AGENTS if not agent.capabilities.model)
+
+
+def _catalog_with_fast() -> frozenset[str]:
+    return frozenset(agent.name for agent in catalog.AGENTS if agent.capabilities.fast)
+
+
+def test_release_harness_declares_its_catalog_without_importing_pratfall() -> None:
+    tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
+            imported.add(node.module)
+    assert imported and not {name for name in imported if name.split(".")[0] == "pratfall"}
+    assert _harness_names() and not hasattr(qa, "catalog")
+
+
+def test_harness_agent_names_match_the_catalog() -> None:
+    assert set(_harness_names()) == set(_catalog_names())
+    assert _harness_names() == _catalog_names()
+
+
+def test_harness_agent_commands_match_the_catalog() -> None:
+    assert _harness_command_lists() == _catalog_command_lists()
+
+
+def test_harness_aliases_match_the_catalog() -> None:
+    assert set(_harness_aliases()) == set(_catalog_aliases())
+    assert _harness_aliases() == _catalog_aliases()
+    assert _harness_alias_lists() == _catalog_alias_lists()
+
+
+def test_harness_version_arguments_match_the_catalog() -> None:
+    assert _harness_version_args() == _catalog_version_args()
+
+
+def test_harness_effort_values_match_the_catalog() -> None:
+    assert set(_harness_effort_values()) == set(_catalog_effort_values())
+    assert _harness_effort_values() == _catalog_effort_values()
+
+
+def test_harness_budgets_match_the_catalog() -> None:
+    assert set(_harness_budgets()) == set(_catalog_budgets())
+    assert _harness_budgets() == _catalog_budgets()
+
+
+def test_harness_model_and_fast_capabilities_match_the_catalog() -> None:
+    assert _harness_without_model() == _catalog_without_model()
+    assert _harness_with_fast() == _catalog_with_fast()

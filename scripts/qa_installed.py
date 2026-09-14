@@ -114,6 +114,8 @@ _BUDGETS = {
     "vibe": ["max_budget_usd", "max_turns"],
     "cortex": ["max_turns"],
 }
+_NO_MODEL = frozenset({"openhands", "amp", "vibe"})
+_FAST = frozenset({"claude", "codex"})
 _STDIN_PREFIXES = {
     "qwen": ["--output-format", "stream-json"],
     "amp": ["--execute", "--stream-json"],
@@ -1988,11 +1990,11 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
         assert record["command"] == [AGENTS[name]]
         assert record["aliases"] == [alias for alias, agent in ALIASES.items() if agent == name]
         assert record["capabilities"] == {
-            "model": name not in {"openhands", "amp", "vibe"},
+            "model": name not in _NO_MODEL,
             "effort": name in _EFFORT_VALUES,
             "effort_values": _EFFORT_VALUES.get(name),
             "budgets": _BUDGETS.get(name, []),
-            "fast": name in {"claude", "codex"},
+            "fast": name in _FAST,
         }
     assert len(ALIASES) == 17 and not set(ALIASES).intersection(AGENTS)
     doctor = _run(prat, root, ["doctor", "--json"], config=config)
