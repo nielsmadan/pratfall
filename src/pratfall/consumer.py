@@ -1,11 +1,13 @@
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
 from pratfall.limits import EVENT_BYTES, NUMERIC_BYTES, RECORD_COUNT, RETAINED_STATE_BYTES
-from pratfall.models import DecodedOutput, ResultError
+from pratfall.models import Activity, DecodedOutput, ResultError, Usage
 
 CR = ord("\r")
+PROTOCOL_SLOT = "protocol"
 
 
 class ConsumerFailure(Exception):
@@ -16,7 +18,7 @@ class ConsumerFailure(Exception):
 
 
 class ByteConsumer(Protocol):
-    def feed(self, data: bytes) -> str | None: ...
+    def feed(self, data: bytes) -> Activity | None: ...
 
     def finish(self) -> DecodedOutput: ...
 
@@ -42,14 +44,6 @@ class StateBudget:
         self._bytes = 0
         self._records = 0
 
-    def replace_bytes(self, old: int, new: int) -> None:
-        updated = self._bytes - old + new
-        if updated > self._limits.state_bytes:
-            raise _limit_failure(
-                f"Agent retained output state exceeded {self._limits.state_bytes} bytes."
-            )
-        self._bytes = updated
-
     def replace_state(self, old_bytes: int, new_bytes: int, added_records: int) -> None:
         updated_bytes = self._bytes - old_bytes + new_bytes
         updated_records = self._records + added_records
@@ -62,24 +56,6 @@ class StateBudget:
         self._bytes = updated_bytes
         self._records = updated_records
 
-    def add_string(self, value: str) -> int:
-        try:
-            size = len(value.encode("utf-8"))
-        except UnicodeEncodeError as error:
-            raise ConsumerFailure(
-                ResultError("output_encoding", "Agent output contains invalid Unicode text.")
-            ) from error
-        self.replace_bytes(0, size)
-        return size
-
-    def add_record(self) -> None:
-        if self._records >= self._limits.records:
-            raise _limit_failure(f"Agent retained output records exceeded {self._limits.records}.")
-        self._records += 1
-
-    def remove_record(self) -> None:
-        self._records -= 1
-
     def numeric_size(self, value: int | float | None) -> int:
         if value is None:
             return 0
@@ -91,9 +67,64 @@ class StateBudget:
         return size
 
 
+class Retention:
+    def __init__(self, budget: StateBudget) -> None:
+        self._budget = budget
+        self._sizes: dict[str, int] = {}
+        self._records: set[str] = set()
+
+    def payload(self, slot: str, size: int, *, record: bool = False) -> None:
+        added = int(record and slot not in self._records)
+        self._budget.replace_state(self._sizes.get(slot, 0), size, added)
+        self._sizes[slot] = size
+        if added:
+            self._records.add(slot)
+
+    def text(self, slot: str, value: str, *, extra: int = 0, record: bool = False) -> bytes:
+        encoded = retained_utf8(value)
+        self.payload(slot, len(encoded) + extra, record=record)
+        return encoded
+
+    def numbers(
+        self,
+        slot: str,
+        values: Iterable[int | float | None],
+        *,
+        extra: int = 0,
+        record: bool = False,
+    ) -> None:
+        sizes = sum(self._budget.numeric_size(value) for value in values)
+        self.payload(slot, sizes + extra, record=record)
+
+    def usage(
+        self, slot: str, value: Usage | None, *, extra: int = 0, record: bool = False
+    ) -> None:
+        values = () if value is None else _usage_values(value)
+        self.numbers(slot, values, extra=extra, record=record)
+
+    def record(self, slot: str) -> None:
+        self.payload(slot, self._sizes.get(slot, 0), record=True)
+
+    def release(self, *slots: str) -> None:
+        released = 0
+        records = 0
+        for slot in slots:
+            released += self._sizes.pop(slot, 0)
+            records += int(slot in self._records)
+            self._records.discard(slot)
+        self._budget.replace_state(released, 0, -records)
+
+    def commit(self, *slots: str) -> None:
+        for slot in slots:
+            self._sizes.pop(slot, None)
+            self._records.discard(slot)
+
+
 class JsonlConsumer:
     def __init__(self, name: str, limits: ConsumerLimits = DEFAULT_CONSUMER_LIMITS) -> None:
         self.budget = StateBudget(limits)
+        self.retain = Retention(self.budget)
+        self.protocol_error: ResultError | None = None
         self._name = name
         self._limits = limits
         self._buffer = bytearray()
@@ -104,7 +135,7 @@ class JsonlConsumer:
         self._failed = False
         self._failure: ConsumerFailure | None = None
 
-    def feed(self, data: bytes) -> str | None:
+    def feed(self, data: bytes) -> Activity | None:
         if self._finished:
             raise RuntimeError("consumer already finished")
         if self._failed:
@@ -116,9 +147,9 @@ class JsonlConsumer:
             self._failure = failure
             raise
 
-    def _feed(self, data: bytes) -> str | None:
+    def _feed(self, data: bytes) -> Activity | None:
         self._buffer.extend(data)
-        activity: str | None = None
+        activity: Activity | None = None
         while True:
             newline = self._buffer.find(b"\n", self._scan)
             if newline < 0:
@@ -158,13 +189,13 @@ class JsonlConsumer:
         self._buffer.clear()
         return self.result()
 
-    def apply(self, event: dict[str, object]) -> str | None:
+    def apply(self, event: dict[str, object]) -> Activity | None:
         raise NotImplementedError
 
     def result(self) -> DecodedOutput:
         raise NotImplementedError
 
-    def _consume(self, record: bytes) -> str | None:
+    def _consume(self, record: bytes) -> Activity | None:
         self._line_number += 1
         if len(record) > self._limits.event_bytes:
             raise _limit_failure(f"Agent output event exceeded {self._limits.event_bytes} bytes.")
@@ -201,7 +232,9 @@ class JsonlConsumer:
         return "type"
 
     def malformed(self, message: str) -> None:
-        raise NotImplementedError
+        if self.protocol_error is None:
+            self.retain.text(PROTOCOL_SLOT, message)
+            self.protocol_error = ResultError("protocol_error", message)
 
     @property
     def failed(self) -> bool:
@@ -269,6 +302,16 @@ def retained_utf8(value: str) -> bytes:
         raise ConsumerFailure(
             ResultError("output_encoding", "Agent output contains invalid Unicode text.")
         ) from error
+
+
+def _usage_values(usage: Usage) -> tuple[int | None, ...]:
+    return (
+        usage.input_tokens,
+        usage.cached_input_tokens,
+        usage.cache_write_input_tokens,
+        usage.output_tokens,
+        usage.reasoning_output_tokens,
+    )
 
 
 def _limit_failure(message: str) -> ConsumerFailure:

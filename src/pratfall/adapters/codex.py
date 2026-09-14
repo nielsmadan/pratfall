@@ -3,16 +3,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from pratfall.adapters.native_args import Flag, validate_flags
-from pratfall.codes import Code
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
     ConsumerFailure,
     ConsumerLimits,
     JsonlConsumer,
     decode_with,
-    retained_utf8,
 )
-from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
+from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
+
+_TURN_SLOTS = ("answer", "join", "answer_id", "turn")
 
 _ALLOWED = {
     name: Flag(0)
@@ -87,9 +87,7 @@ class _State:
     usage: Usage | None = None
     completed: bool = False
     provider_error: ResultError | None = None
-    protocol_error: ResultError | None = None
     current_answer_id: str | None = None
-    turn_has_record: bool = False
 
 
 def decode(stdout: str) -> DecodedOutput:
@@ -105,11 +103,8 @@ class _Consumer(JsonlConsumer):
         super().__init__("Codex", limits)
         self.state = _State()
 
-    def apply(self, event: dict[str, object]) -> str | None:
+    def apply(self, event: dict[str, object]) -> Activity | None:
         return _apply_event(self, event)
-
-    def malformed(self, message: str) -> None:
-        _set_protocol(self, message)
 
     def result(self) -> DecodedOutput:
         state = self.state
@@ -117,7 +112,7 @@ class _Consumer(JsonlConsumer):
         if state.current_answer is not None:
             output_parts.append(state.current_answer)
         output = b"\n".join(output_parts).decode("utf-8")
-        failure = state.provider_error or state.protocol_error
+        failure = state.provider_error or self.protocol_error
         if failure is not None:
             return DecodedOutput(output=output, usage=state.usage, error=failure)
         if not state.completed:
@@ -125,7 +120,7 @@ class _Consumer(JsonlConsumer):
                 return DecodedOutput(output=output, usage=state.usage)
             message = "Codex stream ended without turn.completed."
             try:
-                _set_protocol(self, message)
+                self.malformed(message)
             except ConsumerFailure as budget_failure:
                 decoded = DecodedOutput(
                     output=output, usage=state.usage, error=budget_failure.error
@@ -134,50 +129,41 @@ class _Consumer(JsonlConsumer):
             return DecodedOutput(
                 output=output,
                 usage=state.usage,
-                error=state.protocol_error,
+                error=self.protocol_error,
             )
         return DecodedOutput(output=output, usage=state.usage)
 
 
-def _apply_event(consumer: _Consumer, event: dict[str, object]) -> str | None:
+def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | None:
     state = consumer.state
     event_type = event["type"]
     if event_type == "thread.started":
         if not isinstance(event.get("thread_id"), str):
-            _set_protocol(consumer, "Codex thread.started event is malformed.")
+            consumer.malformed("Codex thread.started event is malformed.")
         return "starting"
     elif event_type == "turn.started":
-        if state.current_answer is not None:
-            old = len(state.current_answer) + (1 if state.answers else 0)
-            consumer.budget.replace_bytes(old, 0)
-        if state.current_answer_id is not None:
-            consumer.budget.replace_bytes(len(retained_utf8(state.current_answer_id)), 0)
-        if state.turn_has_record:
-            consumer.budget.remove_record()
+        consumer.retain.release(*_TURN_SLOTS)
         state.current_answer = None
         state.current_answer_id = None
         state.completed = False
-        state.turn_has_record = False
         return "working"
     elif event_type in {"item.started", "item.updated", "item.completed"}:
         return _apply_item(consumer, event, event_type)
     elif event_type == "turn.completed":
         decoded_usage = _usage(event.get("usage"))
         if isinstance(decoded_usage, ResultError):
-            _set_error(consumer, "protocol_error", decoded_usage.message)
+            consumer.malformed(decoded_usage.message)
         else:
-            _replace_usage(consumer, decoded_usage)
+            consumer.retain.usage("usage", decoded_usage)
             state.usage = decoded_usage
-            if not state.turn_has_record:
-                consumer.budget.add_record()
+            consumer.retain.record("turn")
             state.completed = True
             if state.current_answer is not None:
                 state.answers.append(state.current_answer)
             state.current_answer = None
-            if state.current_answer_id is not None:
-                consumer.budget.replace_bytes(len(retained_utf8(state.current_answer_id)), 0)
             state.current_answer_id = None
-            state.turn_has_record = False
+            consumer.retain.release("answer_id")
+            consumer.retain.commit(*_TURN_SLOTS)
         return "finishing"
     elif event_type == "turn.failed":
         error = _event_error(event.get("error"), "Codex turn failed.")
@@ -190,7 +176,9 @@ def _apply_event(consumer: _Consumer, event: dict[str, object]) -> str | None:
     return None
 
 
-def _apply_item(consumer: _Consumer, event: dict[str, object], event_type: object) -> str | None:
+def _apply_item(
+    consumer: _Consumer, event: dict[str, object], event_type: object
+) -> Activity | None:
     state = consumer.state
     item = event.get("item")
     if (
@@ -198,28 +186,23 @@ def _apply_item(consumer: _Consumer, event: dict[str, object], event_type: objec
         or not isinstance(item.get("id"), str)
         or not isinstance(item.get("type"), str)
     ):
-        _set_protocol(consumer, f"Codex {event_type} event is malformed.")
+        consumer.malformed(f"Codex {event_type} event is malformed.")
         return "working"
     item_id = item["id"]
     if event_type == "item.completed" and item["type"] == "agent_message":
         if state.current_answer_id != item_id:
-            if state.current_answer_id is not None:
-                consumer.budget.replace_bytes(len(retained_utf8(state.current_answer_id)), 0)
-            consumer.budget.add_string(item_id)
-            if not state.turn_has_record:
-                consumer.budget.add_record()
-                state.turn_has_record = True
+            consumer.retain.text("answer_id", item_id)
+            consumer.retain.record("turn")
             state.current_answer_id = item_id
         text = item.get("text")
         if not isinstance(text, str):
-            _set_protocol(consumer, "Codex agent_message item is malformed.")
+            consumer.malformed("Codex agent_message item is malformed.")
         else:
-            encoded = retained_utf8(text)
-            old = 0 if state.current_answer is None else len(state.current_answer)
-            separator = 1 if state.current_answer is None and state.answers else 0
-            consumer.budget.replace_bytes(old, len(encoded) + separator)
+            # the join byte outlives same-identifier answer replacement
+            if state.current_answer is None and state.answers:
+                consumer.retain.payload("join", 1)
+            state.current_answer = consumer.retain.text("answer", text)
             state.completed = False
-            state.current_answer = encoded
         return "answering"
     item_type = item["type"]
     if item_type in {"reasoning"}:
@@ -233,39 +216,10 @@ def _set_failure(consumer: _Consumer, error: ResultError) -> None:
     state = consumer.state
     if error.code == "provider_error":
         if state.provider_error is None:
-            consumer.budget.add_string(error.message)
+            consumer.retain.text("provider", error.message)
             state.provider_error = error
     else:
-        _set_error(consumer, error.code, error.message)
-
-
-def _set_protocol(consumer: _Consumer, message: str) -> None:
-    _set_error(consumer, "protocol_error", message)
-
-
-def _set_error(consumer: _Consumer, code: Code, message: str) -> None:
-    if consumer.state.protocol_error is None:
-        consumer.budget.add_string(message)
-        consumer.state.protocol_error = ResultError(code, message)
-
-
-def _replace_usage(consumer: _Consumer, usage: Usage) -> None:
-    previous = consumer.state.usage
-    old = _usage_size(consumer, previous) if previous is not None else 0
-    consumer.budget.replace_bytes(old, _usage_size(consumer, usage))
-
-
-def _usage_size(consumer: _Consumer, usage: Usage) -> int:
-    return sum(
-        consumer.budget.numeric_size(value)
-        for value in (
-            usage.input_tokens,
-            usage.cached_input_tokens,
-            usage.cache_write_input_tokens,
-            usage.output_tokens,
-            usage.reasoning_output_tokens,
-        )
-    )
+        consumer.malformed(error.message)
 
 
 def _usage(value: object) -> Usage | ResultError:

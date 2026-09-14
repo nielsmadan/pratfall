@@ -13,7 +13,7 @@ from pratfall.consumer import (
     retained_utf8,
 )
 from pratfall.limits import NUMERIC_BYTES
-from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
+from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
 _ALLOWED = {
     name: Flag(0)
@@ -78,9 +78,7 @@ class _State:
     cost_parts: dict[str, int | float | None] = field(default_factory=dict)
     completed: bool = False
     provider_error: ResultError | None = None
-    protocol_error: ResultError | None = None
     recognized: bool = False
-    record_ids: set[str] = field(default_factory=set)
 
 
 def decode(stdout: str) -> DecodedOutput:
@@ -96,11 +94,8 @@ class _Consumer(JsonlConsumer):
         super().__init__("OpenCode", limits)
         self.state = _State()
 
-    def apply(self, event: dict[str, object]) -> str | None:
+    def apply(self, event: dict[str, object]) -> Activity | None:
         return _apply_event(self, event)
-
-    def malformed(self, message: str) -> None:
-        _protocol(self, message)
 
     def result(self) -> DecodedOutput:
         state = self.state
@@ -108,14 +103,14 @@ class _Consumer(JsonlConsumer):
         usage, usage_error = _total_usage(state.usage_parts.values())
         if usage_error is not None and not self.failed:
             try:
-                _set_protocol_error(self, usage_error)
+                self.malformed(usage_error.message)
             except ConsumerFailure as budget_failure:
                 decoded = DecodedOutput(output=output, usage=usage, error=budget_failure.error)
                 raise ConsumerFailure(budget_failure.error, decoded) from budget_failure
         cost_usd, cost_error = _total_cost(state.cost_parts.values())
         if cost_error is not None and not self.failed:
             try:
-                _set_protocol_error(self, cost_error)
+                self.malformed(cost_error.message)
             except ConsumerFailure as budget_failure:
                 decoded = DecodedOutput(
                     output=output,
@@ -124,7 +119,7 @@ class _Consumer(JsonlConsumer):
                     error=budget_failure.error,
                 )
                 raise ConsumerFailure(budget_failure.error, decoded) from budget_failure
-        failure = state.provider_error or state.protocol_error
+        failure = state.provider_error or self.protocol_error
         if failure is not None:
             return DecodedOutput(output=output, usage=usage, cost_usd=cost_usd, error=failure)
         if not state.completed:
@@ -133,7 +128,7 @@ class _Consumer(JsonlConsumer):
             suffix = "" if state.recognized else " (only unknown events were received)"
             message = f"OpenCode stream ended without a stop finish{suffix}."
             try:
-                _protocol(self, message)
+                self.malformed(message)
             except ConsumerFailure as budget_failure:
                 decoded = DecodedOutput(
                     output=output,
@@ -146,12 +141,12 @@ class _Consumer(JsonlConsumer):
                 output=output,
                 usage=usage,
                 cost_usd=cost_usd,
-                error=state.protocol_error,
+                error=self.protocol_error,
             )
         return DecodedOutput(output=output, usage=usage, cost_usd=cost_usd)
 
 
-def _apply_event(consumer: _Consumer, event: dict[str, object]) -> str | None:
+def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | None:
     state = consumer.state
     event_type = event["type"]
     if event_type == "text":
@@ -184,7 +179,7 @@ def _text(consumer: _Consumer, event: dict[str, object]) -> None:
     state = consumer.state
     part = _part(event, "text")
     if part is None:
-        _protocol(consumer, "OpenCode text event is malformed.")
+        consumer.malformed("OpenCode text event is malformed.")
         return
     part_id = part.get("id")
     text = part.get("text")
@@ -195,21 +190,15 @@ def _text(consumer: _Consumer, event: dict[str, object]) -> None:
         or not isinstance(time, dict)
         or "end" not in time
     ):
-        _protocol(consumer, "OpenCode completed text part is malformed.")
+        consumer.malformed("OpenCode completed text part is malformed.")
         return
     encoded = retained_utf8(text)
-    new_record = part_id not in state.record_ids
-    new_text = part_id not in state.texts
-    previous = state.texts.get(part_id, b"")
-    identifier = retained_utf8(part_id) if new_record else b""
-    separator = 1 if new_text and state.text_order else 0
-    consumer.budget.replace_state(
-        len(previous), len(identifier) + separator + len(encoded), int(new_record)
-    )
-    if new_record:
-        state.record_ids.add(part_id)
-    if new_text:
+    _record(consumer, part_id)
+    if part_id not in state.texts:
+        if state.text_order:
+            consumer.retain.payload(f"join:{part_id}", 1)
         state.text_order.append(part_id)
+    consumer.retain.payload(f"text:{part_id}", len(encoded))
     state.texts[part_id] = encoded
 
 
@@ -218,7 +207,7 @@ def _finish(consumer: _Consumer, event: dict[str, object]) -> None:
     part = _part(event, "step-finish")
     part_id = part.get("id") if part is not None else None
     if part is None or not isinstance(part_id, str):
-        _protocol(consumer, "OpenCode step_finish event is malformed.")
+        consumer.malformed("OpenCode step_finish event is malformed.")
         return
     _record(consumer, part_id)
     reason = part.get("reason")
@@ -230,7 +219,7 @@ def _finish(consumer: _Consumer, event: dict[str, object]) -> None:
         "error",
         "unknown",
     }:
-        _protocol(consumer, "OpenCode step_finish reason is malformed.")
+        consumer.malformed("OpenCode step_finish reason is malformed.")
     elif reason == "stop":
         state.completed = True
     elif reason == "tool-calls":
@@ -238,28 +227,21 @@ def _finish(consumer: _Consumer, event: dict[str, object]) -> None:
     elif reason in _FAILURE_REASONS:
         _provider(consumer, f"OpenCode stopped with finish reason {reason!r}.")
     part_cost, cost_error = cost(part.get("cost"), "OpenCode step_finish cost")
-    previous_cost = state.cost_parts.get(part_id)
-    consumer.budget.replace_bytes(
-        consumer.budget.numeric_size(previous_cost),
-        consumer.budget.numeric_size(part_cost),
-    )
+    consumer.retain.numbers(f"cost:{part_id}", (part_cost,))
     state.cost_parts[part_id] = part_cost
     if cost_error is not None:
-        _set_protocol_error(consumer, cost_error)
+        consumer.malformed(cost_error.message)
     usage = _usage(part.get("tokens"))
     if isinstance(usage, ResultError):
-        _set_protocol_error(consumer, usage)
+        consumer.malformed(usage.message)
     else:
-        previous_usage = state.usage_parts.get(part_id)
-        consumer.budget.replace_bytes(
-            _usage_size(consumer, previous_usage), _usage_size(consumer, usage)
-        )
+        consumer.retain.usage(f"usage:{part_id}", usage)
         state.usage_parts[part_id] = usage
 
 
 def _error(consumer: _Consumer, value: object) -> None:
     if not isinstance(value, dict):
-        _protocol(consumer, "OpenCode error event is malformed.")
+        consumer.malformed("OpenCode error event is malformed.")
         return
     name = value.get("name")
     data = value.get("data")
@@ -270,7 +252,7 @@ def _error(consumer: _Consumer, value: object) -> None:
         or (message is None and name not in _MESSAGELESS_ERRORS)
         or (message is not None and not isinstance(message, str))
     ):
-        _protocol(consumer, "OpenCode error event is malformed.")
+        consumer.malformed("OpenCode error event is malformed.")
         return
     diagnostic = name if message is None else message or "OpenCode reported an error."
     _provider(consumer, diagnostic)
@@ -338,30 +320,11 @@ def _total_cost(
     return (None if unknown else total), None
 
 
-def _protocol(consumer: _Consumer, message: str) -> None:
-    if consumer.state.protocol_error is None:
-        consumer.budget.add_string(message)
-        consumer.state.protocol_error = ResultError("protocol_error", message)
-
-
-def _set_protocol_error(consumer: _Consumer, error: ResultError) -> None:
-    _protocol(consumer, error.message)
-
-
 def _provider(consumer: _Consumer, message: str) -> None:
     if consumer.state.provider_error is None:
-        consumer.budget.add_string(message)
+        consumer.retain.text("provider", message)
         consumer.state.provider_error = ResultError("provider_error", message)
 
 
 def _record(consumer: _Consumer, part_id: str) -> None:
-    if part_id not in consumer.state.record_ids:
-        consumer.budget.add_record()
-        consumer.budget.add_string(part_id)
-        consumer.state.record_ids.add(part_id)
-
-
-def _usage_size(consumer: _Consumer, usage: Usage | None) -> int:
-    if usage is None:
-        return 0
-    return sum(consumer.budget.numeric_size(value) for value in usage.__dict__.values())
+    consumer.retain.text(f"part:{part_id}", part_id, record=True)

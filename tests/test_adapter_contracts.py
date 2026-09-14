@@ -3,7 +3,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from difflib import SequenceMatcher
 from importlib import import_module
-from typing import Protocol
+from typing import Protocol, get_args
 
 import pytest
 
@@ -30,9 +30,17 @@ from pratfall.adapters import (
 from pratfall.adapters.native_args import Flag
 from pratfall.adapters.registry import ADAPTERS, Adapter
 from pratfall.catalog import BY_NAME
-from pratfall.consumer import ByteConsumer, ConsumerFailure, ConsumerLimits
+from pratfall.cli import ACTIVITY_LABELS
+from pratfall.consumer import (
+    ByteConsumer,
+    ConsumerFactory,
+    ConsumerFailure,
+    ConsumerLimits,
+    decode_with,
+)
 from pratfall.errors import PratError
 from pratfall.models import (
+    Activity,
     Capabilities,
     DecodedOutput,
     Invocation,
@@ -767,3 +775,146 @@ def test_late_provider_failures_outrank_duplicate_terminal_protocol_errors() -> 
     )
     assert opencode_decoded.cost_usd == 0.25
     assert opencode_decoded.error == ResultError("provider_error", "failed later")
+
+
+_RETAINED_ANSWERS = ("retained", "retained-answer-" * 2, "retained-answer-" * 4)
+_RETAINED_ANSWER = _RETAINED_ANSWERS[-1]
+_RETENTION_STREAMS: Mapping[str, Callable[[str], str]] = {
+    "amp": lambda answer: codex_stream(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": answer,
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        }
+    ),
+    "antigravity": lambda answer: codex_stream(
+        {"event": "init", "init": {}},
+        {
+            "event": "result",
+            "result": {
+                "status": "SUCCESS",
+                "response": answer,
+                "usage": antigravity_usage(),
+            },
+        },
+    ),
+    "codex": lambda answer: codex_stream(
+        {
+            "type": "item.completed",
+            "item": {"id": "item", "type": "agent_message", "text": answer},
+        },
+        {"type": "turn.completed", "usage": codex_usage()},
+    ),
+    "copilot": lambda answer: codex_stream(
+        {"type": "assistant.message", "data": {"messageId": "m", "content": answer}},
+        copilot_result(),
+    ),
+    "kimi": lambda answer: codex_stream({"role": "assistant", "content": answer}),
+    "opencode": lambda answer: codex_stream(
+        {
+            "type": "text",
+            "part": {"id": "p", "type": "text", "text": answer, "time": {"end": 1}},
+        },
+        {
+            "type": "step_finish",
+            "part": {
+                "id": "p",
+                "type": "step-finish",
+                "reason": "stop",
+                "cost": 0,
+                "tokens": opencode_usage(),
+            },
+        },
+    ),
+    "openhands": lambda answer: codex_stream(
+        {
+            "kind": "MessageEvent",
+            "source": "agent",
+            "llm_message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": answer}],
+            },
+        }
+    ),
+    "qwen": lambda answer: codex_stream(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": answer,
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        }
+    ),
+    "warp": lambda answer: codex_stream({"type": "agent", "text": answer}),
+}
+_CONSUMER_AGENTS = sorted(
+    name for name, adapter in ADAPTERS.items() if adapter.consumer is not None
+)
+
+
+def _consumer_factory(agent: str) -> ConsumerFactory:
+    factory = ADAPTERS[agent].consumer
+    assert factory is not None
+    return factory
+
+
+def _retention_stream(agent: str, answer: str) -> bytes:
+    return _RETENTION_STREAMS[agent](answer).encode()
+
+
+def _retains_within(agent: str, answer: str, state_bytes: int) -> bool:
+    incremental = _consumer_factory(agent)(ConsumerLimits(state_bytes=state_bytes))
+    try:
+        incremental.feed(_retention_stream(agent, answer))
+        incremental.finish()
+    except ConsumerFailure:
+        return False
+    return True
+
+
+def _minimum_state_bytes(agent: str, answer: str) -> int:
+    low = 0
+    high = ConsumerLimits().state_bytes
+    assert _retains_within(agent, answer, high)
+    while low < high:
+        middle = (low + high) // 2
+        if _retains_within(agent, answer, middle):
+            high = middle
+        else:
+            low = middle + 1
+    return low
+
+
+def test_every_consumer_adapter_has_a_retained_answer_stream() -> None:
+    assert sorted(_RETENTION_STREAMS) == _CONSUMER_AGENTS
+
+
+@pytest.mark.parametrize("agent", _CONSUMER_AGENTS)
+def test_retained_answer_stream_reaches_the_decoded_output(agent: str) -> None:
+    decoded = decode_with(_consumer_factory(agent), _RETENTION_STREAMS[agent](_RETAINED_ANSWER))
+    assert decoded.output == _RETAINED_ANSWER
+    assert decoded.error is None
+
+
+@pytest.mark.parametrize("agent", _CONSUMER_AGENTS)
+def test_every_consumer_adapter_charges_its_retained_answer(agent: str) -> None:
+    thresholds = [_minimum_state_bytes(agent, answer) for answer in _RETAINED_ANSWERS]
+    overheads = [
+        threshold - len(answer.encode())
+        for threshold, answer in zip(thresholds, _RETAINED_ANSWERS, strict=True)
+    ]
+    assert overheads == [overheads[0]] * len(_RETAINED_ANSWERS)
+    assert _retains_within(agent, _RETAINED_ANSWER, thresholds[-1])
+
+    limits = ConsumerLimits(state_bytes=thresholds[-1] - 1)
+    incremental = _consumer_factory(agent)(limits)
+    with pytest.raises(ConsumerFailure) as failure:
+        incremental.feed(_retention_stream(agent, _RETAINED_ANSWER))
+        incremental.finish()
+    assert failure.value.error.code == "stdout_limit_exceeded"
+
+
+def test_progress_labels_cover_every_activity_category() -> None:
+    assert set(ACTIVITY_LABELS) == set(get_args(Activity))

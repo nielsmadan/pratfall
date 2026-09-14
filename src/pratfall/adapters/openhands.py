@@ -8,11 +8,12 @@ from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
     ConsumerFailure,
     ConsumerLimits,
+    Retention,
     StateBudget,
     decode_with,
     retained_utf8,
 )
-from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
+from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError
 
 _ALLOWED = {"--override-with-envs": Flag(0)}
 _RESERVED = {
@@ -98,6 +99,7 @@ class _Consumer:
     def __init__(self, limits: ConsumerLimits) -> None:
         self._limits = limits
         self._budget = StateBudget(limits)
+        self._retain = Retention(self._budget)
         self._buffer = bytearray()
         self._scan = 0
         self._finished = False
@@ -108,7 +110,7 @@ class _Consumer:
         self._text = b""
         self._error: ResultError | None = None
 
-    def feed(self, data: bytes) -> str | None:
+    def feed(self, data: bytes) -> Activity | None:
         if self._finished:
             raise RuntimeError("consumer already finished")
         if self._failure is not None:
@@ -119,10 +121,10 @@ class _Consumer:
             self._failure = failure
             raise
 
-    def _feed(self, data: bytes) -> str | None:
+    def _feed(self, data: bytes) -> Activity | None:
         self._buffer.extend(data)
         start = 0
-        activity = None
+        activity: Activity | None = None
         while (end := self._buffer.find(b"\n", self._scan)) >= 0:
             record = bytes(self._buffer[start:end])
             current = self._line(record.removesuffix(b"\r"))
@@ -154,7 +156,7 @@ class _Consumer:
             raise ConsumerFailure(self._failure.error, decoded) from self._failure
         return decoded
 
-    def _line(self, record: bytes) -> str | None:
+    def _line(self, record: bytes) -> Activity | None:
         if len(record) > self._limits.event_bytes:
             self._limit()
         try:
@@ -181,7 +183,7 @@ class _Consumer:
             return None
         return self._event(event)
 
-    def _framing(self, line: str) -> tuple[bool, str | None]:
+    def _framing(self, line: str) -> tuple[bool, Activity | None]:
         if self._summary or not line.strip():
             return True, None
         if _SUMMARY.fullmatch(line.strip()):
@@ -204,7 +206,7 @@ class _Consumer:
         self._model_banner = False
         return False, None
 
-    def _event(self, event: dict[str, object]) -> str | None:
+    def _event(self, event: dict[str, object]) -> Activity | None:
         kind = event["kind"]
         if kind == "ConversationErrorEvent":
             self._provider(event)
@@ -273,7 +275,7 @@ class _Consumer:
         if self._terminal:
             self._protocol("OpenHands emitted more than one terminal assistant event.")
             return
-        self._budget.replace_state(0, len(encoded), 1)
+        self._retain.payload("answer", len(encoded), record=True)
         self._text = encoded
         self._terminal = True
 
@@ -285,14 +287,12 @@ class _Consumer:
         if self._error is not None and self._error.code == "provider_error":
             return
         message = detail or code or "OpenHands reported a conversation error."
-        encoded = retained_utf8(message)
-        previous = len(retained_utf8(self._error.message)) if self._error is not None else 0
-        self._budget.replace_bytes(previous, len(encoded))
+        self._retain.text("diagnostic", message)
         self._error = ResultError("provider_error", message)
 
     def _protocol(self, message: str) -> None:
         if self._error is None:
-            self._budget.add_string(message)
+            self._retain.text("diagnostic", message)
             self._error = ResultError("protocol_error", message)
 
     def _integer(self, value: str) -> int:

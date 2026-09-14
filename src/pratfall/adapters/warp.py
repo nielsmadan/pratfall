@@ -4,9 +4,8 @@ from pratfall.consumer import (
     ConsumerLimits,
     JsonlConsumer,
     decode_with,
-    retained_utf8,
 )
-from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
+from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile
 
 _ALLOWED = {"--strict-mcp-startup": Flag(0)} | {
     name: Flag(1, joined=name == "-n") for name in ("--name", "-n", "--mcp-startup-timeout")
@@ -85,18 +84,17 @@ class _Consumer(JsonlConsumer):
     def __init__(self, limits: ConsumerLimits) -> None:
         super().__init__("Warp", limits)
         self._texts: list[bytes] = []
-        self._error: ResultError | None = None
 
-    def apply(self, event: dict[str, object]) -> str | None:
+    def apply(self, event: dict[str, object]) -> Activity | None:
         event_type = event["type"]
         if event_type == "agent":
             text = event.get("text")
             if not isinstance(text, str):
                 self.malformed("Malformed Warp agent text.")
                 return None
-            encoded = retained_utf8(text)
-            self.budget.replace_state(0, len(encoded) + int(bool(self._texts)), 1)
-            self._texts.append(encoded)
+            slot = f"answer:{len(self._texts)}"
+            separator = int(bool(self._texts))
+            self._texts.append(self.retain.text(slot, text, extra=separator, record=True))
             return "answering"
         if event_type not in _IGNORED:
             self.malformed("Unknown Warp event type.")
@@ -106,10 +104,7 @@ class _Consumer(JsonlConsumer):
             return "tool"
         return None
 
-    def malformed(self, message: str) -> None:
-        if self._error is None:
-            self.budget.add_string(message)
-            self._error = ResultError("protocol_error", message)
-
     def result(self) -> DecodedOutput:
-        return DecodedOutput(output=b"\n".join(self._texts).decode("utf-8"), error=self._error)
+        return DecodedOutput(
+            output=b"\n".join(self._texts).decode("utf-8"), error=self.protocol_error
+        )

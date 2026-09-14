@@ -8,11 +8,11 @@ import shlex
 import shutil
 import signal
 import sys
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from types import FrameType
+from types import FrameType, MappingProxyType
 from typing import Literal, NoReturn
 
 from pratfall import __version__
@@ -22,7 +22,15 @@ from pratfall.codes import SIGNAL_EXIT_BASE
 from pratfall.config import config_path, init_config, load_config, option_labels, resolve_profile
 from pratfall.consumer import ByteConsumer
 from pratfall.errors import PratError
-from pratfall.models import Config, DecodedOutput, Invocation, Options, ResolvedProfile, ResultError
+from pratfall.models import (
+    Activity,
+    Config,
+    DecodedOutput,
+    Invocation,
+    Options,
+    ResolvedProfile,
+    ResultError,
+)
 from pratfall.output import normalize, result_dict, validation_error
 from pratfall.prompt_input import InputInterrupted, PromptSource, acquire_prompt
 from pratfall.runner import OutputLimits, ProcessResult, cleanup_process_group, run
@@ -30,6 +38,16 @@ from pratfall.runner import OutputLimits, ProcessResult, cleanup_process_group, 
 VERSION_TIMEOUT = 3.0
 VERSION_OUTPUT_LIMIT = 64 * 1024
 VERSION_LIMITS = OutputLimits(stdout=VERSION_OUTPUT_LIMIT, stderr=VERSION_OUTPUT_LIMIT)
+ACTIVITY_LABELS: Mapping[Activity, str] = MappingProxyType(
+    {
+        "starting": "starting",
+        "working": "working",
+        "reasoning": "reasoning",
+        "tool": "using tools",
+        "answering": "answering",
+        "finishing": "finishing",
+    }
+)
 
 _RUN_VALUE_FLAGS = {
     "--config": "config",
@@ -663,16 +681,8 @@ class _StderrSink:
                 raise OSError(errno.EIO, "stderr write returned zero bytes")
             offset += written
 
-    def progress(self, elapsed_ms: int, category: str) -> None:
-        labels = {
-            "starting": "starting",
-            "working": "working",
-            "reasoning": "reasoning",
-            "tool": "using tools",
-            "answering": "answering",
-            "finishing": "finishing",
-        }
-        self.line(f"prat: {elapsed_ms / 1000:.1f}s {labels[category]}")
+    def progress(self, elapsed_ms: int, category: Activity) -> None:
+        self.line(f"prat: {elapsed_ms / 1000:.1f}s {ACTIVITY_LABELS[category]}")
 
 
 def _presentation_error(error: Exception) -> ResultError:

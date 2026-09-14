@@ -764,6 +764,108 @@ def test_retained_records_one_below_the_limit_is_rejected(case: _Canonical) -> N
     )
 
 
+@dataclass(frozen=True)
+class _Peak:
+    name: str
+    factory: ConsumerFactory
+    events: tuple[object, ...]
+    peak_bytes: int
+    settled_bytes: int
+    records: int
+
+
+_LARGE_COUNT = 123456789
+_LARGE_SNAPSHOT = len(b"123456789")
+_PEAKS = (
+    _Peak(
+        "amp",
+        amp.consumer,
+        (
+            _amp_assistant("hello"),
+            _amp_result("hi", input_tokens=_LARGE_COUNT, output_tokens=_LARGE_COUNT),
+        ),
+        len(b"hi") + _LARGE_SNAPSHOT * 2,
+        len(b"hi") + _LARGE_SNAPSHOT * 2,
+        2,
+    ),
+    _Peak(
+        "antigravity",
+        antigravity.consumer,
+        (
+            {"event": "init", "init": {}},
+            _antigravity_result(
+                "a longer answer", status="ERROR", error="blew up", usage=_antigravity_usage()
+            ),
+        ),
+        len(b"a longer answer") + len(b"blew up") + len(b"1") + len(b"4") + len(b"2") + len(b"3"),
+        len(b"a longer answer") + len(b"blew up") + len(b"1") + len(b"4") + len(b"2") + len(b"3"),
+        2,
+    ),
+    _Peak(
+        "copilot",
+        copilot.consumer,
+        (
+            _copilot_message("m1", "hello", model="gpt-x"),
+            _copilot_message("m2", "world", model="gpt-x"),
+            copilot_result(),
+        ),
+        len(b"m1") + len(b"hello") + len(b"gpt-x") + len(b"m2") + _SEPARATOR + len(b"world"),
+        len(b"m1") + len(b"hello") + len(b"gpt-x") + len(b"m2") + _SEPARATOR + len(b"world"),
+        4,
+    ),
+    _Peak(
+        "opencode-step",
+        opencode.consumer,
+        (
+            _opencode_text("p", "answer"),
+            _opencode_step("p", "tool-calls", _opencode_tokens(*(_LARGE_COUNT,) * 5), cost=0),
+            _opencode_step("p", "stop", _opencode_tokens(1, 1, 1, 1, 1), cost=0.5),
+        ),
+        len(b"p") + len(b"answer") + len(b"0.5") + _LARGE_SNAPSHOT * 5,
+        len(b"p") + len(b"answer") + len(b"0.5") + len(b"1") * 5,
+        1,
+    ),
+    _Peak(
+        "opencode-text",
+        opencode.consumer,
+        (_opencode_text("aaa", "a long first text"), _opencode_text("aaa", "x")),
+        len(b"aaa") + len(b"a long first text"),
+        len(b"aaa") + len(b"x"),
+        1,
+    ),
+    _Peak(
+        "qwen",
+        qwen.consumer,
+        (
+            _qwen_result("hi", input_tokens=_LARGE_COUNT, output_tokens=_LARGE_COUNT),
+            _qwen_result("a longer answer", input_tokens=1, output_tokens=2),
+        ),
+        len(b"a longer answer") + _LARGE_SNAPSHOT * 2,
+        len(b"a longer answer") + len(b"1") + len(b"2"),
+        2,
+    ),
+)
+_PEAK_IDS = [case.name for case in _PEAKS]
+
+
+@pytest.mark.parametrize("case", _PEAKS, ids=_PEAK_IDS)
+def test_a_multi_slot_charge_is_accepted_at_its_transient_peak(case: _Peak) -> None:
+    incremental = case.factory(_state_limits(case.peak_bytes))
+    _feed(incremental, *case.events)
+    assert _retained(incremental) == (case.settled_bytes, case.records)
+
+
+@pytest.mark.parametrize("case", _PEAKS, ids=_PEAK_IDS)
+def test_a_multi_slot_charge_is_rejected_one_byte_below_its_transient_peak(case: _Peak) -> None:
+    incremental = case.factory(_state_limits(case.peak_bytes - 1))
+    with pytest.raises(ConsumerFailure) as failure:
+        _feed(incremental, *case.events)
+    assert failure.value.error == ResultError(
+        "stdout_limit_exceeded",
+        f"Agent retained output state exceeded {case.peak_bytes - 1} bytes.",
+    )
+
+
 def test_codex_partial_answer_and_usage_survive_a_missing_turn_diagnostic() -> None:
     retained = len(b"partial") + len(b"1") + len(b"2") + len(b"3")
     ceiling = retained + len(b"a")

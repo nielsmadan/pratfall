@@ -22,7 +22,7 @@ from pratfall.codes import (
 )
 from pratfall.consumer import ByteConsumer, ConsumerFailure
 from pratfall.limits import FINAL_DRAIN_GRACE, STDERR_BYTES, STDOUT_BYTES, TERMINATE_GRACE
-from pratfall.models import DecodedOutput, Invocation, ResultError
+from pratfall.models import Activity, DecodedOutput, Invocation, ResultError
 
 READ_SIZE = 64 * 1024
 PROGRESS_INTERVAL = 1.0
@@ -64,7 +64,7 @@ class _RunContext:
     timeout: float
     signal_state: _SignalState
     output_limits: OutputLimits
-    progress: Callable[[int, str], None] | None
+    progress: Callable[[int, Activity], None] | None
 
 
 def run(
@@ -74,7 +74,7 @@ def run(
     *,
     output_limits: OutputLimits = DEFAULT_OUTPUT_LIMITS,
     consumer: ByteConsumer | None = None,
-    progress: Callable[[int, str], None] | None = None,
+    progress: Callable[[int, Activity], None] | None = None,
 ) -> ProcessResult:
     started = time.monotonic()
     consumer_state = _ConsumerState(consumer)
@@ -235,7 +235,7 @@ class _OutputState:
     buffers: dict[str, bytearray]
     consumer: ByteConsumer | None
     consumer_failed: bool = False
-    activity: str | None = None
+    activity: Activity | None = None
 
 
 @dataclass
@@ -254,7 +254,7 @@ def _drain(
     context: _RunContext,
 ) -> tuple[ResultError | None, bool]:
     last_progress = time.monotonic()
-    pending_activity: str | None = None
+    pending_activity: Activity | None = None
     while True:
         now = time.monotonic()
         native_exit = process.poll()
@@ -273,7 +273,7 @@ def _drain(
             output.activity = None
         if context.progress is not None:
             elapsed = now - last_progress
-            category = pending_activity if elapsed >= PROGRESS_INTERVAL else None
+            category: Activity | None = pending_activity if elapsed >= PROGRESS_INTERVAL else None
             if category is None and elapsed >= HEARTBEAT_INTERVAL:
                 category = "working"
             if category is not None:

@@ -49,6 +49,12 @@ used during execution. The registry identifies which adapters use incremental co
   logical records. Answer separators, identifiers, models, diagnostics, usage and cost snapshots
   count while retained. Replacement must refund the old payload. Numeric representations are
   bounded to 128 bytes.
+- Adapters retain through `Retention` named slots rather than charging the budget by hand, so
+  retaining a value and paying for it are one operation and replacement refunds automatically.
+  `release` returns a slot's bytes and record; `commit` makes a slot permanent. `JsonlConsumer`
+  owns the first-error-wins `malformed` policy and its retained diagnostic. A consumer that
+  retains an answer it never charged fails the cross-adapter bound
+  [conformance](../tests/test_adapter_contracts.py).
 - Whole-document JSON and text adapters use the runner's 8 MiB complete stdout capture; native
   stderr is capped at 2 MiB. [whole_json.py:8](../src/pratfall/adapters/whole_json.py#L8) re-checks
   that same `STDOUT_BYTES` document cap and supplies shared framing, Unicode, duplicate-key and

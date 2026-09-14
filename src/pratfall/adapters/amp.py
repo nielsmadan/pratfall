@@ -4,9 +4,8 @@ from pratfall.consumer import (
     ConsumerLimits,
     JsonlConsumer,
     decode_with,
-    retained_utf8,
 )
-from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
+from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
 _ALLOWED = {"--stream-json-thinking": Flag(0)}
 _RESERVED = {
@@ -56,17 +55,9 @@ class _Consumer(JsonlConsumer):
         self.output = b""
         self.usage: Usage | None = None
         self.provider_error: ResultError | None = None
-        self.protocol_error: ResultError | None = None
         self.completed = False
-        self.has_output = False
-        self.has_result = False
 
-    def malformed(self, message: str) -> None:
-        if self.protocol_error is None:
-            self.budget.add_string(message)
-            self.protocol_error = ResultError("protocol_error", message)
-
-    def apply(self, event: dict[str, object]) -> str | None:
+    def apply(self, event: dict[str, object]) -> Activity | None:
         if self.completed:
             self.malformed("Amp emitted a record after its terminal result.")
             return None
@@ -122,17 +113,14 @@ class _Consumer(JsonlConsumer):
             self._text("".join(texts))
 
     def _text(self, text: str) -> None:
-        encoded = retained_utf8(text)
-        self.budget.replace_state(len(self.output), len(encoded), int(not self.has_output))
-        self.output = encoded
-        self.has_output = True
+        self.output = self.retain.text("answer", text, record=True)
 
     def _error(self, value: object) -> None:
         if not isinstance(value, str):
             self.malformed("Amp error must be a string.")
         elif self.provider_error is None:
             message = value or "Amp failed."
-            self.budget.add_string(message)
+            self.retain.text("provider", message)
             self.provider_error = ResultError("provider_error", message)
 
     def _result(self, event: dict[str, object]) -> None:
@@ -163,19 +151,8 @@ class _Consumer(JsonlConsumer):
         if isinstance(usage, ResultError):
             self.malformed(usage.message)
         else:
-            old_size = (
-                sum(self.budget.numeric_size(value) for value in self.usage.__dict__.values())
-                if self.usage is not None
-                else 0
-            )
-            size = (
-                sum(self.budget.numeric_size(value) for value in usage.__dict__.values())
-                if usage is not None
-                else 0
-            )
-            self.budget.replace_state(old_size, size, int(not self.has_result))
+            self.retain.usage("result", usage, record=True)
             self.usage = usage
-            self.has_result = True
 
     def result(self) -> DecodedOutput:
         error = self.provider_error or self.protocol_error

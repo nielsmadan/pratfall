@@ -11,7 +11,7 @@ from pratfall.consumer import (
     decode_with,
     retained_utf8,
 )
-from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
+from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError
 
 _ALLOWED = (
     {
@@ -135,7 +135,6 @@ class _State:
     completed: bool = False
     terminal_seen: bool = False
     provider_error: ResultError | None = None
-    protocol_error: ResultError | None = None
     recognized: bool = False
     reported_models: list[str] = field(default_factory=list)
     reported_model_set: set[str] = field(default_factory=set)
@@ -154,17 +153,14 @@ class _Consumer(JsonlConsumer):
         super().__init__("Copilot", limits)
         self.state = _State()
 
-    def apply(self, event: dict[str, object]) -> str | None:
+    def apply(self, event: dict[str, object]) -> Activity | None:
         return _apply_event(self, event)
-
-    def malformed(self, message: str) -> None:
-        _protocol(self, message)
 
     def result(self) -> DecodedOutput:
         state = self.state
         output = b"\n".join(state.messages[item] for item in state.order).decode("utf-8")
         models = tuple(state.reported_models) or None
-        failure = state.provider_error or state.protocol_error
+        failure = state.provider_error or self.protocol_error
         if failure is not None:
             return DecodedOutput(output=output, reported_models=models, error=failure)
         if not state.completed:
@@ -173,17 +169,17 @@ class _Consumer(JsonlConsumer):
             suffix = "" if state.recognized else " (only unknown events were received)"
             message = f"Copilot stream ended without a successful result event{suffix}."
             try:
-                _protocol(self, message)
+                self.malformed(message)
             except ConsumerFailure as budget_failure:
                 decoded = DecodedOutput(
                     output=output, reported_models=models, error=budget_failure.error
                 )
                 raise ConsumerFailure(budget_failure.error, decoded) from budget_failure
-            return DecodedOutput(output=output, reported_models=models, error=state.protocol_error)
+            return DecodedOutput(output=output, reported_models=models, error=self.protocol_error)
         return DecodedOutput(output=output, reported_models=models)
 
 
-def _apply_event(consumer: _Consumer, event: dict[str, object]) -> str | None:
+def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | None:
     state = consumer.state
     event_type = event["type"]
     if event_type in {"assistant.message", "assistant.message_delta"}:
@@ -213,14 +209,14 @@ def _message(consumer: _Consumer, event: dict[str, object], event_type: object) 
     state = consumer.state
     data = event.get("data")
     if not isinstance(data, dict):
-        _protocol(consumer, f"Copilot {event_type} event is malformed.")
+        consumer.malformed(f"Copilot {event_type} event is malformed.")
         return
     agent_id = event.get("agentId")
     parent_tool_call = data.get("parentToolCallId")
     if (agent_id is not None and not isinstance(agent_id, str)) or (
         parent_tool_call is not None and not isinstance(parent_tool_call, str)
     ):
-        _protocol(consumer, f"Copilot {event_type} event is malformed.")
+        consumer.malformed(f"Copilot {event_type} event is malformed.")
         return
     if agent_id is not None or parent_tool_call is not None:
         return
@@ -228,50 +224,48 @@ def _message(consumer: _Consumer, event: dict[str, object], event_type: object) 
     field = "content" if event_type == "assistant.message" else "deltaContent"
     content = data.get(field)
     if not isinstance(message_id, str) or not isinstance(content, str):
-        _protocol(consumer, f"Copilot {event_type} event is malformed.")
+        consumer.malformed(f"Copilot {event_type} event is malformed.")
         return
     encoded = retained_utf8(content)
     new_message = message_id not in state.messages
     if new_message:
-        identifier = retained_utf8(message_id)
         separator = 1 if state.order else 0
-        consumer.budget.replace_state(0, len(identifier) + separator + len(encoded), 1)
+        consumer.retain.text(f"id:{message_id}", message_id, extra=separator, record=True)
+        consumer.retain.payload(f"text:{message_id}", len(encoded))
         state.order.append(message_id)
         state.messages[message_id] = (
             encoded if event_type == "assistant.message" else bytearray(encoded)
         )
     if event_type == "assistant.message":
         if not new_message:
-            previous = len(state.messages[message_id])
-            consumer.budget.replace_bytes(previous, len(encoded))
+            consumer.retain.payload(f"text:{message_id}", len(encoded))
             state.messages[message_id] = encoded
         state.complete_messages.add(message_id)
         reported_model, model_error = model(data.get("model"), "Copilot assistant model")
         if model_error is not None:
-            _set_protocol_error(consumer, model_error)
+            consumer.malformed(model_error.message)
         elif reported_model is not None and reported_model not in state.reported_model_set:
-            consumer.budget.add_record()
-            consumer.budget.add_string(reported_model)
+            consumer.retain.text(f"model:{reported_model}", reported_model, record=True)
             state.reported_models.append(reported_model)
             state.reported_model_set.add(reported_model)
     elif message_id in state.complete_messages:
         return
     elif encoded and not new_message:
-        consumer.budget.replace_bytes(0, len(encoded))
         message = state.messages[message_id]
         if isinstance(message, bytearray):
+            consumer.retain.payload(f"text:{message_id}", len(message) + len(encoded))
             message.extend(encoded)
 
 
 def _session_error(consumer: _Consumer, event: dict[str, object]) -> None:
     data = event.get("data")
     if not isinstance(data, dict):
-        _protocol(consumer, "Copilot session.error event is malformed.")
+        consumer.malformed("Copilot session.error event is malformed.")
         return
     error_type = data.get("errorType")
     message = data.get("message")
     if not isinstance(error_type, str) or not isinstance(message, str):
-        _protocol(consumer, "Copilot session.error event is malformed.")
+        consumer.malformed("Copilot session.error event is malformed.")
     elif error_type != "model_call":
         _provider(consumer, message or f"Copilot reported {error_type}.")
 
@@ -283,7 +277,7 @@ def _session_warning(consumer: _Consumer, event: dict[str, object]) -> None:
         or not isinstance(data.get("warningType"), str)
         or not isinstance(data.get("message"), str)
     ):
-        _protocol(consumer, "Copilot session.warning event is malformed.")
+        consumer.malformed("Copilot session.warning event is malformed.")
         return
     warning_type = data["warningType"]
     if warning_type in _TERMINAL_WARNINGS:
@@ -304,12 +298,12 @@ def _result(consumer: _Consumer, event: dict[str, object]) -> None:
         or not isinstance(usage, dict)
         or not _summary_usage(usage)
     ):
-        _protocol(consumer, "Copilot result event is malformed.")
+        consumer.malformed("Copilot result event is malformed.")
         return
     if state.terminal_seen:
-        _protocol(consumer, "Copilot result event is malformed.")
+        consumer.malformed("Copilot result event is malformed.")
     else:
-        consumer.budget.add_record()
+        consumer.retain.record("result")
         state.terminal_seen = True
     if exit_code == 0:
         state.completed = True
@@ -317,19 +311,9 @@ def _result(consumer: _Consumer, event: dict[str, object]) -> None:
         _provider(consumer, "Copilot reported an unsuccessful result.")
 
 
-def _protocol(consumer: _Consumer, message: str) -> None:
-    if consumer.state.protocol_error is None:
-        consumer.budget.add_string(message)
-        consumer.state.protocol_error = ResultError("protocol_error", message)
-
-
-def _set_protocol_error(consumer: _Consumer, error: ResultError) -> None:
-    _protocol(consumer, error.message)
-
-
 def _provider(consumer: _Consumer, message: str) -> None:
     if consumer.state.provider_error is None:
-        consumer.budget.add_string(message)
+        consumer.retain.text("provider", message)
         consumer.state.provider_error = ResultError("provider_error", message)
 
 

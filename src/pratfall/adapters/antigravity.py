@@ -7,9 +7,8 @@ from pratfall.consumer import (
     ConsumerLimits,
     JsonlConsumer,
     decode_with,
-    retained_utf8,
 )
-from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
+from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
 _ALLOWED = {
     name: Flag(0)
@@ -43,7 +42,6 @@ _RESERVED = {
 class _State:
     initialized: bool = False
     result: DecodedOutput | None = None
-    protocol_error: ResultError | None = None
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
@@ -79,25 +77,22 @@ class _Consumer(JsonlConsumer):
     def type_field(self) -> str:
         return "event"
 
-    def apply(self, event: dict[str, object]) -> str | None:
+    def apply(self, event: dict[str, object]) -> Activity | None:
         return _apply_event(self, event)
-
-    def malformed(self, message: str) -> None:
-        _record_protocol(self, message)
 
     def result(self) -> DecodedOutput:
         state = self.state
         if state.result is None:
             return DecodedOutput(
-                error=state.protocol_error
+                error=self.protocol_error
                 or ResultError("protocol_error", "Antigravity stream ended without a result event.")
             )
         decoded = state.result
         if decoded.error is not None and decoded.error.code == "provider_error":
             return decoded
-        if state.protocol_error is not None:
+        if self.protocol_error is not None:
             return DecodedOutput(
-                output=decoded.output, usage=decoded.usage, error=state.protocol_error
+                output=decoded.output, usage=decoded.usage, error=self.protocol_error
             )
         if not state.initialized:
             return DecodedOutput(
@@ -110,14 +105,14 @@ class _Consumer(JsonlConsumer):
         return decoded
 
 
-def _apply_event(consumer: _Consumer, event: dict[str, object]) -> str | None:
+def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | None:
     state = consumer.state
     event_type = event["event"]
     if event_type == "init":
         if state.initialized or state.result is not None or not isinstance(event.get("init"), dict):
-            _record_protocol(consumer, "Antigravity init event is malformed.")
+            consumer.malformed("Antigravity init event is malformed.")
         else:
-            consumer.budget.add_record()
+            consumer.retain.record("init")
         state.initialized = True
         return "starting"
     elif event_type == "step_update":
@@ -126,19 +121,19 @@ def _apply_event(consumer: _Consumer, event: dict[str, object]) -> str | None:
             or state.result is not None
             or not isinstance(event.get("step_update"), dict)
         ):
-            _record_protocol(consumer, "Antigravity step_update event is malformed.")
+            consumer.malformed("Antigravity step_update event is malformed.")
         return "working"
     elif event_type == "result":
         value = event.get("result")
         if state.result is not None or not isinstance(value, dict):
-            _record_protocol(consumer, "Antigravity result event is malformed.")
+            consumer.malformed("Antigravity result event is malformed.")
             if isinstance(value, dict):
                 later = _decode_result(value)
                 if later.error is not None and later.error.code == "provider_error":
                     _retain_provider(consumer, later.error)
         else:
             if not state.initialized:
-                _record_protocol(consumer, "Antigravity result event is malformed.")
+                consumer.malformed("Antigravity result event is malformed.")
             decoded = _decode_result(value)
             _retain_result(consumer, decoded)
             state.result = decoded
@@ -146,35 +141,17 @@ def _apply_event(consumer: _Consumer, event: dict[str, object]) -> str | None:
     return None
 
 
-def _record_protocol(consumer: _Consumer, message: str) -> None:
-    if consumer.state.protocol_error is None:
-        consumer.budget.add_string(message)
-        consumer.state.protocol_error = ResultError("protocol_error", message)
-
-
 def _retain_result(consumer: _Consumer, decoded: DecodedOutput) -> None:
-    consumer.budget.add_record()
-    consumer.budget.add_string(decoded.output)
+    consumer.retain.text("answer", decoded.output, record=True)
     if decoded.error is not None:
-        consumer.budget.add_string(decoded.error.message)
-    if decoded.usage is not None:
-        for value in (
-            decoded.usage.input_tokens,
-            decoded.usage.cached_input_tokens,
-            decoded.usage.output_tokens,
-            decoded.usage.reasoning_output_tokens,
-        ):
-            consumer.budget.replace_bytes(0, consumer.budget.numeric_size(value))
+        consumer.retain.text("diagnostic", decoded.error.message)
+    consumer.retain.usage("usage", decoded.usage)
 
 
 def _retain_provider(consumer: _Consumer, error: ResultError) -> None:
     current = consumer.state.result
     if current is None or current.error is None or current.error.code != "provider_error":
-        old_size = 0
-        if current is not None and current.error is not None:
-            old_size = len(retained_utf8(current.error.message))
-        new_size = len(retained_utf8(error.message))
-        consumer.budget.replace_bytes(old_size, new_size)
+        consumer.retain.text("diagnostic", error.message)
         if current is None:
             consumer.state.result = DecodedOutput(error=error)
         else:

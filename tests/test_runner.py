@@ -15,7 +15,7 @@ import pratfall.runner as runner_module
 from pratfall.adapters import codex
 from pratfall.consumer import ConsumerLimits
 from pratfall.limits import STDERR_BYTES, STDOUT_BYTES
-from pratfall.models import DecodedOutput, Invocation, ResultError
+from pratfall.models import Activity, DecodedOutput, Invocation, ResultError
 from pratfall.runner import OutputLimits, run
 
 
@@ -381,7 +381,7 @@ def test_runner_finishes_consumer_once_after_stdout_closes(tmp_path: Path) -> No
             self.feeds: list[bytes] = []
             self.finishes = 0
 
-        def feed(self, data: bytes) -> str | None:
+        def feed(self, data: bytes) -> Activity | None:
             self.feeds.append(data)
             return None
 

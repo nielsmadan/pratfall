@@ -4,9 +4,8 @@ from pratfall.consumer import (
     ConsumerLimits,
     JsonlConsumer,
     decode_with,
-    retained_utf8,
 )
-from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
+from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile
 
 _ALLOWED = {name: Flag(0) for name in ("--thinking", "--no-thinking", "--plan", "--debug")}
 _RESERVED = {
@@ -78,26 +77,18 @@ class _Consumer(JsonlConsumer):
     def __init__(self, limits: ConsumerLimits) -> None:
         super().__init__("Kimi", limits)
         self._text = b""
-        self._error: ResultError | None = None
 
     @property
     def type_field(self) -> str:
         return "role"
 
-    def apply(self, event: dict[str, object]) -> str | None:
+    def apply(self, event: dict[str, object]) -> Activity | None:
         content = event.get("content")
         if event["role"] != "assistant" or not isinstance(content, str):
             self.malformed("Malformed Kimi final assistant message.")
             return None
-        encoded = retained_utf8(content)
-        self.budget.replace_bytes(len(self._text), len(encoded))
-        self._text = encoded
+        self._text = self.retain.text("answer", content)
         return "answering"
 
-    def malformed(self, message: str) -> None:
-        if self._error is None:
-            self.budget.add_string(message)
-            self._error = ResultError("protocol_error", message)
-
     def result(self) -> DecodedOutput:
-        return DecodedOutput(output=self._text.decode("utf-8"), error=self._error)
+        return DecodedOutput(output=self._text.decode("utf-8"), error=self.protocol_error)

@@ -2,8 +2,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
+from typing import Literal
 
 from pratfall.codes import Code
+
+Activity = Literal["starting", "working", "reasoning", "tool", "answering", "finishing"]
 
 
 @dataclass(frozen=True)
