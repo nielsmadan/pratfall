@@ -1901,6 +1901,7 @@ def test_missing_and_nonexecutable_agents_map_to_shell_exit_codes(
         (["cx", "a\0b"], "NUL"),
         (["--timeout=nan", "cx", "prompt"], "finite positive"),
         (["--max-turns=1.5", "cc", "prompt"], "positive integer"),
+        (["--max-turns=4294967296", "cc", "prompt"], "positive integer"),
         (["cx", "prompt", "--cwd=/missing-prat-directory"], "not a directory"),
     ],
 )

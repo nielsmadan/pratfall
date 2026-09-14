@@ -8,7 +8,7 @@ from typing import NoReturn
 
 from pratfall.catalog import MANAGEMENT_COMMANDS
 from pratfall.errors import PratError
-from pratfall.models import Options
+from pratfall.models import MAX_TURNS, Options
 from pratfall.prompt_input import PromptSource
 
 _RUN_VALUE_FLAGS = {
@@ -282,7 +282,7 @@ def _integer_option(value: str | None, flag: str) -> int | None:
         number = int(value)
     except ValueError:
         number = 0
-    if str(number) != value or number <= 0:
+    if str(number) != value or not 0 < number <= MAX_TURNS:
         raise PratError(f"{flag} requires a positive integer.", code="invalid_arguments")
     return number
 

@@ -9,7 +9,15 @@ from types import MappingProxyType
 
 from pratfall.catalog import BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent
 from pratfall.errors import PratError
-from pratfall.models import AgentSpec, Config, OptionOrigin, Options, Profile, ResolvedProfile
+from pratfall.models import (
+    MAX_TURNS,
+    AgentSpec,
+    Config,
+    OptionOrigin,
+    Options,
+    Profile,
+    ResolvedProfile,
+)
 
 DEFAULT_TIMEOUT = 600.0
 OPTION_FIELDS = frozenset(Options.__dataclass_fields__)
@@ -77,8 +85,8 @@ def _number(value: object, label: str) -> float:
 
 
 def _integer(value: object, label: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise PratError(f"{label}: expected a positive integer.")
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= MAX_TURNS:
+        raise PratError(f"{label}: expected a positive integer within the native u32 range.")
     return value
 
 

@@ -28,6 +28,9 @@ class AgentSpec:
     version_args: tuple[str, ...] = ("--version",)
 
 
+MAX_TURNS = 4_294_967_295
+
+
 @dataclass(frozen=True)
 class Options:
     model: str | None = None
