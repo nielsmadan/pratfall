@@ -56,7 +56,8 @@ convenience decoder feeds the same state machine used during execution. The regi
 which adapters use incremental consumption.
 
 - Each physical event is limited to 8 MiB, excluding LF or CRLF. Whitespace and discarded events
-  still obey this bound, but discarded output has no cumulative trace cap.
+  still obey this bound, but discarded output has no cumulative cap unless `--trace` captures it.
+- `--trace` retains up to 8 MiB of complete native stdout while still feeding the adapter consumer.
 - [`StateBudget`](../src/pratfall/consumer.py) allows 8 MiB of live retained state and 16,384
   logical records. Answer separators, identifiers, models, diagnostics, usage and cost snapshots
   count while retained. Replacement must refund the old payload. Numeric representations are
@@ -154,12 +155,13 @@ preserves this case.
 stdout contains final text or one JSON result. Native stderr and Pratfall diagnostics use stderr.
 One execution path emits the launch line, native stderr and the completion line through the
 invocation's diagnostics writer, so progress is a choice of writer rather than a second run path.
+Trace mode replays captured native stdout on stderr before the completion line.
 Opt-in progress uses the static [`Activity`](../src/pratfall/models.py) category vocabulary, whose
 labels live in `ACTIVITY_LABELS`, through the nonblocking
 [`_ProgressDiagnostics`](../src/pratfall/cli/presentation.py) sink, which sets and restores stderr's
 descriptor flags exactly once per invocation, covering config warnings and the run alike.
-Backpressure drops writes rather than delaying the run; other sink failures enter normal cleanup and
-result handling.
+Backpressure drops progress, trace and diagnostic writes rather than delaying the run; other sink
+failures enter normal cleanup and result handling.
 
 [`_doctor`](../src/pratfall/cli/doctor.py) reuses the runner with a three-second deadline and
 64 KiB per-stream bounds. The CLI selects opaque text and records per-agent probe errors;

@@ -131,6 +131,12 @@ uv run prat cc "make the requested edit" -- --permission-mode acceptEdits
 Standard output contains normalized final text. Structured adapters select assistant text;
 text adapters capture complete native stdout, which can include banners or progress.
 Launch/completion progress and native stderr diagnostics go to standard error.
+`--trace` also copies the captured native stdout to standard error before the completion line,
+while standard output remains the normalized final text or one JSON result. This exposes every
+native stdout record Prat receives, but cannot expose activity the native CLI omits. For streaming
+adapters, trace capture applies the 8 MiB complete stdout limit.
+When combined with `--progress`, stderr backpressure can discard trace and diagnostic writes rather
+than delaying the run.
 If writing diagnostics fails, Prat cleans up the owned process group and preserves the answer on
 stdout. JSON results also retain accounting and report `output_io_error` unless a prior timeout,
 interruption, or runner error takes precedence.
@@ -179,8 +185,9 @@ and I/O failures exit 1. A dry-run JSON object instead has `dry_run: true`, reso
 Codex, Copilot, Antigravity, OpenCode, Warp, Qwen, Amp and Kimi JSONL is decoded incrementally. OpenHands uses a
 separate incremental decoder for SDK events mixed with native status and summary text. Each physical event and
 the retained answer/protocol state are limited to 8 MiB, with at most 16,384 retained logical
-records. Discarded events have no cumulative trace limit. Whole-document JSON and text adapters
-retain the 8 MiB complete stdout limit; native stderr is limited to 2 MiB. Limit failures are
+records. Whole-document JSON and text adapters retain the 8 MiB complete stdout limit; native
+stderr is limited to 2 MiB. Unless `--trace` is enabled, discarded streaming events have no
+cumulative output limit. Limit failures are
 explicit and trigger process-group cleanup. Every whole-document JSON adapter applies the same
 strictness rule and reports `protocol_error`, or `output_encoding` for an unpaired surrogate, when
 native output carries a duplicate object key, a nonfinite number, an over-wide numeric literal, or

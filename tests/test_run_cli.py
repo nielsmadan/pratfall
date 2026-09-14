@@ -208,6 +208,59 @@ def test_claude_text_dispatch_prints_only_final_answer(
     assert '"type": "result"' not in captured.out
 
 
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_trace_copies_streaming_native_stdout_to_stderr(
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+    json_mode: bool,
+) -> None:
+    tool = {
+        "type": "item.completed",
+        "item": {
+            "id": "tool",
+            "type": "command_execution",
+            "command": "printf traced",
+            "aggregated_output": "traced",
+            "exit_code": 0,
+        },
+    }
+    answer = {
+        "type": "item.completed",
+        "item": {"id": "answer", "type": "agent_message", "text": "done"},
+    }
+    completed = {
+        "type": "turn.completed",
+        "usage": {"input_tokens": 1, "cached_input_tokens": 0, "output_tokens": 1},
+    }
+    native_stdout = "\n".join(json.dumps(event) for event in (tool, answer, completed)) + "\n"
+    config = write_agent(
+        tmp_path,
+        "codex",
+        f"import sys\nsys.stdin.buffer.read()\nsys.stdout.write({native_stdout!r})\n",
+    )
+    arguments = ["cx", "prompt", "--trace", "--config", str(config)]
+    if json_mode:
+        arguments.append("--json")
+    assert main(arguments) == 0
+    captured = capfd.readouterr()
+    result = json.loads(captured.out) if json_mode else None
+    assert (result["output"] if result is not None else captured.out.rstrip()) == "done"
+    assert native_stdout in captured.err
+    assert captured.err.index(native_stdout) < captured.err.index("finished with status success")
+
+
+def test_trace_copies_whole_document_native_stdout_to_stderr(
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "claude", CLAUDE_SUCCESS)
+    assert main(["cc", "hello", "--trace", "--config", str(config)]) == 0
+    captured = capfd.readouterr()
+    assert captured.out == "Claude: hello\n"
+    assert '"type": "result"' in captured.err
+    assert '"result": "Claude: hello"' in captured.err
+
+
 SURROGATE_ANSWERS = {
     "claude": '{"type":"result","subtype":"success","is_error":false,'
     '"result":"before\\ud800after","usage":{"input_tokens":1,"output_tokens":1}}',
@@ -1171,9 +1224,11 @@ def _lock_is_available(lock_path: Path) -> bool:
 
 
 @pytest.mark.parametrize("collision", [False, True])
+@pytest.mark.parametrize("trace", [False, True])
 def test_progress_full_stderr_before_launch_does_not_block_or_change_flags(
     tmp_path: Path,
     collision: bool,
+    trace: bool,
 ) -> None:
     marker = tmp_path / "full-before-launch"
     group_path = tmp_path / "full-before-launch.group"
@@ -1200,6 +1255,7 @@ def test_progress_full_stderr_before_launch_does_not_block_or_change_flags(
                 "cx",
                 "prompt",
                 "--progress",
+                *(["--trace"] if trace else []),
                 "--json",
                 "--config",
                 str(config),

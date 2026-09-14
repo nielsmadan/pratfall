@@ -23,7 +23,7 @@ from pratfall.cli.presentation import (
 )
 from pratfall.codes import INTERNAL_ERROR, SIGNAL_EXIT_BASE, exit_code_for
 from pratfall.config import config_path, init_config, load_config, option_origins, resolve_profile
-from pratfall.consumer import ByteConsumer
+from pratfall.consumer import ByteConsumer, CapturingConsumer
 from pratfall.errors import PratError
 from pratfall.models import (
     Config,
@@ -217,6 +217,7 @@ class _RunPlan:
     timeout: float
     consumer: ByteConsumer | None
     json_mode: bool
+    trace: bool
 
 
 def _execute(plan: _RunPlan, diagnostics: _Diagnostics) -> tuple[ProcessResult, DecodedOutput]:
@@ -255,6 +256,13 @@ def _present_run(
     resolved = plan.resolved
     process, decoded, native_stderr = _decode_process(resolved, process)
     result = normalize(resolved, process, decoded)
+    native_stdout = _trace_stdout(plan, process)
+    if native_stdout:
+        try:
+            diagnostics.bytes(native_stdout + (b"" if native_stdout.endswith(b"\n") else b"\n"))
+        except diagnostics.write_errors as error:
+            process = _after_run_presentation_failure(process, error)
+            diagnostics.fail()
     if native_stderr:
         try:
             diagnostics.text(native_stderr + ("" if native_stderr.endswith("\n") else "\n"))
@@ -273,6 +281,16 @@ def _present_run(
         process = _after_run_presentation_failure(process, error)
         diagnostics.fail()
     return process, decoded
+
+
+def _trace_stdout(plan: _RunPlan, process: ProcessResult) -> bytes:
+    if not plan.trace:
+        return b""
+    if isinstance(plan.consumer, CapturingConsumer):
+        return bytes(plan.consumer.stdout)
+    if isinstance(process.capture, RawCapture):
+        return process.capture.stdout
+    return b""
 
 
 @dataclass
@@ -344,13 +362,17 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             if timeout is None:
                 raise PratError("Resolved timeout is missing.", code="invalid_arguments")
             adapter = ADAPTERS[resolved.agent.name]
+            consumer = adapter.consumer() if adapter.consumer is not None else None
+            if parsed.trace and consumer is not None:
+                consumer = CapturingConsumer(consumer)
             plan = _RunPlan(
                 resolved=resolved,
                 invocation=invocation,
                 cwd=cwd,
                 timeout=timeout,
-                consumer=adapter.consumer() if adapter.consumer is not None else None,
+                consumer=consumer,
                 json_mode=json_mode,
+                trace=parsed.trace,
             )
             process, decoded = _execute(plan, diagnostics)
             state.process = process

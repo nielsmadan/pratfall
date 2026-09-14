@@ -35,6 +35,7 @@ class RunArguments:
     dry_run: bool
     options: Options
     progress: bool
+    trace: bool
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,7 @@ run options:
   --config PATH           Merge PATH over global config instead of .pratfile.
   --json                  Print one normalized JSON result.
   --progress              Print bounded live activity updates on stderr.
+  --trace                 Print captured native stdout on stderr.
   --dry-run               Resolve and print the invocation without launching it.
 
 examples:
@@ -149,6 +151,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     json_mode = False
     dry_run = False
     progress = False
+    trace = False
     fast: bool | None = None
     for token in scan.tokens:
         argument = token.argument
@@ -158,8 +161,9 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         if argument == "--dry-run":
             dry_run = True
             continue
-        if argument == "--progress":
-            progress = True
+        if argument in {"--progress", "--trace"}:
+            progress = progress or argument == "--progress"
+            trace = trace or argument == "--trace"
             continue
         if argument in {"--fast", "--no-fast"}:
             fast_value = argument == "--fast"
@@ -215,6 +219,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         dry_run,
         options,
         progress,
+        trace,
     )
 
 
@@ -317,6 +322,7 @@ def _management_mode(arguments: list[str]) -> bool:
             "--json",
             "--dry-run",
             "--progress",
+            "--trace",
             "--fast",
             "--no-fast",
         } or argument.startswith("--prompt="):

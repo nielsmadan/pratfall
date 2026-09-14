@@ -50,6 +50,8 @@ class _Diagnostics(Protocol):
 
     def text(self, value: str) -> None: ...
 
+    def bytes(self, value: bytes) -> None: ...
+
     def flush(self) -> None: ...
 
 
@@ -82,6 +84,15 @@ class _StreamDiagnostics:
         if self.failed:
             return
         sys.stderr.write(value)
+
+    def bytes(self, value: bytes) -> None:
+        if self.failed:
+            return
+        stream = getattr(sys.stderr, "buffer", None)
+        if stream is None:
+            sys.stderr.write(value.decode("utf-8"))
+        else:
+            stream.write(value)
 
     def flush(self) -> None:
         if self.failed:
@@ -124,14 +135,16 @@ class _ProgressDiagnostics:
         self.text(value + "\n")
 
     def text(self, value: str) -> None:
+        self.bytes(value.encode("utf-8", errors="replace"))
+
+    def bytes(self, value: bytes) -> None:
         descriptor = self.fd
         if self.failed or descriptor is None:
             return
-        data = value.encode("utf-8", errors="replace")
         offset = 0
-        while offset < len(data):
+        while offset < len(value):
             try:
-                written = os.write(descriptor, data[offset : offset + 4096])
+                written = os.write(descriptor, value[offset : offset + 4096])
             except BlockingIOError:
                 return
             except OSError as error:

@@ -3,7 +3,13 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import Protocol
 
-from pratfall.limits import EVENT_BYTES, NUMERIC_BYTES, RECORD_COUNT, RETAINED_STATE_BYTES
+from pratfall.limits import (
+    EVENT_BYTES,
+    NUMERIC_BYTES,
+    RECORD_COUNT,
+    RETAINED_STATE_BYTES,
+    STDOUT_BYTES,
+)
 from pratfall.models import Activity, DecodedOutput, ResultError, Usage
 
 CR = ord("\r")
@@ -36,6 +42,25 @@ DEFAULT_CONSUMER_LIMITS = ConsumerLimits()
 
 class ConsumerFactory(Protocol):
     def __call__(self, limits: ConsumerLimits = ...) -> ByteConsumer: ...
+
+
+class CapturingConsumer:
+    def __init__(self, consumer: ByteConsumer, limit: int = STDOUT_BYTES) -> None:
+        self.consumer = consumer
+        self.stdout = bytearray()
+        self.limit = limit
+
+    def feed(self, data: bytes) -> Activity | None:
+        remaining = self.limit - len(self.stdout)
+        captured = data[:remaining]
+        self.stdout.extend(captured)
+        activity = self.consumer.feed(captured) if captured else None
+        if len(data) > remaining:
+            raise _limit_failure(f"Agent stdout exceeded {self.limit} bytes.")
+        return activity
+
+    def finish(self) -> DecodedOutput:
+        return self.consumer.finish()
 
 
 class StateBudget:

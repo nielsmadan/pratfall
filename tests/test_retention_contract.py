@@ -18,6 +18,7 @@ from pratfall.adapters import (
 )
 from pratfall.consumer import (
     ByteConsumer,
+    CapturingConsumer,
     ConsumerFactory,
     ConsumerFailure,
     ConsumerLimits,
@@ -38,6 +39,18 @@ def _stream(*events: object) -> str:
 
 def _feed(consumer: ByteConsumer, *events: object) -> None:
     consumer.feed(_stream(*events).encode("ascii"))
+
+
+def test_capturing_consumer_preserves_native_stdout_with_a_complete_bound() -> None:
+    native_stdout = _stream(
+        _codex_item("answer", "done"),
+        _codex_turn(input_tokens=1, cached_input_tokens=0, output_tokens=1),
+    ).encode()
+    consumer = CapturingConsumer(codex.consumer(), limit=len(native_stdout))
+    with pytest.raises(ConsumerFailure, match=rf"exceeded {len(native_stdout)} bytes"):
+        consumer.feed(native_stdout + b"x")
+    assert consumer.stdout == native_stdout
+    assert consumer.finish().output == "done"
 
 
 def _budget(consumer: ByteConsumer) -> StateBudget:

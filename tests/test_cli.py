@@ -45,6 +45,18 @@ def test_no_arguments_shows_help(capsys: pytest.CaptureFixture[str]) -> None:
     assert "usage: prat" in capsys.readouterr().out
 
 
+def test_trace_without_selector_uses_normalized_run_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["--trace", "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["agent"] is None
+    assert result["error"] == {
+        "code": "invalid_arguments",
+        "message": "A selector is required.",
+    }
+
+
 def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as caught:
         main(["--help"])
@@ -59,6 +71,7 @@ def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str])
         "--fast / --no-fast",
         "--timeout SECONDS",
         "--cwd PATH",
+        "--trace",
         "--dry-run",
     ):
         assert flag in output
