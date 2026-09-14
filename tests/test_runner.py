@@ -15,8 +15,21 @@ import pratfall.runner as runner_module
 from pratfall.adapters import codex
 from pratfall.consumer import ConsumerLimits
 from pratfall.limits import STDERR_BYTES, STDOUT_BYTES
-from pratfall.models import Activity, DecodedOutput, Invocation, ResultError
-from pratfall.runner import OutputLimits, run
+from pratfall.models import (
+    Activity,
+    ConsumedCapture,
+    DecodedOutput,
+    Invocation,
+    RawCapture,
+    ResultError,
+)
+from pratfall.runner import OutputLimits, ProcessResult, raw_stdout, run
+
+
+def consumed(result: ProcessResult) -> DecodedOutput:
+    capture = result.capture
+    assert isinstance(capture, ConsumedCapture)
+    return capture.decoded
 
 
 def test_cleanup_rechecks_group_after_transient_probe_permission_error(
@@ -165,7 +178,7 @@ def test_runner_drains_large_stdout_and_stderr_concurrently(tmp_path: Path) -> N
     result = run(python(code), tmp_path, 5)
     assert result.error is None
     assert result.native_exit_code == 0
-    assert result.stdout == b"a" * size
+    assert result.capture == RawCapture(b"a" * size)
     assert result.stderr == b"b" * size
 
 
@@ -173,7 +186,7 @@ def test_runner_uses_bounded_file_for_large_stdin(tmp_path: Path) -> None:
     prompt = b"p" * (1024 * 1024)
     result = run(python("import sys;print(len(sys.stdin.buffer.read()))", prompt), tmp_path, 5)
     assert result.error is None
-    assert result.stdout == b"1048576\n"
+    assert result.capture == RawCapture(b"1048576\n")
 
 
 @pytest.mark.parametrize(
@@ -187,7 +200,8 @@ def test_output_bounds_fail_and_stop_child(tmp_path: Path, fd: str, limit: int, 
     result = run(python(code), tmp_path, 5)
     assert result.error is not None
     assert result.error.code == f"{fd}_limit_exceeded"
-    assert len(getattr(result, fd)) == limit
+    captured = raw_stdout(result.capture) if fd == "stdout" else result.stderr
+    assert len(captured) == limit
     assert result.duration_ms < 4_000
 
 
@@ -198,11 +212,11 @@ def test_runner_accepts_explicit_capture_bounds_without_changing_defaults(tmp_pa
         5,
         output_limits=OutputLimits(stdout=4, stderr=7),
     )
-    assert limited.stdout == b"1234"
+    assert limited.capture == RawCapture(b"1234")
     assert limited.error is not None
     assert limited.error.code == "stdout_limit_exceeded"
     ordinary = run(python("import os;os.write(1,b'12345')"), tmp_path, 5)
-    assert ordinary.stdout == b"12345"
+    assert ordinary.capture == RawCapture(b"12345")
     assert ordinary.error is None
 
 
@@ -214,7 +228,7 @@ def test_runner_preserves_failing_native_exit_and_output(tmp_path: Path) -> None
     )
     assert result.error is None
     assert result.native_exit_code == 17
-    assert result.stdout == b"out"
+    assert result.capture == RawCapture(b"out")
     assert result.stderr == b"err"
 
 
@@ -241,7 +255,7 @@ def test_deadline_covers_pipes_held_by_grandchild(tmp_path: Path) -> None:
         f"subprocess.Popen([sys.executable,'-c',{descendant!r},{str(lock_path)!r}])"
     )
     result = run(python(code), tmp_path, 0.3)
-    descendant_pid = int(result.stdout)
+    descendant_pid = int(raw_stdout(result.capture))
     assert result.timed_out is True
     assert result.error is not None
     assert result.error.code == "timeout"
@@ -274,7 +288,7 @@ def test_timeout_still_kills_descendant_after_parent_exits_and_pipes_close(tmp_p
         "print(child.pid,flush=True);time.sleep(30)"
     )
     result = run(python(code), tmp_path, 0.2)
-    descendant_pid = int(result.stdout)
+    descendant_pid = int(raw_stdout(result.capture))
     assert result.timed_out is True
     assert result.native_exit_code == -signal.SIGTERM
     assert 2_100 <= result.duration_ms < 4_000
@@ -350,7 +364,7 @@ time.sleep(30)
         5,
     )
     assert result.interrupted_by == signal.SIGINT
-    assert result.stdout == b"termination requested\n"
+    assert result.capture == RawCapture(b"termination requested\n")
     assert result.native_exit_code == -signal.SIGKILL
     assert result.duration_ms < 2_000
     assert signal.getsignal(signal.SIGINT) == previous
@@ -369,9 +383,7 @@ def test_runner_streams_stdout_to_consumer_without_retaining_trace(tmp_path: Pat
         5,
         consumer=codex.consumer(),
     )
-    assert result.stdout == b""
-    assert result.decoded is not None
-    assert result.decoded.output == "done"
+    assert consumed(result).output == "done"
     assert result.error is None
 
 
@@ -392,8 +404,7 @@ def test_runner_finishes_consumer_once_after_stdout_closes(tmp_path: Path) -> No
     consumer = CountingConsumer()
     result = run(python("print('answer',end='')"), tmp_path, 5, consumer=consumer)
     assert consumer.finishes == 1
-    assert result.stdout == b""
-    assert result.decoded == DecodedOutput(output="answer")
+    assert consumed(result) == DecodedOutput(output="answer")
 
 
 def test_finish_time_limit_cleans_descendant_and_preserves_decoded_output(tmp_path: Path) -> None:
@@ -426,9 +437,7 @@ def test_finish_time_limit_cleans_descendant_and_preserves_decoded_output(tmp_pa
         )
         assert result.error is not None
         assert result.error.code == "stdout_limit_exceeded"
-        assert result.decoded is not None
-        assert result.decoded.output == "partial"
-        assert result.stdout == b""
+        assert consumed(result).output == "partial"
         assert_process_terminated(int(pid_path.read_text()), lock_path)
     finally:
         if pid_path.exists():
@@ -470,8 +479,7 @@ def test_missing_terminal_limit_outranks_native_exit_and_cleans_descendant(
             "stdout_limit_exceeded", "Agent retained output state exceeded 11 bytes."
         )
         assert result.native_exit_code == 17
-        assert result.decoded is not None
-        assert result.decoded.output == "answer12345"
+        assert consumed(result).output == "answer12345"
         assert_process_terminated(int(pid_path.read_text()), lock_path)
     finally:
         if pid_path.exists():
@@ -508,8 +516,7 @@ def test_progress_failure_terminates_child_and_preserves_streamed_answer(tmp_pat
         assert result.error == ResultError(
             "output_io_error", "Cannot write progress to stderr: closed progress pipe."
         )
-        assert result.decoded is not None
-        assert result.decoded.output == "partial"
+        assert consumed(result).output == "partial"
         assert_process_terminated(int(pid_path.read_text()), lock_path)
     finally:
         if pid_path.exists():
@@ -553,9 +560,8 @@ def test_timeout_and_interruption_feed_term_cleanup_bytes_to_consumer(
     )
     if sender is not None:
         sender.join()
-    assert result.decoded is not None
-    assert result.decoded.output == "cleanup answer"
-    assert result.decoded.error is None
+    assert consumed(result).output == "cleanup answer"
+    assert consumed(result).error is None
     if interrupt:
         assert result.interrupted_by == signal.SIGINT
     else:

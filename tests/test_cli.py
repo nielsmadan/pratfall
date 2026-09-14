@@ -24,7 +24,7 @@ from pratfall.cli import (
 )
 from pratfall.config import init_config, load_config
 from pratfall.interruption import InterruptionState
-from pratfall.models import Config, Invocation
+from pratfall.models import Config, Invocation, RawCapture
 from pratfall.runner import OutputLimits, ProcessResult
 from pratfall.runner import run as run_process
 
@@ -484,8 +484,10 @@ def test_default_doctor_does_not_spawn(
 
 
 def test_version_selection_strips_unicode_whitespace_before_stderr_fallback() -> None:
-    fallback = _version_result(ProcessResult("\u2003".encode(), b" fallback 3.0 \n", 0, 0))
-    empty = _version_result(ProcessResult("\u2003".encode(), "\u2002".encode(), 0, 0))
+    fallback = _version_result(
+        ProcessResult(RawCapture("\u2003".encode()), b" fallback 3.0 \n", 0, 0)
+    )
+    empty = _version_result(ProcessResult(RawCapture("\u2003".encode()), "\u2002".encode(), 0, 0))
     assert fallback == ("fallback 3.0", None)
     assert empty == (None, "Version probe returned no version text.")
 

@@ -19,15 +19,18 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   options, local defaults, global defaults, and built-in defaults; all effective profiles are
   validated. Command paths, profile fields, and inherited defaults retain their defining file's
   location. Aliases of the global file load once through the selected local path, preserving that
-  path's command base. The CLI sends duplicate-profile warnings to stderr before reading the prompt
-  or launching an agent, using its nonblocking sink when progress is enabled.
+  path's command base. The CLI selects one diagnostics writer per invocation and sends
+  duplicate-profile warnings through it, before reading the prompt or launching an agent.
 - [catalog.py](../src/pratfall/catalog.py) holds immutable capabilities, not provider model lists.
   [registry.py:41](../src/pratfall/adapters/registry.py#L41) is the adapter assembly point: command
   builder, one validator over the resolved profile, and exactly one of a whole-document decoder or
   an incremental consumer factory. The registry synthesizes the whole-document path for consumer
   adapters, so each agent has a single decode path rather than a precedence rule.
-- [runner.py:62](../src/pratfall/runner.py#L62) owns POSIX process lifecycle and passes bytes to a
+- [runner.py:86](../src/pratfall/runner.py#L86) owns POSIX process lifecycle and passes bytes to a
   schema-neutral consumer. Adapters own native protocol transitions; they do not manage processes.
+  Its result carries either a `RawCapture` of complete stdout or a `ConsumedCapture` of the
+  consumer's decoded output, so the selected capture mode is a type distinction rather than an
+  empty-stdout sentinel.
 - [output.py:7](../src/pratfall/output.py#L7) selects status and exit code while retaining decoded
   output and accounting. The requested model remains distinct from models reported by the agent.
   [codes.py](../src/pratfall/codes.py) owns the public `Code` vocabulary and the fixed code-to-exit
@@ -104,7 +107,7 @@ summed. See [OpenCode](reference/opencode.md) for per-step replacement and unkno
 ## Deadline, cleanup and diagnostics
 
 The runner starts a new process group, drains stdout and stderr concurrently, and enforces one
-monotonic run deadline. [Cleanup:314](../src/pratfall/runner.py#L314) sends SIGTERM, then SIGKILL after
+monotonic run deadline. [Cleanup:386](../src/pratfall/runner.py#L386) sends SIGTERM, then SIGKILL after
 a bounded grace period, and verifies both parent reaping and group disappearance. Repeated
 interruptions accelerate termination. Timeout/interruption cleanup feeds trailing bytes before
 finalizing the consumer once; after a hard local output failure, stdout drains without reparsing.
@@ -114,10 +117,13 @@ managed server processes are outside that boundary. Ordinary successful completi
 native background-process behavior.
 
 Encoding and presentation errors discovered after parent exit still invoke
-[group cleanup](../src/pratfall/cli.py#L654): descendants can survive after closing the pipes.
+[group cleanup](../src/pratfall/cli.py#L768): descendants can survive after closing the pipes.
 Both ordinary and progress diagnostics preserve the decoded answer and accounting when stderr
-fails. Ordinary diagnostics flush before final result emission; a failed stream is redirected to
-prevent another flush at interpreter shutdown from replacing the normalized exit code.
+fails. Ordinary
+diagnostics flush before final result emission; a failed stream is redirected to prevent another
+flush at interpreter shutdown from replacing the normalized exit code. The progress sink is
+deliberately never redirected: it writes with `os.write`, so no buffer survives to be flushed, and
+redirecting it would restore the saved descriptor flags onto the replacement descriptor.
 A zero-signal `killpg` probe returning EPERM keeps the group pending within the existing deadline;
 persistent denial fails cleanup, and SIGTERM/SIGKILL permission errors remain explicit failures.
 This handles macOS group teardown where a successful SIGTERM can precede a denied existence probe;
@@ -125,12 +131,14 @@ the [XNU implementation](https://github.com/apple-oss-distributions/xnu/blob/f62
 excludes zombie group members. [Regression coverage](../tests/test_runner.py#L21) preserves this case.
 
 stdout contains final text or one JSON result. Native stderr and Pratfall diagnostics use stderr.
+One execution path emits the launch line, native stderr and the completion line through the
+invocation's diagnostics writer, so progress is a choice of writer rather than a second run path.
 Opt-in progress uses static activity categories through a
-[nonblocking sink:602](../src/pratfall/cli.py#L602), which also handles launch, completion and native
-diagnostics in that mode and restores stderr's descriptor flags. Backpressure drops writes rather
-than delaying the run; other sink failures enter normal cleanup and result handling.
+[nonblocking sink:431](../src/pratfall/cli.py#L431), which sets and restores stderr's descriptor
+flags exactly once per invocation, covering config warnings and the run alike. Backpressure drops
+writes rather than delaying the run; other sink failures enter normal cleanup and result handling.
 
-[Version diagnostics:262](../src/pratfall/cli.py#L262) reuse the runner with a three-second deadline
+[Version diagnostics:279](../src/pratfall/cli.py#L279) reuse the runner with a three-second deadline
 and 64 KiB per-stream bounds. The CLI selects opaque text and records per-agent probe errors;
 the catalog owns probe arguments.
 

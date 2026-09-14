@@ -29,7 +29,15 @@ from pratfall.interruption import (
     restore,
 )
 from pratfall.limits import FINAL_DRAIN_GRACE, STDERR_BYTES, STDOUT_BYTES, TERMINATE_GRACE
-from pratfall.models import Activity, DecodedOutput, Invocation, ResultError
+from pratfall.models import (
+    Activity,
+    Capture,
+    ConsumedCapture,
+    DecodedOutput,
+    Invocation,
+    RawCapture,
+    ResultError,
+)
 
 READ_SIZE = 64 * 1024
 PROGRESS_INTERVAL = 1.0
@@ -38,15 +46,20 @@ HEARTBEAT_INTERVAL = 5.0
 
 @dataclass(frozen=True)
 class ProcessResult:
-    stdout: bytes
+    capture: Capture
     stderr: bytes
     native_exit_code: int | None
     duration_ms: int
     error: ResultError | None = None
     timed_out: bool = False
     interrupted_by: int | None = None
-    decoded: DecodedOutput | None = None
     process_group: int | None = None
+
+
+def raw_stdout(capture: Capture) -> bytes:
+    if not isinstance(capture, RawCapture):
+        raise TypeError("raw stdout is unavailable for a consumed capture")
+    return capture.stdout
 
 
 @dataclass(frozen=True)
@@ -113,24 +126,22 @@ def run(
                         progress(_duration(started), "starting")
                 except OSError as error:
                     _force_cleanup(process)
-                    decoded_output = _finish_consumer(consumer_state)[0]
+                    _finish_consumer(consumer_state)
                     return ProcessResult(
-                        b"",
+                        consumer_state.capture(b""),
                         b"",
                         process.returncode,
                         _duration(started),
                         _presentation_error(error),
-                        decoded=decoded_output,
                     )
                 context = _RunContext(started, timeout, signal_state, output_limits, progress)
                 return _collect(process, context, consumer_state)
         except OSError as error:
             if process is not None:
                 _force_cleanup(process)
-            decoded_output = None
             consumer_error: ResultError | None = None
             if process is not None:
-                decoded_output, consumer_error = _finish_consumer(consumer_state)
+                consumer_error = _finish_consumer(consumer_state)[1]
             failure = ResultError("process_io_error", f"Process I/O failed: {error}.")
             failure = consumer_error or failure
             if signal_state.received is not None:
@@ -138,13 +149,12 @@ def run(
                     "interrupted", f"Interrupted by signal {signal_state.received}."
                 )
             return ProcessResult(
-                b"",
+                consumer_state.capture(b""),
                 b"",
                 process.returncode if process is not None else None,
                 _duration(started),
                 failure,
                 interrupted_by=signal_state.received,
-                decoded=decoded_output,
             )
     finally:
         restore(previous)
@@ -165,7 +175,6 @@ def _collect(
         selector.register(stream, selectors.EVENT_READ, name)
     error: ResultError | None
     timed_out: bool
-    decoded: DecodedOutput | None = None
     cleanup_error: str | None = None
     try:
         error, timed_out = _drain(
@@ -187,7 +196,7 @@ def _collect(
                 cleanup_error = str(failure)
                 with suppress(OSError):
                     os.killpg(process.pid, signal.SIGKILL)
-        decoded, finish_error = _finish_consumer(consumer_state)
+        finish_error = _finish_consumer(consumer_state)[1]
         if error is None and finish_error is not None:
             error = finish_error
             if not needs_cleanup:
@@ -224,14 +233,13 @@ def _collect(
             error.code, f"{error.message} Process-group cleanup failed: {cleanup_error}."
         )
     return ProcessResult(
-        b"" if consumer_state.consumer is not None else bytes(output.buffers["stdout"]),
+        consumer_state.capture(bytes(output.buffers["stdout"])),
         bytes(output.buffers["stderr"]),
         process.returncode,
         _duration(context.started),
         error,
         timed_out,
         context.signal_state.received,
-        decoded,
         process.pid,
     )
 
@@ -250,6 +258,11 @@ class _ConsumerState:
     finished: bool = False
     decoded: DecodedOutput | None = None
     error: ResultError | None = None
+
+    def capture(self, stdout: bytes) -> Capture:
+        if self.consumer is None:
+            return RawCapture(stdout)
+        return ConsumedCapture(self.decoded if self.decoded is not None else DecodedOutput())
 
 
 def _drain(
@@ -428,7 +441,7 @@ def _spawn_failure(started: float, error: OSError, executable: str) -> ProcessRe
 
 
 def _startup_failure(started: float, code: Code, message: str) -> ProcessResult:
-    return ProcessResult(b"", b"", None, _duration(started), ResultError(code, message))
+    return ProcessResult(RawCapture(), b"", None, _duration(started), ResultError(code, message))
 
 
 def _duration(started: float) -> int:

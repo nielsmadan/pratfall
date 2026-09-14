@@ -7,12 +7,12 @@ import os
 import shlex
 import shutil
 import sys
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager, suppress
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import closing, contextmanager, suppress
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, NoReturn
+from typing import ClassVar, Literal, NoReturn, Protocol
 
 from pratfall import __version__
 from pratfall.adapters.registry import ADAPTERS
@@ -25,15 +25,23 @@ from pratfall.interruption import InterruptionState, handler_for, handling
 from pratfall.models import (
     Activity,
     Config,
+    ConsumedCapture,
     DecodedOutput,
     Invocation,
     Options,
+    RawCapture,
     ResolvedProfile,
     ResultError,
 )
 from pratfall.output import normalize, result_dict, validation_error
 from pratfall.prompt_input import InputInterrupted, PromptSource, acquire_prompt
-from pratfall.runner import OutputLimits, ProcessResult, cleanup_process_group, run
+from pratfall.runner import (
+    OutputLimits,
+    ProcessResult,
+    cleanup_process_group,
+    raw_stdout,
+    run,
+)
 
 VERSION_TIMEOUT = 3.0
 VERSION_OUTPUT_LIMIT = 64 * 1024
@@ -339,7 +347,7 @@ def _version_result(process: ProcessResult) -> tuple[str | None, str | None]:
     if process.native_exit_code != 0:
         return None, f"Version probe exited with status {process.native_exit_code}."
     try:
-        stdout = process.stdout.decode("utf-8").strip()
+        stdout = raw_stdout(process.capture).decode("utf-8").strip()
     except UnicodeDecodeError:
         return None, "Version output is not valid UTF-8."
     if stdout:
@@ -365,6 +373,127 @@ def _doctor_line(record: dict[str, object], *, versions: bool) -> str:
     return f"{line} version={json.dumps(record['version'], ensure_ascii=False)}"
 
 
+class _Diagnostics(Protocol):
+    start_errors: ClassVar[tuple[type[Exception], ...]]
+    write_errors: ClassVar[tuple[type[Exception], ...]]
+
+    def open(self) -> None: ...
+
+    def close(self) -> None: ...
+
+    def progress_callback(self) -> Callable[[int, Activity], None] | None: ...
+
+    def fail(self) -> None: ...
+
+    def line(self, value: str) -> None: ...
+
+    def text(self, value: str) -> None: ...
+
+    def flush(self) -> None: ...
+
+
+class _StreamDiagnostics:
+    start_errors: ClassVar[tuple[type[Exception], ...]] = (OSError, ValueError)
+    write_errors: ClassVar[tuple[type[Exception], ...]] = (OSError, ValueError)
+
+    def __init__(self) -> None:
+        self.failed = False
+
+    def open(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+    def progress_callback(self) -> Callable[[int, Activity], None] | None:
+        return None
+
+    def fail(self) -> None:
+        self.failed = True
+        _silence_broken_stream("stderr")
+
+    def line(self, value: str) -> None:
+        if self.failed:
+            return
+        print(value, file=sys.stderr)
+
+    def text(self, value: str) -> None:
+        if self.failed:
+            return
+        sys.stderr.write(value)
+
+    def flush(self) -> None:
+        if self.failed:
+            return
+        sys.stderr.flush()
+
+
+class _ProgressDiagnostics:
+    start_errors: ClassVar[tuple[type[Exception], ...]] = (AttributeError, OSError, ValueError)
+    write_errors: ClassVar[tuple[type[Exception], ...]] = (OSError,)
+
+    def __init__(self) -> None:
+        self.failed = False
+        self.fd: int | None = None
+        self.flags = 0
+
+    def open(self) -> None:
+        if self.fd is not None:
+            return
+        descriptor = sys.stderr.fileno()
+        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        fcntl.fcntl(descriptor, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        self.fd = descriptor
+        self.flags = flags
+
+    def close(self) -> None:
+        descriptor, self.fd = self.fd, None
+        if descriptor is None:
+            return
+        with suppress(OSError):
+            fcntl.fcntl(descriptor, fcntl.F_SETFL, self.flags)
+
+    def progress_callback(self) -> Callable[[int, Activity], None] | None:
+        return self.progress
+
+    def fail(self) -> None:
+        self.failed = True
+
+    def line(self, value: str) -> None:
+        self.text(value + "\n")
+
+    def text(self, value: str) -> None:
+        descriptor = self.fd
+        if self.failed or descriptor is None:
+            return
+        data = value.encode("utf-8", errors="replace")
+        offset = 0
+        while offset < len(data):
+            try:
+                written = os.write(descriptor, data[offset : offset + 4096])
+            except BlockingIOError:
+                return
+            except OSError as error:
+                if error.errno in {errno.EAGAIN, errno.EWOULDBLOCK}:
+                    return
+                self.failed = True
+                raise
+            if written == 0:
+                self.failed = True
+                raise OSError(errno.EIO, "stderr write returned zero bytes")
+            offset += written
+
+    def flush(self) -> None:
+        return None
+
+    def progress(self, elapsed_ms: int, category: Activity) -> None:
+        self.line(f"prat: {elapsed_ms / 1000:.1f}s {ACTIVITY_LABELS[category]}")
+
+
+def _diagnostics_for(*, progress: bool) -> _Diagnostics:
+    return _ProgressDiagnostics() if progress else _StreamDiagnostics()
+
+
 def _validate_native_arguments(resolved: ResolvedProfile, label: str) -> None:
     adapter = ADAPTERS.get(resolved.agent.name)
     if adapter is None:
@@ -388,19 +517,16 @@ def _validate_config_native_arguments(config: Config) -> None:
             raise PratError(str(error)) from error
 
 
-def _config_warnings(config: Config, *, progress: bool = False) -> None:
+def _config_warnings(config: Config, diagnostics: _Diagnostics) -> None:
     if not config.warnings:
         return
     try:
-        if progress:
-            with _StderrSink() as sink:
-                for warning in config.warnings:
-                    sink.line(f"prat: warning: {warning}")
-        else:
-            for warning in config.warnings:
-                print(f"prat: warning: {warning}", file=sys.stderr)
-            sys.stderr.flush()
+        diagnostics.open()
+        for warning in config.warnings:
+            diagnostics.line(f"prat: warning: {warning}")
+        diagnostics.flush()
     except (AttributeError, OSError, ValueError) as error:
+        diagnostics.close()
         _silence_broken_stream("stderr")
         raise PratError(
             f"Cannot write config warnings: {error}.", code="output_io_error"
@@ -417,7 +543,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     else:
         config = load_config(args.config)
         _validate_config_native_arguments(config)
-        _config_warnings(config)
+        _config_warnings(config, _StreamDiagnostics())
         if args.command == "agents":
             _agents(args.json)
         elif args.command == "profiles":
@@ -612,17 +738,16 @@ def _decode(resolved: ResolvedProfile, stdout: str) -> DecodedOutput:
 def _decode_process(
     resolved: ResolvedProfile, process: ProcessResult
 ) -> tuple[ProcessResult, DecodedOutput, str]:
-    stdout: str | None
+    capture = process.capture
+    decoded = capture.decoded if isinstance(capture, ConsumedCapture) else None
+    stdout: str | None = None
     stderr = ""
     encoding_error: ResultError | None = None
-    if process.decoded is None:
+    if decoded is None:
         try:
-            stdout = process.stdout.decode("utf-8")
+            stdout = raw_stdout(capture).decode("utf-8")
         except UnicodeDecodeError:
-            stdout = None
             encoding_error = ResultError("output_encoding", "Agent stdout is not valid UTF-8.")
-    else:
-        stdout = None
     try:
         stderr = process.stderr.decode("utf-8")
     except UnicodeDecodeError:
@@ -631,50 +756,9 @@ def _decode_process(
         )
     if encoding_error is not None and process.error is None:
         process = _after_run_failure(process, encoding_error)
-    decoded = process.decoded
     if decoded is None:
         decoded = _decode(resolved, stdout) if stdout is not None else DecodedOutput()
     return process, decoded, stderr
-
-
-class _StderrSink:
-    def __init__(self) -> None:
-        self.fd = sys.stderr.fileno()
-        self.flags = fcntl.fcntl(self.fd, fcntl.F_GETFL)
-        self.failed = False
-
-    def __enter__(self) -> "_StderrSink":
-        fcntl.fcntl(self.fd, fcntl.F_SETFL, self.flags | os.O_NONBLOCK)
-        return self
-
-    def __exit__(self, *_args: object) -> None:
-        fcntl.fcntl(self.fd, fcntl.F_SETFL, self.flags)
-
-    def line(self, value: str) -> None:
-        self.write(value + "\n")
-
-    def write(self, value: str) -> None:
-        if self.failed:
-            return
-        data = value.encode("utf-8", errors="replace")
-        offset = 0
-        while offset < len(data):
-            try:
-                written = os.write(self.fd, data[offset : offset + 4096])
-            except BlockingIOError:
-                return
-            except OSError as error:
-                if error.errno in {errno.EAGAIN, errno.EWOULDBLOCK}:
-                    return
-                self.failed = True
-                raise
-            if written == 0:
-                self.failed = True
-                raise OSError(errno.EIO, "stderr write returned zero bytes")
-            offset += written
-
-    def progress(self, elapsed_ms: int, category: Activity) -> None:
-        self.line(f"prat: {elapsed_ms / 1000:.1f}s {ACTIVITY_LABELS[category]}")
 
 
 def _presentation_error(error: Exception) -> ResultError:
@@ -738,92 +822,56 @@ def _emit_result(result: dict[str, object], *, json_mode: bool) -> None:
             sys.stdout.write("\n")
 
 
-def _run_without_progress(
-    resolved: ResolvedProfile,
-    invocation: Invocation,
-    cwd: Path,
-    timeout: float,
-    consumer: ByteConsumer | None,
-    *,
-    json_mode: bool,
-) -> tuple[ProcessResult, DecodedOutput]:
-    try:
-        print(f"prat: launching {resolved.agent.label}", file=sys.stderr, flush=True)
-    except (OSError, ValueError) as error:
-        _silence_broken_stream("stderr")
-        return ProcessResult(b"", b"", None, 0, _presentation_error(error)), DecodedOutput()
+@dataclass(frozen=True)
+class _RunPlan:
+    resolved: ResolvedProfile
+    invocation: Invocation
+    cwd: Path
+    timeout: float
+    consumer: ByteConsumer | None
+    json_mode: bool
 
-    process = run(invocation, cwd, timeout, consumer=consumer)
+
+def _execute(plan: _RunPlan, diagnostics: _Diagnostics) -> tuple[ProcessResult, DecodedOutput]:
+    resolved = plan.resolved
+    try:
+        diagnostics.open()
+        diagnostics.line(f"prat: launching {resolved.agent.label}")
+        diagnostics.flush()
+    except diagnostics.start_errors as error:
+        diagnostics.fail()
+        return (
+            ProcessResult(RawCapture(), b"", None, 0, _presentation_error(error)),
+            DecodedOutput(),
+        )
+
+    process = run(
+        plan.invocation,
+        plan.cwd,
+        plan.timeout,
+        consumer=plan.consumer,
+        progress=diagnostics.progress_callback(),
+    )
     process, decoded, native_stderr = _decode_process(resolved, process)
     result = normalize(resolved, process, decoded)
-    try:
-        if native_stderr:
-            sys.stderr.write(native_stderr + ("" if native_stderr.endswith("\n") else "\n"))
-        print(
-            f"prat: {resolved.agent.label} finished with status {result.status} "
-            f"in {result.duration_ms}ms",
-            file=sys.stderr,
-        )
-        if not json_mode and result.error is not None:
-            print(f"prat: {result.error.message}", file=sys.stderr)
-        sys.stderr.flush()
-    except (OSError, ValueError) as error:
-        process = _after_run_presentation_failure(process, error)
-        _silence_broken_stream("stderr")
-    return process, decoded
-
-
-def _run_with_progress(
-    resolved: ResolvedProfile,
-    invocation: Invocation,
-    cwd: Path,
-    timeout: float,
-    consumer: ByteConsumer | None,
-    *,
-    json_mode: bool,
-) -> tuple[ProcessResult, DecodedOutput]:
-    sink: _StderrSink | None = None
-    entered = False
-    try:
+    if native_stderr:
         try:
-            sink = _StderrSink()
-            sink.__enter__()
-            entered = True
-            sink.line(f"prat: launching {resolved.agent.label}")
-        except (AttributeError, OSError, ValueError) as error:
-            if sink is not None:
-                sink.failed = True
-            process = ProcessResult(b"", b"", None, 0, _presentation_error(error))
-        else:
-            process = run(
-                invocation,
-                cwd,
-                timeout,
-                consumer=consumer,
-                progress=sink.progress,
-            )
-        process, decoded, native_stderr = _decode_process(resolved, process)
-        if sink is not None and native_stderr:
-            try:
-                sink.write(native_stderr + ("" if native_stderr.endswith("\n") else "\n"))
-            except OSError as error:
-                process = _after_run_presentation_failure(process, error)
-        result = normalize(resolved, process, decoded)
-        if sink is not None:
-            try:
-                sink.line(
-                    f"prat: {resolved.agent.label} finished with status {result.status} "
-                    f"in {result.duration_ms}ms"
-                )
-                if not json_mode and result.error is not None:
-                    sink.line(f"prat: {result.error.message}")
-            except OSError as error:
-                process = _after_run_presentation_failure(process, error)
-        return process, decoded
-    finally:
-        if sink is not None and entered:
-            with suppress(OSError):
-                sink.__exit__()
+            diagnostics.text(native_stderr + ("" if native_stderr.endswith("\n") else "\n"))
+        except diagnostics.write_errors as error:
+            process = _after_run_presentation_failure(process, error)
+            diagnostics.fail()
+    try:
+        diagnostics.line(
+            f"prat: {resolved.agent.label} finished with status {result.status} "
+            f"in {result.duration_ms}ms"
+        )
+        if not plan.json_mode and result.error is not None:
+            diagnostics.line(f"prat: {result.error.message}")
+        diagnostics.flush()
+    except diagnostics.write_errors as error:
+        process = _after_run_presentation_failure(process, error)
+        diagnostics.fail()
+    return process, decoded
 
 
 def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
@@ -832,34 +880,34 @@ def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
     try:
         parsed = _parse_run(arguments)
         json_mode = parsed.json
-        config = load_config(parsed.config, cwd=invocation_cwd)
-        _validate_config_native_arguments(config)
-        _config_warnings(config, progress=parsed.progress)
-        resolved = resolve_profile(config, parsed.selector, parsed.options)
-        label = option_labels(config, parsed.selector, parsed.options).get(
-            "native_args", f"selector {parsed.selector!r}.native_args"
-        )
-        _validate_native_arguments(resolved, label)
-        cwd = _run_cwd(parsed.cwd, invocation_cwd)
-        prompt = acquire_prompt(parsed.prompt_source, invocation_cwd)
-        invocation = _build_invocation(resolved, prompt)
-        if parsed.dry_run:
-            _preview(resolved, invocation, cwd, json_mode=json_mode)
-            return 0
-        timeout = resolved.options.timeout
-        if timeout is None:
-            raise PratError("Resolved timeout is missing.", code="invalid_arguments")
-        adapter = ADAPTERS[resolved.agent.name]
-        consumer = adapter.consumer() if adapter.consumer is not None else None
-        execute = _run_with_progress if parsed.progress else _run_without_progress
-        process, decoded = execute(
-            resolved,
-            invocation,
-            cwd,
-            timeout,
-            consumer,
-            json_mode=json_mode,
-        )
+        with closing(_diagnostics_for(progress=parsed.progress)) as diagnostics:
+            config = load_config(parsed.config, cwd=invocation_cwd)
+            _validate_config_native_arguments(config)
+            _config_warnings(config, diagnostics)
+            resolved = resolve_profile(config, parsed.selector, parsed.options)
+            label = option_labels(config, parsed.selector, parsed.options).get(
+                "native_args", f"selector {parsed.selector!r}.native_args"
+            )
+            _validate_native_arguments(resolved, label)
+            cwd = _run_cwd(parsed.cwd, invocation_cwd)
+            prompt = acquire_prompt(parsed.prompt_source, invocation_cwd)
+            invocation = _build_invocation(resolved, prompt)
+            if parsed.dry_run:
+                _preview(resolved, invocation, cwd, json_mode=json_mode)
+                return 0
+            timeout = resolved.options.timeout
+            if timeout is None:
+                raise PratError("Resolved timeout is missing.", code="invalid_arguments")
+            adapter = ADAPTERS[resolved.agent.name]
+            plan = _RunPlan(
+                resolved=resolved,
+                invocation=invocation,
+                cwd=cwd,
+                timeout=timeout,
+                consumer=adapter.consumer() if adapter.consumer is not None else None,
+                json_mode=json_mode,
+            )
+            process, decoded = _execute(plan, diagnostics)
         result = normalize(resolved, process, decoded)
         payload = result_dict(result)
         _emit_result(payload, json_mode=json_mode)

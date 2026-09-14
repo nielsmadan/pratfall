@@ -99,6 +99,19 @@ class DecodedOutput:
 
 
 @dataclass(frozen=True)
+class RawCapture:
+    stdout: bytes = b""
+
+
+@dataclass(frozen=True)
+class ConsumedCapture:
+    decoded: DecodedOutput
+
+
+Capture = RawCapture | ConsumedCapture
+
+
+@dataclass(frozen=True)
 class NormalizedResult:
     agent: str | None
     profile: str | None

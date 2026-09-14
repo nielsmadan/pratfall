@@ -4,6 +4,7 @@ from pratfall.catalog import BY_NAME
 from pratfall.models import (
     DecodedOutput,
     Options,
+    RawCapture,
     ResolvedProfile,
     ResultError,
     Usage,
@@ -23,7 +24,7 @@ def process(
     timeout: bool = False,
     interrupted: int | None = None,
 ) -> ProcessResult:
-    return ProcessResult(b"", b"", native, 42, error, timeout, interrupted)
+    return ProcessResult(RawCapture(), b"", native, 42, error, timeout, interrupted)
 
 
 def test_runner_failure_outranks_native_and_decoder_failures() -> None:

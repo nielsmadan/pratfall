@@ -5,6 +5,7 @@ import os
 import re
 import selectors
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -18,7 +19,7 @@ from pratfall import cli as cli_module
 from pratfall import runner as runner_module
 from pratfall.cli import main
 from pratfall.config import init_config
-from pratfall.models import DecodedOutput, ResultError, Usage
+from pratfall.models import ConsumedCapture, DecodedOutput, RawCapture, ResultError, Usage
 from pratfall.prompt_input import PROMPT_LIMIT
 from pratfall.runner import ProcessResult
 
@@ -1591,17 +1592,18 @@ def test_final_diagnostic_and_flush_failures_preserve_results(
 
     config = write_agent(tmp_path, "codex", "")
     process = ProcessResult(
-        b"",
+        ConsumedCapture(
+            DecodedOutput(
+                output="KEEP",
+                usage=Usage(input_tokens=3, output_tokens=2),
+                reported_models=("native-model",),
+                cost_usd=0.01,
+                error=ResultError("provider_error", "native failed"),
+            )
+        ),
         b"",
         0,
         12,
-        decoded=DecodedOutput(
-            output="KEEP",
-            usage=Usage(input_tokens=3, output_tokens=2),
-            reported_models=("native-model",),
-            cost_usd=0.01,
-            error=ResultError("provider_error", "native failed"),
-        ),
         process_group=123,
     )
     cleaned: list[int] = []
@@ -1631,7 +1633,7 @@ def test_final_presentation_cleanup_failure_stays_normalized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(cli_module, "cleanup_process_group", lambda _group: "permission denied")
-    process = ProcessResult(b"", b"", 0, 12, process_group=123)
+    process = ProcessResult(RawCapture(), b"", 0, 12, process_group=123)
     updated = cli_module._after_run_presentation_failure(
         process, BrokenPipeError("closed diagnostics")
     )
@@ -1660,12 +1662,11 @@ def test_unverified_bounded_cleanup_preserves_primary_failure_and_output(
     monkeypatch.setattr(cli_module, "cleanup_process_group", lambda _group: cleanup_error)
     primary = ResultError("stdout_limit_exceeded", "primary output failure")
     process = ProcessResult(
-        b"",
+        ConsumedCapture(DecodedOutput(output="KEEP", error=primary)),
         b"",
         17,
         12,
         error=primary,
-        decoded=DecodedOutput(output="KEEP", error=primary),
         process_group=123,
     )
     updated = cli_module._after_run_presentation_failure(
@@ -1677,8 +1678,7 @@ def test_unverified_bounded_cleanup_preserves_primary_failure_and_output(
         "owned process-group cleanup before the deadline.",
     )
     assert updated.native_exit_code == 17
-    assert updated.decoded is not None
-    assert updated.decoded.output == "KEEP"
+    assert updated.capture == ConsumedCapture(DecodedOutput(output="KEEP", error=primary))
 
 
 def test_quiet_run_has_no_elapsed_progress_events(
@@ -1757,6 +1757,116 @@ def test_progress_restores_stderr_flags_and_replays_native_diagnostics_once(
     assert written.count("native diagnostic") == 1
     assert "s starting" in written
     assert "finished with status success" in written
+
+
+def test_native_stderr_write_failure_preserves_results_and_cleans_up_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FailingNativeReplay(io.StringIO):
+        def write(self, value: str) -> int:
+            if value == "native noise\n":
+                raise OSError("native replay failed")
+            return super().write(value)
+
+    config = write_agent(tmp_path, "codex", "")
+    process = ProcessResult(
+        ConsumedCapture(
+            DecodedOutput(
+                output="KEEP",
+                usage=Usage(input_tokens=3, output_tokens=2),
+                reported_models=("native-model",),
+                cost_usd=0.01,
+            )
+        ),
+        b"native noise\n",
+        0,
+        12,
+        process_group=123,
+    )
+    cleaned: list[int] = []
+    stream = FailingNativeReplay()
+    monkeypatch.setattr(cli_module, "run", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(cli_module, "cleanup_process_group", cleaned.append)
+    monkeypatch.setattr(sys, "stderr", stream)
+    assert main(["cx", "prompt", "--config", str(config), "--json"]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"] == {
+        "code": "output_io_error",
+        "message": "Cannot write diagnostics to stderr: native replay failed.",
+    }
+    assert result["output"] == "KEEP"
+    assert result["usage"]["input_tokens"] == 3
+    assert result["reported_models"] == ["native-model"]
+    assert result["cost_usd"] == 0.01
+    assert cleaned == [123]
+    assert stream.getvalue() == "prat: launching Codex\n"
+
+
+def test_progress_stderr_failure_restores_flags_without_redirecting_the_descriptor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    marker = tmp_path / "launched"
+    config = write_agent(
+        tmp_path,
+        "codex",
+        f"from pathlib import Path;Path({str(marker)!r}).touch()",
+    )
+    read_fd, write_fd = os.pipe()
+    os.close(read_fd)
+    stream = os.fdopen(write_fd, "w", encoding="utf-8")
+    original = fcntl.fcntl(write_fd, fcntl.F_GETFL)
+    monkeypatch.setattr(sys, "stderr", stream)
+    exit_code = main(["cx", "prompt", "--progress", "--json", "--config", str(config)])
+    restored = fcntl.fcntl(write_fd, fcntl.F_GETFL)
+    mode = os.fstat(write_fd).st_mode
+    with suppress(OSError):
+        stream.close()
+    assert exit_code == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "output_io_error"
+    assert not marker.exists()
+    assert original & os.O_NONBLOCK == 0
+    assert restored & os.O_NONBLOCK == 0
+    assert stat.S_ISFIFO(mode)
+
+
+def test_progress_run_toggles_stderr_nonblocking_once_including_config_warnings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake_config = write_agent(tmp_path, "codex", CODEX_SUCCESS, profile="work")
+    global_path = init_config()
+    global_path.write_text(fake_config.read_text(), encoding="utf-8")
+    local_path = tmp_path / ".pratfile"
+    local_path.write_text('version=1\n[profiles.work]\nagent="cx"\n', encoding="utf-8")
+    diagnostics = tmp_path / "diagnostics.log"
+    with diagnostics.open("w", encoding="utf-8") as stream:
+        descriptor = stream.fileno()
+        original = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+        real_fcntl = fcntl.fcntl
+        applied: list[int] = []
+
+        def recording(fd: int, operation: int, *rest: int) -> int:
+            if operation == fcntl.F_SETFL and fd == descriptor:
+                applied.append(rest[0])
+            return real_fcntl(fd, operation, *rest)
+
+        monkeypatch.setattr(fcntl, "fcntl", recording)
+        monkeypatch.setattr(sys, "stderr", stream)
+        exit_code = main(["work", "prompt", "--progress", "--json"])
+        restored = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "success"
+    written = diagnostics.read_text(encoding="utf-8")
+    assert f"prat: warning: {local_path}: profile 'work' replaces" in written
+    assert "finished with status success" in written
+    assert applied == [original | os.O_NONBLOCK, original]
+    assert restored & os.O_NONBLOCK == original & os.O_NONBLOCK
 
 
 def test_missing_and_nonexecutable_agents_map_to_shell_exit_codes(
