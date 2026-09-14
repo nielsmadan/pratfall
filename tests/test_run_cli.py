@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from pratfall import cli as cli_module
 from pratfall import runner as runner_module
+from pratfall.cli import dispatch as dispatch_module
 from pratfall.cli import main
 from pratfall.config import init_config
 from pratfall.models import ConsumedCapture, DecodedOutput, RawCapture, ResultError, Usage
@@ -1607,8 +1607,8 @@ def test_final_diagnostic_and_flush_failures_preserve_results(
         process_group=123,
     )
     cleaned: list[int] = []
-    monkeypatch.setattr(cli_module, "run", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr(cli_module, "cleanup_process_group", cleaned.append)
+    monkeypatch.setattr(dispatch_module, "run", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(dispatch_module, "cleanup_process_group", cleaned.append)
     monkeypatch.setattr(sys, "stderr", FailingDiagnostics())
     arguments = ["cx", "prompt", "--config", str(config)]
     if json_mode:
@@ -1632,9 +1632,11 @@ def test_final_diagnostic_and_flush_failures_preserve_results(
 def test_final_presentation_cleanup_failure_stays_normalized(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(cli_module, "cleanup_process_group", lambda _group: "permission denied")
+    monkeypatch.setattr(
+        dispatch_module, "cleanup_process_group", lambda _group: "permission denied"
+    )
     process = ProcessResult(RawCapture(), b"", 0, 12, process_group=123)
-    updated = cli_module._after_run_presentation_failure(
+    updated = dispatch_module._after_run_presentation_failure(
         process, BrokenPipeError("closed diagnostics")
     )
     assert updated.error == ResultError(
@@ -1659,7 +1661,7 @@ def test_unverified_bounded_cleanup_preserves_primary_failure_and_output(
     assert signals == [signal.SIGTERM, signal.SIGKILL]
     assert cleanup_error == "could not verify owned process-group cleanup before the deadline"
 
-    monkeypatch.setattr(cli_module, "cleanup_process_group", lambda _group: cleanup_error)
+    monkeypatch.setattr(dispatch_module, "cleanup_process_group", lambda _group: cleanup_error)
     primary = ResultError("stdout_limit_exceeded", "primary output failure")
     process = ProcessResult(
         ConsumedCapture(DecodedOutput(output="KEEP", error=primary)),
@@ -1669,7 +1671,7 @@ def test_unverified_bounded_cleanup_preserves_primary_failure_and_output(
         error=primary,
         process_group=123,
     )
-    updated = cli_module._after_run_presentation_failure(
+    updated = dispatch_module._after_run_presentation_failure(
         process, BrokenPipeError("closed diagnostics")
     )
     assert updated.error == ResultError(
@@ -1787,8 +1789,8 @@ def test_native_stderr_write_failure_preserves_results_and_cleans_up_once(
     )
     cleaned: list[int] = []
     stream = FailingNativeReplay()
-    monkeypatch.setattr(cli_module, "run", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr(cli_module, "cleanup_process_group", cleaned.append)
+    monkeypatch.setattr(dispatch_module, "run", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(dispatch_module, "cleanup_process_group", cleaned.append)
     monkeypatch.setattr(sys, "stderr", stream)
     assert main(["cx", "prompt", "--config", str(config), "--json"]) == 1
     result = json.loads(capsys.readouterr().out)
@@ -2240,8 +2242,8 @@ def test_decoder_exception_is_normalized_with_process_group_cleanup(
 
     config = write_agent(tmp_path, "gemini", 'print("{\\"response\\": \\"KEEP\\"}")')
     cleaned: list[int] = []
-    monkeypatch.setattr(cli_module, "_decode", boom)
-    monkeypatch.setattr(cli_module, "cleanup_process_group", cleaned.append)
+    monkeypatch.setattr(dispatch_module, "_decode", boom)
+    monkeypatch.setattr(dispatch_module, "cleanup_process_group", cleaned.append)
     assert main(["gm", "prompt", "--json", "--config", str(config)]) == 1
     result = json.loads(capsys.readouterr().out)
     assert cleaned

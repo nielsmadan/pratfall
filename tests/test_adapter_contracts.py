@@ -33,7 +33,7 @@ from pratfall.adapters import (
 from pratfall.adapters.native_args import Flag
 from pratfall.adapters.registry import ADAPTERS, Adapter
 from pratfall.catalog import BY_NAME
-from pratfall.cli import ACTIVITY_LABELS
+from pratfall.cli.presentation import ACTIVITY_LABELS
 from pratfall.codes import Code
 from pratfall.consumer import (
     ByteConsumer,

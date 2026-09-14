@@ -12,7 +12,7 @@ protocol evidence and version-specific quirks live in the [agent references](ref
 
 ## Dispatch boundary
 
-- [cli.py](../src/pratfall/cli.py) validates configuration, selected native options, and the child
+- [dispatch.py](../src/pratfall/cli/dispatch.py) validates configuration, selected native options, and the child
   working directory before acquiring the prompt. [config.py](../src/pratfall/config.py) merges
   the global file with the invocation directory's `.pratfile`, or the local file selected by
   `--config`. Local profiles replace global profiles by name. Invocation options override profile
@@ -117,7 +117,7 @@ managed server processes are outside that boundary. Ordinary successful completi
 native background-process behavior.
 
 Encoding and presentation errors discovered after parent exit still invoke
-[group cleanup](../src/pratfall/cli.py#L768): descendants can survive after closing the pipes.
+[group cleanup](../src/pratfall/cli/dispatch.py#L205): descendants can survive after closing the pipes.
 An unexpected exception is handled twice for the same reason: once where the process result is
 still bound, so cleanup runs, and once around the whole run for pre-launch failures.
 Both ordinary and progress diagnostics preserve the decoded answer and accounting when stderr
@@ -136,11 +136,11 @@ stdout contains final text or one JSON result. Native stderr and Pratfall diagno
 One execution path emits the launch line, native stderr and the completion line through the
 invocation's diagnostics writer, so progress is a choice of writer rather than a second run path.
 Opt-in progress uses static activity categories through a
-[nonblocking sink:431](../src/pratfall/cli.py#L431), which sets and restores stderr's descriptor
+[nonblocking sink:93](../src/pratfall/cli/presentation.py#L93), which sets and restores stderr's descriptor
 flags exactly once per invocation, covering config warnings and the run alike. Backpressure drops
 writes rather than delaying the run; other sink failures enter normal cleanup and result handling.
 
-[Version diagnostics:279](../src/pratfall/cli.py#L279) reuse the runner with a three-second deadline
+[Version diagnostics:68](../src/pratfall/cli/doctor.py#L68) reuse the runner with a three-second deadline
 and 64 KiB per-stream bounds. The CLI selects opaque text and records per-agent probe errors;
 the catalog owns probe arguments.
 

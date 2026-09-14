@@ -15,13 +15,9 @@ import pytest
 
 from pratfall import __version__
 from pratfall.catalog import AGENTS
-from pratfall.cli import (
-    _doctor,
-    _doctor_inventory,
-    _doctor_line,
-    _version_result,
-    main,
-)
+from pratfall.cli import doctor as doctor_module
+from pratfall.cli import main
+from pratfall.cli.doctor import _doctor, _doctor_inventory, _doctor_line, _version_result
 from pratfall.config import init_config, load_config
 from pratfall.interruption import InterruptionState
 from pratfall.models import Config, Invocation, RawCapture
@@ -475,7 +471,7 @@ def test_default_doctor_does_not_spawn(
     def fail(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("doctor started execution-only behavior")
 
-    monkeypatch.setattr("pratfall.cli.run", fail)
+    monkeypatch.setattr(doctor_module, "run", fail)
     monkeypatch.setattr(signal, "signal", fail)
     assert main(["doctor", "--json"]) == 0
     assert all(
@@ -532,7 +528,7 @@ def test_doctor_version_timeout_is_diagnostic(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setenv("PATH", "")
-    monkeypatch.setattr("pratfall.cli.VERSION_TIMEOUT", 0.05)
+    monkeypatch.setattr(doctor_module, "VERSION_TIMEOUT", 0.05)
     config = _version_config(
         tmp_path, {"codex": [sys.executable, "-c", "import time;time.sleep(30)"]}
     )
@@ -644,7 +640,7 @@ def test_doctor_version_interruption_during_discovery_is_normalized(
         raise AssertionError("doctor launched a version probe")
 
     monkeypatch.setattr(shutil, "which", interrupt_discovery)
-    monkeypatch.setattr("pratfall.cli.run", fail)
+    monkeypatch.setattr(doctor_module, "run", fail)
     assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 128 + chosen
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "interrupted"
@@ -670,8 +666,8 @@ def test_doctor_version_interruption_before_first_inventory_item_is_normalized(
     def fail(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("doctor launched a version probe")
 
-    monkeypatch.setattr("pratfall.cli._doctor_inventory", interrupt_before_inventory)
-    monkeypatch.setattr("pratfall.cli.run", fail)
+    monkeypatch.setattr(doctor_module, "_doctor_inventory", interrupt_before_inventory)
+    monkeypatch.setattr(doctor_module, "run", fail)
     assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 130
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "interrupted"
@@ -706,7 +702,7 @@ def test_doctor_version_interruption_during_handler_install_is_normalized(
         raise AssertionError("doctor launched a version probe")
 
     monkeypatch.setattr(signal, "signal", interrupt_after_install)
-    monkeypatch.setattr("pratfall.cli.run", fail)
+    monkeypatch.setattr(doctor_module, "run", fail)
     assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 130
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "interrupted"
@@ -752,7 +748,7 @@ def test_doctor_version_interruption_during_probe_selection_prevents_launch(
         raise AssertionError("doctor launched a version probe")
 
     monkeypatch.setenv("PATH", "")
-    monkeypatch.setattr("pratfall.cli.run", fail)
+    monkeypatch.setattr(doctor_module, "run", fail)
     assert _doctor(replace(loaded, commands=commands), True, versions=True) == 128 + chosen
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "interrupted"
@@ -789,8 +785,8 @@ def test_doctor_version_interruption_during_result_preparation_is_normalized(
             os.kill(os.getpid(), signal.SIGINT)
         return _doctor_line(record, versions=versions)
 
-    monkeypatch.setattr("pratfall.cli.run", counting_run)
-    monkeypatch.setattr("pratfall.cli._doctor_line", interrupt_first_line)
+    monkeypatch.setattr(doctor_module, "run", counting_run)
+    monkeypatch.setattr(doctor_module, "_doctor_line", interrupt_first_line)
     assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 130
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "interrupted"
@@ -841,7 +837,7 @@ def test_doctor_version_interruption_after_probe_prevents_next_launch(
         os.kill(os.getpid(), chosen)
         return process
 
-    monkeypatch.setattr("pratfall.cli.run", interrupt_after_run)
+    monkeypatch.setattr(doctor_module, "run", interrupt_after_run)
     assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 128 + chosen
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "interrupted"
