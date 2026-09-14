@@ -1,5 +1,6 @@
 from dataclasses import asdict
 
+from pratfall.codes import FAILURE_EXIT, SIGNAL_EXIT_BASE, TIMEOUT_EXIT, Code, exit_code_for
 from pratfall.models import DecodedOutput, NormalizedResult, ResolvedProfile, ResultError
 from pratfall.runner import ProcessResult
 
@@ -15,19 +16,19 @@ def normalize(
             process,
             decoded,
             "interrupted",
-            128 + process.interrupted_by,
+            SIGNAL_EXIT_BASE + process.interrupted_by,
             process.error,
         )
     if process.timed_out:
         error = process.error or ResultError("timeout", "The agent timed out.")
-        return _result(resolved, process, decoded, "timeout", 124, error)
+        return _result(resolved, process, decoded, "timeout", TIMEOUT_EXIT, error)
     if process.error is not None:
         return _result(
-            resolved, process, decoded, "error", _runner_exit(process.error.code), process.error
+            resolved, process, decoded, "error", exit_code_for(process.error.code), process.error
         )
     if decoded.timed_out:
         error = decoded.error or ResultError("timeout", "The agent timed out.")
-        return _result(resolved, process, decoded, "timeout", 124, error)
+        return _result(resolved, process, decoded, "timeout", TIMEOUT_EXIT, error)
     native_exit = process.native_exit_code
     if native_exit is not None and native_exit < 0:
         signum = -native_exit
@@ -36,7 +37,7 @@ def normalize(
             process,
             decoded,
             "interrupted",
-            128 + signum,
+            SIGNAL_EXIT_BASE + signum,
             ResultError("native_signal", f"{resolved.agent.label} died from signal {signum}."),
         )
     if native_exit not in {None, 0}:
@@ -49,7 +50,7 @@ def normalize(
             ResultError("native_exit", f"{resolved.agent.label} exited with status {native_exit}."),
         )
     if decoded.error is not None:
-        return _result(resolved, process, decoded, "error", 1, decoded.error)
+        return _result(resolved, process, decoded, "error", FAILURE_EXIT, decoded.error)
     return _result(resolved, process, decoded, "success", 0, None)
 
 
@@ -81,7 +82,7 @@ def result_dict(result: NormalizedResult) -> dict[str, object]:
     return {"schema_version": 1, **asdict(result)}
 
 
-def validation_error(error: Exception, code: str, exit_code: int) -> dict[str, object]:
+def validation_error(error: Exception, code: Code, exit_code: int) -> dict[str, object]:
     return {
         "schema_version": 1,
         "agent": None,
@@ -97,11 +98,3 @@ def validation_error(error: Exception, code: str, exit_code: int) -> dict[str, o
         "usage": None,
         "error": {"code": code, "message": str(error)},
     }
-
-
-def _runner_exit(code: str) -> int:
-    if code == "executable_not_found":
-        return 127
-    if code == "executable_not_executable":
-        return 126
-    return 1

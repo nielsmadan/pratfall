@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
+from pratfall.codes import Code
+
 
 @dataclass(frozen=True)
 class Capabilities:
@@ -79,7 +81,7 @@ class Usage:
 
 @dataclass(frozen=True)
 class ResultError:
-    code: str
+    code: Code
     message: str
 
 

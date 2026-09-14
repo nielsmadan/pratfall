@@ -45,6 +45,34 @@ estimate billing.
 Statuses are `success`, `error`, `timeout`, and `interrupted`. Invalid input exits 2, missing and
 non-executable commands exit 127 and 126, timeouts exit 124, and signals exit `128 + signal`.
 Provider and protocol failures exit 1 unless a native nonzero exit has precedence.
+
+## Error codes and exit codes
+
+`error` is null on success, and otherwise an object with a stable `code` and a human-readable
+`message`. The vocabulary below is the complete stable set; `exit_code` is determined by the code.
+
+| `code` | `exit_code` | Meaning |
+| --- | --- | --- |
+| `invalid_config` | 2 | Configuration file is unreadable, malformed, or rejected. |
+| `invalid_arguments` | 2 | Command line, prompt source, or native option is rejected. |
+| `unsupported_agent` | 2 | Selected agent is not a built-in name, alias, or profile. |
+| `executable_not_found` | 127 | Configured command does not exist. |
+| `executable_not_executable` | 126 | Configured command exists but cannot be executed. |
+| `timeout` | 124 | Run deadline elapsed, or the native CLI reported its own timeout. |
+| `interrupted` | `128 + signal` | Prat received SIGINT or SIGTERM. |
+| `native_signal` | `128 + signal` | The native CLI died from a signal. |
+| `native_exit` | the native status | The native CLI exited nonzero without another failure. |
+| `protocol_error` | 1 | Native output violated the agent's documented protocol. |
+| `provider_error` | 1 | The native CLI reported a provider or model failure. |
+| `output_encoding` | 1 | Native output was not valid UTF-8 or not representable text. |
+| `output_io_error` | 1 | Prat could not read agent output or write diagnostics. |
+| `process_io_error` | 1 | Process setup or I/O failed before a result existed. |
+| `stdout_limit_exceeded` | 1 | Native stdout or retained decoder state exceeded its budget. |
+| `stderr_limit_exceeded` | 1 | Native stderr exceeded its budget. |
+| `unsupported_platform` | 1 | Process execution requires POSIX. |
+
+The three signal- and status-derived rows are computed per run; every other code has the fixed
+exit code above. A successful run reports `status` `success`, `exit_code` 0, and null `error`.
 Successfully decoded output, usage, reported models, and cost remain in failed or timed-out results.
 For Codex, a completed assistant message before an unfinished turn ends is returned as partial
 output, while the missing `turn.completed` remains a protocol error.

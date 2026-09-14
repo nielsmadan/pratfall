@@ -28,6 +28,8 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   schema-neutral consumer. Adapters own native protocol transitions; they do not manage processes.
 - [output.py:7](../src/pratfall/output.py#L7) selects status and exit code while retaining decoded
   output and accounting. The requested model remains distinct from models reported by the agent.
+  [codes.py](../src/pratfall/codes.py) owns the public `Code` vocabulary and the fixed code-to-exit
+  mapping; interruption, native signal and native exit stay computed in `normalize`.
 
 The dependency boundary is acyclic, and runtime code uses only the standard library. Invocation
 builders preserve argv execution and inherited native authentication and permissions. Child stdin

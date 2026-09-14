@@ -18,6 +18,7 @@ from typing import Literal, NoReturn
 from pratfall import __version__
 from pratfall.adapters.registry import ADAPTERS
 from pratfall.catalog import AGENTS, MANAGEMENT_COMMANDS
+from pratfall.codes import SIGNAL_EXIT_BASE
 from pratfall.config import config_path, init_config, load_config, option_labels, resolve_profile
 from pratfall.consumer import ByteConsumer
 from pratfall.errors import PratError
@@ -315,10 +316,10 @@ def _doctor_result(
         message = f"Interrupted by signal {interrupted}."
         payload.update(
             status="interrupted",
-            exit_code=128 + interrupted,
+            exit_code=SIGNAL_EXIT_BASE + interrupted,
             error={"code": "interrupted", "message": message},
         )
-        return payload, lines, 128 + interrupted, message
+        return payload, lines, SIGNAL_EXIT_BASE + interrupted, message
     return payload, lines, 0, None
 
 
@@ -364,7 +365,7 @@ def _validate_native_arguments(resolved: ResolvedProfile, label: str) -> None:
         else:
             adapter.validate(resolved.options.native_args or ())
     except PratError as error:
-        raise PratError(f"{label}: {error}", code=error.code, exit_code=error.exit_code) from error
+        raise PratError(f"{label}: {error}", code=error.code) from error
 
 
 def _validate_config_native_arguments(config: Config) -> None:
@@ -395,7 +396,7 @@ def _config_warnings(config: Config, *, progress: bool = False) -> None:
     except (AttributeError, OSError, ValueError) as error:
         _silence_broken_stream("stderr")
         raise PratError(
-            f"Cannot write config warnings: {error}.", code="output_io_error", exit_code=1
+            f"Cannot write config warnings: {error}.", code="output_io_error"
         ) from error
 
 
@@ -865,7 +866,7 @@ def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
         _emit_result(payload, json_mode=json_mode)
         return result.exit_code
     except InputInterrupted as error:
-        exit_code = 128 + error.signum
+        exit_code = SIGNAL_EXIT_BASE + error.signum
         payload = validation_error(error, "interrupted", exit_code)
         payload["status"] = "interrupted"
         if resolved is not None:

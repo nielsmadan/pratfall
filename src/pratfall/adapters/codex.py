@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.codes import Code
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
     ConsumerFailure,
@@ -243,7 +244,7 @@ def _set_protocol(consumer: _Consumer, message: str) -> None:
     _set_error(consumer, "protocol_error", message)
 
 
-def _set_error(consumer: _Consumer, code: str, message: str) -> None:
+def _set_error(consumer: _Consumer, code: Code, message: str) -> None:
     if consumer.state.protocol_error is None:
         consumer.budget.add_string(message)
         consumer.state.protocol_error = ResultError(code, message)

@@ -12,6 +12,14 @@ from pathlib import Path
 from types import FrameType
 from typing import BinaryIO, cast
 
+from pratfall.codes import (
+    EXECUTABLE_NOT_EXECUTABLE,
+    EXECUTABLE_NOT_FOUND,
+    PROCESS_IO_ERROR,
+    STDERR_LIMIT_EXCEEDED,
+    STDOUT_LIMIT_EXCEEDED,
+    Code,
+)
 from pratfall.consumer import ByteConsumer, ConsumerFailure
 from pratfall.limits import FINAL_DRAIN_GRACE, STDERR_BYTES, STDOUT_BYTES, TERMINATE_GRACE
 from pratfall.models import DecodedOutput, Invocation, ResultError
@@ -307,7 +315,8 @@ def _read_ready(
     remaining = limit - len(output.buffers[name])
     output.buffers[name].extend(chunk[:remaining])
     if len(chunk) > remaining:
-        return ResultError(f"{name}_limit_exceeded", f"Agent {name} exceeded {limit} bytes.")
+        code: Code = STDOUT_LIMIT_EXCEEDED if name == "stdout" else STDERR_LIMIT_EXCEEDED
+        return ResultError(code, f"Agent {name} exceeded {limit} bytes.")
     return None
 
 
@@ -417,19 +426,20 @@ def _signal_group(process_group: int, chosen: signal.Signals) -> None:
 
 
 def _spawn_failure(started: float, error: OSError, executable: str) -> ProcessResult:
+    code: Code
     if isinstance(error, FileNotFoundError) or error.errno == errno.ENOENT:
-        code = "executable_not_found"
+        code = EXECUTABLE_NOT_FOUND
         message = f"Executable {executable!r} was not found."
     elif isinstance(error, PermissionError) or error.errno in {errno.EACCES, errno.ENOEXEC}:
-        code = "executable_not_executable"
+        code = EXECUTABLE_NOT_EXECUTABLE
         message = f"Executable {executable!r} cannot be executed."
     else:
-        code = "process_io_error"
+        code = PROCESS_IO_ERROR
         message = f"Cannot start executable {executable!r}: {error}."
     return _startup_failure(started, code, message)
 
 
-def _startup_failure(started: float, code: str, message: str) -> ProcessResult:
+def _startup_failure(started: float, code: Code, message: str) -> ProcessResult:
     return ProcessResult(b"", b"", None, _duration(started), ResultError(code, message))
 
 
