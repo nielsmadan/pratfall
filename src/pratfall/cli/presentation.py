@@ -13,7 +13,6 @@ from typing import ClassVar, Literal, Protocol
 
 from pratfall.errors import PratError
 from pratfall.models import Activity, Config, Invocation, ResolvedProfile, ResultError
-from pratfall.runner import ProcessResult
 
 ACTIVITY_LABELS: Mapping[Activity, str] = MappingProxyType(
     {
@@ -177,18 +176,15 @@ def _presentation_error(error: Exception) -> ResultError:
 
 
 @dataclass
-class _RunState:
-    json_mode: bool = False
+class _StdoutLatch:
     emitted: bool = False
-    resolved: ResolvedProfile | None = None
-    process: ProcessResult | None = None
 
 
 def _preview(
     resolved: ResolvedProfile,
     invocation: Invocation,
     cwd: Path,
-    state: _RunState,
+    latch: _StdoutLatch,
     *,
     json_mode: bool,
 ) -> None:
@@ -205,7 +201,7 @@ def _preview(
         "stdin_bytes": len(invocation.stdin),
     }
     if json_mode:
-        _emit_stdout(json.dumps(payload, ensure_ascii=False), state)
+        _emit_stdout(json.dumps(payload, ensure_ascii=False), latch)
         return
     fast = "native" if resolved.options.fast is None else str(resolved.options.fast).lower()
     _emit_stdout(
@@ -218,11 +214,11 @@ def _preview(
                 f"stdin: {len(invocation.stdin)} bytes",
             )
         ),
-        state,
+        latch,
     )
 
 
-def _emit_stdout(text: str, state: _RunState) -> None:
+def _emit_stdout(text: str, latch: _StdoutLatch) -> None:
     committed = True
     try:
         print(text)
@@ -230,16 +226,16 @@ def _emit_stdout(text: str, state: _RunState) -> None:
         committed = False
         raise
     finally:
-        state.emitted = state.emitted or committed
+        latch.emitted = latch.emitted or committed
 
 
-def _emit_result(result: dict[str, object], state: _RunState, *, json_mode: bool) -> None:
+def _emit_result(result: dict[str, object], latch: _StdoutLatch, *, json_mode: bool) -> None:
     if json_mode:
-        _emit_stdout(json.dumps(result, ensure_ascii=False), state)
+        _emit_stdout(json.dumps(result, ensure_ascii=False), latch)
         return
     output = result["output"]
     if isinstance(output, str) and output:
-        _emit_stdout(output.removesuffix("\n"), state)
+        _emit_stdout(output.removesuffix("\n"), latch)
 
 
 def _silence_broken_stream(name: Literal["stdout", "stderr"]) -> None:

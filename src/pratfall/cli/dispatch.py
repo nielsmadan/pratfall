@@ -3,7 +3,7 @@ import json
 import sys
 from collections.abc import Callable
 from contextlib import closing, suppress
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 from pratfall.adapters.registry import ADAPTERS
@@ -18,7 +18,7 @@ from pratfall.cli.presentation import (
     _emit_result,
     _presentation_error,
     _preview,
-    _RunState,
+    _StdoutLatch,
     _StreamDiagnostics,
 )
 from pratfall.codes import INTERNAL_ERROR, SIGNAL_EXIT_BASE, exit_code_for
@@ -103,10 +103,7 @@ def _validate_config_native_arguments(config: Config) -> None:
         label = option_labels(config, name).get(
             "native_args", f"{source}: profiles.{name}.native_args"
         )
-        try:
-            _validate_native_arguments(resolved, label)
-        except PratError as error:
-            raise PratError(str(error)) from error
+        _validate_native_arguments(resolved, label)
 
 
 def _dispatch(args: argparse.Namespace) -> int:
@@ -284,6 +281,14 @@ def _present_run(
     return process, decoded
 
 
+@dataclass
+class _RunState:
+    json_mode: bool = False
+    stdout: _StdoutLatch = field(default_factory=_StdoutLatch)
+    resolved: ResolvedProfile | None = None
+    process: ProcessResult | None = None
+
+
 def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
     state = _RunState(json_mode=_json_requested(arguments))
     return _guard(
@@ -301,7 +306,7 @@ def _internal_failure(error: Exception, state: _RunState) -> int:
     _cleanup_after(state.process)
     message = _internal_message(error)
     with suppress(OSError, ValueError):
-        if state.json_mode and not state.emitted:
+        if state.json_mode and not state.stdout.emitted:
             print(json.dumps(_internal_payload(message, state.resolved), ensure_ascii=False))
         else:
             print(f"prat: {message}", file=sys.stderr)
@@ -309,12 +314,13 @@ def _internal_failure(error: Exception, state: _RunState) -> int:
 
 
 def _internal_payload(message: str, resolved: ResolvedProfile | None) -> dict[str, object]:
-    payload = validation_error(Exception(message), INTERNAL_ERROR, exit_code_for(INTERNAL_ERROR))
-    if resolved is not None:
-        payload.update(
-            agent=resolved.agent.name, profile=resolved.profile, model=resolved.options.model
-        )
-    return payload
+    return validation_error(
+        Exception(message),
+        INTERNAL_ERROR,
+        exit_code_for(INTERNAL_ERROR),
+        status="error",
+        resolved=resolved,
+    )
 
 
 def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) -> int:
@@ -338,7 +344,7 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             prompt = acquire_prompt(parsed.prompt_source, invocation_cwd)
             invocation = _build_invocation(resolved, prompt)
             if parsed.dry_run:
-                _preview(resolved, invocation, cwd, state, json_mode=json_mode)
+                _preview(resolved, invocation, cwd, state.stdout, json_mode=json_mode)
                 return 0
             timeout = resolved.options.timeout
             if timeout is None:
@@ -356,31 +362,22 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             state.process = process
         result = normalize(resolved, process, decoded)
         payload = result_dict(result)
-        _emit_result(payload, state, json_mode=json_mode)
+        _emit_result(payload, state.stdout, json_mode=json_mode)
         return result.exit_code
     except InputInterrupted as error:
         exit_code = SIGNAL_EXIT_BASE + error.signum
-        payload = validation_error(error, "interrupted", exit_code)
-        payload["status"] = "interrupted"
-        if resolved is not None:
-            payload.update(
-                agent=resolved.agent.name,
-                profile=resolved.profile,
-                model=resolved.options.model,
-            )
+        payload = validation_error(
+            error, "interrupted", exit_code, status="interrupted", resolved=resolved
+        )
         if json_mode:
             print(json.dumps(payload, ensure_ascii=False))
         else:
             print(f"prat: {error}", file=sys.stderr)
         return exit_code
     except PratError as error:
-        payload = validation_error(error, error.code, error.exit_code)
-        if resolved is not None:
-            payload.update(
-                agent=resolved.agent.name,
-                profile=resolved.profile,
-                model=resolved.options.model,
-            )
+        payload = validation_error(
+            error, error.code, error.exit_code, status="error", resolved=resolved
+        )
         if json_mode:
             print(json.dumps(payload, ensure_ascii=False))
         else:

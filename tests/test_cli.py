@@ -312,7 +312,7 @@ def test_config_validate_checks_resolved_native_arguments(
     )
     assert main(["config", "validate", "--config", str(path), "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
-    assert result["error"]["code"] == "invalid_config"
+    assert result["error"]["code"] == "invalid_arguments"
     assert f"{path}: defaults.native_args (selector 'bad')" in result["error"]["message"]
     assert "controlled by prat" in result["error"]["message"]
 

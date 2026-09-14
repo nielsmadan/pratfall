@@ -82,15 +82,22 @@ def result_dict(result: NormalizedResult) -> dict[str, object]:
     return {"schema_version": 1, **asdict(result)}
 
 
-def validation_error(error: Exception, code: Code, exit_code: int) -> dict[str, object]:
+def validation_error(
+    error: Exception,
+    code: Code,
+    exit_code: int,
+    *,
+    status: str,
+    resolved: ResolvedProfile | None,
+) -> dict[str, object]:
     return {
         "schema_version": 1,
-        "agent": None,
-        "profile": None,
-        "model": None,
+        "agent": None if resolved is None else resolved.agent.name,
+        "profile": None if resolved is None else resolved.profile,
+        "model": None if resolved is None else resolved.options.model,
         "reported_models": None,
         "cost_usd": None,
-        "status": "error",
+        "status": status,
         "output": "",
         "exit_code": exit_code,
         "native_exit_code": None,

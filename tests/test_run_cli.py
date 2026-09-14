@@ -513,7 +513,7 @@ def test_all_profiles_validate_new_adapter_native_arguments(
         )
     assert main(["cx", "prompt", "--config", str(config), "--dry-run", "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
-    assert result["error"]["code"] == "invalid_config"
+    assert result["error"]["code"] == "invalid_arguments"
     assert "profiles.bad.native_args" in result["error"]["message"]
     assert "controlled by prat" in result["error"]["message"]
 
@@ -528,7 +528,7 @@ def test_config_validation_checks_openclaw_fallback_model_dependency(
         )
     assert main(["config", "validate", "--config", str(config), "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
-    assert result["error"]["code"] == "invalid_config"
+    assert result["error"]["code"] == "invalid_arguments"
     assert "profiles.bad.native_args" in result["error"]["message"]
     assert "fallback requires an explicit model" in result["error"]["message"]
 
@@ -1041,7 +1041,7 @@ def test_dispatch_rejects_invalid_native_arguments_in_an_unselected_profile(
         stream.write('\n[profiles.bad]\nagent="claude"\nnative_args=["--output-format", "text"]\n')
     assert main(["cx", "prompt", "--config", str(config), "--dry-run", "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
-    assert result["error"]["code"] == "invalid_config"
+    assert result["error"]["code"] == "invalid_arguments"
     assert f"{config}: profiles.bad.native_args" in result["error"]["message"]
 
 

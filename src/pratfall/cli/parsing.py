@@ -2,10 +2,10 @@ import argparse
 import math
 import os
 from dataclasses import dataclass
+from importlib.metadata import version
 from pathlib import Path
 from typing import NoReturn
 
-from pratfall import __version__
 from pratfall.catalog import MANAGEMENT_COMMANDS
 from pratfall.errors import PratError
 from pratfall.models import Options
@@ -94,7 +94,7 @@ examples:
     )
     parser.set_defaults(config=None, json=False)
     _common_flags(parser)
-    parser.add_argument("--version", action="version", version=f"prat {__version__}")
+    parser.add_argument("--version", action="version", version=f"prat {version('pratfall')}")
     subparsers = parser.add_subparsers(dest="command", parser_class=Parser)
     for command, help_text in (
         ("agents", "List built-in agent selectors and supported settings."),
