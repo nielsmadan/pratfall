@@ -1,7 +1,8 @@
 # JSON output
 
 Run mode `--json` writes exactly one versioned result object to stdout. Diagnostics remain on
-stderr. Config and argument failures also use this shape when `--json` is unambiguous.
+stderr. Config and argument failures carry the same fields when `--json` is unambiguous, though they
+appear in a different order; JSON objects are unordered, so read by key rather than by position.
 `--progress` adds bounded live activity on stderr without adding extra stdout objects or fields.
 
 ```json
@@ -10,15 +11,15 @@ stderr. Config and argument failures also use this shape when `--json` is unambi
   "agent": "codex",
   "profile": "simple",
   "model": "gpt-5.6-luna",
-  "reported_models": null,
-  "cost_usd": null,
   "status": "success",
   "output": "Final answer",
   "exit_code": 0,
   "native_exit_code": 0,
   "duration_ms": 1234,
   "usage": null,
-  "error": null
+  "error": null,
+  "reported_models": null,
+  "cost_usd": null
 }
 ```
 

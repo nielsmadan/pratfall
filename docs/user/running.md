@@ -65,7 +65,9 @@ but an unfinished turn still fails rather than becoming a synthetic success.
 
 Diagnostic write failures trigger process-group cleanup in both ordinary and progress modes while
 preserving final output on stdout. JSON also retains accounting and reports `output_io_error` unless
-a prior timeout, interruption, or runner error takes precedence.
+a prior timeout, interruption, or runner error takes precedence. Any other unexpected failure is
+normalized the same way and reported as `internal_error` after the owned process group is cleaned
+up; once a result has reached stdout, the failure is reported on stderr alone.
 
 Codex, Copilot, Antigravity, OpenCode, Warp, Qwen, Amp and Kimi JSONL output is decoded as it arrives. OpenHands
 decodes its mixed SDK events and native status/summary text incrementally. Prat limits each

@@ -115,7 +115,9 @@ uv run prat simple "review this change" --dry-run --json
 Native arguments after `--` replace configured `native_args` for that invocation. Prat accepts a
 finite set of documented flags and rejects native positional arguments plus flags that could
 replace its prompt, structured output, model, effort, budget, session, or working-directory
-contract. Explicit native permission choices remain available:
+contract. A rejected native argument reports `invalid_arguments` and exits 2, whether it came from
+`--` on the command line or a profile's `native_args`. Explicit native permission choices remain
+available:
 
 ```sh
 uv run prat cx "inspect only" -- --sandbox read-only --ephemeral
@@ -143,8 +145,6 @@ including validation and runtime failures:
   "agent": "codex",
   "profile": "simple",
   "model": "gpt-5.6-luna",
-  "reported_models": null,
-  "cost_usd": null,
   "status": "success",
   "output": "Final answer",
   "exit_code": 0,
@@ -157,7 +157,9 @@ including validation and runtime failures:
     "output_tokens": 20,
     "reasoning_output_tokens": null
   },
-  "error": null
+  "error": null,
+  "reported_models": null,
+  "cost_usd": null
 }
 ```
 

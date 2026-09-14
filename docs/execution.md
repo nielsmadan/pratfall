@@ -12,8 +12,13 @@ protocol evidence and version-specific quirks live in the [agent references](ref
 
 ## Dispatch boundary
 
-- [dispatch.py](../src/pratfall/cli/dispatch.py) validates configuration, selected native options, and the child
-  working directory before acquiring the prompt. [config.py](../src/pratfall/config.py) merges
+- The CLI is a package: [parsing.py](../src/pratfall/cli/parsing.py) turns argv into a run or a
+  management command, [dispatch.py](../src/pratfall/cli/dispatch.py) owns run and management
+  dispatch, [doctor.py](../src/pratfall/cli/doctor.py) owns the inventory and version probes, and
+  [presentation.py](../src/pratfall/cli/presentation.py) owns diagnostics writers and stdout
+  emission. [dispatch.py](../src/pratfall/cli/dispatch.py) validates configuration, selected native
+  options, and the child working directory before acquiring the prompt.
+  [config.py](../src/pratfall/config.py) merges
   the global file with the invocation directory's `.pratfile`, or the local file selected by
   `--config`. Local profiles replace global profiles by name. Invocation options override profile
   options, local defaults, global defaults, and built-in defaults; all effective profiles are
@@ -22,48 +27,54 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   path's command base. The CLI selects one diagnostics writer per invocation and sends
   duplicate-profile warnings through it, before reading the prompt or launching an agent.
 - [catalog.py](../src/pratfall/catalog.py) holds immutable capabilities, not provider model lists.
-  [registry.py:41](../src/pratfall/adapters/registry.py#L41) is the adapter assembly point: command
+  [`Adapter`](../src/pratfall/adapters/registry.py) is the adapter assembly point: command
   builder, one validator over the resolved profile, and exactly one of a whole-document decoder or
   an incremental consumer factory. The registry synthesizes the whole-document path for consumer
   adapters, so each agent has a single decode path rather than a precedence rule.
-- [runner.py:86](../src/pratfall/runner.py#L86) owns POSIX process lifecycle and passes bytes to a
+- [`run`](../src/pratfall/runner.py) owns POSIX process lifecycle and passes bytes to a
   schema-neutral consumer. Adapters own native protocol transitions; they do not manage processes.
   Its result carries either a `RawCapture` of complete stdout or a `ConsumedCapture` of the
   consumer's decoded output, so the selected capture mode is a type distinction rather than an
   empty-stdout sentinel.
-- [output.py:7](../src/pratfall/output.py#L7) selects status and exit code while retaining decoded
+- [`normalize`](../src/pratfall/output.py) selects status and exit code while retaining decoded
   output and accounting. The requested model remains distinct from models reported by the agent.
   [codes.py](../src/pratfall/codes.py) owns the public `Code` vocabulary and the fixed code-to-exit
   mapping; interruption, native signal and native exit stay computed in `normalize`.
 
-The dependency boundary is acyclic, and runtime code uses only the standard library. Invocation
-builders preserve argv execution and inherited native authentication and permissions. Child stdin
-contains explicit bytes, including an empty input when appropriate; it never inherits the terminal.
+The dependency boundary is acyclic, and runtime code uses only the standard library.
+[test_layering.py](../tests/test_layering.py) machine-enforces that contract: the layer order, each
+module's stated import allowances, absolute internal imports, and the stdlib-only runtime.
+Invocation builders preserve argv execution and inherited native authentication and permissions.
+Child stdin contains explicit bytes, including an empty input when appropriate; it never inherits
+the terminal.
 
 ## Bounded output
 
-[JsonlConsumer:91](../src/pratfall/consumer.py#L91) owns strict UTF-8 and physical JSONL framing;
-adapter consumers own event interpretation. Its convenience decoder feeds the same state machine
-used during execution. The registry identifies which adapters use incremental consumption.
+[`JsonlConsumer`](../src/pratfall/consumer.py) owns strict UTF-8 and physical JSONL framing;
+adapter consumers own event interpretation. The shared [`decode_with`](../src/pratfall/consumer.py)
+convenience decoder feeds the same state machine used during execution. The registry identifies
+which adapters use incremental consumption.
 
 - Each physical event is limited to 8 MiB, excluding LF or CRLF. Whitespace and discarded events
   still obey this bound, but discarded output has no cumulative trace cap.
-- [StateBudget:36](../src/pratfall/consumer.py#L36) allows 8 MiB of live retained state and 16,384
+- [`StateBudget`](../src/pratfall/consumer.py) allows 8 MiB of live retained state and 16,384
   logical records. Answer separators, identifiers, models, diagnostics, usage and cost snapshots
   count while retained. Replacement must refund the old payload. Numeric representations are
   bounded to 128 bytes.
-- Adapters retain through `Retention` named slots rather than charging the budget by hand, so
-  retaining a value and paying for it are one operation and replacement refunds automatically.
-  `release` returns a slot's bytes and record; `commit` makes a slot permanent. `JsonlConsumer`
+- Adapters retain through [`Retention`](../src/pratfall/consumer.py) named slots rather than
+  charging the budget by hand, so retaining a value and paying for it are one operation and
+  replacement refunds automatically. `release` refunds a slot's bytes and record; `commit` stops
+  tracking a slot, leaving its bytes charged permanently. `JsonlConsumer`
   owns the first-error-wins `malformed` policy and its retained diagnostic. A consumer that
   retains an answer it never charged fails the cross-adapter bound
   [conformance](../tests/test_adapter_contracts.py).
 - Whole-document JSON and text adapters use the runner's 8 MiB complete stdout capture; native
-  stderr is capped at 2 MiB. [whole_json.py:8](../src/pratfall/adapters/whole_json.py#L8) re-checks
+  stderr is capped at 2 MiB. [`parse`](../src/pratfall/adapters/whole_json.py) re-checks
   that same `STDOUT_BYTES` document cap and supplies shared framing, Unicode, duplicate-key and
   numeric guards for every whole-document JSON adapter.
 - [limits.py](../src/pratfall/limits.py) owns every budget above: `STDOUT_BYTES`, `STDERR_BYTES`,
-  `EVENT_BYTES`, `RETAINED_STATE_BYTES`, `RECORD_COUNT`, `NUMERIC_BYTES`.
+  `EVENT_BYTES`, `RETAINED_STATE_BYTES`, `RECORD_COUNT`, `NUMERIC_BYTES`. It also owns the
+  `TERMINATE_GRACE` and `FINAL_DRAIN_GRACE` cleanup windows.
 
 [OpenHands](reference/openhands.md) needs a separate bounded consumer for mixed SDK events and
 native prose. Its trailing Rich summary is never reparsed as events; keep that exception out of
@@ -91,14 +102,14 @@ Do not share terminal rules by schema resemblance: [Qwen](reference/qwen.md) and
 differ on repeated results. Native success alone can be insufficient, while empty text can be valid;
 the [agent references](reference/overview.md) establish each contract.
 
-[normalize:7](../src/pratfall/output.py#L7) applies precedence in this order: interruption, runner
+[`normalize`](../src/pratfall/output.py) applies precedence in this order: interruption, runner
 timeout, runner error, decoded native timeout, native signal or nonzero exit, decoder error, success.
 Consequently, native nonzero exit takes precedence over ordinary protocol errors.
 
 Populate nullable usage, `reported_models`, and `cost_usd` only from verified native mappings.
-[accounting.py:7](../src/pratfall/adapters/accounting.py#L7) validates nonempty UTF-8 model identifiers
-and finite nonnegative USD costs. Keep valid accounting alongside provider, protocol, runner and
-timeout failures; never substitute a reported model for the requested `model`.
+[`model_map`, `model` and `cost`](../src/pratfall/adapters/accounting.py) validate nonempty UTF-8
+model identifiers and finite nonnegative USD costs. Keep valid accounting alongside provider,
+protocol, runner and timeout failures; never substitute a reported model for the requested `model`.
 
 Replacing accounting snapshots must refund retained state, and cumulative snapshots must not be
 summed. See [OpenCode](reference/opencode.md) for per-step replacement and unknown totals, and
@@ -107,21 +118,25 @@ summed. See [OpenCode](reference/opencode.md) for per-step replacement and unkno
 ## Deadline, cleanup and diagnostics
 
 The runner starts a new process group, drains stdout and stderr concurrently, and enforces one
-monotonic run deadline. [Cleanup:386](../src/pratfall/runner.py#L386) sends SIGTERM, then SIGKILL after
-a bounded grace period, and verifies both parent reaping and group disappearance. Repeated
-interruptions accelerate termination. Timeout/interruption cleanup feeds trailing bytes before
-finalizing the consumer once; after a hard local output failure, stdout drains without reparsing.
+monotonic run deadline. [`_terminate_and_drain`](../src/pratfall/runner.py) sends SIGTERM, then
+SIGKILL after a bounded grace period, and verifies both parent reaping and group disappearance.
+Repeated interruptions accelerate termination. Timeout/interruption cleanup feeds trailing bytes
+before finalizing the consumer once; after a hard local output failure, stdout drains without
+reparsing. [interruption.py](../src/pratfall/interruption.py) is the one signal seam: `handler_for`
+builds a first/repeat handler over shared `InterruptionState`, and `install`, `restore` and the
+`handling` context manager swap SIGINT and SIGTERM dispositions and always put the previous ones
+back. The runner, prompt input and the version probes use it rather than installing handlers directly.
 
 Cleanup covers the owned POSIX process group. Deliberately detached descendants and externally
 managed server processes are outside that boundary. Ordinary successful completion preserves
 native background-process behavior.
 
-Encoding and presentation errors discovered after parent exit still invoke
-[group cleanup](../src/pratfall/cli/dispatch.py#L205): descendants can survive after closing the pipes.
-An unexpected exception is handled twice for the same reason: once where the process result is
-still bound, so cleanup runs, and once around the whole run for pre-launch failures.
-Both ordinary and progress diagnostics preserve the decoded answer and accounting when stderr
-fails. Ordinary
+Encoding and presentation errors discovered after parent exit still invoke group cleanup through
+[`_after_run_failure`](../src/pratfall/cli/dispatch.py): descendants can survive after closing the
+pipes. An unexpected exception is handled twice for the same reason: once where the process result
+is still bound, so cleanup runs, and once around the whole run as the last resort; both paths
+report `internal_error` rather than a traceback. Both ordinary and progress diagnostics preserve the
+decoded answer and accounting when stderr fails. Ordinary
 diagnostics flush before final result emission; a failed stream is redirected to prevent another
 flush at interpreter shutdown from replacing the normalized exit code. The progress sink is
 deliberately never redirected: it writes with `os.write`, so no buffer survives to be flushed, and
@@ -130,26 +145,32 @@ A zero-signal `killpg` probe returning EPERM keeps the group pending within the 
 persistent denial fails cleanup, and SIGTERM/SIGKILL permission errors remain explicit failures.
 This handles macOS group teardown where a successful SIGTERM can precede a denied existence probe;
 the [XNU implementation](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_sig.c#L1709)
-excludes zombie group members. [Regression coverage](../tests/test_runner.py#L21) preserves this case.
+excludes zombie group members.
+[`test_cleanup_rechecks_group_after_transient_probe_permission_error`](../tests/test_runner.py)
+preserves this case.
 
 stdout contains final text or one JSON result. Native stderr and Pratfall diagnostics use stderr.
 One execution path emits the launch line, native stderr and the completion line through the
 invocation's diagnostics writer, so progress is a choice of writer rather than a second run path.
-Opt-in progress uses static activity categories through a
-[nonblocking sink:93](../src/pratfall/cli/presentation.py#L93), which sets and restores stderr's descriptor
-flags exactly once per invocation, covering config warnings and the run alike. Backpressure drops
-writes rather than delaying the run; other sink failures enter normal cleanup and result handling.
+Opt-in progress uses the static [`Activity`](../src/pratfall/models.py) category vocabulary, whose
+labels live in `ACTIVITY_LABELS`, through the nonblocking
+[`_ProgressDiagnostics`](../src/pratfall/cli/presentation.py) sink, which sets and restores stderr's
+descriptor flags exactly once per invocation, covering config warnings and the run alike.
+Backpressure drops writes rather than delaying the run; other sink failures enter normal cleanup and
+result handling.
 
-[Version diagnostics:68](../src/pratfall/cli/doctor.py#L68) reuse the runner with a three-second deadline
-and 64 KiB per-stream bounds. The CLI selects opaque text and records per-agent probe errors;
+[`_doctor`](../src/pratfall/cli/doctor.py) reuses the runner with a three-second deadline and
+64 KiB per-stream bounds. The CLI selects opaque text and records per-agent probe errors;
 the catalog owns probe arguments.
 
 ## Extending an adapter
 
-Keep the builder, decoder and protocol state in the adapter; register its callables explicitly.
+Keep the builder, decoder and protocol state in the adapter; register its callables explicitly on
+an [`Adapter`](../src/pratfall/adapters/registry.py) record with exactly one of `whole_document` or
+`consumer`; supplying both or neither raises at import.
 `validate` takes the resolved profile, so cross-field native rules stay in the adapter that owns
 them; `build` assumes the CLI already validated at the trust boundary and never revalidates.
-Use [native_args.py:15](../src/pratfall/adapters/native_args.py#L15) with a finite flag set and known
+Use [`validate_flags`](../src/pratfall/adapters/native_args.py) with a finite flag set and known
 arity. Reserve Pratfall-owned fields and transports; response files, positional arguments and
 subcommands are rejected. Trusted executable wrappers cover unsupported options.
 

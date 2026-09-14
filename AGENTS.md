@@ -19,10 +19,13 @@ just build
 just test
 ```
 
-`just check` runs Ruff lint and formatting checks, Pylint cycle detection, strict mypy, and all
-tests, including the release helper tests under `scripts/`. `just setup` installs project
-dependencies and repository hooks; it does not install `prat` globally. Local tool installation is
-an explicit `just install` action.
+`just check` runs Ruff lint and formatting checks, Pylint cycle detection, strict mypy over `src`,
+`tests` and `scripts`, and all tests, including the release helper tests under `scripts/` and the
+layering contract in `tests/test_layering.py`. That test machine-enforces the module dependency
+contract: layer order, per-module import allowances, absolute internal imports, and a stdlib-only
+runtime. `just check` does not measure coverage; `just coverage` is the gate for that. `just setup`
+installs project dependencies and repository hooks; it does not install `prat` globally. Local tool
+installation is an explicit `just install` action.
 
 ## Architecture
 
@@ -37,7 +40,8 @@ native config changes.
 
 ## Conventions
 
-- Target Python 3.13, Ruff at 100 columns, strict mypy, and at least 80% branch coverage.
+- Target Python 3.13, Ruff at 100 columns, strict mypy across `src`, `tests` and `scripts`, and at
+  least 80% branch coverage.
 - New behavior gets observable tests in the matching `tests/test_<module>.py` file.
 - Tests and release tests use fake agent/external commands and never spend inference credits.
 - New code normally needs no comments or docstrings. Use names and small typed functions.

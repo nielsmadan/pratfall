@@ -36,9 +36,9 @@ These contracts were statically checked on 2026-09-11 before accepting fake exec
 
 ## Implementation
 
-Model deduplication in the [adapter](../../src/pratfall/adapters/qwen.py#L123) uses list membership
-and scales quadratically. A synthetic 2026-09-11 review measured about three seconds for 16,380
-distinct 500-byte root model identifiers, within the byte/record limits. Ordinary native streams
+Model deduplication in the adapter's [`_assistant`](../../src/pratfall/adapters/qwen.py) handler
+uses list membership and scales quadratically. A synthetic 2026-09-11 review measured about three
+seconds for 16,380 distinct 500-byte root model identifiers, within the byte/record limits. Ordinary native streams
 report few models; this performance case remains deferred. The runner checks deadlines between reads.
 
 - [Pratfall adapter](../../src/pratfall/adapters/qwen.py)

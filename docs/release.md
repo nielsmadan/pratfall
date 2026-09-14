@@ -1,9 +1,10 @@
 # Release and distribution
 
-The [release helper](../scripts/release.py#L251) prepares an annotated tag, atomically pushes `main`
-and that tag, then prints workflow and release links and finishes. Publication runs asynchronously;
-local success confirms the Git push. The [workflow](../.github/workflows/release.yml) attaches the
-wheel and sdist and updates `nielsmadan/homebrew-tap`. Pratfall is not published to PyPI.
+The [release helper](../scripts/release.py) prepares an annotated tag, atomically pushes `main`
+and that tag, then prints workflow and release links through `report_publication` and finishes.
+Publication runs asynchronously; local success confirms the Git push. The
+[workflow](../.github/workflows/release.yml) attaches the wheel and sdist and updates
+`nielsmadan/homebrew-tap`. Pratfall is not published to PyPI.
 
 - [Prerequisites](#prerequisites)
 - [Prepare and publish](#prepare-and-publish)
@@ -20,8 +21,8 @@ must already exist. Publish a new repository's initial branch as a separate expl
 the helper's remote-branch and ancestry checks. The local helper uses Git for remote inspection and
 publication of the branch and tag, with Git push access to the repository.
 
-Check that origin's actual host is `github.com`: the helper's
-[repository check](../scripts/release.py#L92) matches a URL substring rather than parsing its host.
+Check that origin's actual host is `github.com`: the repository check in the helper's
+[`inspect`](../scripts/release.py) matches a URL substring rather than parsing its host.
 This validation limitation was deferred in the 2026-09-09 review.
 
 Before the first release, configure `HOMEBREW_TAP_TOKEN` as a repository Actions secret using a
@@ -42,12 +43,13 @@ just release 0.2.0
 release runs the [configured checks](../scripts/release.json) before interactive confirmation or
 explicit `--yes`, then verifies HEAD, checkout and remote state still match the reviewed state.
 
-[Preparation:189](../scripts/release.py#L189) updates `pyproject.toml`, runs `uv lock`, and generates
+[`prepare`](../scripts/release.py) runs the configured stages in
+[release.json](../scripts/release.json): they update `pyproject.toml`, run `uv lock`, and generate
 `CHANGELOG.md` with the pinned git-cliff version. Only those three files may change. It creates a
-`chore: release VERSION` commit and annotated `vVERSION` tag, then pushes them atomically with
-`--no-follow-tags`. Failures preserve local state for inspection; never replace a published tag.
-Check the linked workflow for publication success or failure. A failed workflow leaves the remote
-tag in place for a retry after fixing its cause.
+`chore: release VERSION` commit, after which `main` tags the annotated `vVERSION` tag and pushes
+both atomically with `--no-follow-tags`. Failures preserve local state for inspection; never
+replace a published tag. Check the linked workflow for publication success or failure. A failed
+workflow leaves the remote tag in place for a retry after fixing its cause.
 
 The tagged `pyproject.toml` determines GitHub prerelease status: Pre-Alpha, Alpha and Beta development
 classifiers produce prereleases, with `Latest` disabled. Other development statuses produce regular
@@ -170,7 +172,7 @@ from `main`, which the built-in Actions token cannot have. See GitHub's
 The formula uses Homebrew `python@3.13` and checksummed pure-Python wheels for Hatchling and its
 runtime requirements. It installs those resources first, then Pratfall with build isolation disabled.
 
-[Formula rendering:32](../scripts/render_formula.py#L32) parses the trusted tap formula version:
+[`installed_version`](../scripts/render_formula.py) parses the trusted tap formula version:
 an older tag cannot replace a newer formula; a same-version repair or normal upgrade can proceed.
 Rendering, Ruby validation and commit creation run before the PAT-bearing final push. That command
 receives its credential through a Git header, never a clone URL.
