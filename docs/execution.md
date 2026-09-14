@@ -24,7 +24,7 @@ protocol evidence and version-specific quirks live in the [agent references](ref
 - [catalog.py](../src/pratfall/catalog.py) holds immutable capabilities, not provider model lists.
   [registry.py:42](../src/pratfall/adapters/registry.py#L42) is the adapter assembly point: command
   builder, validator, decoder, and optional incremental consumer factory.
-- [runner.py:65](../src/pratfall/runner.py#L65) owns POSIX process lifecycle and passes bytes to a
+- [runner.py:62](../src/pratfall/runner.py#L62) owns POSIX process lifecycle and passes bytes to a
   schema-neutral consumer. Adapters own native protocol transitions; they do not manage processes.
 - [output.py:7](../src/pratfall/output.py#L7) selects status and exit code while retaining decoded
   output and accounting. The requested model remains distinct from models reported by the agent.
@@ -35,19 +35,22 @@ contains explicit bytes, including an empty input when appropriate; it never inh
 
 ## Bounded output
 
-[JsonlConsumer:94](../src/pratfall/consumer.py#L94) owns strict UTF-8 and physical JSONL framing;
+[JsonlConsumer:91](../src/pratfall/consumer.py#L91) owns strict UTF-8 and physical JSONL framing;
 adapter consumers own event interpretation. Its convenience decoder feeds the same state machine
 used during execution. The registry identifies which adapters use incremental consumption.
 
 - Each physical event is limited to 8 MiB, excluding LF or CRLF. Whitespace and discarded events
   still obey this bound, but discarded output has no cumulative trace cap.
-- [StateBudget:39](../src/pratfall/consumer.py#L39) allows 8 MiB of live retained state and 16,384
+- [StateBudget:36](../src/pratfall/consumer.py#L36) allows 8 MiB of live retained state and 16,384
   logical records. Answer separators, identifiers, models, diagnostics, usage and cost snapshots
   count while retained. Replacement must refund the old payload. Numeric representations are
   bounded to 128 bytes.
 - Whole-document JSON and text adapters use the runner's 8 MiB complete stdout capture; native
-  stderr is capped at 2 MiB. [whole_json.py:8](../src/pratfall/adapters/whole_json.py#L8) supplies
-  shared framing, Unicode, duplicate-key and numeric guards for Reasonix, Droid and Vibe.
+  stderr is capped at 2 MiB. [whole_json.py:8](../src/pratfall/adapters/whole_json.py#L8) re-checks
+  that same `STDOUT_BYTES` document cap and supplies shared framing, Unicode, duplicate-key and
+  numeric guards for Reasonix, Droid and Vibe.
+- [limits.py](../src/pratfall/limits.py) owns every budget above: `STDOUT_BYTES`, `STDERR_BYTES`,
+  `EVENT_BYTES`, `RETAINED_STATE_BYTES`, `RECORD_COUNT`, `NUMERIC_BYTES`.
 
 [OpenHands](reference/openhands.md) needs a separate bounded consumer for mixed SDK events and
 native prose. Its trailing Rich summary is never reparsed as events; keep that exception out of
@@ -85,7 +88,7 @@ summed. See [OpenCode](reference/opencode.md) for per-step replacement and unkno
 ## Deadline, cleanup and diagnostics
 
 The runner starts a new process group, drains stdout and stderr concurrently, and enforces one
-monotonic run deadline. [Cleanup:317](../src/pratfall/runner.py#L317) sends SIGTERM, then SIGKILL after
+monotonic run deadline. [Cleanup:314](../src/pratfall/runner.py#L314) sends SIGTERM, then SIGKILL after
 a bounded grace period, and verifies both parent reaping and group disappearance. Repeated
 interruptions accelerate termination. Timeout/interruption cleanup feeds trailing bytes before
 finalizing the consumer once; after a hard local output failure, stdout drains without reparsing.

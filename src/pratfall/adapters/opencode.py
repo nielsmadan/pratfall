@@ -6,13 +6,13 @@ from pratfall.adapters.accounting import cost
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
-    NUMERIC_BYTE_LIMIT,
     ConsumerFailure,
     ConsumerLimits,
     JsonlConsumer,
     decode_with,
     retained_utf8,
 )
+from pratfall.limits import NUMERIC_BYTES
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
 _ALLOWED = {
@@ -314,7 +314,7 @@ def _total_usage(parts: Iterable[Usage]) -> tuple[Usage | None, ResultError | No
             (left or 0) + (right or 0)
             for left, right in zip(total.__dict__.values(), part.__dict__.values(), strict=True)
         )
-        if any(len(str(value)) > NUMERIC_BYTE_LIMIT for value in values):
+        if any(len(str(value)) > NUMERIC_BYTES for value in values):
             return None, ResultError("protocol_error", "OpenCode aggregate usage is malformed.")
         total = Usage(*values)
     return total, None

@@ -14,8 +14,9 @@ import pytest
 import pratfall.runner as runner_module
 from pratfall.adapters import codex
 from pratfall.consumer import ConsumerLimits
+from pratfall.limits import STDERR_BYTES, STDOUT_BYTES
 from pratfall.models import DecodedOutput, Invocation, ResultError
-from pratfall.runner import STDERR_LIMIT, STDOUT_LIMIT, OutputLimits, run
+from pratfall.runner import OutputLimits, run
 
 
 def test_cleanup_rechecks_group_after_transient_probe_permission_error(
@@ -178,8 +179,8 @@ def test_runner_uses_bounded_file_for_large_stdin(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("fd", "limit", "code"),
     [
-        ("stdout", STDOUT_LIMIT, "import os;os.write(1,b'x'*(8*1024*1024+1))"),
-        ("stderr", STDERR_LIMIT, "import os;os.write(2,b'x'*(2*1024*1024+1))"),
+        ("stdout", STDOUT_BYTES, "import os;os.write(1,b'x'*(8*1024*1024+1))"),
+        ("stderr", STDERR_BYTES, "import os;os.write(2,b'x'*(2*1024*1024+1))"),
     ],
 )
 def test_output_bounds_fail_and_stop_child(tmp_path: Path, fd: str, limit: int, code: str) -> None:

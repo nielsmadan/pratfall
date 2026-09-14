@@ -1,7 +1,7 @@
 import json
 import math
 
-from pratfall.consumer import NUMERIC_BYTE_LIMIT, STATE_BYTE_LIMIT
+from pratfall.limits import NUMERIC_BYTES, STDOUT_BYTES
 from pratfall.models import ResultError
 
 
@@ -10,7 +10,7 @@ def parse(stdout: str, agent: str) -> object:
         size = len(stdout.encode("utf-8"))
     except UnicodeEncodeError:
         return encoding_error()
-    if size > STATE_BYTE_LIMIT:
+    if size > STDOUT_BYTES:
         return ResultError("stdout_limit_exceeded", f"{agent} JSON exceeds 8 MiB.")
     try:
         return json.loads(
@@ -44,13 +44,13 @@ def encoding_error() -> ResultError:
 
 
 def _integer(value: str) -> int:
-    if len(value) > NUMERIC_BYTE_LIMIT:
+    if len(value) > NUMERIC_BYTES:
         raise ValueError("numeric value is too large")
     return int(value)
 
 
 def _number(value: str) -> float:
-    if len(value) > NUMERIC_BYTE_LIMIT:
+    if len(value) > NUMERIC_BYTES:
         raise ValueError("numeric value is too large")
     return float(value)
 

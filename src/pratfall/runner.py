@@ -13,13 +13,10 @@ from types import FrameType
 from typing import BinaryIO, cast
 
 from pratfall.consumer import ByteConsumer, ConsumerFailure
+from pratfall.limits import FINAL_DRAIN_GRACE, STDERR_BYTES, STDOUT_BYTES, TERMINATE_GRACE
 from pratfall.models import DecodedOutput, Invocation, ResultError
 
-STDOUT_LIMIT = 8 * 1024 * 1024
-STDERR_LIMIT = 2 * 1024 * 1024
 READ_SIZE = 64 * 1024
-TERMINATE_GRACE = 2.0
-FINAL_DRAIN_GRACE = 0.25
 PROGRESS_INTERVAL = 1.0
 HEARTBEAT_INTERVAL = 5.0
 
@@ -39,8 +36,8 @@ class ProcessResult:
 
 @dataclass(frozen=True)
 class OutputLimits:
-    stdout: int = STDOUT_LIMIT
-    stderr: int = STDERR_LIMIT
+    stdout: int = STDOUT_BYTES
+    stderr: int = STDERR_BYTES
 
 
 DEFAULT_OUTPUT_LIMITS = OutputLimits()

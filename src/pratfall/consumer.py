@@ -3,12 +3,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from pratfall.limits import EVENT_BYTES, NUMERIC_BYTES, RECORD_COUNT, RETAINED_STATE_BYTES
 from pratfall.models import DecodedOutput, ResultError
 
-EVENT_BYTE_LIMIT = 8 * 1024 * 1024
-STATE_BYTE_LIMIT = 8 * 1024 * 1024
-RECORD_LIMIT = 16_384
-NUMERIC_BYTE_LIMIT = 128
 CR = ord("\r")
 
 
@@ -27,10 +24,10 @@ class ByteConsumer(Protocol):
 
 @dataclass(frozen=True)
 class ConsumerLimits:
-    event_bytes: int = EVENT_BYTE_LIMIT
-    state_bytes: int = STATE_BYTE_LIMIT
-    records: int = RECORD_LIMIT
-    numeric_bytes: int = NUMERIC_BYTE_LIMIT
+    event_bytes: int = EVENT_BYTES
+    state_bytes: int = RETAINED_STATE_BYTES
+    records: int = RECORD_COUNT
+    numeric_bytes: int = NUMERIC_BYTES
 
 
 DEFAULT_CONSUMER_LIMITS = ConsumerLimits()
