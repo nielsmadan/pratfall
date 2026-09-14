@@ -188,27 +188,13 @@ def _collect(
         if error is not None:
             output.consumer_failed = True
         if needs_cleanup:
-            try:
-                _terminate_and_drain(
-                    process, selector, output, context.signal_state, context.output_limits
-                )
-            except OSError as failure:
-                cleanup_error = str(failure)
-                with suppress(OSError):
-                    os.killpg(process.pid, signal.SIGKILL)
+            cleanup_error = _terminate_after_failure(process, selector, output, context)
         finish_error = _finish_consumer(consumer_state)[1]
         if error is None and finish_error is not None:
             error = finish_error
             if not needs_cleanup:
                 output.consumer_failed = True
-                try:
-                    _terminate_and_drain(
-                        process, selector, output, context.signal_state, context.output_limits
-                    )
-                except OSError as failure:
-                    cleanup_error = str(failure)
-                    with suppress(OSError):
-                        os.killpg(process.pid, signal.SIGKILL)
+                cleanup_error = _terminate_after_failure(process, selector, output, context)
         elif not needs_cleanup:
             process.wait()
     finally:
@@ -371,6 +357,27 @@ def _terminate_and_drain(
         raise OSError("agent process could not be reaped")
     if _process_group_exists(process.pid):
         raise OSError("could not verify owned process-group cleanup before the deadline")
+
+
+def _terminate_after_failure(
+    process: subprocess.Popen[bytes],
+    selector: selectors.BaseSelector,
+    output: _OutputState,
+    context: _RunContext,
+) -> str | None:
+    try:
+        _terminate_and_drain(
+            process,
+            selector,
+            output,
+            context.signal_state,
+            context.output_limits,
+        )
+    except OSError as failure:
+        with suppress(OSError):
+            os.killpg(process.pid, signal.SIGKILL)
+        return str(failure)
+    return None
 
 
 def _force_cleanup(process: subprocess.Popen[bytes]) -> None:

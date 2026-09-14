@@ -289,16 +289,29 @@ def _token_count(value: object) -> bool:
 def _total_usage(parts: Iterable[Usage]) -> tuple[Usage | None, ResultError | None]:
     total: Usage | None = None
     for part in parts:
-        if total is None:
-            total = Usage(0, 0, 0, 0, 0)
-        values = tuple(
-            (left or 0) + (right or 0)
-            for left, right in zip(total.__dict__.values(), part.__dict__.values(), strict=True)
+        total = _add_usage(total or Usage(), part)
+        values = (
+            total.input_tokens,
+            total.cached_input_tokens,
+            total.cache_write_input_tokens,
+            total.output_tokens,
+            total.reasoning_output_tokens,
         )
         if any(len(str(value)) > NUMERIC_BYTES for value in values):
             return None, ResultError("protocol_error", "OpenCode aggregate usage is malformed.")
-        total = Usage(*values)
     return total, None
+
+
+def _add_usage(left: Usage, right: Usage) -> Usage:
+    return Usage(
+        input_tokens=(left.input_tokens or 0) + (right.input_tokens or 0),
+        cached_input_tokens=(left.cached_input_tokens or 0) + (right.cached_input_tokens or 0),
+        cache_write_input_tokens=(left.cache_write_input_tokens or 0)
+        + (right.cache_write_input_tokens or 0),
+        output_tokens=(left.output_tokens or 0) + (right.output_tokens or 0),
+        reasoning_output_tokens=(left.reasoning_output_tokens or 0)
+        + (right.reasoning_output_tokens or 0),
+    )
 
 
 def _total_cost(

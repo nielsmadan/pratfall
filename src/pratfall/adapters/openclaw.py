@@ -1,4 +1,5 @@
 import math
+from dataclasses import replace
 
 from pratfall.adapters.accounting import cost, model
 from pratfall.adapters.native_args import Flag, validate_flags
@@ -81,19 +82,20 @@ def _decode_envelope(value: dict[str, object]) -> DecodedOutput:
             error=ResultError("protocol_error", "OpenClaw result envelope is malformed."),
         )
     final = encodable_text(final)
+    decoded = DecodedOutput(
+        output=final,
+        reported_models=reported_models,
+        cost_usd=cost_usd,
+    )
     if isinstance(payloads, ResultError):
-        return DecodedOutput(
-            output=final,
-            reported_models=reported_models,
-            cost_usd=cost_usd,
-            error=payloads,
-        )
+        return replace(decoded, error=payloads)
     usage = _usage(value.get("usage")) if "usage" in value else None
     if isinstance(usage, ResultError):
         usage_error: ResultError | None = usage
         usage = None
     else:
         usage_error = None
+    decoded = replace(decoded, usage=usage)
     detail_error = usage_error or accounting_error or document_error(value, "OpenClaw")
     native_error = _error(value["error"]) if "error" in value else None
     payload_error = _payload_error(payloads)
@@ -101,69 +103,25 @@ def _decode_envelope(value: dict[str, object]) -> DecodedOutput:
     if status == "timeout":
         failure = provider_error or native_error or detail_error
         if failure is None:
-            decoded = DecodedOutput(
-                output=final,
-                usage=usage,
-                reported_models=reported_models,
-                cost_usd=cost_usd,
-                error=_missing_error(),
-            )
+            decoded = replace(decoded, error=_missing_error())
         elif failure.code != "provider_error":
-            decoded = DecodedOutput(
-                output=final,
-                usage=usage,
-                reported_models=reported_models,
-                cost_usd=cost_usd,
-                error=failure,
-            )
+            decoded = replace(decoded, error=failure)
         else:
-            decoded = DecodedOutput(
-                output=final,
-                usage=usage,
-                reported_models=reported_models,
-                cost_usd=cost_usd,
+            decoded = replace(
+                decoded,
                 error=ResultError("timeout", failure.message),
                 timed_out=True,
             )
     elif provider_error is not None:
-        decoded = DecodedOutput(
-            output=final,
-            usage=usage,
-            reported_models=reported_models,
-            cost_usd=cost_usd,
-            error=provider_error,
-        )
+        decoded = replace(decoded, error=provider_error)
     elif native_error is not None or detail_error is not None:
-        decoded = DecodedOutput(
-            output=final,
-            usage=usage,
-            reported_models=reported_models,
-            cost_usd=cost_usd,
-            error=native_error or detail_error,
-        )
+        decoded = replace(decoded, error=native_error or detail_error)
     elif status == "ok" and ok:
-        decoded = DecodedOutput(
-            output=final,
-            usage=usage,
-            reported_models=reported_models,
-            cost_usd=cost_usd,
-        )
+        pass
     elif status != "ok" and not ok:
-        decoded = DecodedOutput(
-            output=final,
-            usage=usage,
-            reported_models=reported_models,
-            cost_usd=cost_usd,
-            error=_missing_error(),
-        )
+        decoded = replace(decoded, error=_missing_error())
     else:
-        decoded = DecodedOutput(
-            output=final,
-            usage=usage,
-            reported_models=reported_models,
-            cost_usd=cost_usd,
-            error=_envelope_mismatch(),
-        )
+        decoded = replace(decoded, error=_envelope_mismatch())
     return decoded
 
 

@@ -37,6 +37,19 @@ class RunArguments:
     progress: bool
 
 
+@dataclass(frozen=True)
+class _RunToken:
+    argument: str
+    name: str
+    value: str | None = None
+
+
+@dataclass(frozen=True)
+class _RunScan:
+    tokens: tuple[_RunToken, ...]
+    native_arguments: tuple[str, ...] | None
+
+
 class Parser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         raise PratError(message, code="invalid_arguments")
@@ -129,7 +142,7 @@ examples:
 
 
 def _parse_run(arguments: list[str]) -> RunArguments:
-    prat_arguments, native_arguments = _split_native(arguments)
+    scan = _scan_run(arguments)
     values: dict[str, str] = {}
     selector: str | None = None
     prompt_source: PromptSource | None = None
@@ -137,20 +150,16 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     dry_run = False
     progress = False
     fast: bool | None = None
-    index = 0
-    while index < len(prat_arguments):
-        argument = prat_arguments[index]
+    for token in scan.tokens:
+        argument = token.argument
         if argument == "--json":
             json_mode = True
-            index += 1
             continue
         if argument == "--dry-run":
             dry_run = True
-            index += 1
             continue
         if argument == "--progress":
             progress = True
-            index += 1
             continue
         if argument in {"--fast", "--no-fast"}:
             fast_value = argument == "--fast"
@@ -160,7 +169,6 @@ def _parse_run(arguments: list[str]) -> RunArguments:
                     code="invalid_arguments",
                 )
             fast = fast_value
-            index += 1
             continue
         if argument == "--prompt":
             raise PratError("--prompt requires the --prompt=TEXT form.", code="invalid_arguments")
@@ -168,15 +176,13 @@ def _parse_run(arguments: list[str]) -> RunArguments:
             prompt_source = _add_prompt_source(
                 prompt_source, PromptSource("inline", argument.removeprefix("--prompt="))
             )
-            index += 1
             continue
-        name, equals, inline = argument.partition("=")
-        field = _RUN_VALUE_FLAGS.get(name)
+        field = _RUN_VALUE_FLAGS.get(token.name)
         if field is not None:
-            value, index = _run_option_value(prat_arguments, index, name, equals, inline)
+            value = _run_token_value(token)
             if field == "file":
                 prompt_source = _add_prompt_source(
-                    prompt_source, PromptSource("file", _text_option(value, name))
+                    prompt_source, PromptSource("file", _text_option(value, token.name))
                 )
             else:
                 values[field] = value
@@ -188,7 +194,6 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         else:
             source = PromptSource("stdin") if argument == "-" else PromptSource("inline", argument)
             prompt_source = _add_prompt_source(prompt_source, source)
-        index += 1
     if selector is None:
         raise PratError("A selector is required.", code="invalid_arguments")
     options = Options(
@@ -199,7 +204,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         max_turns=_integer_option(values.get("max_turns"), "--max-turns"),
         max_ai_credits=_number_option(values.get("max_ai_credits"), "--max-ai-credits"),
         fast=fast,
-        native_args=native_arguments,
+        native_args=scan.native_arguments,
     )
     return RunArguments(
         selector,
@@ -213,21 +218,37 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     )
 
 
-def _split_native(arguments: list[str]) -> tuple[list[str], tuple[str, ...] | None]:
-    if "--" not in arguments:
-        return arguments, None
-    delimiter = arguments.index("--")
-    return arguments[:delimiter], tuple(arguments[delimiter + 1 :])
+def _scan_run(arguments: list[str]) -> _RunScan:
+    if "--" in arguments:
+        delimiter = arguments.index("--")
+        prat_arguments = arguments[:delimiter]
+        native_arguments: tuple[str, ...] | None = tuple(arguments[delimiter + 1 :])
+    else:
+        prat_arguments = arguments
+        native_arguments = None
+    tokens: list[_RunToken] = []
+    index = 0
+    while index < len(prat_arguments):
+        argument = prat_arguments[index]
+        name, equals, inline = argument.partition("=")
+        if name not in _RUN_VALUE_FLAGS:
+            tokens.append(_RunToken(argument, name))
+            index += 1
+            continue
+        if equals:
+            tokens.append(_RunToken(argument, name, inline))
+            index += 1
+            continue
+        value = prat_arguments[index + 1] if index + 1 < len(prat_arguments) else None
+        tokens.append(_RunToken(argument, name, value))
+        index += 2
+    return _RunScan(tuple(tokens), native_arguments)
 
 
-def _run_option_value(
-    arguments: list[str], index: int, name: str, equals: str, inline: str
-) -> tuple[str, int]:
-    if equals:
-        return inline, index + 1
-    if index + 1 >= len(arguments):
-        raise PratError(f"{name} requires a value.", code="invalid_arguments")
-    return arguments[index + 1], index + 2
+def _run_token_value(token: _RunToken) -> str:
+    if token.value is None:
+        raise PratError(f"{token.name} requires a value.", code="invalid_arguments")
+    return token.value
 
 
 def _add_prompt_source(current: PromptSource | None, added: PromptSource) -> PromptSource:
@@ -282,29 +303,15 @@ def _run_cwd(value: str | None, invocation_cwd: Path) -> Path:
 
 
 def _json_requested(arguments: list[str]) -> bool:
-    before_delimiter = arguments[: arguments.index("--")] if "--" in arguments else arguments
-    index = 0
-    while index < len(before_delimiter):
-        argument = before_delimiter[index]
-        name = argument.partition("=")[0]
-        if name in _RUN_VALUE_FLAGS:
-            index += 1 if "=" in argument else 2
-        elif argument == "--json":
-            return True
-        else:
-            index += 1
-    return False
+    return any(token.argument == "--json" for token in _scan_run(arguments).tokens)
 
 
 def _management_mode(arguments: list[str]) -> bool:
     run_option = False
-    index = 0
-    while index < len(arguments) and arguments[index] != "--":
-        argument = arguments[index]
-        name = argument.partition("=")[0]
-        if name in _RUN_VALUE_FLAGS:
-            run_option = run_option or name != "--config"
-            index += 1 if "=" in argument else 2
+    for token in _scan_run(arguments).tokens:
+        argument = token.argument
+        if token.name in _RUN_VALUE_FLAGS:
+            run_option = run_option or token.name != "--config"
             continue
         if argument in {
             "--json",
@@ -314,10 +321,8 @@ def _management_mode(arguments: list[str]) -> bool:
             "--no-fast",
         } or argument.startswith("--prompt="):
             run_option = run_option or argument != "--json"
-            index += 1
             continue
         if argument.startswith("-"):
-            index += 1
             continue
         return argument in MANAGEMENT_COMMANDS
     return not run_option

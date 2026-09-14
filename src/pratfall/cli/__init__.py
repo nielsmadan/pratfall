@@ -33,7 +33,6 @@ def _main(argv: Sequence[str] | None = None) -> int:
         else:
             print(f"prat: {error}", file=sys.stderr)
         return error.exit_code
-    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:

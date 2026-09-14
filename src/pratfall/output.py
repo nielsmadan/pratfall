@@ -90,18 +90,19 @@ def validation_error(
     status: str,
     resolved: ResolvedProfile | None,
 ) -> dict[str, object]:
-    return {
-        "schema_version": 1,
-        "agent": None if resolved is None else resolved.agent.name,
-        "profile": None if resolved is None else resolved.profile,
-        "model": None if resolved is None else resolved.options.model,
-        "reported_models": None,
-        "cost_usd": None,
-        "status": status,
-        "output": "",
-        "exit_code": exit_code,
-        "native_exit_code": None,
-        "duration_ms": 0,
-        "usage": None,
-        "error": {"code": code, "message": str(error)},
-    }
+    return result_dict(
+        NormalizedResult(
+            agent=None if resolved is None else resolved.agent.name,
+            profile=None if resolved is None else resolved.profile,
+            model=None if resolved is None else resolved.options.model,
+            reported_models=None,
+            cost_usd=None,
+            status=status,
+            output="",
+            exit_code=exit_code,
+            native_exit_code=None,
+            duration_ms=0,
+            usage=None,
+            error=ResultError(code, str(error)),
+        )
+    )

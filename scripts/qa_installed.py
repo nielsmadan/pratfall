@@ -15,6 +15,7 @@ import sys
 import tarfile
 import time
 import zipfile
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -325,6 +326,306 @@ def _answer_vibe(answer: str) -> None:
     )
 
 
+def _answer_claude(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": answer,
+                "usage": {"input_tokens": 3, "output_tokens": 2},
+            }
+        )
+    )
+
+
+def _answer_codex(answer: str) -> None:
+    print(json.dumps({"type": "turn.started"}))
+    print(
+        json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"id": "answer", "type": "agent_message", "text": answer},
+            }
+        )
+    )
+    print(
+        json.dumps(
+            {
+                "type": "turn.completed",
+                "usage": {
+                    "input_tokens": 3,
+                    "cached_input_tokens": 1,
+                    "output_tokens": 2,
+                },
+            }
+        )
+    )
+
+
+def _answer_gemini(answer: str) -> None:
+    print(json.dumps({"response": answer}))
+
+
+def _answer_antigravity(answer: str) -> None:
+    print(json.dumps({"event": "init", "init": {"cwd": os.getcwd()}}))
+    print(
+        json.dumps(
+            {
+                "event": "result",
+                "result": {
+                    "status": "SUCCESS",
+                    "response": answer,
+                    "usage": {
+                        "input_tokens": 3,
+                        "output_tokens": 2,
+                        "thinking_tokens": 1,
+                        "cache_read_tokens": 1,
+                        "total_tokens": 5,
+                    },
+                },
+            }
+        )
+    )
+
+
+def _answer_copilot(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "type": "assistant.message",
+                "data": {"messageId": "answer", "content": answer},
+            }
+        )
+    )
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "timestamp": "2026-09-09T12:00:00Z",
+                "sessionId": "qa",
+                "exitCode": 0,
+                "usage": {
+                    "premiumRequests": 1,
+                    "totalApiDurationMs": 2,
+                    "sessionDurationMs": 3,
+                    "codeChanges": {
+                        "linesAdded": 0,
+                        "linesRemoved": 0,
+                        "filesModified": 0,
+                    },
+                },
+            }
+        )
+    )
+
+
+def _answer_openhands(answer: str) -> None:
+    _openhands_startup()
+    print(
+        json.dumps(
+            {
+                "kind": "MessageEvent",
+                "source": "agent",
+                "id": "answer",
+                "llm_message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": answer}],
+                },
+            }
+        )
+    )
+    _openhands_summary()
+
+
+def _answer_warp(answer: str) -> None:
+    print(json.dumps({"type": "tool_error", "error": "recoverable tool failure"}))
+    print(json.dumps({"type": "agent", "text": answer}))
+
+
+def _answer_qwen(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "type": "assistant",
+                "uuid": "qwen-message",
+                "session_id": "qa-session",
+                "parent_tool_use_id": None,
+                "message": {
+                    "id": "qwen-message",
+                    "type": "message",
+                    "role": "assistant",
+                    "usage": {"input_tokens": 3, "output_tokens": 2},
+                    "content": [{"type": "text", "text": answer}],
+                    "model": "qwen-native",
+                },
+            }
+        )
+    )
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "uuid": "qwen-result",
+                "duration_api_ms": 9,
+                "permission_denials": [],
+                "session_id": "qa-session",
+                "duration_ms": 10,
+                "num_turns": 1,
+                "subtype": "success",
+                "is_error": False,
+                "result": answer,
+                "usage": {"input_tokens": 3, "output_tokens": 2, "cache_read_input_tokens": 1},
+            }
+        )
+    )
+
+
+def _answer_amp(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "type": "system",
+                "subtype": "init",
+                "agent_mode": "native-mode",
+                "cwd": os.getcwd(),
+                "session_id": "qa-session",
+                "tools": [],
+                "mcp_servers": [],
+            }
+        )
+    )
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "session_id": "qa-session",
+                "duration_ms": 10,
+                "num_turns": 1,
+                "subtype": "success",
+                "is_error": False,
+                "result": answer,
+                "usage": {
+                    "input_tokens": 3,
+                    "output_tokens": 2,
+                    "cache_read_input_tokens": 1,
+                    "cache_creation_input_tokens": 4,
+                },
+            }
+        )
+    )
+
+
+def _answer_reasonix(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "session_id": "qa-session",
+                "duration_ms": 10,
+                "num_turns": 1,
+                "subtype": "success",
+                "is_error": False,
+                "result": answer,
+                "usage": {
+                    "input_tokens": 3,
+                    "output_tokens": 2,
+                    "cache_read_input_tokens": 1,
+                    "cache_creation_input_tokens": 7,
+                },
+                "cost_complete": True,
+                "display_complete": True,
+                "currency": "CNY",
+                "total_cost_usd": 2.5,
+            }
+        )
+    )
+
+
+def _answer_cursor(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": answer,
+            }
+        )
+    )
+
+
+def _answer_openclaw(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "status": "ok",
+                "final": answer,
+                "payloads": [{"text": answer}],
+                "usage": {"input": 3, "output": 2, "total": 5},
+            }
+        )
+    )
+
+
+def _answer_opencode(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "type": "text",
+                "part": {
+                    "id": "answer",
+                    "type": "text",
+                    "text": answer,
+                    "time": {"end": 1},
+                },
+            }
+        )
+    )
+    print(
+        json.dumps(
+            {
+                "type": "step_finish",
+                "part": {
+                    "id": "step",
+                    "type": "step-finish",
+                    "reason": "stop",
+                    "cost": 0,
+                    "tokens": {
+                        "total": 5,
+                        "input": 3,
+                        "output": 2,
+                        "reasoning": 0,
+                        "cache": {"read": 1, "write": 0},
+                    },
+                },
+            }
+        )
+    )
+
+
+_ANSWER_EMITTERS: dict[str, Callable[[str], None]] = {
+    "claude": _answer_claude,
+    "codex": _answer_codex,
+    "gemini": _answer_gemini,
+    "antigravity": _answer_antigravity,
+    "copilot": _answer_copilot,
+    "cursor": _answer_cursor,
+    "openclaw": _answer_openclaw,
+    "opencode": _answer_opencode,
+    "openhands": _answer_openhands,
+    "warp": _answer_warp,
+    "qwen": _answer_qwen,
+    "amp": _answer_amp,
+    "reasonix": _answer_reasonix,
+    "droid": _answer_droid,
+    "kimi": _answer_kimi,
+    "vibe": _answer_vibe,
+}
+
+
 def _openhands_startup() -> None:
     print(
         "OpenHands CLI terminal UI may not work correctly in this environment: "
@@ -355,266 +656,7 @@ def _openhands_summary() -> None:
 
 
 def _answer(agent: str, answer: str) -> None:
-    emitter = {"droid": _answer_droid, "kimi": _answer_kimi, "vibe": _answer_vibe}.get(agent)
-    if emitter is not None:
-        emitter(answer)
-        return
-    if agent == "claude":
-        print(
-            json.dumps(
-                {
-                    "type": "result",
-                    "subtype": "success",
-                    "is_error": False,
-                    "result": answer,
-                    "usage": {"input_tokens": 3, "output_tokens": 2},
-                }
-            )
-        )
-    elif agent == "codex":
-        print(json.dumps({"type": "turn.started"}))
-        print(
-            json.dumps(
-                {
-                    "type": "item.completed",
-                    "item": {"id": "answer", "type": "agent_message", "text": answer},
-                }
-            )
-        )
-        print(
-            json.dumps(
-                {
-                    "type": "turn.completed",
-                    "usage": {
-                        "input_tokens": 3,
-                        "cached_input_tokens": 1,
-                        "output_tokens": 2,
-                    },
-                }
-            )
-        )
-    elif agent == "gemini":
-        print(json.dumps({"response": answer}))
-    elif agent == "antigravity":
-        print(json.dumps({"event": "init", "init": {"cwd": os.getcwd()}}))
-        print(
-            json.dumps(
-                {
-                    "event": "result",
-                    "result": {
-                        "status": "SUCCESS",
-                        "response": answer,
-                        "usage": {
-                            "input_tokens": 3,
-                            "output_tokens": 2,
-                            "thinking_tokens": 1,
-                            "cache_read_tokens": 1,
-                            "total_tokens": 5,
-                        },
-                    },
-                }
-            )
-        )
-    elif agent == "copilot":
-        print(
-            json.dumps(
-                {
-                    "type": "assistant.message",
-                    "data": {"messageId": "answer", "content": answer},
-                }
-            )
-        )
-        print(
-            json.dumps(
-                {
-                    "type": "result",
-                    "timestamp": "2026-09-09T12:00:00Z",
-                    "sessionId": "qa",
-                    "exitCode": 0,
-                    "usage": {
-                        "premiumRequests": 1,
-                        "totalApiDurationMs": 2,
-                        "sessionDurationMs": 3,
-                        "codeChanges": {
-                            "linesAdded": 0,
-                            "linesRemoved": 0,
-                            "filesModified": 0,
-                        },
-                    },
-                }
-            )
-        )
-    elif agent == "openhands":
-        _openhands_startup()
-        print(
-            json.dumps(
-                {
-                    "kind": "MessageEvent",
-                    "source": "agent",
-                    "id": "answer",
-                    "llm_message": {
-                        "role": "assistant",
-                        "content": [{"type": "text", "text": answer}],
-                    },
-                }
-            )
-        )
-        _openhands_summary()
-    elif agent == "warp":
-        print(json.dumps({"type": "tool_error", "error": "recoverable tool failure"}))
-        print(json.dumps({"type": "agent", "text": answer}))
-    elif agent == "qwen":
-        print(
-            json.dumps(
-                {
-                    "type": "assistant",
-                    "uuid": "qwen-message",
-                    "session_id": "qa-session",
-                    "parent_tool_use_id": None,
-                    "message": {
-                        "id": "qwen-message",
-                        "type": "message",
-                        "role": "assistant",
-                        "usage": {"input_tokens": 3, "output_tokens": 2},
-                        "content": [{"type": "text", "text": answer}],
-                        "model": "qwen-native",
-                    },
-                }
-            )
-        )
-        print(
-            json.dumps(
-                {
-                    "type": "result",
-                    "uuid": "qwen-result",
-                    "duration_api_ms": 9,
-                    "permission_denials": [],
-                    "session_id": "qa-session",
-                    "duration_ms": 10,
-                    "num_turns": 1,
-                    "subtype": "success",
-                    "is_error": False,
-                    "result": answer,
-                    "usage": {"input_tokens": 3, "output_tokens": 2, "cache_read_input_tokens": 1},
-                }
-            )
-        )
-    elif agent == "amp":
-        print(
-            json.dumps(
-                {
-                    "type": "system",
-                    "subtype": "init",
-                    "agent_mode": "native-mode",
-                    "cwd": os.getcwd(),
-                    "session_id": "qa-session",
-                    "tools": [],
-                    "mcp_servers": [],
-                }
-            )
-        )
-        print(
-            json.dumps(
-                {
-                    "type": "result",
-                    "session_id": "qa-session",
-                    "duration_ms": 10,
-                    "num_turns": 1,
-                    "subtype": "success",
-                    "is_error": False,
-                    "result": answer,
-                    "usage": {
-                        "input_tokens": 3,
-                        "output_tokens": 2,
-                        "cache_read_input_tokens": 1,
-                        "cache_creation_input_tokens": 4,
-                    },
-                }
-            )
-        )
-    elif agent == "reasonix":
-        print(
-            json.dumps(
-                {
-                    "type": "result",
-                    "session_id": "qa-session",
-                    "duration_ms": 10,
-                    "num_turns": 1,
-                    "subtype": "success",
-                    "is_error": False,
-                    "result": answer,
-                    "usage": {
-                        "input_tokens": 3,
-                        "output_tokens": 2,
-                        "cache_read_input_tokens": 1,
-                        "cache_creation_input_tokens": 7,
-                    },
-                    "cost_complete": True,
-                    "display_complete": True,
-                    "currency": "CNY",
-                    "total_cost_usd": 2.5,
-                }
-            )
-        )
-    elif agent == "cursor":
-        print(
-            json.dumps(
-                {
-                    "type": "result",
-                    "subtype": "success",
-                    "is_error": False,
-                    "result": answer,
-                }
-            )
-        )
-    elif agent == "openclaw":
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "status": "ok",
-                    "final": answer,
-                    "payloads": [{"text": answer}],
-                    "usage": {"input": 3, "output": 2, "total": 5},
-                }
-            )
-        )
-    elif agent == "opencode":
-        print(
-            json.dumps(
-                {
-                    "type": "text",
-                    "part": {
-                        "id": "answer",
-                        "type": "text",
-                        "text": answer,
-                        "time": {"end": 1},
-                    },
-                }
-            )
-        )
-        print(
-            json.dumps(
-                {
-                    "type": "step_finish",
-                    "part": {
-                        "id": "step",
-                        "type": "step-finish",
-                        "reason": "stop",
-                        "cost": 0,
-                        "tokens": {
-                            "total": 5,
-                            "input": 3,
-                            "output": 2,
-                            "reasoning": 0,
-                            "cache": {"read": 1, "write": 0},
-                        },
-                    },
-                }
-            )
-        )
-    else:
-        print(answer)
+    _ANSWER_EMITTERS.get(agent, print)(answer)
 
 
 def _jsonl(*events: object) -> str:
@@ -687,434 +729,210 @@ def _fake_openhands_case(prompt: str) -> int:
     return 0
 
 
+type _FakeOutput = tuple[str, int]
+type _FakeCaseHandler = Callable[[], _FakeOutput]
+
+
+def _fixed_fake_case(output: str, returncode: int = 0) -> _FakeCaseHandler:
+    return lambda: (output, returncode)
+
+
+def _reasonix_a11_case(subtype: str, result: str) -> _FakeOutput:
+    return (
+        _jsonl(
+            {
+                "type": "result",
+                "subtype": subtype,
+                "is_error": False,
+                "result": result,
+                "usage": {
+                    "input_tokens": 13,
+                    "output_tokens": 5,
+                    "cache_read_input_tokens": 3,
+                    "cache_creation_input_tokens": 99,
+                },
+                "currency": "CNY",
+                "total_cost_usd": 2.5,
+                "cost_complete": True,
+                "display_complete": True,
+            }
+        ),
+        0,
+    )
+
+
+def _vibe_projection_case() -> _FakeOutput:
+    history = [
+        {
+            "id": "answer",
+            "sessionId": "qa-session",
+            "turnId": "turn",
+            "createdAt": 2,
+            "updatedAt": 2,
+            "generationStatus": "completed",
+            "relatedEntryId": None,
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": text} for text in ("VIBE_ONE", "VIBE_TWO")],
+            "source": "harness",
+            "userDisplayContent": None,
+        }
+    ]
+    history.append({**history[0], "id": "empty", "content": []})
+    history.append(
+        {
+            **history[0],
+            "id": "user",
+            "role": "user",
+            "content": [{"type": "text", "text": "USER"}],
+        }
+    )
+    return json.dumps(history) + "\n", 0
+
+
+_A_TIER_CASES: dict[tuple[str, str], _FakeCaseHandler] = {
+    ("qwen", "QA_A09.qwen_failure"): _fixed_fake_case(
+        _jsonl(
+            _assistant("QWEN_PARTIAL", "root-model"),
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "error": {"message": "controlled qwen failure"},
+                "usage": "malformed optional metadata",
+            },
+        )
+    ),
+    ("amp", "QA_A09.amp_failure"): _fixed_fake_case(
+        _jsonl(
+            _assistant("AMP_PARTIAL", "not-a-reported-model"),
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "error": "controlled amp failure",
+                "usage": "malformed optional metadata",
+            },
+        )
+    ),
+    ("droid", "QA_A09.droid_failure"): _fixed_fake_case(
+        _jsonl(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "result": "DROID_PARTIAL",
+                "usage": {"untrusted": float("nan")},
+            }
+        )
+    ),
+    ("vibe", "QA_A09.vibe_projection"): _vibe_projection_case,
+    ("qwen", "QA_A10.recovery"): _fixed_fake_case(
+        _jsonl(
+            _assistant("ROOT_DRAFT", "root-model"),
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "error": {"message": "recoverable child failure"},
+            },
+            _assistant("CHILD_TEXT", "child-model", "tool-1"),
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "QWEN_RECOVERED",
+                "usage": {
+                    "input_tokens": 37,
+                    "output_tokens": 11,
+                    "cache_read_input_tokens": 5,
+                },
+            },
+        )
+    ),
+    ("reasonix", "QA_A11.aliases"): lambda: _reasonix_a11_case("success", "REASONIX_SUCCESS"),
+    ("reasonix", "QA_A11.paused"): lambda: _reasonix_a11_case(
+        "recovery_paused", "REASONIX_PARTIAL"
+    ),
+    ("kimi", "QA_A13.kimi_empty"): _fixed_fake_case(""),
+    ("warp", "QA_A13.warp_empty"): _fixed_fake_case(
+        _jsonl(
+            {"type": "agent_reasoning", "text": "private reasoning"},
+            {"type": "tool_error", "error": "recoverable tool failure"},
+        )
+    ),
+    ("kimi", "QA_A13.kimi_native_failure"): _fixed_fake_case(
+        _jsonl({"role": "assistant", "content": "KIMI_PARTIAL"}) + "native plain-text error\n",
+        17,
+    ),
+    ("warp", "QA_A13.warp_native_failure"): _fixed_fake_case(
+        _jsonl(
+            {"type": "agent", "text": "WARP_PARTIAL"},
+            {"type": "tool_error", "error": "native tool failure"},
+        ),
+        17,
+    ),
+    ("droid", "QA_A14.numeric_width"): _fixed_fake_case('{"value":' + "9" * 129 + "}\n"),
+    ("reasonix", "QA_A14.nesting"): _fixed_fake_case("[" * 10_000 + "0" + "]" * 10_000 + "\n"),
+    ("vibe", "QA_A14.unicode"): _fixed_fake_case('[{"type":"notice","text":"\\ud800"}]\n'),
+    **{
+        (agent, f"QA_A15.{agent}_{outcome}"): _fixed_fake_case(
+            "native banner\nError: quoted example\nTEXT_CAPTURE\r\n", returncode
+        )
+        for agent in ("iflow", "crush", "devin", "cortex")
+        for outcome, returncode in (("success", 0), ("failure", 17))
+    },
+}
+
+_OPENHANDS_A_TIER_CASES = frozenset(
+    {
+        "QA_A12.recovery",
+        "QA_A12.conversation_error",
+        "QA_A12.missing_terminal",
+    }
+)
+
+
 def _fake_a_tier(agent: str, prompt: str) -> int | None:
     if re.match(r"QA_A[0-9]{2}\.", prompt) is None:
         return None
     prompt = prompt.rstrip("\n")
-    if agent == "openhands" and prompt in {
-        "QA_A12.recovery",
-        "QA_A12.conversation_error",
-        "QA_A12.missing_terminal",
-    }:
+    if agent == "openhands" and prompt in _OPENHANDS_A_TIER_CASES:
         return _fake_openhands_case(prompt)
-    fixtures = {
-        ("qwen", "QA_A09.qwen_failure"): (
-            _jsonl(
-                _assistant("QWEN_PARTIAL", "root-model"),
-                {
-                    "type": "result",
-                    "subtype": "error_during_execution",
-                    "is_error": True,
-                    "error": {"message": "controlled qwen failure"},
-                    "usage": "malformed optional metadata",
-                },
-            ),
-            0,
-        ),
-        ("amp", "QA_A09.amp_failure"): (
-            _jsonl(
-                _assistant("AMP_PARTIAL", "not-a-reported-model"),
-                {
-                    "type": "result",
-                    "subtype": "error_during_execution",
-                    "is_error": True,
-                    "error": "controlled amp failure",
-                    "usage": "malformed optional metadata",
-                },
-            ),
-            0,
-        ),
-        ("droid", "QA_A09.droid_failure"): (
-            _jsonl(
-                {
-                    "type": "result",
-                    "subtype": "error_during_execution",
-                    "is_error": True,
-                    "result": "DROID_PARTIAL",
-                    "usage": {"untrusted": float("nan")},
-                }
-            ),
-            0,
-        ),
-        ("qwen", "QA_A10.recovery"): (
-            _jsonl(
-                _assistant("ROOT_DRAFT", "root-model"),
-                {
-                    "type": "result",
-                    "subtype": "error_during_execution",
-                    "is_error": True,
-                    "error": {"message": "recoverable child failure"},
-                },
-                _assistant("CHILD_TEXT", "child-model", "tool-1"),
-                {
-                    "type": "result",
-                    "subtype": "success",
-                    "is_error": False,
-                    "result": "QWEN_RECOVERED",
-                    "usage": {
-                        "input_tokens": 37,
-                        "output_tokens": 11,
-                        "cache_read_input_tokens": 5,
-                    },
-                },
-            ),
-            0,
-        ),
-        ("kimi", "QA_A13.kimi_empty"): ("", 0),
-        ("warp", "QA_A13.warp_empty"): (
-            _jsonl(
-                {"type": "agent_reasoning", "text": "private reasoning"},
-                {"type": "tool_error", "error": "recoverable tool failure"},
-            ),
-            0,
-        ),
-        ("kimi", "QA_A13.kimi_native_failure"): (
-            _jsonl({"role": "assistant", "content": "KIMI_PARTIAL"}) + "native plain-text error\n",
-            17,
-        ),
-        ("warp", "QA_A13.warp_native_failure"): (
-            _jsonl(
-                {"type": "agent", "text": "WARP_PARTIAL"},
-                {"type": "tool_error", "error": "native tool failure"},
-            ),
-            17,
-        ),
-        ("droid", "QA_A14.numeric_width"): ('{"value":' + "9" * 129 + "}\n", 0),
-        ("reasonix", "QA_A14.nesting"): ("[" * 10_000 + "0" + "]" * 10_000 + "\n", 0),
-        ("vibe", "QA_A14.unicode"): ('[{"type":"notice","text":"\\ud800"}]\n', 0),
-    }
-    for subtype, case in (("success", "aliases"), ("recovery_paused", "paused")):
-        fixtures["reasonix", f"QA_A11.{case}"] = (
-            _jsonl(
-                {
-                    "type": "result",
-                    "subtype": subtype,
-                    "is_error": False,
-                    "result": "REASONIX_PARTIAL" if case == "paused" else "REASONIX_SUCCESS",
-                    "usage": {
-                        "input_tokens": 13,
-                        "output_tokens": 5,
-                        "cache_read_input_tokens": 3,
-                        "cache_creation_input_tokens": 99,
-                    },
-                    "currency": "CNY",
-                    "total_cost_usd": 2.5,
-                    "cost_complete": True,
-                    "display_complete": True,
-                }
-            ),
-            0,
-        )
-    for text_agent in ("iflow", "crush", "devin", "cortex"):
-        for outcome, returncode in (("success", 0), ("failure", 17)):
-            fixtures[text_agent, f"QA_A15.{text_agent}_{outcome}"] = (
-                "native banner\nError: quoted example\nTEXT_CAPTURE\r\n",
-                returncode,
-            )
-    if agent == "vibe" and prompt == "QA_A09.vibe_projection":
-        history = [
-            {
-                "id": "answer",
-                "sessionId": "qa-session",
-                "turnId": "turn",
-                "createdAt": 2,
-                "updatedAt": 2,
-                "generationStatus": "completed",
-                "relatedEntryId": None,
-                "type": "message",
-                "role": "assistant",
-                "content": [{"type": "text", "text": text} for text in ("VIBE_ONE", "VIBE_TWO")],
-                "source": "harness",
-                "userDisplayContent": None,
-            }
-        ]
-        history.append({**history[0], "id": "empty", "content": []})
-        history.append(
-            {
-                **history[0],
-                "id": "user",
-                "role": "user",
-                "content": [{"type": "text", "text": "USER"}],
-            }
-        )
-        print(json.dumps(history))
-        return 0
-    fixture = fixtures.get((agent, prompt))
-    if fixture is None:
+    handler = _A_TIER_CASES.get((agent, prompt))
+    if handler is None:
         raise ValueError(f"Unknown A-tier fixture for {agent}: {prompt!r}")
-    output, returncode = fixture
+    output, returncode = handler()
     print(output, end="")
     return returncode
 
 
-def _fake_native(agent: str, arguments: list[str]) -> int:  # noqa: PLR0911, PLR0912, PLR0915
-    _record_owner()
-    version_fixture = (
+def _write_native_record(record: dict[str, object], *, ensure_ascii: bool = False) -> None:
+    log_path = Path(os.environ["PRAT_QA_LOG"])
+    descriptor = os.open(log_path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+    try:
+        os.write(descriptor, (json.dumps(record, ensure_ascii=ensure_ascii) + "\n").encode())
+    finally:
+        os.close(descriptor)
+
+
+def _is_version_probe(agent: str, arguments: list[str]) -> bool:
+    return arguments == VERSION_ARGS[agent] or (
         agent == "codex"
         and len(arguments) == 5
         and arguments[0] in {"QA_VERSION_TIMEOUT", "QA_VERSION_OVERFLOW", "QA_VERSION_INTERRUPT"}
         and arguments[4:] == VERSION_ARGS[agent]
     )
-    if arguments == VERSION_ARGS[agent] or version_fixture:
-        assert sys.stdin.buffer.read() == b""
-        record = {"agent": agent, "argv": arguments, "version_probe": True}
-        log_path = Path(os.environ["PRAT_QA_LOG"])
-        descriptor = os.open(log_path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
-        try:
-            os.write(descriptor, (json.dumps(record) + "\n").encode())
-        finally:
-            os.close(descriptor)
-        mode = arguments[0] if arguments else ""
-        if version_fixture:
-            lock_path, ready_path, go_path = map(Path, arguments[1:4])
-            subprocess.Popen(
-                [
-                    sys.executable,
-                    str(Path(__file__).resolve()),
-                    "--lock-holder",
-                    str(lock_path),
-                    str(ready_path),
-                ]
-            )
-            while not ready_path.exists():
-                time.sleep(0.01)
-            if mode == "QA_VERSION_OVERFLOW":
-                while not go_path.exists():
-                    time.sleep(0.01)
-                os.write(1, b"v" * (64 * 1024 + 1))
-            time.sleep(30)
-        if agent == "hermes":
-            print("opaque version failure", file=sys.stderr)
-            return 17
-        print(f"{agent} opaque version 1.0")
-        return 0
-    data = sys.stdin.buffer.read()
-    prompt = _prompt(agent, arguments, data)
-    record = {
-        "agent": agent,
-        "argv": arguments,
-        "stdin": data.decode(),
-        "prompt": prompt,
-        "cwd": os.getcwd(),
-    }
-    log_path = Path(os.environ["PRAT_QA_LOG"])
-    descriptor = os.open(log_path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
-    try:
-        os.write(descriptor, (json.dumps(record, ensure_ascii=False) + "\n").encode())
-    finally:
-        os.close(descriptor)
-    a_tier_exit = _fake_a_tier(agent, prompt)
-    if a_tier_exit is not None:
-        return a_tier_exit
-    if prompt.startswith("QA_PROVIDER_FAILURE"):
-        print(
-            json.dumps(
-                {
-                    "type": "result",
-                    "subtype": "error_during_execution",
-                    "is_error": True,
-                    "errors": ["controlled provider failure"],
-                    "usage": {"input_tokens": 3, "output_tokens": 1},
-                }
-            )
-        )
-        return 0
-    if prompt.startswith("QA_TRUNCATED"):
-        print('{"type":"turn.started"}')
-        return 0
-    if prompt.startswith("QA_CODEX_PARTIAL"):
-        print('{"type":"turn.started"}')
-        print(
-            json.dumps(
-                {
-                    "type": "item.completed",
-                    "item": {"id": "partial", "type": "agent_message", "text": "PARTIAL_KEEP"},
-                }
-            )
-        )
-        return 0
-    if prompt.startswith("QA_ACCOUNT_CLAUDE"):
-        print(
-            json.dumps(
-                {
-                    "type": "result",
-                    "subtype": "success",
-                    "is_error": False,
-                    "result": "ACCOUNT_OK",
-                    "usage": {"input_tokens": 3, "output_tokens": 2},
-                    "modelUsage": {"claude-primary": {}, "claude-helper": {}},
-                    "total_cost_usd": 0,
-                }
-            )
-        )
-        return 0
-    if prompt.startswith("QA_ACCOUNT_GEMINI"):
-        print(
-            json.dumps(
-                {
-                    "response": "ACCOUNT_OK",
-                    "stats": {
-                        "models": {
-                            name: {
-                                "tokens": {
-                                    "input": 3,
-                                    "prompt": 4,
-                                    "cached": 1,
-                                    "candidates": 2,
-                                    "thoughts": 1,
-                                    "tool": 0,
-                                    "total": 6,
-                                }
-                            }
-                            for name in ("gemini-primary", "gemini-helper")
-                        },
-                        "tools": {},
-                    },
-                }
-            )
-        )
-        return 0
-    if prompt.startswith("QA_ACCOUNT_COPILOT"):
-        print(
-            json.dumps(
-                {
-                    "type": "assistant.message",
-                    "data": {
-                        "messageId": "root",
-                        "content": "ACCOUNT_OK",
-                        "model": "copilot-native",
-                    },
-                }
-            )
-        )
-        print(
-            json.dumps(
-                {
-                    "type": "result",
-                    "timestamp": "2026-09-10T12:00:00Z",
-                    "sessionId": "qa",
-                    "exitCode": 0,
-                    "usage": {
-                        "premiumRequests": 1,
-                        "totalApiDurationMs": 2,
-                        "sessionDurationMs": 3,
-                        "codeChanges": {
-                            "linesAdded": 0,
-                            "linesRemoved": 0,
-                            "filesModified": 0,
-                        },
-                    },
-                }
-            )
-        )
-        return 0
-    if prompt.startswith("QA_ACCOUNT_OPENCLAW"):
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "status": "ok",
-                    "final": "ACCOUNT_OK",
-                    "payloads": [{"text": "ACCOUNT_OK"}],
-                    "usage": {"input": 3, "output": 2, "total": 5},
-                    "provider": "provider",
-                    "model": "model",
-                    "costUsd": 1.25,
-                }
-            )
-        )
-        return 0
-    if prompt.startswith("QA_ACCOUNT_OPENCODE"):
-        print(
-            json.dumps(
-                {
-                    "type": "text",
-                    "part": {
-                        "id": "answer",
-                        "type": "text",
-                        "text": "ACCOUNT_OK",
-                        "time": {"end": 1},
-                    },
-                }
-            )
-        )
-        for step_id, cost in (("one", 1.0), ("one", 2.0), ("two", 0.5)):
-            print(
-                json.dumps(
-                    {
-                        "type": "step_finish",
-                        "part": {
-                            "id": step_id,
-                            "type": "step-finish",
-                            "reason": "stop",
-                            "cost": cost,
-                            "tokens": {
-                                "total": 5,
-                                "input": 3,
-                                "output": 2,
-                                "reasoning": 0,
-                                "cache": {"read": 1, "write": 0},
-                            },
-                        },
-                    }
-                )
-            )
-        return 0
-    if prompt.startswith("QA_NATIVE_17"):
-        _answer(agent, "native failure answer")
-        return 17
-    if prompt.startswith("QA_STREAM_LARGE"):
-        event = (json.dumps({"type": "future", "discarded": "x" * (1024 * 1024)}) + "\n").encode()
-        for _ in range(9):
-            os.write(1, event)
-        _answer(agent, "STREAM_OK")
-        return 0
-    if prompt.startswith("QA_PROGRESS"):
-        controls = {
-            item.split("=", 1)[0]: Path(item.split("=", 1)[1])
-            for item in prompt.split()[1:]
-            if "=" in item
-        }
-        print(
-            json.dumps(
-                {
-                    "type": "item.completed",
-                    "item": {"id": "answer", "type": "agent_message", "text": "PROGRESS_OK"},
-                }
-            ),
-            flush=True,
-        )
-        ready = controls.get("READY")
-        release = controls.get("RELEASE")
-        if ready is not None and release is not None:
-            ready.write_text("ready\n", encoding="utf-8")
-            while not release.exists():
-                time.sleep(0.01)
-        else:
-            time.sleep(1.2)
-        print(
-            json.dumps(
-                {
-                    "type": "turn.completed",
-                    "usage": {"input_tokens": 1, "cached_input_tokens": 0, "output_tokens": 1},
-                }
-            ),
-            flush=True,
-        )
-        print("fake diagnostic: codex", file=sys.stderr)
-        return 0
-    if prompt.startswith(
-        (
-            "QA_TIMEOUT",
-            "QA_INTERRUPT",
-            "QA_PIPE_HOLDER",
-            "QA_STDOUT_LIMIT",
-            "QA_STDERR_LIMIT",
-        )
-    ):
-        lock_path, ready_path, go_path = (
-            Path(item.split("=", 1)[1]) for item in prompt.split()[1:4]
-        )
+
+
+def _fake_version_probe(agent: str, arguments: list[str]) -> int:
+    assert sys.stdin.buffer.read() == b""
+    _write_native_record(
+        {"agent": agent, "argv": arguments, "version_probe": True}, ensure_ascii=True
+    )
+    mode = arguments[0] if arguments else ""
+    if arguments != VERSION_ARGS[agent]:
+        lock_path, ready_path, go_path = map(Path, arguments[1:4])
         subprocess.Popen(
             [
                 sys.executable,
@@ -1126,19 +944,344 @@ def _fake_native(agent: str, arguments: list[str]) -> int:  # noqa: PLR0911, PLR
         )
         while not ready_path.exists():
             time.sleep(0.01)
-        if prompt.startswith("QA_PIPE_HOLDER"):
-            return 0
-        if prompt.startswith(("QA_STDOUT_LIMIT", "QA_STDERR_LIMIT")):
+        if mode == "QA_VERSION_OVERFLOW":
             while not go_path.exists():
                 time.sleep(0.01)
-        if prompt.startswith("QA_STDOUT_LIMIT"):
-            os.write(1, b"x" * (8 * 1024 * 1024 + 1))
-        if prompt.startswith("QA_STDERR_LIMIT"):
-            os.write(2, b"x" * (2 * 1024 * 1024 + 1))
+            os.write(1, b"v" * (64 * 1024 + 1))
         time.sleep(30)
-    if prompt.startswith("QA_BAD_UTF8"):
-        os.write(1, b"\xff")
-        return 0
+    if agent == "hermes":
+        print("opaque version failure", file=sys.stderr)
+        return 17
+    print(f"{agent} opaque version 1.0")
+    return 0
+
+
+type _NativeCaseHandler = Callable[[str, str], int]
+
+
+def _fake_provider_failure(_agent: str, _prompt: str) -> int:
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "error_during_execution",
+                "is_error": True,
+                "errors": ["controlled provider failure"],
+                "usage": {"input_tokens": 3, "output_tokens": 1},
+            }
+        )
+    )
+    return 0
+
+
+def _fake_truncated(_agent: str, _prompt: str) -> int:
+    print('{"type":"turn.started"}')
+    return 0
+
+
+def _fake_codex_partial(_agent: str, _prompt: str) -> int:
+    print('{"type":"turn.started"}')
+    print(
+        json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"id": "partial", "type": "agent_message", "text": "PARTIAL_KEEP"},
+            }
+        )
+    )
+    return 0
+
+
+def _fake_account_claude(_agent: str, _prompt: str) -> int:
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": "ACCOUNT_OK",
+                "usage": {"input_tokens": 3, "output_tokens": 2},
+                "modelUsage": {"claude-primary": {}, "claude-helper": {}},
+                "total_cost_usd": 0,
+            }
+        )
+    )
+    return 0
+
+
+def _fake_account_gemini(_agent: str, _prompt: str) -> int:
+    print(
+        json.dumps(
+            {
+                "response": "ACCOUNT_OK",
+                "stats": {
+                    "models": {
+                        name: {
+                            "tokens": {
+                                "input": 3,
+                                "prompt": 4,
+                                "cached": 1,
+                                "candidates": 2,
+                                "thoughts": 1,
+                                "tool": 0,
+                                "total": 6,
+                            }
+                        }
+                        for name in ("gemini-primary", "gemini-helper")
+                    },
+                    "tools": {},
+                },
+            }
+        )
+    )
+    return 0
+
+
+def _fake_account_copilot(_agent: str, _prompt: str) -> int:
+    print(
+        json.dumps(
+            {
+                "type": "assistant.message",
+                "data": {
+                    "messageId": "root",
+                    "content": "ACCOUNT_OK",
+                    "model": "copilot-native",
+                },
+            }
+        )
+    )
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "timestamp": "2026-09-10T12:00:00Z",
+                "sessionId": "qa",
+                "exitCode": 0,
+                "usage": {
+                    "premiumRequests": 1,
+                    "totalApiDurationMs": 2,
+                    "sessionDurationMs": 3,
+                    "codeChanges": {
+                        "linesAdded": 0,
+                        "linesRemoved": 0,
+                        "filesModified": 0,
+                    },
+                },
+            }
+        )
+    )
+    return 0
+
+
+def _fake_account_openclaw(_agent: str, _prompt: str) -> int:
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "status": "ok",
+                "final": "ACCOUNT_OK",
+                "payloads": [{"text": "ACCOUNT_OK"}],
+                "usage": {"input": 3, "output": 2, "total": 5},
+                "provider": "provider",
+                "model": "model",
+                "costUsd": 1.25,
+            }
+        )
+    )
+    return 0
+
+
+def _fake_account_opencode(_agent: str, _prompt: str) -> int:
+    print(
+        json.dumps(
+            {
+                "type": "text",
+                "part": {
+                    "id": "answer",
+                    "type": "text",
+                    "text": "ACCOUNT_OK",
+                    "time": {"end": 1},
+                },
+            }
+        )
+    )
+    for step_id, cost in (("one", 1.0), ("one", 2.0), ("two", 0.5)):
+        print(
+            json.dumps(
+                {
+                    "type": "step_finish",
+                    "part": {
+                        "id": step_id,
+                        "type": "step-finish",
+                        "reason": "stop",
+                        "cost": cost,
+                        "tokens": {
+                            "total": 5,
+                            "input": 3,
+                            "output": 2,
+                            "reasoning": 0,
+                            "cache": {"read": 1, "write": 0},
+                        },
+                    },
+                }
+            )
+        )
+    return 0
+
+
+def _fake_native_failure(agent: str, _prompt: str) -> int:
+    _answer(agent, "native failure answer")
+    return 17
+
+
+def _fake_large_stream(agent: str, _prompt: str) -> int:
+    event = (json.dumps({"type": "future", "discarded": "x" * (1024 * 1024)}) + "\n").encode()
+    for _ in range(9):
+        os.write(1, event)
+    _answer(agent, "STREAM_OK")
+    return 0
+
+
+def _fake_progress(_agent: str, prompt: str) -> int:
+    controls = {
+        item.split("=", 1)[0]: Path(item.split("=", 1)[1])
+        for item in prompt.split()[1:]
+        if "=" in item
+    }
+    print(
+        json.dumps(
+            {
+                "type": "item.completed",
+                "item": {"id": "answer", "type": "agent_message", "text": "PROGRESS_OK"},
+            }
+        ),
+        flush=True,
+    )
+    ready = controls.get("READY")
+    release = controls.get("RELEASE")
+    if ready is not None and release is not None:
+        ready.write_text("ready\n", encoding="utf-8")
+        while not release.exists():
+            time.sleep(0.01)
+    else:
+        time.sleep(1.2)
+    print(
+        json.dumps(
+            {
+                "type": "turn.completed",
+                "usage": {"input_tokens": 1, "cached_input_tokens": 0, "output_tokens": 1},
+            }
+        ),
+        flush=True,
+    )
+    print("fake diagnostic: codex", file=sys.stderr)
+    return 0
+
+
+type _LifecycleHandler = Callable[[Path], int]
+
+
+def _fake_wait(_go_path: Path) -> int:
+    time.sleep(30)
+    return 0
+
+
+def _fake_pipe_holder(_go_path: Path) -> int:
+    return 0
+
+
+def _fake_stdout_limit(go_path: Path) -> int:
+    while not go_path.exists():
+        time.sleep(0.01)
+    os.write(1, b"x" * (8 * 1024 * 1024 + 1))
+    time.sleep(30)
+    return 0
+
+
+def _fake_stderr_limit(go_path: Path) -> int:
+    while not go_path.exists():
+        time.sleep(0.01)
+    os.write(2, b"x" * (2 * 1024 * 1024 + 1))
+    time.sleep(30)
+    return 0
+
+
+_LIFECYCLE_HANDLERS: dict[str, _LifecycleHandler] = {
+    "QA_TIMEOUT": _fake_wait,
+    "QA_INTERRUPT": _fake_wait,
+    "QA_PIPE_HOLDER": _fake_pipe_holder,
+    "QA_STDOUT_LIMIT": _fake_stdout_limit,
+    "QA_STDERR_LIMIT": _fake_stderr_limit,
+}
+
+
+def _fake_lifecycle(_agent: str, prompt: str) -> int:
+    lock_path, ready_path, go_path = (Path(item.split("=", 1)[1]) for item in prompt.split()[1:4])
+    subprocess.Popen(
+        [
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--lock-holder",
+            str(lock_path),
+            str(ready_path),
+        ]
+    )
+    while not ready_path.exists():
+        time.sleep(0.01)
+    return _LIFECYCLE_HANDLERS[prompt.split(maxsplit=1)[0]](go_path)
+
+
+def _fake_bad_utf8(_agent: str, _prompt: str) -> int:
+    os.write(1, b"\xff")
+    return 0
+
+
+_NATIVE_CASES: tuple[tuple[str | tuple[str, ...], _NativeCaseHandler], ...] = (
+    ("QA_PROVIDER_FAILURE", _fake_provider_failure),
+    ("QA_TRUNCATED", _fake_truncated),
+    ("QA_CODEX_PARTIAL", _fake_codex_partial),
+    ("QA_ACCOUNT_CLAUDE", _fake_account_claude),
+    ("QA_ACCOUNT_GEMINI", _fake_account_gemini),
+    ("QA_ACCOUNT_COPILOT", _fake_account_copilot),
+    ("QA_ACCOUNT_OPENCLAW", _fake_account_openclaw),
+    ("QA_ACCOUNT_OPENCODE", _fake_account_opencode),
+    ("QA_NATIVE_17", _fake_native_failure),
+    ("QA_STREAM_LARGE", _fake_large_stream),
+    ("QA_PROGRESS", _fake_progress),
+    (
+        (
+            "QA_TIMEOUT",
+            "QA_INTERRUPT",
+            "QA_PIPE_HOLDER",
+            "QA_STDOUT_LIMIT",
+            "QA_STDERR_LIMIT",
+        ),
+        _fake_lifecycle,
+    ),
+    ("QA_BAD_UTF8", _fake_bad_utf8),
+)
+
+
+def _fake_native(agent: str, arguments: list[str]) -> int:
+    _record_owner()
+    if _is_version_probe(agent, arguments):
+        return _fake_version_probe(agent, arguments)
+    data = sys.stdin.buffer.read()
+    prompt = _prompt(agent, arguments, data)
+    record = {
+        "agent": agent,
+        "argv": arguments,
+        "stdin": data.decode(),
+        "prompt": prompt,
+        "cwd": os.getcwd(),
+    }
+    _write_native_record(record)
+    a_tier_exit = _fake_a_tier(agent, prompt)
+    if a_tier_exit is not None:
+        return a_tier_exit
+    for prefix, handler in _NATIVE_CASES:
+        if prompt.startswith(prefix):
+            return handler(agent, prompt)
     answer = json.dumps(record, ensure_ascii=False, sort_keys=True)
     _answer(agent, answer)
     print(f"fake diagnostic: {agent}", file=sys.stderr)
@@ -1391,7 +1534,7 @@ def _available(lock_path: Path) -> bool:
     return True
 
 
-def _pending(fixture: _AsyncFixture) -> bool:
+def _observe_pending_and_release(fixture: _AsyncFixture) -> bool:
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline and not fixture.ready_path.exists():
         time.sleep(0.01)
@@ -1437,7 +1580,7 @@ def _complete_async(
 ) -> tuple[subprocess.CompletedProcess[bytes], bool, bool]:
     process = fixture.invocation.process
     try:
-        pending = _pending(fixture)
+        pending = _observe_pending_and_release(fixture)
         if interrupt:
             _signal_group(process.pid, signal.SIGINT)
         stdout, stderr = _communicate(fixture.invocation)
@@ -2242,20 +2385,33 @@ def _exercise_versions(prat: Path, root: Path, config: Path) -> dict[str, object
     }
 
 
-def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
-    prat: Path,
-    root: Path,
-    config: Path,
-    python: Path,
-    script: Path,
-    log: Path,
-    results: dict[str, object],
-) -> None:
-    consumer = root / "consumer"
+@dataclass(frozen=True)
+class _EnhancementContext:
+    prat: Path
+    root: Path
+    config: Path
+    python: Path
+    script: Path
+    log: Path
+    consumer: Path
+    prompt_bytes: bytes
+    prompt_file: Path
+
+
+type _ScenarioObservation = tuple[str, dict[str, object]]
+type _EnhancementScenario = Callable[[_EnhancementContext], _ScenarioObservation]
+
+
+def _exercise_e01(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
+    prompt_bytes = context.prompt_bytes
+    prompt_file = context.prompt_file
+
     run_cwd = root / "enhancement-cwd"
     run_cwd.mkdir(exist_ok=True)
-    prompt_bytes = "first\r\n雪 café\r\n".encode()
-    prompt_file = consumer / "enhancement prompt.md"
     prompt_file.write_bytes(prompt_bytes)
     completed = _run(
         prat,
@@ -2269,7 +2425,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     call = _calls(log)[-1]
     assert call["prompt"] == prompt_bytes.decode()
     assert call["cwd"] == str(run_cwd)
-    results["E01"] = {
+    return "E01", {
         "status": "Pass",
         "result": _compact_result(completed),
         "prompt_utf8_bytes": len(prompt_bytes),
@@ -2277,6 +2433,15 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         "native_cwd": call["cwd"],
         "profile": result["profile"],
     }
+
+
+def _exercise_e02(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
+    prompt_bytes = context.prompt_bytes
+    prompt_file = context.prompt_file
 
     piped_prompt = "pipe café\nsecond line\n".encode()
     pipe_forms = [
@@ -2307,12 +2472,21 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     explicit_calls = _calls(log)[-2:]
     assert explicit_calls[0]["prompt"] == "explicit inline"
     assert explicit_calls[1]["prompt"] == prompt_bytes.decode()
-    results["E02"] = {
+    return "E02", {
         "status": "Pass",
         "forms": ["automatic_pipe", "positional_dash", "file_dash"],
         "prompt_sha256": hashlib.sha256(piped_prompt).hexdigest(),
         "explicit_sources_ignored_incidental_pipe": True,
     }
+
+
+def _exercise_e03(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
+    consumer = context.consumer
+    prompt_file = context.prompt_file
 
     invalid_utf8 = consumer / "invalid-prompt.bin"
     invalid_utf8.write_bytes(b"\xff")
@@ -2358,7 +2532,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         for name, (_arguments, expected_message) in invalid_specs.items()
     }
     assert len(_calls(log)) == calls_before
-    results["E03"] = {
+    return "E03", {
         "status": "Pass",
         "case_exit_codes": {name: case.returncode for name, case in invalid_cases.items()},
         "error_messages": {
@@ -2366,6 +2540,13 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         },
         "native_launches": 0,
     }
+
+
+def _exercise_e04(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
 
     input_interrupts: dict[str, object] = {}
     for source_name, source, chosen in (
@@ -2389,7 +2570,16 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
             "native_launches": 0,
             "error": result["error"],
         }
-    results["E04"] = {"status": "Pass", "forms": input_interrupts}
+    return "E04", {"status": "Pass", "forms": input_interrupts}
+
+
+def _exercise_e05(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
+    python = context.python
+    script = context.script
 
     fast_config = root / "fast.toml"
     codex_command = json.dumps([str(python), str(script), "--fake-native", "codex"])
@@ -2436,7 +2626,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         ),
     )
     assert len(_calls(log)) == calls_before
-    results["E05"] = {
+    return "E05", {
         "status": "Pass",
         "codex_native_argv": [call["argv"] for call in fast_calls[:5]],
         "claude_native_argv": fast_calls[5]["argv"],
@@ -2444,7 +2634,20 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         "unsupported_native_launches": 0,
     }
 
-    results["E06"] = _exercise_versions(prat, root, config)
+
+def _exercise_e06(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
+
+    return "E06", _exercise_versions(prat, root, config)
+
+
+def _exercise_e07(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    python = context.python
+    script = context.script
 
     version_cases: dict[str, object] = {}
     for mode, interrupt in (
@@ -2462,7 +2665,13 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
             "descendant_lock_released_before_emergency_cleanup": True,
             "result": payload,
         }
-    results["E07"] = {"status": "Pass", "cases": version_cases}
+    return "E07", {"status": "Pass", "cases": version_cases}
+
+
+def _exercise_e08(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
 
     accounting_cases = {
         "claude": _run(
@@ -2507,7 +2716,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     assert accounting_results["openclaw"]["reported_models"] == ["provider/model"]
     assert accounting_results["openclaw"]["cost_usd"] == 1.25
     assert all(value["model"] == "requested" for value in accounting_results.values())
-    results["E08"] = {
+    return "E08", {
         "status": "Pass",
         "agents": {
             name: {
@@ -2518,6 +2727,12 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
             for name, value in accounting_results.items()
         },
     }
+
+
+def _exercise_e09(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
 
     opencode = _run(
         prat,
@@ -2531,12 +2746,18 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     assert opencode_result["cost_usd"] == 2.5
     assert opencode_result["reported_models"] is None
     assert _record(opencode_result["usage"])["input_tokens"] == 6
-    results["E09"] = {
+    return "E09", {
         "status": "Pass",
         "latest_step_cost_sum": opencode_result["cost_usd"],
         "input_tokens_distinct_steps": _record(opencode_result["usage"])["input_tokens"],
         "reported_models": opencode_result["reported_models"],
     }
+
+
+def _exercise_e10(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
 
     partial = _run(prat, root, ["cx", "QA_CODEX_PARTIAL", "--json"], config=config)
     partial_result = _assert_result(
@@ -2548,12 +2769,18 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         error_message="Codex stream ended without turn.completed.",
     )
     assert partial_result["output"] == "PARTIAL_KEEP"
-    results["E10"] = {
+    return "E10", {
         "status": "Pass",
         "installed_case": "EOF after completed assistant message",
         "result": _compact_result(partial),
         "partial_output": partial_result["output"],
     }
+
+
+def _exercise_e11(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
 
     large_stream = _run(prat, root, ["cx", "QA_STREAM_LARGE", "--json"], config=config)
     large_result = _assert_result(
@@ -2565,7 +2792,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     )
     assert large_result["output"] == "STREAM_OK"
     event = (json.dumps({"type": "future", "discarded": "x" * (1024 * 1024)}) + "\n").encode()
-    results["E11"] = {
+    return "E11", {
         "status": "Pass",
         "disposable_event_count": 9,
         "physical_bytes_per_event_including_lf": len(event),
@@ -2573,6 +2800,12 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         "result": _compact_result(large_stream),
         "answer": large_result["output"],
     }
+
+
+def _exercise_e12(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
 
     progress, pending, progress_before_release = _progress_pending_run(prat, root, config)
     progress_result = _assert_result(
@@ -2585,7 +2818,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     assert progress_result["output"] == "PROGRESS_OK"
     assert pending and progress_before_release
     assert progress.stderr.count(b"fake diagnostic: codex") == 1
-    results["E12"] = {
+    return "E12", {
         "status": "Pass",
         "result": _compact_result(progress),
         "native_pending_when_progress_observed": True,
@@ -2594,14 +2827,26 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         "progress_stderr": progress.stderr.decode(),
     }
 
-    results["E13"] = {
+
+def _exercise_e13(_context: _EnhancementContext) -> _ScenarioObservation:
+    return "E13", {
         "status": "Not run",
         "reason": "Adversarial stream assertions use focused decoder and subprocess tests.",
     }
-    results["E14"] = {
+
+
+def _exercise_e14(_context: _EnhancementContext) -> _ScenarioObservation:
+    return "E14", {
         "status": "Not run",
         "reason": "Adversarial stderr transport assertions use focused subprocess tests.",
     }
+
+
+def _exercise_e15(context: _EnhancementContext) -> _ScenarioObservation:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
 
     calls_before = len(_calls(log))
     failed = _run(prat, root, ["cc", "QA_PROVIDER_FAILURE", "--json"], config=config)
@@ -2620,7 +2865,7 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
     assert json.loads(_text(recovered_result["output"]))["prompt"] == "fresh retry"
     retry_calls = _calls(log)[calls_before:]
     assert [call["prompt"] for call in retry_calls] == ["QA_PROVIDER_FAILURE", "fresh retry"]
-    results["E15"] = {
+    return "E15", {
         "status": "Pass",
         "failure": _compact_result(failed),
         "failure_output": failed_result["output"],
@@ -2629,6 +2874,33 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         "observed_native_invocations": len(retry_calls),
         "observed_prompts": [call["prompt"] for call in retry_calls],
     }
+
+
+_ENHANCEMENT_SCENARIOS: tuple[_EnhancementScenario, ...] = (
+    _exercise_e01,
+    _exercise_e02,
+    _exercise_e03,
+    _exercise_e04,
+    _exercise_e05,
+    _exercise_e06,
+    _exercise_e07,
+    _exercise_e08,
+    _exercise_e09,
+    _exercise_e10,
+    _exercise_e11,
+    _exercise_e12,
+    _exercise_e13,
+    _exercise_e14,
+    _exercise_e15,
+)
+
+
+def _exercise_enhancements(context: _EnhancementContext) -> dict[str, object]:
+    results: dict[str, object] = {}
+    for scenario in _ENHANCEMENT_SCENARIOS:
+        case, observation = scenario(context)
+        results[case] = observation
+    return results
 
 
 def _exercise_routes(prat: Path, root: Path, config: Path) -> dict[str, object]:
@@ -2663,30 +2935,46 @@ def _exercise_routes(prat: Path, root: Path, config: Path) -> dict[str, object]:
     return {"status": "Pass", "routed": routed}
 
 
-def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
-    prat: Path,
-    sdist_prat: Path,
-    wheel: Path,
-    sdist: Path,
-    base_revision: str,
-    root: Path,
-    output: Path,
-    expected_version: str,
-) -> int:
-    root.mkdir(parents=True, exist_ok=True)
-    consumer = root / "consumer"
-    consumer.mkdir(exist_ok=True)
-    (root / "xdg").mkdir(exist_ok=True)
-    log = root / "native.jsonl"
-    log.unlink(missing_ok=True)
-    script = Path(__file__).resolve()
-    python = prat.with_name("python")
-    fake_bin = _write_fakes(root, python, script)
-    config = root / "config.toml"
-    _write_config(config, python, script)
-    results: dict[str, object] = {}
-    repository = Path(__file__).resolve().parents[1]
-    runtime_identity = _runtime_identity(repository, prat, sdist_prat, wheel, sdist)
+@dataclass(frozen=True)
+class _ExerciseInputs:
+    prat: Path
+    sdist_prat: Path
+    wheel: Path
+    sdist: Path
+    base_revision: str
+    root: Path
+    output: Path
+    expected_version: str
+
+
+@dataclass(frozen=True)
+class _ExerciseContext:
+    prat: Path
+    sdist_prat: Path
+    wheel: Path
+    sdist: Path
+    base_revision: str
+    root: Path
+    output: Path
+    expected_version: str
+    consumer: Path
+    log: Path
+    script: Path
+    python: Path
+    fake_bin: Path
+    config: Path
+    repository: Path
+    runtime_identity: dict[str, object]
+
+
+type _CoreScenario = Callable[[_ExerciseContext], dict[str, object]]
+
+
+def _exercise_q01_q02(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    sdist_prat = context.sdist_prat
+    root = context.root
+    expected_version = context.expected_version
 
     version, _sdist_version = _entry_point_versions(prat, sdist_prat, root, expected_version)
     help_result = _run(prat, root, ["--help"])
@@ -2704,13 +2992,22 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         "--dry-run               Resolve and print the invocation without launching it.",
     ):
         assert expected in help_text
-    results["Q01"] = {
-        "status": "Pass",
-        "version": version_text,
-        "help": help_text,
+    return {
+        "Q01": {
+            "status": "Pass",
+            "version": version_text,
+            "help": help_text,
+        },
+        "Q02": {"status": "Pass", "version": expected_version_text},
     }
 
-    results["Q02"] = {"status": "Pass", "version": expected_version_text}
+
+def _exercise_q03(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
+    consumer = context.consumer
 
     prompt = "fix this bug"
     completed = _run(prat, root, ["cc", prompt, "--json"], config=config)
@@ -2727,7 +3024,15 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         "prompt": prompt,
         "cwd": str(consumer),
     }
-    results["Q03"] = {"status": "Pass", "result": _compact_result(completed), "native": call}
+    return {"Q03": {"status": "Pass", "result": _compact_result(completed), "native": call}}
+
+
+def _exercise_q04(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
+    consumer = context.consumer
 
     completed = _run(prat, root, ["simple", "rebase git", "--json"], config=config)
     result = _json_result(completed)
@@ -2752,9 +3057,22 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         "prompt": "rebase git",
         "cwd": str(consumer),
     }
-    results["Q04"] = {"status": "Pass", "result": _compact_result(completed), "native": call}
+    return {"Q04": {"status": "Pass", "result": _compact_result(completed), "native": call}}
 
-    results["Q05"] = _exercise_routes(prat, root, config)
+
+def _exercise_q05(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
+
+    return {"Q05": _exercise_routes(prat, root, config)}
+
+
+def _exercise_q06(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    fake_bin = context.fake_bin
+    log = context.log
 
     completed = _run(prat, root, ["cx", "missing config default", "--json"], path=fake_bin)
     result = _assert_result(
@@ -2764,7 +3082,12 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     assert result["agent"] == "codex" and result["profile"] is None and result["model"] is None
     assert call["agent"] == "codex" and call["prompt"] == "missing config default"
     assert call["argv"] == ["exec", "--json", "-"]
-    results["Q06"] = {"status": "Pass", "result": _compact_result(completed)}
+    return {"Q06": {"status": "Pass", "result": _compact_result(completed)}}
+
+
+def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
 
     init_path = root / "init.toml"
     init_path.unlink(missing_ok=True)
@@ -2803,14 +3126,26 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         ],
     }
     assert json.loads(profiles.stdout) == expected_profiles
-    results["Q07"] = {
-        "status": "Pass",
-        "init_exit": 0,
-        "refusal_exit": 2,
-        "refusal": refused.stderr.decode().strip(),
-        "validate_exit": 0,
-        "profiles": expected_profiles["profiles"],
+    return {
+        "Q07": {
+            "status": "Pass",
+            "init_exit": 0,
+            "refusal_exit": 2,
+            "refusal": refused.stderr.decode().strip(),
+            "validate_exit": 0,
+            "profiles": expected_profiles["profiles"],
+        }
     }
+
+
+def _exercise_q08(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
+    python = context.python
+    script = context.script
+    consumer = context.consumer
 
     override_arguments = [
         "override",
@@ -2878,11 +3213,21 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         "stdin_bytes": len(b"precedence"),
     }
     assert len(_calls(log)) == calls_before
-    results["Q08"] = {
-        "status": "Pass",
-        "native": call,
-        "resolved": dry_override_result,
+    return {
+        "Q08": {
+            "status": "Pass",
+            "native": call,
+            "resolved": dry_override_result,
+        }
     }
+
+
+def _exercise_q09(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
+    consumer = context.consumer
 
     literal = "-leading $HOME $(touch injected) ; ✓\nsecond line"
     completed = _run(prat, root, ["cx", "-", "--json"], stdin=literal.encode(), config=config)
@@ -2895,7 +3240,15 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         and call["prompt"] == call["stdin"] == literal
         and not (consumer / "injected").exists()
     )
-    results["Q09"] = {"status": "Pass", "prompt": call["prompt"], "side_effect": False}
+    return {"Q09": {"status": "Pass", "prompt": call["prompt"], "side_effect": False}}
+
+
+def _exercise_q10(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
+    consumer = context.consumer
 
     calls_before = len(_calls(log))
     dry_prompt = "DRY_$HOME_$(touch dry-injected)_ß"
@@ -2913,13 +3266,21 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         dry_prompt.encode()
     )
     assert len(_calls(log)) == calls_before and not (consumer / "dry-injected").exists()
-    results["Q10"] = {
-        "status": "Pass",
-        "argv_transport": argv_json,
-        "stdin_transport": stdin_json,
-        "native_launches": 0,
-        "side_effect": False,
+    return {
+        "Q10": {
+            "status": "Pass",
+            "argv_transport": argv_json,
+            "stdin_transport": stdin_json,
+            "native_launches": 0,
+            "side_effect": False,
+        }
     }
+
+
+def _exercise_q11(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
 
     success = _run(prat, root, ["cx", "json success", "--json"], config=config)
     failure = _run(prat, root, ["cx", "QA_NATIVE_17", "--json"], config=config)
@@ -2936,11 +3297,20 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     )
     assert json.loads(_text(success_result["output"]))["prompt"] == "json success"
     assert failure_result["output"] == "native failure answer"
-    results["Q11"] = {
-        "status": "Pass",
-        "success": _compact_result(success),
-        "failure": _compact_result(failure),
+    return {
+        "Q11": {
+            "status": "Pass",
+            "success": _compact_result(success),
+            "failure": _compact_result(failure),
+        }
     }
+
+
+def _exercise_q12(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
+    log = context.log
 
     invalid = root / "invalid.toml"
     invalid.write_text("version = 1\nunknown = true\n", encoding="utf-8")
@@ -2985,12 +3355,19 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         ),
     ]
     assert len(_calls(log)) == calls_before
-    results["Q12"] = {
-        "status": "Pass",
-        "errors": [_compact_result(case) for case in bad_cases],
-        "native_launches": 0,
-    }
     assert all(result["output"] == "" for result in bad_results)
+    return {
+        "Q12": {
+            "status": "Pass",
+            "errors": [_compact_result(case) for case in bad_cases],
+            "native_launches": 0,
+        }
+    }
+
+
+def _exercise_q13(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
 
     unavailable = root / "unavailable.toml"
     missing = root / "missing-agent"
@@ -3022,11 +3399,19 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         error_code="executable_not_executable",
         error_message=f"Executable '{blocked}' cannot be executed.",
     )
-    results["Q13"] = {
-        "status": "Pass",
-        "missing": _compact_result(missing_case),
-        "non_executable": _compact_result(blocked_case),
+    return {
+        "Q13": {
+            "status": "Pass",
+            "missing": _compact_result(missing_case),
+            "non_executable": _compact_result(blocked_case),
+        }
     }
+
+
+def _exercise_q14(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
 
     provider = _run(prat, root, ["cc", "QA_PROVIDER_FAILURE", "--json"], config=config)
     truncated = _run(prat, root, ["cx", "QA_TRUNCATED", "--json"], config=config)
@@ -3052,12 +3437,20 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     )
     assert provider_result["output"] == truncated_result["output"] == ""
     assert json.loads(_text(recovery_result["output"]))["prompt"] == "recovered"
-    results["Q14"] = {
-        "status": "Pass",
-        "provider": _compact_result(provider),
-        "truncated": _compact_result(truncated),
-        "recovery": _compact_result(recovery),
+    return {
+        "Q14": {
+            "status": "Pass",
+            "provider": _compact_result(provider),
+            "truncated": _compact_result(truncated),
+            "recovery": _compact_result(recovery),
+        }
     }
+
+
+def _exercise_q15(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
 
     timeout_fixture = _async_run(prat, root, config, "QA_TIMEOUT", "1")
     timeout_case, timeout_pending, timeout_released = _complete_async(timeout_fixture)
@@ -3088,14 +3481,22 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         retry, returncode=0, status="success", native_exit_code=0, error_code=None
     )
     assert json.loads(_text(retry_result["output"]))["prompt"] == "after interruption"
-    results["Q15"] = {
-        "status": "Pass",
-        "timeout": _compact_result(timeout_case),
-        "interrupt": _compact_result(interrupt_case),
-        "pending_observed": True,
-        "descendant_locks_released": True,
-        "recovery": _compact_result(retry),
+    return {
+        "Q15": {
+            "status": "Pass",
+            "timeout": _compact_result(timeout_case),
+            "interrupt": _compact_result(interrupt_case),
+            "pending_observed": True,
+            "descendant_locks_released": True,
+            "recovery": _compact_result(retry),
+        }
     }
+
+
+def _exercise_q16(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
 
     pipe_fixture = _async_run(prat, root, config, "QA_PIPE_HOLDER", "1")
     pipe_case, pipe_pending, pipe_released = _complete_async(pipe_fixture)
@@ -3108,12 +3509,20 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         error_code="timeout",
         error_message="Agent exceeded the 1 second timeout.",
     )
-    results["Q16"] = {
-        "status": "Pass",
-        "result": _compact_result(pipe_case),
-        "pending_observed": True,
-        "descendant_lock_released": True,
+    return {
+        "Q16": {
+            "status": "Pass",
+            "result": _compact_result(pipe_case),
+            "pending_observed": True,
+            "descendant_lock_released": True,
+        }
     }
+
+
+def _exercise_q17(context: _ExerciseContext) -> dict[str, object]:
+    prat = context.prat
+    root = context.root
+    config = context.config
 
     limit_fixture = _async_run(prat, root, config, "QA_STDOUT_LIMIT", "9")
     limit_case, limit_pending, limit_released = _complete_async(limit_fixture)
@@ -3162,54 +3571,124 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
     assert limit_pending and limit_released and limit_result["output"] == ""
     assert stderr_pending and stderr_released and stderr_result["output"] == ""
     assert invalid_utf8_result["output"] == oversized_result["output"] == ""
-    results["Q17"] = {
-        "status": "Pass",
-        "stdout_limit": {
-            "returncode": limit_case.returncode,
-            "status": limit_result["status"],
-            "error": limit_result["error"],
-            "captured_json_bytes": len(limit_case.stdout),
-            "captured_json_sha256": hashlib.sha256(limit_case.stdout).hexdigest(),
-        },
-        "stdout_pending_observed": limit_pending,
-        "stdout_descendant_lock_released": limit_released,
-        "stderr_limit": {
-            "returncode": stderr_case.returncode,
-            "status": stderr_result["status"],
-            "error": stderr_result["error"],
-            "captured_stderr_bytes": len(stderr_case.stderr),
-            "captured_stderr_sha256": hashlib.sha256(stderr_case.stderr).hexdigest(),
-        },
-        "stderr_pending_observed": stderr_pending,
-        "stderr_descendant_lock_released": stderr_released,
-        "invalid_utf8": _compact_result(invalid_utf8),
-        "oversized_prompt": _compact_result(oversized),
+    return {
+        "Q17": {
+            "status": "Pass",
+            "stdout_limit": {
+                "returncode": limit_case.returncode,
+                "status": limit_result["status"],
+                "error": limit_result["error"],
+                "captured_json_bytes": len(limit_case.stdout),
+                "captured_json_sha256": hashlib.sha256(limit_case.stdout).hexdigest(),
+            },
+            "stdout_pending_observed": limit_pending,
+            "stdout_descendant_lock_released": limit_released,
+            "stderr_limit": {
+                "returncode": stderr_case.returncode,
+                "status": stderr_result["status"],
+                "error": stderr_result["error"],
+                "captured_stderr_bytes": len(stderr_case.stderr),
+                "captured_stderr_sha256": hashlib.sha256(stderr_case.stderr).hexdigest(),
+            },
+            "stderr_pending_observed": stderr_pending,
+            "stderr_descendant_lock_released": stderr_released,
+            "invalid_utf8": _compact_result(invalid_utf8),
+            "oversized_prompt": _compact_result(oversized),
+        }
     }
 
-    _exercise_enhancements(prat, root, config, python, script, log, results)
 
-    for artifact, entry_point in (("wheel", prat), ("sdist", sdist_prat)):
+_CORE_SCENARIOS: tuple[_CoreScenario, ...] = (
+    _exercise_q01_q02,
+    _exercise_q03,
+    _exercise_q04,
+    _exercise_q05,
+    _exercise_q06,
+    _exercise_q07,
+    _exercise_q08,
+    _exercise_q09,
+    _exercise_q10,
+    _exercise_q11,
+    _exercise_q12,
+    _exercise_q13,
+    _exercise_q14,
+    _exercise_q15,
+    _exercise_q16,
+    _exercise_q17,
+)
+
+
+def _prepare_exercise(inputs: _ExerciseInputs) -> _ExerciseContext:
+    root = inputs.root
+    root.mkdir(parents=True, exist_ok=True)
+    consumer = root / "consumer"
+    consumer.mkdir(exist_ok=True)
+    (root / "xdg").mkdir(exist_ok=True)
+    log = root / "native.jsonl"
+    log.unlink(missing_ok=True)
+    script = Path(__file__).resolve()
+    python = inputs.prat.with_name("python")
+    fake_bin = _write_fakes(root, python, script)
+    config = root / "config.toml"
+    _write_config(config, python, script)
+    repository = Path(__file__).resolve().parents[1]
+    runtime_identity = _runtime_identity(
+        repository, inputs.prat, inputs.sdist_prat, inputs.wheel, inputs.sdist
+    )
+    return _ExerciseContext(
+        inputs.prat,
+        inputs.sdist_prat,
+        inputs.wheel,
+        inputs.sdist,
+        inputs.base_revision,
+        root,
+        inputs.output,
+        inputs.expected_version,
+        consumer,
+        log,
+        script,
+        python,
+        fake_bin,
+        config,
+        repository,
+        runtime_identity,
+    )
+
+
+def _exercise_artifacts(context: _ExerciseContext, results: dict[str, object]) -> None:
+    for artifact, entry_point in (("wheel", context.prat), ("sdist", context.sdist_prat)):
         a_results = {
-            "A01.inventory": _exercise_a_inventory(entry_point, root, config),
+            "A01.inventory": _exercise_a_inventory(entry_point, context.root, context.config),
             "A02.routes": results["Q05"]
             if artifact == "wheel"
-            else _exercise_routes(entry_point, root, config),
-            "A03.profile": _exercise_a_profile(entry_point, root),
-            "A04.sources": _exercise_a_sources(entry_point, root, config),
+            else _exercise_routes(entry_point, context.root, context.config),
+            "A03.profile": _exercise_a_profile(entry_point, context.root),
+            "A04.sources": _exercise_a_sources(entry_point, context.root, context.config),
             "A08.versions": results["E06"]
             if artifact == "wheel"
-            else _exercise_versions(entry_point, root, config),
-            **_exercise_a_rejections(entry_point, root, config),
-            **_exercise_a_protocols(entry_point, root, config),
+            else _exercise_versions(entry_point, context.root, context.config),
+            **_exercise_a_rejections(entry_point, context.root, context.config),
+            **_exercise_a_protocols(entry_point, context.root, context.config),
         }
         for case, observation in a_results.items():
             aggregate = _record(results.setdefault(case, {"status": "Pass", "artifacts": {}}))
             _record(aggregate["artifacts"])[artifact] = observation
 
-    assert _runtime_identity(repository, prat, sdist_prat, wheel, sdist) == runtime_identity
+
+def _write_evidence(context: _ExerciseContext, results: dict[str, object]) -> None:
+    assert (
+        _runtime_identity(
+            context.repository,
+            context.prat,
+            context.sdist_prat,
+            context.wheel,
+            context.sdist,
+        )
+        == context.runtime_identity
+    )
     runtime_diff = subprocess.check_output(
-        ["git", "diff", "--binary", base_revision, "--", "src/pratfall"],
-        cwd=repository,
+        ["git", "diff", "--binary", context.base_revision, "--", "src/pratfall"],
+        cwd=context.repository,
         timeout=HARNESS_TIMEOUT,
     )
     evidence = {
@@ -3217,26 +3696,49 @@ def _exercise(  # noqa: PLR0913, PLR0915, PLR0917
         "identity": {
             "platform": platform.platform(),
             "python": subprocess.check_output(
-                [str(python), "--version"], text=True, timeout=HARNESS_TIMEOUT
+                [str(context.python), "--version"], text=True, timeout=HARNESS_TIMEOUT
             ).strip(),
-            "base_revision": base_revision,
+            "base_revision": context.base_revision,
             "runtime_diff_sha256": hashlib.sha256(runtime_diff).hexdigest(),
-            "wheel_sha256": _sha256(wheel),
-            "sdist_sha256": _sha256(sdist),
-            "wheel_prat": str(prat),
-            "sdist_prat": str(sdist_prat),
-            "script_sha256": _sha256(script),
-            **runtime_identity,
+            "wheel_sha256": _sha256(context.wheel),
+            "sdist_sha256": _sha256(context.sdist),
+            "wheel_prat": str(context.prat),
+            "sdist_prat": str(context.sdist_prat),
+            "script_sha256": _sha256(context.script),
+            **context.runtime_identity,
         },
         "scenarios": results,
     }
-    output.parent.mkdir(parents=True, exist_ok=True)
-    portable = _portable(evidence, repository)
-    output.write_text(json.dumps(portable, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    context.output.parent.mkdir(parents=True, exist_ok=True)
+    portable = _portable(evidence, context.repository)
+    context.output.write_text(
+        json.dumps(portable, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def _exercise(inputs: _ExerciseInputs) -> int:
+    context = _prepare_exercise(inputs)
+    results: dict[str, object] = {}
+    for scenario in _CORE_SCENARIOS:
+        results.update(scenario(context))
+    enhancement_context = _EnhancementContext(
+        context.prat,
+        context.root,
+        context.config,
+        context.python,
+        context.script,
+        context.log,
+        context.consumer,
+        "first\r\n雪 café\r\n".encode(),
+        context.consumer / "enhancement prompt.md",
+    )
+    results.update(_exercise_enhancements(enhancement_context))
+    _exercise_artifacts(context, results)
+    _write_evidence(context, results)
     statuses = [result["status"] for result in results.values() if isinstance(result, dict)]
     print(
         f"COMPLETED {statuses.count('Pass')} passed, {statuses.count('Not run')} not run; "
-        f"evidence: {output}"
+        f"evidence: {context.output}"
     )
     return 0
 
@@ -3281,14 +3783,16 @@ def main() -> int:
     ):
         parser.error("all artifact, executable, revision, work-dir, and output flags are required")
     return _exercise(
-        args.prat.resolve(),
-        args.sdist_prat.resolve(),
-        args.wheel.resolve(),
-        args.sdist.resolve(),
-        args.base_revision,
-        args.work_dir.resolve(),
-        args.output.resolve(),
-        args.expected_version,
+        _ExerciseInputs(
+            args.prat.resolve(),
+            args.sdist_prat.resolve(),
+            args.wheel.resolve(),
+            args.sdist.resolve(),
+            args.base_revision,
+            args.work_dir.resolve(),
+            args.output.resolve(),
+            args.expected_version,
+        )
     )
 
 

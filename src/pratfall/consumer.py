@@ -1,6 +1,6 @@
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from pratfall.limits import EVENT_BYTES, NUMERIC_BYTES, RECORD_COUNT, RETAINED_STATE_BYTES
@@ -285,14 +285,7 @@ def decode_with(factory: ConsumerFactory, stdout: str) -> DecodedOutput:
                 decoded = consumer.finish()
             except ConsumerFailure as finish_failure:
                 decoded = finish_failure.decoded or DecodedOutput()
-        return DecodedOutput(
-            output=decoded.output,
-            usage=decoded.usage,
-            error=failure.error,
-            timed_out=decoded.timed_out,
-            reported_models=decoded.reported_models,
-            cost_usd=decoded.cost_usd,
-        )
+        return replace(decoded, error=failure.error)
 
 
 def retained_utf8(value: str) -> bytes:
