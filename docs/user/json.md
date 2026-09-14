@@ -56,7 +56,6 @@ Provider and protocol failures exit 1 unless a native nonzero exit has precedenc
 | --- | --- | --- |
 | `invalid_config` | 2 | Configuration file is unreadable, malformed, or rejected. |
 | `invalid_arguments` | 2 | Command line, prompt source, or native option is rejected. |
-| `unsupported_agent` | 2 | Selected agent is not a built-in name, alias, or profile. |
 | `executable_not_found` | 127 | Configured command does not exist. |
 | `executable_not_executable` | 126 | Configured command exists but cannot be executed. |
 | `timeout` | 124 | Run deadline elapsed, or the native CLI reported its own timeout. |
@@ -72,6 +71,10 @@ Provider and protocol failures exit 1 unless a native nonzero exit has precedenc
 | `stdout_limit_exceeded` | 1 | Native stdout or retained decoder state exceeded its budget. |
 | `stderr_limit_exceeded` | 1 | Native stderr exceeded its budget. |
 | `unsupported_platform` | 1 | Process execution requires POSIX. |
+
+A rejected option follows the source that supplied it: a command-line override reports
+`invalid_arguments`, while a `defaults` or profile value reports `invalid_config`. A rejected
+native argument stays `invalid_arguments` from either source.
 
 The three signal- and status-derived rows are computed per run; every other code has the fixed
 exit code above. `internal_error` is the last-resort code: an unexpected failure anywhere in a run

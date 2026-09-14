@@ -22,7 +22,7 @@ from pratfall.cli.presentation import (
     _StreamDiagnostics,
 )
 from pratfall.codes import INTERNAL_ERROR, SIGNAL_EXIT_BASE, exit_code_for
-from pratfall.config import config_path, init_config, load_config, option_labels, resolve_profile
+from pratfall.config import config_path, init_config, load_config, option_origins, resolve_profile
 from pratfall.consumer import ByteConsumer
 from pratfall.errors import PratError
 from pratfall.models import (
@@ -30,6 +30,7 @@ from pratfall.models import (
     ConsumedCapture,
     DecodedOutput,
     Invocation,
+    OptionOrigin,
     RawCapture,
     ResolvedProfile,
     ResultError,
@@ -100,9 +101,8 @@ def _validate_config_native_arguments(config: Config) -> None:
     for name in config.profiles:
         resolved = resolve_profile(config, name)
         source = config.profiles[name].source or config.path
-        label = option_labels(config, name).get(
-            "native_args", f"{source}: profiles.{name}.native_args"
-        )
+        fallback = OptionOrigin(f"{source}: profiles.{name}.native_args")
+        label = option_origins(config, name).get("native_args", fallback).label
         _validate_native_arguments(resolved, label)
 
 
@@ -142,13 +142,7 @@ def _dispatch(args: argparse.Namespace) -> int:
 
 
 def _build_invocation(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
-    adapter = ADAPTERS.get(resolved.agent.name)
-    if adapter is None:
-        raise PratError(
-            f"{resolved.agent.label} execution is not implemented yet.",
-            code="unsupported_agent",
-        )
-    return adapter.build(resolved, prompt)
+    return ADAPTERS[resolved.agent.name].build(resolved, prompt)
 
 
 def _decode(resolved: ResolvedProfile, stdout: str) -> DecodedOutput:
@@ -336,9 +330,9 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             _config_warnings(config, diagnostics)
             resolved = resolve_profile(config, parsed.selector, parsed.options)
             state.resolved = resolved
-            label = option_labels(config, parsed.selector, parsed.options).get(
-                "native_args", f"selector {parsed.selector!r}.native_args"
-            )
+            fallback = OptionOrigin(f"selector {parsed.selector!r}.native_args")
+            origins = option_origins(config, parsed.selector, parsed.options)
+            label = origins.get("native_args", fallback).label
             _validate_native_arguments(resolved, label)
             cwd = _run_cwd(parsed.cwd, invocation_cwd)
             prompt = acquire_prompt(parsed.prompt_source, invocation_cwd)

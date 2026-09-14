@@ -19,7 +19,6 @@ Code = Literal[
     "stderr_limit_exceeded",
     "stdout_limit_exceeded",
     "timeout",
-    "unsupported_agent",
     "unsupported_platform",
 ]
 
@@ -39,7 +38,6 @@ PROVIDER_ERROR: Code = "provider_error"
 STDERR_LIMIT_EXCEEDED: Code = "stderr_limit_exceeded"
 STDOUT_LIMIT_EXCEEDED: Code = "stdout_limit_exceeded"
 TIMEOUT: Code = "timeout"
-UNSUPPORTED_AGENT: Code = "unsupported_agent"
 UNSUPPORTED_PLATFORM: Code = "unsupported_platform"
 
 FAILURE_EXIT = 1
@@ -64,7 +62,6 @@ EXIT_CODES: Mapping[Code, int] = MappingProxyType(
         STDERR_LIMIT_EXCEEDED: FAILURE_EXIT,
         STDOUT_LIMIT_EXCEEDED: FAILURE_EXIT,
         TIMEOUT: TIMEOUT_EXIT,
-        UNSUPPORTED_AGENT: USAGE_EXIT,
         UNSUPPORTED_PLATFORM: FAILURE_EXIT,
     }
 )

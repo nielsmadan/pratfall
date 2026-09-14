@@ -562,7 +562,7 @@ def test_run_rejects_fast_override_for_unsupported_agent(
 ) -> None:
     assert main(["gm", "prompt", "--no-fast", "--dry-run", "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
-    assert result["error"]["code"] == "invalid_config"
+    assert result["error"]["code"] == "invalid_arguments"
     assert "does not support a fast-mode override" in result["error"]["message"]
 
 

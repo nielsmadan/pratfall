@@ -213,7 +213,6 @@ def test_codex_rejects_malformed_truncated_and_unknown_only_streams(stream: str)
 
 def test_codex_top_level_error_is_provider_failure() -> None:
     decoded = codex.decode(codex_stream({"type": "error", "message": "API unavailable"}))
-    assert decoded.error == decoded.error
     assert decoded.error is not None
     assert decoded.error.code == "provider_error"
     assert decoded.error.message == "API unavailable"

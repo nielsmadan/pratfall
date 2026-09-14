@@ -454,6 +454,46 @@ def test_global_fast_is_checked_only_when_a_builtin_is_resolved(tmp_path: Path) 
         resolve_profile(config, "gm")
 
 
+@pytest.mark.parametrize(
+    ("selector", "overrides", "field"),
+    [
+        ("amp", Options(model="chosen"), "model"),
+        ("gm", Options(effort="low"), "effort"),
+        ("cc", Options(effort="unknown"), "effort"),
+        ("cx", Options(max_budget_usd=5.0), "max_budget_usd"),
+        ("rx", Options(max_turns=3), "max_turns"),
+        ("cx", Options(max_ai_credits=5.0), "max_ai_credits"),
+        ("gm", Options(fast=True), "fast"),
+    ],
+)
+def test_command_line_capability_rejections_are_invalid_arguments(
+    selector: str, overrides: Options, field: str
+) -> None:
+    with pytest.raises(PratError) as caught:
+        resolve_profile(load_config(), selector, overrides)
+    assert caught.value.code == "invalid_arguments"
+    assert caught.value.exit_code == 2
+    assert str(caught.value).startswith(f"command line: selector {selector!r}.{field}: ")
+
+
+@pytest.mark.parametrize(
+    ("contents", "selector", "label"),
+    [
+        ('version=1\n[defaults]\nmodel="chosen"\n', "amp", "defaults.model (selector 'amp')"),
+        ('version=1\n[profiles.work]\nagent="gemini"\nfast=true\n', "work", "profiles.work.fast"),
+    ],
+)
+def test_config_supplied_capability_rejections_stay_invalid_config(
+    tmp_path: Path, contents: str, selector: str, label: str
+) -> None:
+    path = write_config(tmp_path, contents)
+    with pytest.raises(PratError) as caught:
+        resolve_profile(load_config(path), selector)
+    assert caught.value.code == "invalid_config"
+    assert caught.value.exit_code == 2
+    assert str(caught.value).startswith(f"{path}: {label}: ")
+
+
 def test_unknown_selector_suggests_inventory() -> None:
     with pytest.raises(PratError, match="prat profiles") as caught:
         resolve_profile(load_config(), "unknown")

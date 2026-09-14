@@ -41,6 +41,12 @@ class Options:
 
 
 @dataclass(frozen=True)
+class OptionOrigin:
+    label: str
+    code: Code = "invalid_config"
+
+
+@dataclass(frozen=True)
 class Profile:
     agent: str
     options: Options = Options()

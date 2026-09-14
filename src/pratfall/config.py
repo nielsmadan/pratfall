@@ -9,7 +9,7 @@ from types import MappingProxyType
 
 from pratfall.catalog import BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent
 from pratfall.errors import PratError
-from pratfall.models import AgentSpec, Config, Options, Profile, ResolvedProfile
+from pratfall.models import AgentSpec, Config, OptionOrigin, Options, Profile, ResolvedProfile
 
 DEFAULT_TIMEOUT = 600.0
 OPTION_FIELDS = frozenset(Options.__dataclass_fields__)
@@ -131,59 +131,63 @@ def merge_options(*layers: Options) -> Options:
     return parse_options(values, "options")
 
 
+def _rejected(origin: OptionOrigin, message: str) -> PratError:
+    return PratError(f"{origin.label}: {message}", code=origin.code)
+
+
 def validate_capabilities(
     agent: AgentSpec,
     options: Options,
     label: str,
     *,
-    labels: Mapping[str, str] | None = None,
+    origins: Mapping[str, OptionOrigin] | None = None,
 ) -> None:
-    fields = {name: f"{label}.{name}" for name in OPTION_FIELDS}
-    if labels is not None:
-        fields.update(labels)
+    fields = {name: OptionOrigin(f"{label}.{name}") for name in OPTION_FIELDS}
+    if origins is not None:
+        fields.update(origins)
     caps = agent.capabilities
     if options.model is not None and not caps.model:
-        raise PratError(f"{fields['model']}: {agent.label} does not support a model override.")
+        raise _rejected(fields["model"], f"{agent.label} does not support a model override.")
     if options.effort is not None:
         if not caps.effort:
-            raise PratError(
-                f"{fields['effort']}: {agent.label} does not support an effort override."
-            )
+            raise _rejected(fields["effort"], f"{agent.label} does not support an effort override.")
         if caps.effort_values and options.effort not in caps.effort_values:
             allowed = ", ".join(caps.effort_values)
-            raise PratError(f"{fields['effort']}: {agent.label} accepts: {allowed}.")
+            raise _rejected(fields["effort"], f"{agent.label} accepts: {allowed}.")
     for field in ("max_budget_usd", "max_turns", "max_ai_credits"):
         if getattr(options, field) is not None and field not in caps.budgets:
-            raise PratError(f"{fields[field]}: {agent.label} does not support this budget.")
+            raise _rejected(fields[field], f"{agent.label} does not support this budget.")
     if options.fast is not None and not caps.fast:
-        raise PratError(f"{fields['fast']}: {agent.label} does not support a fast-mode override.")
+        raise _rejected(fields["fast"], f"{agent.label} does not support a fast-mode override.")
 
 
-def option_labels(
+def option_origins(
     config: Config, selector: str, overrides: Options | None = None
-) -> dict[str, str]:
-    labels = {
-        name: f"{source}: defaults.{name} (selector {selector!r})"
+) -> dict[str, OptionOrigin]:
+    origins = {
+        name: OptionOrigin(f"{source}: defaults.{name} (selector {selector!r})")
         for name, source in config.default_sources.items()
     }
     profile = config.profiles.get(selector)
     if profile is not None:
-        labels.update(
+        origins.update(
             {
-                name: f"{profile.source or config.path}: profiles.{selector}.{name}"
+                name: OptionOrigin(f"{profile.source or config.path}: profiles.{selector}.{name}")
                 for name, value in asdict(profile.options).items()
                 if value is not None
             }
         )
     if overrides is not None:
-        labels.update(
+        origins.update(
             {
-                name: f"command line: selector {selector!r}.{name}"
+                name: OptionOrigin(
+                    f"command line: selector {selector!r}.{name}", "invalid_arguments"
+                )
                 for name, value in asdict(overrides).items()
                 if value is not None
             }
         )
-    return labels
+    return origins
 
 
 def _commands(table: dict[str, object], path: Path) -> dict[str, tuple[str, ...]]:
@@ -310,7 +314,7 @@ def load_config(explicit: str | Path | None = None, *, cwd: Path | None = None) 
             BY_NAME[profile.agent],
             merge_options(config.defaults, profile.options),
             f"{profile.source}: profiles.{name}",
-            labels=option_labels(config, name),
+            origins=option_origins(config, name),
         )
     return config
 
@@ -344,7 +348,7 @@ def resolve_profile(
         agent,
         options,
         f"{config.path}: selector {selector!r}",
-        labels=option_labels(config, selector, overrides),
+        origins=option_origins(config, selector, overrides),
     )
     return ResolvedProfile(
         agent,

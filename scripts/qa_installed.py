@@ -2183,7 +2183,7 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
             returncode=2,
             status="error",
             native_exit_code=None,
-            error_code="invalid_config",
+            error_code="invalid_arguments",
             error_message=f"command line: selector {selector!r}.{message}",
         )
         controls[selector] = _compact_result(completed)
@@ -2430,8 +2430,10 @@ def _exercise_enhancements(  # noqa: PLR0913, PLR0915, PLR0917
         returncode=2,
         status="error",
         native_exit_code=None,
-        error_code="invalid_config",
-        error_message=_text(_record(_json_result(unsupported_fast)["error"])["message"]),
+        error_code="invalid_arguments",
+        error_message=(
+            "command line: selector 'gm'.fast: Gemini does not support a fast-mode override."
+        ),
     )
     assert len(_calls(log)) == calls_before
     results["E05"] = {
