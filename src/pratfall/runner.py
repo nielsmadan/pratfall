@@ -9,7 +9,6 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from types import FrameType
 from typing import BinaryIO, cast
 
 from pratfall.codes import (
@@ -21,6 +20,14 @@ from pratfall.codes import (
     Code,
 )
 from pratfall.consumer import ByteConsumer, ConsumerFailure
+from pratfall.interruption import (
+    Handler,
+    InterruptionState,
+    Previous,
+    handler_for,
+    install,
+    restore,
+)
 from pratfall.limits import FINAL_DRAIN_GRACE, STDERR_BYTES, STDOUT_BYTES, TERMINATE_GRACE
 from pratfall.models import Activity, DecodedOutput, Invocation, ResultError
 
@@ -52,9 +59,7 @@ DEFAULT_OUTPUT_LIMITS = OutputLimits()
 
 
 @dataclass
-class _SignalState:
-    received: int | None = None
-    repeated: bool = False
+class _SignalState(InterruptionState):
     process_group: int | None = None
 
 
@@ -83,7 +88,8 @@ def run(
             started, "unsupported_platform", "Process execution requires POSIX."
         )
     signal_state = _SignalState()
-    previous = _install_handlers(signal_state)
+    previous: Previous = {}
+    install(_interrupt_handler(signal_state), previous)
     process: subprocess.Popen[bytes] | None = None
     try:
         try:
@@ -141,7 +147,7 @@ def run(
                 decoded=decoded_output,
             )
     finally:
-        _restore_handlers(previous)
+        restore(previous)
 
 
 def _collect(
@@ -394,30 +400,12 @@ def _process_group_exists(process_group: int) -> bool:
     return True
 
 
-def _install_handlers(
-    state: _SignalState,
-) -> dict[signal.Signals, Callable[[int, FrameType | None], None] | int | None]:
-    previous: dict[signal.Signals, Callable[[int, FrameType | None], None] | int | None] = {}
+def _interrupt_handler(state: _SignalState) -> Handler:
+    def escalate() -> None:
+        if state.process_group is not None:
+            _signal_group(state.process_group, signal.SIGKILL)
 
-    def receive(signum: int, _frame: FrameType | None) -> None:
-        if state.received is None:
-            state.received = signum
-        else:
-            state.repeated = True
-            if state.process_group is not None:
-                _signal_group(state.process_group, signal.SIGKILL)
-
-    for chosen in (signal.SIGINT, signal.SIGTERM):
-        previous[chosen] = signal.getsignal(chosen)
-        signal.signal(chosen, receive)
-    return previous
-
-
-def _restore_handlers(
-    previous: dict[signal.Signals, Callable[[int, FrameType | None], None] | int | None],
-) -> None:
-    for chosen, handler in previous.items():
-        signal.signal(chosen, handler)
+    return handler_for(state, on_repeat=escalate)
 
 
 def _signal_group(process_group: int, chosen: signal.Signals) -> None:

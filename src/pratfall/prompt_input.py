@@ -1,17 +1,16 @@
 import errno
 import os
 import select
-import signal
 import stat
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from types import FrameType
 from typing import BinaryIO, Literal, TextIO, cast
 
 from pratfall.errors import PratError
+from pratfall.interruption import InterruptionState, handler_for, handling
 
 PROMPT_LIMIT = 1024 * 1024
 _READ_SIZE = 64 * 1024
@@ -29,11 +28,6 @@ class InputInterrupted(Exception):
         self.signum = signum
 
 
-@dataclass
-class _SignalState:
-    received: int | None = None
-
-
 def acquire_prompt(source: PromptSource | None, invocation_cwd: Path) -> bytes:
     if source is None:
         if _stdin_is_terminal():
@@ -42,7 +36,7 @@ def acquire_prompt(source: PromptSource | None, invocation_cwd: Path) -> bytes:
                 code="invalid_arguments",
             )
         source = PromptSource("stdin")
-    state = _SignalState()
+    state = InterruptionState()
     with _input_signal_handlers(state):
         if source.kind == "inline":
             value = _encode_inline(cast(str, source.value))
@@ -71,7 +65,7 @@ def _encode_inline(value: str) -> bytes:
         raise PratError("Prompt is not valid UTF-8.", code="invalid_arguments") from error
 
 
-def _read_file(value: str, invocation_cwd: Path, state: _SignalState) -> bytes:
+def _read_file(value: str, invocation_cwd: Path, state: InterruptionState) -> bytes:
     path = Path(os.path.abspath(invocation_cwd / value))
     flags = os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
     try:
@@ -96,7 +90,7 @@ def _read_file(value: str, invocation_cwd: Path, state: _SignalState) -> bytes:
         os.close(descriptor)
 
 
-def _read_stdin(state: _SignalState) -> bytes:
+def _read_stdin(state: InterruptionState) -> bytes:
     stream = cast(BinaryIO | TextIO, getattr(sys.stdin, "buffer", sys.stdin))
     if stream is None:
         raise PratError(
@@ -110,7 +104,7 @@ def _read_stdin(state: _SignalState) -> bytes:
     return _read_descriptor(descriptor, state, wait=True, label="standard input")
 
 
-def _read_stream(stream: BinaryIO | TextIO, state: _SignalState) -> bytes:
+def _read_stream(stream: BinaryIO | TextIO, state: InterruptionState) -> bytes:
     _raise_if_interrupted(state)
     try:
         value = stream.read(PROMPT_LIMIT + 1)
@@ -127,7 +121,7 @@ def _read_stream(stream: BinaryIO | TextIO, state: _SignalState) -> bytes:
     return value
 
 
-def _read_descriptor(descriptor: int, state: _SignalState, *, wait: bool, label: str) -> bytes:
+def _read_descriptor(descriptor: int, state: InterruptionState, *, wait: bool, label: str) -> bytes:
     value = bytearray()
     while len(value) <= PROMPT_LIMIT:
         _raise_if_interrupted(state)
@@ -170,25 +164,15 @@ def _validate(value: bytes, label: str) -> bytes:
     return value
 
 
-def _raise_if_interrupted(state: _SignalState) -> None:
+def _raise_if_interrupted(state: InterruptionState) -> None:
     if state.received is not None:
         raise InputInterrupted(state.received)
 
 
 @contextmanager
-def _input_signal_handlers(state: _SignalState) -> Iterator[None]:
-    previous: dict[signal.Signals, Callable[[int, FrameType | None], None] | int | None] = {}
-
-    def receive(signum: int, _frame: FrameType | None) -> None:
-        if state.received is None:
-            state.received = signum
-
+def _input_signal_handlers(state: InterruptionState) -> Iterator[None]:
     try:
-        for chosen in (signal.SIGINT, signal.SIGTERM):
-            previous[chosen] = signal.getsignal(chosen)
-            signal.signal(chosen, receive)
-        yield
+        with handling(handler_for(state)):
+            yield
     finally:
-        for chosen, handler in previous.items():
-            signal.signal(chosen, handler)
         _raise_if_interrupted(state)

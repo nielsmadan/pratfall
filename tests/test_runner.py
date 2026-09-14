@@ -505,8 +505,9 @@ def test_progress_failure_terminates_child_and_preserves_streamed_answer(tmp_pat
             consumer=codex.consumer(),
             progress=fail_progress,
         )
-        assert result.error is not None
-        assert result.error.code == "output_io_error"
+        assert result.error == ResultError(
+            "output_io_error", "Cannot write progress to stderr: closed progress pipe."
+        )
         assert result.decoded is not None
         assert result.decoded.output == "partial"
         assert_process_terminated(int(pid_path.read_text()), lock_path)

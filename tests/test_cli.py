@@ -19,11 +19,11 @@ from pratfall.cli import (
     _doctor,
     _doctor_inventory,
     _doctor_line,
-    _InterruptionState,
     _version_result,
     main,
 )
 from pratfall.config import init_config, load_config
+from pratfall.interruption import InterruptionState
 from pratfall.models import Config, Invocation
 from pratfall.runner import OutputLimits, ProcessResult
 from pratfall.runner import run as run_process
@@ -659,7 +659,7 @@ def test_doctor_version_interruption_before_first_inventory_item_is_normalized(
     config = _version_config(tmp_path, {"codex": [sys.executable, "-c", "print('later')"]})
 
     def interrupt_before_inventory(
-        loaded: Config, interruption: _InterruptionState | None = None
+        loaded: Config, interruption: InterruptionState | None = None
     ) -> list[dict[str, object]]:
         assert interruption is not None
         os.kill(os.getpid(), signal.SIGINT)

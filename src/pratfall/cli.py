@@ -6,13 +6,12 @@ import math
 import os
 import shlex
 import shutil
-import signal
 import sys
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from types import FrameType, MappingProxyType
+from types import MappingProxyType
 from typing import Literal, NoReturn
 
 from pratfall import __version__
@@ -22,6 +21,7 @@ from pratfall.codes import SIGNAL_EXIT_BASE
 from pratfall.config import config_path, init_config, load_config, option_labels, resolve_profile
 from pratfall.consumer import ByteConsumer
 from pratfall.errors import PratError
+from pratfall.interruption import InterruptionState, handler_for, handling
 from pratfall.models import (
     Activity,
     Config,
@@ -76,8 +76,7 @@ class RunArguments:
 
 
 @dataclass
-class _InterruptionState:
-    received: int | None = None
+class _DoctorState(InterruptionState):
     result_chosen: bool = False
 
 
@@ -232,7 +231,7 @@ def _profiles(config: Config, json_mode: bool) -> None:
 
 
 def _doctor_inventory(
-    config: Config, interruption: _InterruptionState | None = None
+    config: Config, interruption: InterruptionState | None = None
 ) -> list[dict[str, object]]:
     records: list[dict[str, object]] = []
     for agent in AGENTS:
@@ -255,25 +254,18 @@ def _doctor_inventory(
 
 
 @contextmanager
-def _track_interruption(state: _InterruptionState) -> Iterator[None]:
-    previous: dict[signal.Signals, Callable[[int, FrameType | None], None] | int | None] = {}
+def _track_interruption(state: _DoctorState) -> Iterator[None]:
     raise_immediately = True
 
-    def receive(signum: int, _frame: FrameType | None) -> None:
-        if state.received is None:
-            state.received = signum
-            if raise_immediately and not state.result_chosen:
-                raise _DoctorInterrupted
+    def on_first(_signum: int) -> None:
+        if raise_immediately and not state.result_chosen:
+            raise _DoctorInterrupted
 
-    try:
-        for chosen in (signal.SIGINT, signal.SIGTERM):
-            previous[chosen] = signal.getsignal(chosen)
-            signal.signal(chosen, receive)
-        yield
-    finally:
-        raise_immediately = False
-        for chosen, handler in previous.items():
-            signal.signal(chosen, handler)
+    with handling(handler_for(state, on_first=on_first)):
+        try:
+            yield
+        finally:
+            raise_immediately = False
 
 
 def _doctor(config: Config, json_mode: bool, *, versions: bool) -> int:
@@ -287,7 +279,7 @@ def _doctor(config: Config, json_mode: bool, *, versions: bool) -> int:
         )
         return 0
 
-    interruption = _InterruptionState()
+    interruption = _DoctorState()
     try:
         with _track_interruption(interruption):
             try:
