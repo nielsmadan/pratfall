@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import devin
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -78,7 +79,7 @@ def test_devin_defaults_preserve_native_trust_and_permissions() -> None:
 )
 def test_devin_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
     with pytest.raises(PratError) as failure:
-        devin.validate(arguments)
+        devin.validate(resolved_profile("devin", Options(native_args=arguments)))
     assert failure.value.code == "invalid_arguments"
 
 

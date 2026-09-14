@@ -360,10 +360,7 @@ def _validate_native_arguments(resolved: ResolvedProfile, label: str) -> None:
     if adapter is None:
         return
     try:
-        if adapter.validate_resolved is not None:
-            adapter.validate_resolved(resolved)
-        else:
-            adapter.validate(resolved.options.native_args or ())
+        adapter.validate(resolved)
     except PratError as error:
         raise PratError(f"{label}: {error}", code=error.code) from error
 

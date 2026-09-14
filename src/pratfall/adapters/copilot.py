@@ -110,7 +110,6 @@ _TERMINAL_WARNINGS = frozenset({"compaction_static_context_blocked", "policy_blo
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
-    validate(arguments)
     argv = [*resolved.command, "--output-format=json"]
     options = resolved.options
     if options.model is not None:
@@ -124,8 +123,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     return Invocation(tuple(argv), b"")
 
 
-def validate(arguments: tuple[str, ...]) -> None:
-    validate_flags("Copilot", arguments, _ALLOWED, _RESERVED)
+def validate(resolved: ResolvedProfile) -> None:
+    validate_flags("Copilot", resolved.options.native_args or (), _ALLOWED, _RESERVED)
 
 
 @dataclass

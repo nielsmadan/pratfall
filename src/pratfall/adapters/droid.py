@@ -40,7 +40,6 @@ _RESERVED = {
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
-    validate(arguments)
     argv = [*resolved.command, "exec", "--output-format", "json"]
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
@@ -49,8 +48,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     return Invocation((*argv, *arguments), prompt)
 
 
-def validate(arguments: tuple[str, ...]) -> None:
-    validate_flags("Droid", arguments, _ALLOWED, _RESERVED)
+def validate(resolved: ResolvedProfile) -> None:
+    validate_flags("Droid", resolved.options.native_args or (), _ALLOWED, _RESERVED)
 
 
 def decode(stdout: str) -> DecodedOutput:

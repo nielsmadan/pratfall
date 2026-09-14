@@ -64,9 +64,8 @@ def test_openclaw_serializes_native_timeout_as_ceiling_plain_integer(
 
 def test_openclaw_explicit_fallback_requires_model() -> None:
     with pytest.raises(PratError, match="fallback requires an explicit model"):
-        openclaw.build(
-            resolved("openclaw", Options(native_args=("--fallback", "provider/backup"))),
-            b"prompt",
+        openclaw.validate(
+            resolved("openclaw", Options(native_args=("--fallback", "provider/backup")))
         )
 
 

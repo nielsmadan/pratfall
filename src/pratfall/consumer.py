@@ -1,5 +1,4 @@
 import json
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -31,6 +30,10 @@ class ConsumerLimits:
 
 
 DEFAULT_CONSUMER_LIMITS = ConsumerLimits()
+
+
+class ConsumerFactory(Protocol):
+    def __call__(self, limits: ConsumerLimits = ...) -> ByteConsumer: ...
 
 
 class StateBudget:
@@ -231,7 +234,7 @@ class JsonlConsumer:
             self._scan -= removed
 
 
-def decode_with(factory: Callable[[], ByteConsumer], stdout: str) -> DecodedOutput:
+def decode_with(factory: ConsumerFactory, stdout: str) -> DecodedOutput:
     consumer = factory()
     try:
         encoded = stdout.encode("utf-8")

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import iflow
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -54,7 +55,7 @@ def test_iflow_builder_keeps_literal_prompt_and_native_modes() -> None:
 )
 def test_iflow_rejects_reserved_and_unknown_native_arguments(arguments: tuple[str, ...]) -> None:
     with pytest.raises(PratError) as failure:
-        iflow.validate(arguments)
+        iflow.validate(resolved_profile("iflow", Options(native_args=arguments)))
     assert failure.value.code == "invalid_arguments"
 
 

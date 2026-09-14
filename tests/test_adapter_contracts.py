@@ -1,6 +1,9 @@
 import json
-from collections.abc import Callable
-from types import ModuleType
+from collections.abc import Callable, Mapping
+from dataclasses import replace
+from difflib import SequenceMatcher
+from importlib import import_module
+from typing import Protocol
 
 import pytest
 
@@ -24,9 +27,170 @@ from pratfall.adapters import (
     openclaw,
     opencode,
 )
+from pratfall.adapters.native_args import Flag
+from pratfall.adapters.registry import ADAPTERS, Adapter
+from pratfall.catalog import BY_NAME
 from pratfall.consumer import ByteConsumer, ConsumerFailure, ConsumerLimits
 from pratfall.errors import PratError
-from pratfall.models import DecodedOutput, Options, ResultError, Usage
+from pratfall.models import (
+    Capabilities,
+    DecodedOutput,
+    Invocation,
+    Options,
+    ResolvedProfile,
+    ResultError,
+    Usage,
+)
+
+
+class AdapterModule(Protocol):
+    def build(self, resolved: ResolvedProfile, prompt: bytes) -> Invocation: ...
+
+    def validate(self, resolved: ResolvedProfile) -> None: ...
+
+    def decode(self, stdout: str) -> DecodedOutput: ...
+
+
+_TIMEOUT = 30.0
+_FAST_MARKERS: Mapping[str, str] = {
+    "claude": '{"fastMode": true}',
+    "codex": 'service_tier="priority"',
+}
+_CAPABILITY_CASES: tuple[tuple[str, Options, str | Mapping[str, str]], ...] = (
+    ("model", Options(timeout=_TIMEOUT, model="conformance-model"), "conformance-model"),
+    ("effort", Options(timeout=_TIMEOUT, effort="conformance-effort"), "conformance-effort"),
+    ("max_budget_usd", Options(timeout=_TIMEOUT, max_budget_usd=12.5), "12.5"),
+    ("max_turns", Options(timeout=_TIMEOUT, max_turns=97), "97"),
+    ("max_ai_credits", Options(timeout=_TIMEOUT, max_ai_credits=13.75), "13.75"),
+    ("fast", Options(timeout=_TIMEOUT, fast=True), _FAST_MARKERS),
+)
+_EVERY_CAPABILITY = Options(
+    timeout=_TIMEOUT,
+    model="conformance-model",
+    effort="conformance-effort",
+    max_budget_usd=12.5,
+    max_turns=97,
+    max_ai_credits=13.75,
+    fast=True,
+)
+
+
+def _declares(capabilities: Capabilities, option: str) -> bool:
+    if option == "model":
+        return capabilities.model
+    if option == "effort":
+        return capabilities.effort
+    if option == "fast":
+        return capabilities.fast
+    return option in capabilities.budgets
+
+
+def _reserved(agent: str) -> Mapping[str, Flag]:
+    reserved: Mapping[str, Flag] = import_module(f"pratfall.adapters.{agent}")._RESERVED
+    return reserved
+
+
+def _marker(agent: str, marker: str | Mapping[str, str]) -> str | None:
+    return marker if isinstance(marker, str) else marker.get(agent)
+
+
+def _without(option: str) -> Options:
+    if option == "model":
+        return replace(_EVERY_CAPABILITY, model=None)
+    if option == "effort":
+        return replace(_EVERY_CAPABILITY, effort=None)
+    if option == "max_budget_usd":
+        return replace(_EVERY_CAPABILITY, max_budget_usd=None)
+    if option == "max_turns":
+        return replace(_EVERY_CAPABILITY, max_turns=None)
+    if option == "max_ai_credits":
+        return replace(_EVERY_CAPABILITY, max_ai_credits=None)
+    return replace(_EVERY_CAPABILITY, fast=None)
+
+
+def _added_positions(baseline: tuple[str, ...], variant: tuple[str, ...]) -> frozenset[int]:
+    positions: set[int] = set()
+    for tag, _, _, start, end in SequenceMatcher(
+        a=baseline, b=variant, autojunk=False
+    ).get_opcodes():
+        if tag != "equal":
+            positions.update(range(start, end))
+    return frozenset(positions)
+
+
+def _owning_flag(variant: tuple[str, ...], index: int) -> str:
+    argument = variant[index]
+    if argument.startswith("-"):
+        return argument.split("=", 1)[0]
+    return variant[index - 1] if index else argument
+
+
+_RESERVED_CASES: tuple[tuple[str, str], ...] = tuple(
+    (agent, flag) for agent in sorted(ADAPTERS) for flag in _reserved(agent)
+)
+
+
+def test_adapter_requires_exactly_one_whole_document_or_consumer() -> None:
+    with pytest.raises(TypeError, match="exactly one"):
+        Adapter(build=claude.build, validate=claude.validate)
+    with pytest.raises(TypeError, match="exactly one"):
+        Adapter(
+            build=codex.build,
+            validate=codex.validate,
+            whole_document=codex.decode,
+            consumer=codex.consumer,
+        )
+
+
+@pytest.mark.parametrize("agent", sorted(ADAPTERS))
+@pytest.mark.parametrize(("option", "options", "marker"), _CAPABILITY_CASES)
+def test_build_emits_exactly_the_capabilities_the_catalog_declares(
+    agent: str, option: str, options: Options, marker: str | Mapping[str, str]
+) -> None:
+    build = ADAPTERS[agent].build
+    baseline = build(resolved(agent, Options(timeout=_TIMEOUT)), b"prompt").argv
+    variant = build(resolved(agent, options), b"prompt").argv
+    if not _declares(BY_NAME[agent].capabilities, option):
+        assert variant == baseline
+        return
+    assert variant != baseline
+    text = _marker(agent, marker)
+    assert text is not None
+    added = _added_positions(baseline, variant)
+    carriers = tuple(index for index, argument in enumerate(variant) if text in argument)
+    assert carriers
+    for index in carriers:
+        assert index in added
+        assert _owning_flag(variant, index) in _reserved(agent)
+
+
+@pytest.mark.parametrize("agent", sorted(ADAPTERS))
+def test_build_ignores_undeclared_capabilities_when_every_option_is_set(agent: str) -> None:
+    build = ADAPTERS[agent].build
+    capabilities = BY_NAME[agent].capabilities
+    everything = build(resolved(agent, _EVERY_CAPABILITY), b"prompt").argv
+    for option, _, marker in _CAPABILITY_CASES:
+        if _declares(capabilities, option):
+            continue
+        assert everything == build(resolved(agent, _without(option)), b"prompt").argv
+        text = _marker(agent, marker)
+        if text is not None:
+            assert not any(text in argument for argument in everything)
+
+
+@pytest.mark.parametrize(("agent", "flag"), _RESERVED_CASES)
+def test_validate_rejects_owned_native_arguments(agent: str, flag: str) -> None:
+    with pytest.raises(PratError, match="controlled by prat") as owned:
+        ADAPTERS[agent].validate(resolved(agent, Options(native_args=(flag,))))
+    assert owned.value.code == "invalid_arguments"
+
+
+@pytest.mark.parametrize("agent", sorted(ADAPTERS))
+def test_validate_rejects_unknown_native_arguments(agent: str) -> None:
+    probe = Options(native_args=("--prat-conformance-probe",))
+    with pytest.raises(PratError, match="unknown native option") as unknown:
+        ADAPTERS[agent].validate(resolved(agent, probe))
+    assert unknown.value.code == "invalid_arguments"
 
 
 @pytest.mark.parametrize(
@@ -44,9 +208,9 @@ from pratfall.models import DecodedOutput, Options, ResultError, Usage
     ],
 )
 def test_owned_native_flags_are_rejected(agent: str, arguments: tuple[str, ...]) -> None:
-    adapter = claude if agent == "claude" else codex
+    adapter: AdapterModule = claude if agent == "claude" else codex
     with pytest.raises(PratError, match="controlled by prat"):
-        adapter.build(resolved(agent, Options(native_args=arguments)), b"prompt")
+        adapter.validate(resolved(agent, Options(native_args=arguments)))
 
 
 @pytest.mark.parametrize(
@@ -59,7 +223,7 @@ def test_owned_native_flags_are_rejected(agent: str, arguments: tuple[str, ...])
     ],
 )
 def test_fast_mode_native_mapping(agent: str, fast: bool | None, expected: tuple[str, ...]) -> None:
-    adapter = claude if agent == "claude" else codex
+    adapter: AdapterModule = claude if agent == "claude" else codex
     invocation = adapter.build(resolved(agent, Options(fast=fast)), b"prompt")
     for item in expected:
         assert item in invocation.argv
@@ -83,9 +247,9 @@ def test_fast_mode_native_mapping(agent: str, fast: bool | None, expected: tuple
 def test_unvetted_native_argument_forms_are_rejected(
     agent: str, arguments: tuple[str, ...], message: str
 ) -> None:
-    adapter = claude if agent == "claude" else codex
+    adapter: AdapterModule = claude if agent == "claude" else codex
     with pytest.raises(PratError, match=message):
-        adapter.build(resolved(agent, Options(native_args=arguments)), b"prompt")
+        adapter.validate(resolved(agent, Options(native_args=arguments)))
 
 
 @pytest.mark.parametrize(
@@ -114,10 +278,10 @@ def test_unvetted_native_argument_forms_are_rejected(
     ],
 )
 def test_new_adapters_reject_owned_native_flags(
-    adapter: ModuleType, agent: str, arguments: tuple[str, ...]
+    adapter: AdapterModule, agent: str, arguments: tuple[str, ...]
 ) -> None:
     with pytest.raises(PratError, match="controlled by prat"):
-        adapter.build(resolved(agent, Options(native_args=arguments)), b"prompt")
+        adapter.validate(resolved(agent, Options(native_args=arguments)))
 
 
 @pytest.mark.parametrize(
@@ -136,15 +300,15 @@ def test_new_adapters_reject_owned_native_flags(
     ],
 )
 def test_new_adapters_reject_unvetted_native_arguments(
-    adapter: ModuleType, agent: str, arguments: tuple[str, ...], message: str
+    adapter: AdapterModule, agent: str, arguments: tuple[str, ...], message: str
 ) -> None:
     with pytest.raises(PratError, match=message):
-        adapter.build(resolved(agent, Options(native_args=arguments)), b"prompt")
+        adapter.validate(resolved(agent, Options(native_args=arguments)))
 
 
 @pytest.mark.parametrize("adapter", [kiro, hermes])
 def test_text_adapters_preserve_stdout_and_remove_terminal_line_endings(
-    adapter: ModuleType,
+    adapter: AdapterModule,
 ) -> None:
     decoded = adapter.decode("banner\nfinal answer\r\n")
     assert decoded == DecodedOutput(output="banner\nfinal answer")

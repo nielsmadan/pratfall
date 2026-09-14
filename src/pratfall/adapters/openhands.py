@@ -76,15 +76,14 @@ _SUMMARY = re.compile(r"[─━]+ CONVERSATION SUMMARY [─━]+")
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
-    validate(arguments)
     return Invocation(
         (*resolved.command, "--headless", "--json", *arguments, f"--task={prompt.decode('utf-8')}"),
         b"",
     )
 
 
-def validate(arguments: tuple[str, ...]) -> None:
-    validate_flags("OpenHands", arguments, _ALLOWED, _RESERVED)
+def validate(resolved: ResolvedProfile) -> None:
+    validate_flags("OpenHands", resolved.options.native_args or (), _ALLOWED, _RESERVED)
 
 
 def decode(stdout: str) -> DecodedOutput:

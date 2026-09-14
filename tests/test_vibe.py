@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import vibe
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -78,7 +79,7 @@ def test_vibe_bare_prompt_stdin_and_native_budgets() -> None:
 )
 def test_vibe_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
     with pytest.raises(PratError):
-        vibe.validate(arguments)
+        vibe.validate(resolved_profile("vibe", Options(native_args=arguments)))
 
 
 @pytest.mark.parametrize(

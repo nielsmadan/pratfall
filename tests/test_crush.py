@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import crush
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -80,7 +81,7 @@ def test_crush_defaults_add_only_one_shot_controls() -> None:
 )
 def test_crush_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
     with pytest.raises(PratError) as failure:
-        crush.validate(arguments)
+        crush.validate(resolved_profile("crush", Options(native_args=arguments)))
     assert failure.value.code == "invalid_arguments"
 
 

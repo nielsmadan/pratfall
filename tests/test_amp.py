@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import amp
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -75,7 +76,7 @@ def test_amp_literal_stdin_and_native_thinking() -> None:
 )
 def test_amp_reserved_and_unknown_arguments(arguments: tuple[str, ...]) -> None:
     with pytest.raises(PratError):
-        amp.validate(arguments)
+        amp.validate(resolved_profile("amp", Options(native_args=arguments)))
 
 
 @pytest.mark.parametrize(

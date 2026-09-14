@@ -59,7 +59,7 @@ def test_copilot_builds_optional_variadic_native_arguments() -> None:
 )
 def test_copilot_rejects_native_flags_that_persist_configuration(argument: str) -> None:
     with pytest.raises(PratError, match="unknown native option"):
-        copilot.build(resolved("copilot", Options(native_args=(argument,))), b"prompt")
+        copilot.validate(resolved("copilot", Options(native_args=(argument,))))
 
 
 def test_copilot_deduplicates_snapshots_and_excludes_subagent_text() -> None:

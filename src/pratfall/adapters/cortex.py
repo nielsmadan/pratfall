@@ -46,7 +46,6 @@ _RESERVED = {
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
-    validate(arguments)
     argv = [*resolved.command]
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
@@ -58,8 +57,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     return Invocation(tuple(argv), prompt)
 
 
-def validate(arguments: tuple[str, ...]) -> None:
-    validate_flags("Cortex Code", arguments, _ALLOWED, _RESERVED)
+def validate(resolved: ResolvedProfile) -> None:
+    validate_flags("Cortex Code", resolved.options.native_args or (), _ALLOWED, _RESERVED)
 
 
 def decode(stdout: str) -> DecodedOutput:

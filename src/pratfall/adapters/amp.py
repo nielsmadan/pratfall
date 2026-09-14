@@ -30,17 +30,16 @@ _RESERVED = {
         "--max-turns",
     )
 }
-_ERRORS = {"error_during_execution", "error_max_turns"}
+_AMP_SYSTEM_ERRORS = {"error_during_execution", "error_max_turns"}
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
-    validate(arguments)
     return Invocation((*resolved.command, "--execute", "--stream-json", *arguments), prompt)
 
 
-def validate(arguments: tuple[str, ...]) -> None:
-    validate_flags("Amp", arguments, _ALLOWED, _RESERVED)
+def validate(resolved: ResolvedProfile) -> None:
+    validate_flags("Amp", resolved.options.native_args or (), _ALLOWED, _RESERVED)
 
 
 def decode(stdout: str) -> DecodedOutput:
@@ -80,7 +79,7 @@ class _Consumer(JsonlConsumer):
             return "finishing"
         if event_type == "system":
             subtype = event.get("subtype")
-            if isinstance(subtype, str) and subtype in _ERRORS:
+            if isinstance(subtype, str) and subtype in _AMP_SYSTEM_ERRORS:
                 self._error(event.get("error"))
             elif subtype != "init":
                 self.malformed("Amp system subtype is malformed.")
@@ -147,7 +146,11 @@ class _Consumer(JsonlConsumer):
                 self._text(text)
             finally:
                 self._retain_usage(event.get("usage"))
-        elif isinstance(subtype, str) and subtype in _ERRORS and event.get("is_error") is True:
+        elif (
+            isinstance(subtype, str)
+            and subtype in _AMP_SYSTEM_ERRORS
+            and event.get("is_error") is True
+        ):
             self._error(event.get("error"))
             self._retain_usage(event.get("usage"))
         else:

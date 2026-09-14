@@ -42,12 +42,11 @@ _RESERVED = {
         "--json-schema",
     )
 }
-_ERRORS = {"error_during_execution", "error_max_turns"}
+_QWEN_RESULT_ERRORS = {"error_during_execution", "error_max_turns"}
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
-    validate(arguments)
     argv = [*resolved.command, "--output-format", "stream-json"]
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
@@ -56,8 +55,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     return Invocation((*argv, *arguments), prompt)
 
 
-def validate(arguments: tuple[str, ...]) -> None:
-    validate_flags("Qwen", arguments, _ALLOWED, _RESERVED)
+def validate(resolved: ResolvedProfile) -> None:
+    validate_flags("Qwen", resolved.options.native_args or (), _ALLOWED, _RESERVED)
 
 
 def decode(stdout: str) -> DecodedOutput:
@@ -158,7 +157,7 @@ class _Consumer(JsonlConsumer):
         error_value = event.get("error")
         if subtype == "success" and error_flag is False and "error" not in event:
             failure = None
-        elif isinstance(subtype, str) and subtype in _ERRORS and error_flag is True:
+        elif isinstance(subtype, str) and subtype in _QWEN_RESULT_ERRORS and error_flag is True:
             if not isinstance(error_value, dict) or not isinstance(error_value.get("message"), str):
                 self.malformed("Qwen result error must contain a message string.")
                 return

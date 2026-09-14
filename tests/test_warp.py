@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import warp
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -72,13 +73,13 @@ def test_warp_builder_keeps_model_native_options_and_literal_prompt() -> None:
 )
 def test_warp_rejects_reserved_and_unknown_native_arguments(arguments: tuple[str, ...]) -> None:
     with pytest.raises(PratError) as failure:
-        warp.validate(arguments)
+        warp.validate(resolved_profile("warp", Options(native_args=arguments)))
     assert failure.value.code == "invalid_arguments"
 
 
 @pytest.mark.parametrize("arguments", [("-nlabel",), ("--name=label",), ("-n", "label")])
 def test_warp_accepts_verified_name_grammar(arguments: tuple[str, ...]) -> None:
-    warp.validate(arguments)
+    warp.validate(resolved_profile("warp", Options(native_args=arguments)))
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import droid
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -69,7 +70,7 @@ def test_droid_literal_stdin_and_native_controls() -> None:
 )
 def test_droid_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
     with pytest.raises(PratError):
-        droid.validate(arguments)
+        droid.validate(resolved_profile("droid", Options(native_args=arguments)))
 
 
 @pytest.mark.parametrize(

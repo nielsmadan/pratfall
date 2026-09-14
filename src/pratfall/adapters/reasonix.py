@@ -36,7 +36,6 @@ _COMPLETIONS = {
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
-    validate(arguments)
     argv = [*resolved.command, "run", "--output-format", "json"]
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
@@ -45,8 +44,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     return Invocation((*argv, *arguments), prompt)
 
 
-def validate(arguments: tuple[str, ...]) -> None:
-    validate_flags("Reasonix", arguments, _ALLOWED, _RESERVED)
+def validate(resolved: ResolvedProfile) -> None:
+    validate_flags("Reasonix", resolved.options.native_args or (), _ALLOWED, _RESERVED)
 
 
 def decode(stdout: str) -> DecodedOutput:

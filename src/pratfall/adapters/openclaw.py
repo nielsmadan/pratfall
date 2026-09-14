@@ -31,7 +31,6 @@ _RESERVED = {name: Flag(0) for name in ("--json",)} | {
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
-    validate_resolved(resolved)
     arguments = resolved.options.native_args or ()
     argv = [*resolved.command, "agent", "exec", "--json", "--message-file", "-"]
     options = resolved.options
@@ -45,13 +44,9 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     return Invocation(tuple(argv), prompt)
 
 
-def validate(arguments: tuple[str, ...]) -> None:
-    validate_flags("OpenClaw", arguments, _ALLOWED, _RESERVED)
-
-
-def validate_resolved(resolved: ResolvedProfile) -> None:
+def validate(resolved: ResolvedProfile) -> None:
     arguments = resolved.options.native_args or ()
-    validate(arguments)
+    validate_flags("OpenClaw", arguments, _ALLOWED, _RESERVED)
     if _has_fallback(arguments) and resolved.options.model is None:
         raise PratError(
             "OpenClaw native --fallback requires an explicit model override.",

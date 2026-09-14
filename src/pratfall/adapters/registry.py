@@ -1,5 +1,5 @@
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 
 from pratfall.adapters import (
@@ -26,109 +26,113 @@ from pratfall.adapters import (
     vibe,
     warp,
 )
-from pratfall.consumer import ByteConsumer
+from pratfall.consumer import ConsumerFactory, decode_with
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile
+
+
+def _whole_document(factory: ConsumerFactory) -> Callable[[str], DecodedOutput]:
+    def decoder(stdout: str) -> DecodedOutput:
+        return decode_with(factory, stdout)
+
+    return decoder
 
 
 @dataclass(frozen=True)
 class Adapter:
     build: Callable[[ResolvedProfile, bytes], Invocation]
-    decode: Callable[[str], DecodedOutput]
-    validate: Callable[[tuple[str, ...]], None]
-    validate_resolved: Callable[[ResolvedProfile], None] | None = None
-    consumer: Callable[[], ByteConsumer] | None = None
+    validate: Callable[[ResolvedProfile], None]
+    whole_document: Callable[[str], DecodedOutput] | None = None
+    consumer: ConsumerFactory | None = None
+    decode: Callable[[str], DecodedOutput] = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.whole_document is not None and self.consumer is None:
+            object.__setattr__(self, "decode", self.whole_document)
+        elif self.consumer is not None and self.whole_document is None:
+            object.__setattr__(self, "decode", _whole_document(self.consumer))
+        else:
+            raise TypeError("Adapter needs exactly one of whole_document or consumer.")
 
 
 ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
     {
         "claude": Adapter(
             build=claude.build,
-            decode=claude.decode,
             validate=claude.validate,
+            whole_document=claude.decode,
         ),
         "codex": Adapter(
             build=codex.build,
-            decode=codex.decode,
             validate=codex.validate,
             consumer=codex.consumer,
         ),
         "gemini": Adapter(
             build=gemini.build,
-            decode=gemini.decode,
             validate=gemini.validate,
+            whole_document=gemini.decode,
         ),
         "antigravity": Adapter(
             build=antigravity.build,
-            decode=antigravity.decode,
             validate=antigravity.validate,
             consumer=antigravity.consumer,
         ),
         "copilot": Adapter(
             build=copilot.build,
-            decode=copilot.decode,
             validate=copilot.validate,
             consumer=copilot.consumer,
         ),
         "kiro": Adapter(
             build=kiro.build,
-            decode=kiro.decode,
             validate=kiro.validate,
+            whole_document=kiro.decode,
         ),
         "cursor": Adapter(
             build=cursor.build,
-            decode=cursor.decode,
             validate=cursor.validate,
+            whole_document=cursor.decode,
         ),
         "openclaw": Adapter(
             build=openclaw.build,
-            decode=openclaw.decode,
             validate=openclaw.validate,
-            validate_resolved=openclaw.validate_resolved,
+            whole_document=openclaw.decode,
         ),
         "hermes": Adapter(
             build=hermes.build,
-            decode=hermes.decode,
             validate=hermes.validate,
+            whole_document=hermes.decode,
         ),
         "opencode": Adapter(
             build=opencode.build,
-            decode=opencode.decode,
             validate=opencode.validate,
             consumer=opencode.consumer,
         ),
         "openhands": Adapter(
             build=openhands.build,
-            decode=openhands.decode,
             validate=openhands.validate,
             consumer=openhands.consumer,
         ),
         "warp": Adapter(
             build=warp.build,
-            decode=warp.decode,
             validate=warp.validate,
             consumer=warp.consumer,
         ),
-        "qwen": Adapter(
-            build=qwen.build, decode=qwen.decode, validate=qwen.validate, consumer=qwen.consumer
-        ),
-        "amp": Adapter(
-            build=amp.build, decode=amp.decode, validate=amp.validate, consumer=amp.consumer
-        ),
+        "qwen": Adapter(build=qwen.build, validate=qwen.validate, consumer=qwen.consumer),
+        "amp": Adapter(build=amp.build, validate=amp.validate, consumer=amp.consumer),
         "reasonix": Adapter(
-            build=reasonix.build, decode=reasonix.decode, validate=reasonix.validate
+            build=reasonix.build, validate=reasonix.validate, whole_document=reasonix.decode
         ),
-        "droid": Adapter(build=droid.build, decode=droid.decode, validate=droid.validate),
-        "kimi": Adapter(
-            build=kimi.build, decode=kimi.decode, validate=kimi.validate, consumer=kimi.consumer
+        "droid": Adapter(build=droid.build, validate=droid.validate, whole_document=droid.decode),
+        "kimi": Adapter(build=kimi.build, validate=kimi.validate, consumer=kimi.consumer),
+        "vibe": Adapter(build=vibe.build, validate=vibe.validate, whole_document=vibe.decode),
+        "crush": Adapter(build=crush.build, validate=crush.validate, whole_document=crush.decode),
+        "devin": Adapter(build=devin.build, validate=devin.validate, whole_document=devin.decode),
+        "cortex": Adapter(
+            build=cortex.build, validate=cortex.validate, whole_document=cortex.decode
         ),
-        "vibe": Adapter(build=vibe.build, decode=vibe.decode, validate=vibe.validate),
-        "crush": Adapter(build=crush.build, decode=crush.decode, validate=crush.validate),
-        "devin": Adapter(build=devin.build, decode=devin.decode, validate=devin.validate),
-        "cortex": Adapter(build=cortex.build, decode=cortex.decode, validate=cortex.validate),
         "iflow": Adapter(
             build=iflow.build,
-            decode=iflow.decode,
             validate=iflow.validate,
+            whole_document=iflow.decode,
         ),
     }
 )

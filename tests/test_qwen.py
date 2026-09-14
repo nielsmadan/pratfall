@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import qwen
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -93,7 +94,7 @@ def test_qwen_literal_stdin_and_controls() -> None:
 )
 def test_qwen_reserved_and_unknown_arguments(arguments: tuple[str, ...]) -> None:
     with pytest.raises(PratError):
-        qwen.validate(arguments)
+        qwen.validate(resolved_profile("qwen", Options(native_args=arguments)))
 
 
 @pytest.mark.parametrize(

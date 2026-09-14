@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import openhands
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -80,7 +81,7 @@ def test_openhands_rejects_reserved_and_unknown_native_arguments(
     arguments: tuple[str, ...],
 ) -> None:
     with pytest.raises(PratError) as failure:
-        openhands.validate(arguments)
+        openhands.validate(resolved_profile("openhands", Options(native_args=arguments)))
     assert failure.value.code == "invalid_arguments"
 
 

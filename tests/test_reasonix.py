@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import reasonix
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -80,7 +81,7 @@ def test_reasonix_literal_stdin_and_native_controls() -> None:
 )
 def test_reasonix_reserved_and_unknown_arguments(arguments: tuple[str, ...]) -> None:
     with pytest.raises(PratError):
-        reasonix.validate(arguments)
+        reasonix.validate(resolved_profile("reasonix", Options(native_args=arguments)))
 
 
 @pytest.mark.parametrize(

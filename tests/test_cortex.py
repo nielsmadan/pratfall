@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import cortex
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
@@ -94,7 +95,7 @@ def test_cortex_defaults_add_only_exec_stdin_controls() -> None:
 )
 def test_cortex_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
     with pytest.raises(PratError) as failure:
-        cortex.validate(arguments)
+        cortex.validate(resolved_profile("cortex", Options(native_args=arguments)))
     assert failure.value.code == "invalid_arguments"
 
 

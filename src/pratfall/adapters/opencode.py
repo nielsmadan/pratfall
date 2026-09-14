@@ -57,7 +57,6 @@ _MESSAGELESS_ERRORS = frozenset({"MessageOutputLengthError"})
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
-    validate(arguments)
     argv = [*resolved.command, "run", "--format", "json"]
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
@@ -67,8 +66,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     return Invocation(tuple(argv), prompt)
 
 
-def validate(arguments: tuple[str, ...]) -> None:
-    validate_flags("OpenCode", arguments, _ALLOWED, _RESERVED)
+def validate(resolved: ResolvedProfile) -> None:
+    validate_flags("OpenCode", resolved.options.native_args or (), _ALLOWED, _RESERVED)
 
 
 @dataclass

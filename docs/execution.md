@@ -22,8 +22,10 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   path's command base. The CLI sends duplicate-profile warnings to stderr before reading the prompt
   or launching an agent, using its nonblocking sink when progress is enabled.
 - [catalog.py](../src/pratfall/catalog.py) holds immutable capabilities, not provider model lists.
-  [registry.py:42](../src/pratfall/adapters/registry.py#L42) is the adapter assembly point: command
-  builder, validator, decoder, and optional incremental consumer factory.
+  [registry.py:41](../src/pratfall/adapters/registry.py#L41) is the adapter assembly point: command
+  builder, one validator over the resolved profile, and exactly one of a whole-document decoder or
+  an incremental consumer factory. The registry synthesizes the whole-document path for consumer
+  adapters, so each agent has a single decode path rather than a precedence rule.
 - [runner.py:62](../src/pratfall/runner.py#L62) owns POSIX process lifecycle and passes bytes to a
   schema-neutral consumer. Adapters own native protocol transitions; they do not manage processes.
 - [output.py:7](../src/pratfall/output.py#L7) selects status and exit code while retaining decoded
@@ -123,6 +125,8 @@ the catalog owns probe arguments.
 ## Extending an adapter
 
 Keep the builder, decoder and protocol state in the adapter; register its callables explicitly.
+`validate` takes the resolved profile, so cross-field native rules stay in the adapter that owns
+them; `build` assumes the CLI already validated at the trust boundary and never revalidates.
 Use [native_args.py:15](../src/pratfall/adapters/native_args.py#L15) with a finite flag set and known
 arity. Reserve Pratfall-owned fields and transports; response files, positional arguments and
 subcommands are rejected. Trusted executable wrappers cover unsupported options.
