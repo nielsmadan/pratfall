@@ -5,7 +5,7 @@
 Pratfall provides the `prat` command for one-shot coding-agent invocations through named profiles.
 Claude Code, Codex, Gemini, Antigravity, Copilot, Kiro, Cursor, OpenClaw, Hermes, OpenCode,
 OpenHands, Warp (Oz), iFlow, Qwen Code, Amp, Reasonix, Droid, Kimi CLI, Mistral Vibe, Crush,
-Devin, and Cortex Code (CoCo) execution are available.
+Devin, Cortex Code (CoCo), and Grok Build execution are available.
 
 OpenHands requires existing native setup and its headless mode automatically approves actions.
 iFlow 0.5.19 also defaults to automatic approval for noninteractive prompts unless native settings
@@ -19,6 +19,7 @@ trusted command prefix. Prat does not substitute the successor kimi-code for kim
 Crush local run automatically approves actions; `CRUSH_CLIENT_SERVER` can select a server backend
 with a separate lifetime. Devin print requires an already trusted workspace. Cortex exec requires
 existing Snowflake account/connection/authentication, disables plan mode and rejects interactive asks.
+Grok Build requires existing xAI authentication and cancels unresolved headless approval requests.
 
 - [Installation](#installation)
 - [Running prompts](#running-prompts)
@@ -90,7 +91,8 @@ Prat sends Claude, Codex, Antigravity, OpenCode, Qwen, Amp, Reasonix, Droid, Kim
 through native stdin protocols. Reasonix, Kimi and Vibe trim surrounding whitespace natively.
 Crush receives the original input and adds two trailing newline characters natively.
 OpenClaw, Hermes and Cortex use native stdin file options. Gemini, Copilot, OpenHands, Warp and iFlow use
-native prompt options, while Cursor, Kiro and Devin use positional prompts after an end-of-options marker.
+native prompt options, Grok uses native `--single`, and Cursor, Kiro and Devin use positional prompts
+after an end-of-options marker. Grok trims surrounding whitespace natively.
 These argv transports are subject to the operating system's argv-size limit, which can be lower than
 Prat's 1 MiB input limit. Prompts are never passed through a shell or the inherited terminal.
 
@@ -105,7 +107,7 @@ roll back edits.
 
 `--dry-run` validates the complete invocation and shows its argv without launching the agent.
 Prompts carried through stdin appear only as a byte count. Gemini, Copilot, Cursor, Kiro, OpenHands,
-Warp, iFlow and Devin carry the prompt in argv, so their previews include it:
+Warp, iFlow, Devin and Grok carry the prompt in argv, so their previews include it:
 
 ```sh
 uv run prat simple "review this change" --dry-run
@@ -256,7 +258,7 @@ file loads it once, preserving the selected path's base for relative commands.
 
 Options are `model`, `effort`, `fast`, `timeout` (seconds), `native_args` (an argv array), and supported
 native budgets: Claude and Vibe `max_budget_usd` and `max_turns`, Copilot `max_ai_credits`, and
-Hermes/Qwen/Cortex `max_turns`. Qwen forwards its native session-turn limit.
+Hermes/Qwen/Cortex/Grok `max_turns`. Qwen forwards its native session-turn limit.
 Limits must be positive and finite; `max_turns` must be an integer. Unsupported options and
 unknown fields fail validation. Model IDs are passed through for agents that support model
 selection. Gemini and Cursor effort overrides are unsupported. Kiro
@@ -264,6 +266,7 @@ accepts effort `low|medium|high|xhigh|max`; Hermes accepts
 `none|minimal|low|medium|high|xhigh|max|ultra`. Native effort enums are validated where known;
 Droid accepts the provider-specific union `none|dynamic|off|minimal|low|medium|high|xhigh|max`.
 Cortex accepts `minimal|low|medium|high|max`.
+Grok accepts `none|minimal|low|medium|high|xhigh|max`; each model can support a subset.
 Other supported effort strings are left to the native CLI. Native permission defaults are
 preserved unless explicitly overridden.
 
@@ -304,6 +307,13 @@ model, effort or budget override; its native mode is not a model identifier. Amp
 approves tools unless existing settings enable permissions. Reasonix paused recovery is reported
 as incomplete even when its native exit code is zero.
 
+Grok uses whole-document JSON and requires `stopReason: end_turn` for success. It maps native fresh
+input, cache-read, cache-creation, output and reasoning token buckets. Complete native USD cost and
+`modelUsage` keys are exposed when present. Incomplete usage is rejected rather than reported as
+exact accounting. Prat passes `--no-auto-update` for the invocation and never injects approval
+bypass; explicit Grok permission, tool, agent, rules, sandbox, structured-output,
+background-wait and `--verbatim` options remain available after `--`.
+
 Crush (`cr`), Devin (`dv`) and Cortex (`co`) return bounded complete native stdout with terminal
 CR/LF removed. Text can include banners/progress; native exit status determines success, including
 empty successful output. Prat does not infer errors or accounting from prose. All three support
@@ -314,9 +324,10 @@ are Crush `--verbose`/`-v` and `--debug`/`-d`, Devin `--permission-mode`, and Co
 The requested `model` remains separate from `reported_models`, which contains distinct native
 model identifiers in observed order when the supported protocol exposes them. Claude reports the
 keys of `modelUsage`, Gemini the keys of `stats.models`, Copilot root completed-message models,
-OpenClaw its provider/model identity, and Qwen root assistant-message models. Other adapters report
+OpenClaw its provider/model identity, Qwen root assistant-message models, and Grok the keys of
+`modelUsage`. Other adapters report
 null. `cost_usd` is the native USD cost
-from Claude or OpenClaw, or the sum of OpenCode's latest snapshot for each step ID. Missing native
+from Claude, OpenClaw or Grok, or the sum of OpenCode's latest snapshot for each step ID. Missing native
 data stays null, including an OpenCode run where any latest step cost is unknown. Zero is preserved.
 Pratfall does not calculate prices, convert Copilot credits, or promise that native cost equals a
 subscription bill.

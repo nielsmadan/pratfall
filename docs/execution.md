@@ -71,7 +71,9 @@ which adapters use incremental consumption.
 - Whole-document JSON and text adapters use the runner's 8 MiB complete stdout capture; native
   stderr is capped at 2 MiB. [`parse`](../src/pratfall/adapters/whole_json.py) re-checks
   that same `STDOUT_BYTES` document cap and supplies shared framing, Unicode, duplicate-key and
-  numeric guards for every whole-document JSON adapter.
+  numeric guards for every whole-document JSON adapter. The cap bounds input bytes, not the
+  decoded object graph; a compact document expands severalfold in memory, and that transitive
+  bound is the accepted ceiling.
 - [limits.py](../src/pratfall/limits.py) owns every budget above: `STDOUT_BYTES`, `STDERR_BYTES`,
   `EVENT_BYTES`, `RETAINED_STATE_BYTES`, `RECORD_COUNT`, `NUMERIC_BYTES`. It also owns the
   `TERMINATE_GRACE` and `FINAL_DRAIN_GRACE` cleanup windows.
@@ -80,13 +82,13 @@ which adapters use incremental consumption.
 native prose. Its trailing Rich summary is never reparsed as events; keep that exception out of
 the strict shared JSONL framer.
 
-All seven whole-document JSON adapters share one strictness rule: Claude, Cursor, Droid, Gemini,
-OpenClaw, Reasonix and Vibe reject a duplicate object key, a nonfinite number, a numeric literal
+All eight whole-document JSON adapters share one strictness rule: Claude, Cursor, Droid, Gemini,
+Grok, OpenClaw, Reasonix and Vibe reject a duplicate object key, a nonfinite number, a numeric literal
 wider than `NUMERIC_BYTES`, nesting deep enough to exhaust the parser, and an unpaired surrogate
 anywhere in the document, including in fields that adapter never reads. The duplicate-key, numeric
 and nesting guards run inside `parse`, while the nonfinite and unpaired-surrogate walk applies to a
 successfully-shaped document, so a provider or protocol failure detected earlier takes precedence.
-Claude, Cursor, Gemini and OpenClaw accepted all of those before 2026-09-14; one rule for seven
+Claude, Cursor, Gemini and OpenClaw accepted all of those before 2026-09-14; one rule for eight
 adapters was chosen over four divergent ones, and the tightening is deliberate rather than a
 compatibility guarantee. Rejections name the underlying reason: `parse` reports the
 standard-library decoder message, a duplicate object key, an over-wide numeric literal or excessive

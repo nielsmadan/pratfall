@@ -8,7 +8,8 @@ page so its source links, version baseline, and open questions stay together.
 Initial interface evidence was recorded on 2026-09-09 through source inspection and
 installed help, with live observations identified in the individual sections. Accounting
 and fast-mode additions were recorded on 2026-09-10 through primary-source review and
-fake-native tests. The twelve later adapters use the static 2026-09-11 baselines below.
+fake-native tests. The twelve later adapters use the static 2026-09-11 baselines below. Grok Build
+was added from official documentation and source inspection on 2026-09-14.
 These dates describe the original evidence, not fresh compatibility checks. Native releases
 can change the interfaces. Recheck the relevant agent page before updating its contract.
 
@@ -63,6 +64,7 @@ published prices, and non-USD credits are not used as substitutes.
 | [Crush](crush.md) | `crush run --quiet` with stdin | `--model` | Unsupported | None verified | [0.93.1 source](crush.md) |
 | [Devin](devin.md) | `devin -p -- PROMPT` | `--model` | Unsupported | None verified | [3000.10.21 baseline](devin.md) |
 | [Cortex Code / CoCo](cortex.md) | `cortex exec --file -` with stdin | `--model` | `--effort minimal\|low\|medium\|high\|max` | `--max-turns` | [1.1.78 baseline](cortex.md) |
+| [Grok Build](grok.md) | `grok --no-auto-update --output-format json --single=PROMPT` | `--model` | `--reasoning-effort none\|minimal\|low\|medium\|high\|xhigh\|max` | `--max-turns` | [Official docs and source](grok.md) |
 
 ## Remaining factual verification
 
@@ -85,3 +87,6 @@ version, was executed. Fixtures establish Prat's behavior against these contract
 with every installed release. Version probes use `--version` except Amp's `version`; normal
 doctor still only locates executables. Accounting is normalized only where the individual
 agent pages establish a mapping; missing fields remain null.
+
+The Grok contract was established separately on 2026-09-14 from official xAI documentation and
+source revision `37949780c144e37df692e3d669051a21fec24f20`. Grok was not installed or executed.

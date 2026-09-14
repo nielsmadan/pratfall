@@ -926,8 +926,9 @@ def test_new_agents_probe_independent_version_argv_with_empty_stdin(
         "crush": ["--version"],
         "devin": ["--version"],
         "cortex": ["--version"],
+        "grok": ["--version"],
     }
-    assert len(calls) == 12
+    assert len(calls) == 13
     for record in inventory["agents"]:
         if record["agent"] in {call["agent"] for call in calls}:
             assert record["version"] == f"{record['agent']} opaque version 1.0"

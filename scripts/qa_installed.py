@@ -71,6 +71,7 @@ AGENTS = {
     "crush": "crush",
     "devin": "devin",
     "cortex": "cortex",
+    "grok": "grok",
 }
 ALIASES = {
     "cc": "claude",
@@ -106,6 +107,7 @@ _EFFORT_VALUES = {
     "reasonix": None,
     "droid": ["none", "dynamic", "off", "minimal", "low", "medium", "high", "xhigh", "max"],
     "cortex": ["minimal", "low", "medium", "high", "max"],
+    "grok": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
 }
 _BUDGETS = {
     "claude": ["max_budget_usd", "max_turns"],
@@ -114,6 +116,7 @@ _BUDGETS = {
     "qwen": ["max_turns"],
     "vibe": ["max_budget_usd", "max_turns"],
     "cortex": ["max_turns"],
+    "grok": ["max_turns"],
 }
 _NO_MODEL = frozenset({"openhands", "amp", "vibe"})
 _FAST = frozenset({"claude", "codex"})
@@ -142,12 +145,29 @@ _NATIVE_PREFIXES = {
     "warp": ["agent", "run", "--output-format", "ndjson"],
     "iflow": [],
     "devin": ["-p"],
+    "grok": ["--no-auto-update", "--output-format", "json"],
 }
+_PROMPT_FLAGS = {"grok": "--single=", "openhands": "--task="}
 _NATIVE_OPTIONS = {
     "crush": {"--model": 1, "--verbose": 0, "-v": 0, "--debug": 0, "-d": 0},
     "devin": {"--model": 1, "--permission-mode": 1},
     "cortex": {"--model": 1, "--effort": 1, "--max-turns": 1, "--connection": 1, "-c": 1},
     "droid": {"--model": 1, "--reasoning-effort": 1, "--auto": 1},
+    "grok": {
+        "--model": 1,
+        "--reasoning-effort": 1,
+        "--max-turns": 1,
+        "--permission-mode": 1,
+        "--verbatim": 0,
+        "--no-plan": 0,
+        "--disable-web-search": 0,
+        "--rules": 1,
+        "--allow": 1,
+        "--agent": 1,
+        "--json-schema": 1,
+        "--no-wait-for-background": 0,
+        "--background-wait-timeout": 1,
+    },
     "kimi": {"--model": 1, "--thinking": 0, "--no-thinking": 0, "--plan": 0, "--debug": 0},
     "vibe": {
         "--max-turns": 1,
@@ -238,10 +258,11 @@ def _checked_argv_prompt(agent: str, arguments: list[str], data: bytes) -> str:
         assert len(arguments) >= 3 and arguments[-2] == "--", "incorrect devin delimiter"
         _native_options(agent, arguments[len(prefix) : -2])
         return arguments[-1]
-    prompt_flag = "--task=" if agent == "openhands" else "--prompt="
+    prompt_flag = _PROMPT_FLAGS.get(agent, "--prompt=")
     assert arguments[-1].startswith(prompt_flag), f"incorrect {agent} prompt transport"
     _native_options(agent, arguments[len(prefix) : -1])
-    return arguments[-1][len(prompt_flag) :]
+    prompt = arguments[-1][len(prompt_flag) :]
+    return prompt.strip() if agent == "grok" else prompt
 
 
 def _prompt(agent: str, arguments: list[str], data: bytes) -> str:
@@ -280,6 +301,31 @@ def _answer_droid(answer: str) -> None:
                 "num_turns": 1,
                 "result": answer,
                 "session_id": "qa-session",
+            }
+        )
+    )
+
+
+def _answer_grok(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "text": answer,
+                "stopReason": "end_turn",
+                "sessionId": "qa-session",
+                "requestId": "qa-request",
+                "num_turns": 1,
+                "usage": {
+                    "input_tokens": 3,
+                    "cache_read_input_tokens": 5,
+                    "cache_creation_input_tokens": 7,
+                    "output_tokens": 2,
+                    "reasoning_tokens": 1,
+                    "total_tokens": 17,
+                },
+                "modelUsage": {"grok-4.6": {"inputTokens": 3}},
+                "total_cost_usd": 0.0123456789,
+                "total_cost_usd_ticks": 123_456_789,
             }
         )
     )
@@ -621,6 +667,7 @@ _ANSWER_EMITTERS: dict[str, Callable[[str], None]] = {
     "amp": _answer_amp,
     "reasonix": _answer_reasonix,
     "droid": _answer_droid,
+    "grok": _answer_grok,
     "kimi": _answer_kimi,
     "vibe": _answer_vibe,
 }
@@ -1091,6 +1138,31 @@ def _fake_account_openclaw(_agent: str, _prompt: str) -> int:
     return 0
 
 
+def _fake_account_grok(_agent: str, _prompt: str) -> int:
+    print(
+        json.dumps(
+            {
+                "text": "ACCOUNT_OK",
+                "stopReason": "end_turn",
+                "sessionId": "qa-grok-account",
+                "requestId": "qa-grok-request",
+                "usage": {
+                    "input_tokens": 3,
+                    "cache_read_input_tokens": 5,
+                    "cache_creation_input_tokens": 7,
+                    "output_tokens": 2,
+                    "reasoning_tokens": 1,
+                    "total_tokens": 17,
+                },
+                "modelUsage": {"grok-primary": {}, "grok-helper": {}},
+                "total_cost_usd": 0.0123456789,
+                "total_cost_usd_ticks": 123_456_789,
+            }
+        )
+    )
+    return 0
+
+
 def _fake_account_opencode(_agent: str, _prompt: str) -> int:
     print(
         json.dumps(
@@ -1245,6 +1317,7 @@ _NATIVE_CASES: tuple[tuple[str | tuple[str, ...], _NativeCaseHandler], ...] = (
     ("QA_ACCOUNT_COPILOT", _fake_account_copilot),
     ("QA_ACCOUNT_OPENCLAW", _fake_account_openclaw),
     ("QA_ACCOUNT_OPENCODE", _fake_account_opencode),
+    ("QA_ACCOUNT_GROK", _fake_account_grok),
     ("QA_NATIVE_17", _fake_native_failure),
     ("QA_STREAM_LARGE", _fake_large_stream),
     ("QA_PROGRESS", _fake_progress),
@@ -2127,7 +2200,7 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
     payload = _json_result(completed)
     assert completed.returncode == 0 and payload["schema_version"] == 1
     records = {_text(record["name"]): record for record in _records(payload["agents"])}
-    assert len(_records(payload["agents"])) == len(records) == 22
+    assert len(_records(payload["agents"])) == len(records) == 23
     assert set(records) == set(AGENTS)
     for name, record in records.items():
         assert record["command"] == [AGENTS[name]]
@@ -2698,6 +2771,12 @@ def _exercise_e08(context: _EnhancementContext) -> _ScenarioObservation:
             ["claw", "QA_ACCOUNT_OPENCLAW", "--model", "requested", "--json"],
             config=config,
         ),
+        "grok": _run(
+            prat,
+            root,
+            ["grok", "QA_ACCOUNT_GROK", "--model", "requested", "--json"],
+            config=config,
+        ),
     }
     accounting_results = {name: _json_result(case) for name, case in accounting_cases.items()}
     assert all(case.returncode == 0 for case in accounting_cases.values())
@@ -2715,6 +2794,9 @@ def _exercise_e08(context: _EnhancementContext) -> _ScenarioObservation:
     assert accounting_results["copilot"]["cost_usd"] is None
     assert accounting_results["openclaw"]["reported_models"] == ["provider/model"]
     assert accounting_results["openclaw"]["cost_usd"] == 1.25
+    assert accounting_results["grok"]["reported_models"] == ["grok-primary", "grok-helper"]
+    assert accounting_results["grok"]["cost_usd"] == 0.0123456789
+    assert _record(accounting_results["grok"]["usage"])["output_tokens"] == 2
     assert all(value["model"] == "requested" for value in accounting_results.values())
     return "E08", {
         "status": "Pass",
@@ -2924,7 +3006,7 @@ def _exercise_routes(prat: Path, root: Path, config: Path) -> dict[str, object]:
             if agent == "devin":
                 assert call["argv"] == ["-p", "--", f"route {selector}"]
             else:
-                flag = "--task=" if agent == "openhands" else "--prompt="
+                flag = _PROMPT_FLAGS.get(agent, "--prompt=")
                 assert call["argv"] == [*_NATIVE_PREFIXES[agent], f"{flag}route {selector}"]
             assert call["stdin"] == ""
         elif agent in _STDIN_PREFIXES:

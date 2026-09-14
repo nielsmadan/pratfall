@@ -86,7 +86,7 @@ or the global path when neither file exists. Ordinary runs never write configura
 
 New built-in names become reserved when upgrading. In this release, profiles named `openhands`,
 `oh`, `warp`, `iflow`, `if`, `qwen`, `amp`, `reasonix`, `rx`, `droid`, `dr`, `kimi`,
-`vibe`, `crush`, `cr`, `devin`, `dv`, `cortex`, or `co` must be renamed, for example
+`vibe`, `crush`, `cr`, `devin`, `dv`, `cortex`, `co`, or `grok` must be renamed, for example
 `[profiles.oh]` to `[profiles.my-openhands]`. Keep the profile's `agent` and options, update commands that invoke its
 old name, then run `prat config validate`. A collision reports
 `profiles.NAME: name is reserved; choose a different profile name.`

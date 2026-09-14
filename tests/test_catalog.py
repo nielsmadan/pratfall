@@ -30,6 +30,7 @@ from pratfall.errors import PratError
         ("crush", ("cr",)),
         ("devin", ("dv",)),
         ("cortex", ("co",)),
+        ("grok", ()),
     ],
 )
 def test_agent_names_and_aliases_resolve(name: str, aliases: tuple[str, ...]) -> None:
@@ -41,7 +42,7 @@ def test_agent_names_and_aliases_resolve(name: str, aliases: tuple[str, ...]) ->
 
 
 def test_registry_has_completed_agents_and_unique_selectors() -> None:
-    assert len(AGENTS) == 22
+    assert len(AGENTS) == 23
     assert set(ADAPTERS) == set(BY_NAME)
     assert len(BY_SELECTOR) == sum(len(agent.aliases) + 1 for agent in AGENTS)
     assert RESERVED_NAMES.issuperset({"agents", "profiles", "doctor", "config", *BY_SELECTOR})

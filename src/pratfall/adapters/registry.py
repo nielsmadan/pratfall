@@ -14,6 +14,7 @@ from pratfall.adapters import (
     devin,
     droid,
     gemini,
+    grok,
     hermes,
     iflow,
     kimi,
@@ -129,6 +130,7 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
         "cortex": Adapter(
             build=cortex.build, validate=cortex.validate, whole_document=cortex.decode
         ),
+        "grok": Adapter(build=grok.build, validate=grok.validate, whole_document=grok.decode),
         "iflow": Adapter(
             build=iflow.build,
             validate=iflow.validate,

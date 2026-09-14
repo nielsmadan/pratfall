@@ -116,6 +116,17 @@ AGENTS = (
             budgets=frozenset({"max_turns"}),
         ),
     ),
+    AgentSpec(
+        "grok",
+        "Grok Build",
+        (),
+        ("grok",),
+        Capabilities(
+            effort=True,
+            effort_values=("none", "minimal", "low", "medium", "high", "xhigh", "max"),
+            budgets=frozenset({"max_turns"}),
+        ),
+    ),
 )
 BY_NAME = MappingProxyType({agent.name: agent for agent in AGENTS})
 BY_SELECTOR = MappingProxyType(

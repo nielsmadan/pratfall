@@ -36,6 +36,7 @@ selection; Pratfall does not freeze a model catalog.
 | Crush | `crush` | `cr` | Quiet text capture; local run autoapproval; model override; accounting unknown |
 | Devin | `devin` | `dv` | Print text capture; requires trusted workspace; model override; accounting unknown |
 | Cortex Code / CoCo | `cortex` | `co` | Exec text capture; Snowflake connection required; model/effort/turns; accounting unknown |
+| Grok Build | `grok` | none | Whole JSON result; model/effort/turns; native tokens, model IDs and complete USD cost |
 
 ## Shared controls and limitations
 
@@ -46,7 +47,7 @@ quiet one-shot path.
 
 There is no common verified hard token cap. Claude and Vibe expose native USD and turn budgets. Copilot's
 `max_ai_credits` is a soft per-response limit and may not stop exactly at the requested amount.
-Hermes, Qwen and Cortex support native turn counts. Pratfall forwards those native controls without strengthening
+Hermes, Qwen, Cortex and Grok support native turn counts. Pratfall forwards those native controls without strengthening
 their guarantees.
 
 Claude fast mode is passed as an inline `fastMode` setting for the current invocation. Codex fast
@@ -191,3 +192,23 @@ All three return bounded complete native stdout with terminal CR/LF removed. Ban
 can appear in the text; there is no final-answer separation guarantee or prose failure detection.
 Native exit status determines success, including empty output. Usage, reported models and USD
 cost remain null. Their version diagnostic is `--version`; normal doctor does not execute it.
+
+### Grok Build
+
+Grok Build support uses executable `grok` and the official headless `--single` path. Prat selects
+whole-document JSON, disables the invocation's auto-update check, and passes the prompt as one argv
+item. Grok trims surrounding whitespace natively. Existing
+xAI API-key or OAuth authentication is required.
+
+Model selection, reasoning effort `none|minimal|low|medium|high|xhigh|max`, and `max_turns` are
+supported; each model advertises its own effort subset. Native default headless permissions cancel
+unresolved approval requests. Prat does not add `--always-approve`; explicit permission, tool,
+agent, rules, sandbox, approval, structured-output and background-wait controls can be passed
+after `--`.
+
+Only `stopReason: end_turn` completes successfully. Other terminal reasons retain partial text as a
+provider error. Prat maps native fresh input, cache-read, cache-creation, output and reasoning
+tokens, `modelUsage` keys, and complete USD cost. Missing cost stays null. Incomplete usage is
+reported as a protocol error instead of exact accounting. Native JSON error objects preserve their
+message when Grok exits zero; a nonzero exit reports the native exit status instead. The version
+diagnostic is `--version`; normal doctor does not execute it.

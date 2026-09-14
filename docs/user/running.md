@@ -21,11 +21,11 @@ Every source must be valid UTF-8, nonempty and not whitespace-only, contain no N
 within 1 MiB. Named files must be regular files; symlinks to regular files work, while missing,
 unreadable, directory, and special-file inputs fail with exit 2 before an agent starts. Relative
 file paths resolve from the directory where Prat was invoked, independently of `--cwd`. Gemini,
-Copilot, Cursor, Kiro, OpenHands, Warp, iFlow and Devin carry prompts in argv and can hit an operating-system argv limit below
+Copilot, Cursor, Kiro, OpenHands, Warp, iFlow, Devin and Grok carry prompts in argv and can hit an operating-system argv limit below
 1 MiB.
 
 Crush 0.93.1 receives the original prompt bytes on stdin and adds two trailing newline characters
-when it constructs its native prompt. Reasonix, Kimi and Vibe trim surrounding whitespace
+when it constructs its native prompt. Reasonix, Kimi, Vibe and Grok trim surrounding whitespace
 natively. Prat supplies the same acquired bytes for each prompt source before these native
 transformations.
 
@@ -34,7 +34,8 @@ Run options can appear before or after the selector. `--model`, `--effort`, `--f
 `--max-budget-usd`, `--max-turns`, and `--max-ai-credits` override supported profile fields.
 Claude and Vibe support USD budgets; Vibe maps the value to native `--max-price`. These controls
 retain native counting and overshoot behavior. Vibe's `--max-tokens` is native passthrough only.
-Cortex supports `max_turns` with native per-conversation-round counting.
+Cortex supports `max_turns` with native per-conversation-round counting. Grok maps `max_turns`
+to its native agentic-turn limit.
 Fast overrides are supported by Claude and Codex. Omitting both flags preserves native behavior;
 `--no-fast` is a real false override. Conflicting fast flags fail before launch.
 `--config PATH` selects a local config to merge over the global config, replacing automatic
@@ -42,7 +43,7 @@ Fast overrides are supported by Claude and Codex. Omitting both flags preserves 
 `--cwd PATH` changes the child working directory and does not change config discovery.
 `--dry-run` acquires and validates the selected input, then prints the resolved argv without
 launching the agent. Prompts carried through stdin
-appear only as a byte count. Gemini, Copilot, Cursor, Kiro, OpenHands, Warp, iFlow and Devin carry the prompt in
+appear only as a byte count. Gemini, Copilot, Cursor, Kiro, OpenHands, Warp, iFlow, Devin and Grok carry the prompt in
 argv, so their previews include it.
 
 Use `--progress` to print bounded elapsed-time and activity updates on stderr while an agent runs.

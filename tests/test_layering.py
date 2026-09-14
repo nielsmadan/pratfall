@@ -70,6 +70,7 @@ ADAPTER_AGENTS: frozenset[str] = frozenset(
         "devin",
         "droid",
         "gemini",
+        "grok",
         "hermes",
         "iflow",
         "kimi",

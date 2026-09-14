@@ -426,6 +426,10 @@ def test_artifact_entry_point_version_mismatch_is_rejected(tmp_path: Path) -> No
         ("openhands", ["--headless", "--json", "--task=-雪\nnext"]),
         ("warp", ["agent", "run", "--output-format", "ndjson", "--prompt=-雪\nnext"]),
         ("iflow", ["--prompt=-雪\nnext"]),
+        (
+            "grok",
+            ["--no-auto-update", "--output-format", "json", "--single=-雪\nnext"],
+        ),
     ],
 )
 def test_new_native_contracts_reject_incorrect_invocation_and_stdin(
@@ -449,6 +453,7 @@ def test_new_native_contracts_check_flag_arity() -> None:
         ("openhands", ["--headless", "--json", "--override-with-envs=true", "--task=x"]),
         ("warp", ["agent", "run", "--output-format", "ndjson", "--model", "--prompt=x"]),
         ("iflow", ["--plan=true", "--prompt=x"]),
+        ("grok", ["--no-auto-update", "--output-format", "json", "--rules", "--single=x"]),
     ):
         with pytest.raises(AssertionError):
             qa._prompt(agent, arguments, b"")
@@ -742,6 +747,28 @@ def source_entry_point(tmp_path: Path) -> tuple[Path, Path]:
                 },
             },
         ),
+        (
+            "grok",
+            [
+                "--no-auto-update",
+                "--output-format",
+                "json",
+                "--model",
+                "requested",
+                "--single=QA_ACCOUNT_GROK",
+            ],
+            {
+                "reported_models": ["grok-primary", "grok-helper"],
+                "cost_usd": 0.0123456789,
+                "usage": {
+                    "input_tokens": 3,
+                    "cached_input_tokens": 5,
+                    "cache_write_input_tokens": 7,
+                    "output_tokens": 2,
+                    "reasoning_output_tokens": 1,
+                },
+            },
+        ),
     ],
 )
 def test_accounting_controls_through_fake_dispatch_and_source_entry_point(
@@ -756,7 +783,7 @@ def test_accounting_controls_through_fake_dispatch_and_source_entry_point(
     log = tmp_path / "native.jsonl"
     monkeypatch.setenv("PRAT_QA_LOG", str(log))
     prompt = f"QA_ACCOUNT_{agent.upper()}"
-    stdin = b"" if agent in {"gemini", "copilot"} else prompt.encode()
+    stdin = b"" if agent in {"gemini", "copilot", "grok"} else prompt.encode()
     native = subprocess.run(
         [sys.executable, str(SCRIPT), "--fake-native", agent, *arguments],
         input=stdin,
