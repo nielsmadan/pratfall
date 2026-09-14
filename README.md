@@ -174,7 +174,13 @@ separate incremental decoder for SDK events mixed with native status and summary
 the retained answer/protocol state are limited to 8 MiB, with at most 16,384 retained logical
 records. Discarded events have no cumulative trace limit. Whole-document JSON and text adapters
 retain the 8 MiB complete stdout limit; native stderr is limited to 2 MiB. Limit failures are
-explicit and trigger process-group cleanup.
+explicit and trigger process-group cleanup. Every whole-document JSON adapter applies the same
+strictness rule and reports `protocol_error`, or `output_encoding` for an unpaired surrogate, when
+native output carries a duplicate object key, a nonfinite number, an over-wide numeric literal, or
+excessive nesting anywhere in the document, including in fields that adapter does not read.
+Duplicate keys, over-wide numeric literals and excessive nesting are rejected while parsing, while
+the nonfinite and unpaired-surrogate checks walk a successfully-shaped document, so a provider or
+protocol failure detected earlier is reported instead.
 
 `agents` lists canonical names, aliases, and supported settings. `doctor` reports which executable
 prefixes are available on PATH without launching them. `doctor --versions` additionally executes

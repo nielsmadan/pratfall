@@ -21,6 +21,8 @@ retains usage. The error subtype is a semantic failure even when the native proc
 Both result arms also expose `modelUsage` and `total_cost_usd`. Prat reports the ordered map keys
 without inspecting unused per-model values, and passes through the finite nonnegative native total
 without combining it with per-model figures.
+Whole-document parsing is bounded and rejects duplicate keys, excessive numeric width/nesting,
+nonfinite numbers and invalid Unicode anywhere in the document.
 
 ## Sources
 

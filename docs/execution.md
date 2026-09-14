@@ -58,7 +58,7 @@ used during execution. The registry identifies which adapters use incremental co
 - Whole-document JSON and text adapters use the runner's 8 MiB complete stdout capture; native
   stderr is capped at 2 MiB. [whole_json.py:8](../src/pratfall/adapters/whole_json.py#L8) re-checks
   that same `STDOUT_BYTES` document cap and supplies shared framing, Unicode, duplicate-key and
-  numeric guards for Reasonix, Droid and Vibe.
+  numeric guards for every whole-document JSON adapter.
 - [limits.py](../src/pratfall/limits.py) owns every budget above: `STDOUT_BYTES`, `STDERR_BYTES`,
   `EVENT_BYTES`, `RETAINED_STATE_BYTES`, `RECORD_COUNT`, `NUMERIC_BYTES`.
 
@@ -66,11 +66,17 @@ used during execution. The registry identifies which adapters use incremental co
 native prose. Its trailing Rich summary is never reparsed as events; keep that exception out of
 the strict shared JSONL framer.
 
-Known deferred parser limits from the 2026-09-09 review remain in the older whole-document
-decoders: extreme JSON nesting can escape Claude, Gemini, OpenClaw and Cursor as `RecursionError`;
-Cursor also lacks an oversized-integer `ValueError` guard. Extreme TOML integers can escape
-[configuration error handling](../src/pratfall/config.py#L207). The byte caps do not prevent
-these crafted-input failures.
+All seven whole-document JSON adapters share one strictness rule: Claude, Cursor, Droid, Gemini,
+OpenClaw, Reasonix and Vibe reject a duplicate object key, a nonfinite number, a numeric literal
+wider than `NUMERIC_BYTES`, nesting deep enough to exhaust the parser, and an unpaired surrogate
+anywhere in the document, including in fields that adapter never reads. The duplicate-key, numeric
+and nesting guards run inside `parse`, while the nonfinite and unpaired-surrogate walk applies to a
+successfully-shaped document, so a provider or protocol failure detected earlier takes precedence.
+Claude, Cursor, Gemini and OpenClaw accepted all of those before 2026-09-14; one rule for seven
+adapters was chosen over four divergent ones, and the tightening is deliberate rather than a
+compatibility guarantee. Rejections name the underlying reason: `parse` reports the
+standard-library decoder message, a duplicate object key, an over-wide numeric literal or excessive
+nesting behind each agent's own message prefix.
 
 ## Completion and accounting
 

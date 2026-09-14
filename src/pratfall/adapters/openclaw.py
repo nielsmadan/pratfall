@@ -1,8 +1,8 @@
-import json
 import math
 
 from pratfall.adapters.accounting import cost, model
 from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.adapters.whole_json import document_error, encodable_text, parse
 from pratfall.errors import PratError
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
@@ -55,14 +55,9 @@ def validate(resolved: ResolvedProfile) -> None:
 
 
 def decode(stdout: str) -> DecodedOutput:
-    try:
-        value = json.loads(stdout)
-    except json.JSONDecodeError as error:
-        return _protocol(f"Invalid OpenClaw JSON: {error.msg}.")
-    except ValueError:
-        return _protocol("Invalid OpenClaw JSON: numeric value is too large.")
-    except RecursionError:
-        return _protocol("Invalid OpenClaw JSON: document nesting is too deep.")
+    value = parse(stdout, "OpenClaw")
+    if isinstance(value, ResultError):
+        return DecodedOutput(error=value)
     if not isinstance(value, dict):
         return _protocol("OpenClaw result must be a JSON object.")
     return _decode_envelope(value)
@@ -85,6 +80,7 @@ def _decode_envelope(value: dict[str, object]) -> DecodedOutput:
             cost_usd=cost_usd,
             error=ResultError("protocol_error", "OpenClaw result envelope is malformed."),
         )
+    final = encodable_text(final)
     if isinstance(payloads, ResultError):
         return DecodedOutput(
             output=final,
@@ -98,11 +94,12 @@ def _decode_envelope(value: dict[str, object]) -> DecodedOutput:
         usage = None
     else:
         usage_error = None
+    detail_error = usage_error or accounting_error or document_error(value, "OpenClaw")
     native_error = _error(value["error"]) if "error" in value else None
     payload_error = _payload_error(payloads)
     provider_error = _provider_error(native_error, payload_error)
     if status == "timeout":
-        failure = provider_error or native_error or usage_error or accounting_error
+        failure = provider_error or native_error or detail_error
         if failure is None:
             decoded = DecodedOutput(
                 output=final,
@@ -136,13 +133,13 @@ def _decode_envelope(value: dict[str, object]) -> DecodedOutput:
             cost_usd=cost_usd,
             error=provider_error,
         )
-    elif native_error is not None or usage_error is not None or accounting_error is not None:
+    elif native_error is not None or detail_error is not None:
         decoded = DecodedOutput(
             output=final,
             usage=usage,
             reported_models=reported_models,
             cost_usd=cost_usd,
-            error=native_error or usage_error or accounting_error,
+            error=native_error or detail_error,
         )
     elif status == "ok" and ok:
         decoded = DecodedOutput(

@@ -207,6 +207,44 @@ def test_claude_text_dispatch_prints_only_final_answer(
     assert '"type": "result"' not in captured.out
 
 
+SURROGATE_ANSWERS = {
+    "claude": '{"type":"result","subtype":"success","is_error":false,'
+    '"result":"before\\ud800after","usage":{"input_tokens":1,"output_tokens":1}}',
+    "cursor": '{"type":"result","subtype":"success","is_error":false,'
+    '"result":"before\\ud800after"}',
+    "droid": '{"type":"result","subtype":"success","is_error":false,"result":"before\\ud800after"}',
+    "gemini": '{"response":"before\\ud800after"}',
+    "openclaw": '{"ok":true,"status":"ok","final":"before\\ud800after","payloads":[]}',
+    "reasonix": '{"type":"result","subtype":"success","is_error":false,'
+    '"result":"before\\ud800after"}',
+    "vibe": '[{"type":"message","role":"assistant",'
+    '"content":[{"type":"text","text":"before\\ud800after"}]}]',
+}
+
+
+def surrogate_agent(payload: str) -> str:
+    return f"import sys\nsys.stdin.buffer.read()\nsys.stdout.write({payload!r})\n"
+
+
+@pytest.mark.parametrize("agent", sorted(SURROGATE_ANSWERS))
+@pytest.mark.parametrize("mode", [[], ["--json"]], ids=["text", "json"])
+def test_unencodable_answer_is_normalized_instead_of_crashing(
+    agent: str, mode: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, agent, surrogate_agent(SURROGATE_ANSWERS[agent]))
+    assert main([agent, "prompt", "--config", str(config), *mode]) == 1
+    captured = capsys.readouterr()
+    if mode:
+        assert json.loads(captured.out)["output"] == ""
+        assert json.loads(captured.out)["error"] == {
+            "code": "output_encoding",
+            "message": "Agent output contains invalid Unicode text.",
+        }
+    else:
+        assert captured.out == ""
+        assert "prat: Agent output contains invalid Unicode text.\n" in captured.err
+
+
 @pytest.mark.parametrize("local_name", [".pratfile", "custom.toml"])
 @pytest.mark.parametrize("mode", [[], ["--json"], ["--json", "--progress"]])
 def test_run_uses_local_profile_and_global_wrapper_from_invocation_directory(

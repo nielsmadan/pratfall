@@ -1890,14 +1890,14 @@ _PROTOCOL_EXPECTATIONS = (
         "droid",
         exit_code=1,
         error_code="protocol_error",
-        error_message="Invalid Droid JSON document.",
+        error_message="Invalid Droid JSON: numeric value is too large.",
     ),
     _ProtocolExpectation(
         "A14.nesting",
         "reasonix",
         exit_code=1,
         error_code="protocol_error",
-        error_message="Invalid Reasonix JSON document.",
+        error_message="Invalid Reasonix JSON: document nesting is too deep.",
     ),
     _ProtocolExpectation(
         "A14.unicode",

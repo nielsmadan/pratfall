@@ -20,6 +20,8 @@ counts and are ignored. An empty model map reports nullable usage. The prompt tr
 the operating system may reject a large prompt before reaching Prat's 1 MiB bound.
 The ordered `stats.models` keys are also reported as observed models. Gemini exposes no verified
 native USD total in this interface.
+Whole-document parsing is bounded and rejects duplicate keys, excessive numeric width/nesting,
+nonfinite numbers and invalid Unicode anywhere in the document.
 
 ## Sources
 

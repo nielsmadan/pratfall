@@ -2,6 +2,7 @@ import json
 
 from pratfall.adapters.accounting import cost, model_map
 from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.adapters.whole_json import document_error, encodable_text, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
 _ALLOWED = {
@@ -103,21 +104,14 @@ def validate(resolved: ResolvedProfile) -> None:
 
 
 def decode(stdout: str) -> DecodedOutput:
-    try:
-        value = json.loads(stdout)
-    except json.JSONDecodeError as error:
-        return DecodedOutput(
-            error=ResultError("protocol_error", f"Invalid Claude JSON: {error.msg}.")
-        )
-    except ValueError:
-        return _protocol("Invalid Claude JSON: numeric value is too large.")
-    except RecursionError:
-        return _protocol("Invalid Claude JSON: document nesting is too deep.")
+    value = parse(stdout, "Claude")
+    if isinstance(value, ResultError):
+        return DecodedOutput(error=value)
     if not isinstance(value, dict):
         return _protocol("Claude result must be a JSON object.")
     reported_models, model_error = model_map(value.get("modelUsage"), "Claude modelUsage")
     cost_usd, cost_error = cost(value.get("total_cost_usd"), "Claude total_cost_usd")
-    accounting_error = model_error or cost_error
+    accounting_error = model_error or cost_error or document_error(value, "Claude")
     event_type = value.get("type")
     subtype = value.get("subtype")
     is_error = value.get("is_error")
@@ -180,6 +174,7 @@ def _decode_success(
                 "protocol_error", "Claude success result is missing a string result field."
             ),
         )
+    output = encodable_text(output)
     if is_error:
         message = output.strip() or "Claude reported an error."
         return DecodedOutput(

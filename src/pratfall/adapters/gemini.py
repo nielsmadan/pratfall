@@ -1,7 +1,6 @@
-import json
-
 from pratfall.adapters.accounting import model_map
 from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.adapters.whole_json import document_error, encodable_text, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
 _ALLOWED = {
@@ -67,7 +66,7 @@ def validate(resolved: ResolvedProfile) -> None:
 
 
 def decode(stdout: str) -> DecodedOutput:
-    value = _load(stdout)
+    value = parse(stdout, "Gemini")
     if isinstance(value, ResultError):
         return DecodedOutput(error=value)
     if not isinstance(value, dict):
@@ -81,6 +80,7 @@ def decode(stdout: str) -> DecodedOutput:
             reported_models=reported_models,
             error=ResultError("protocol_error", "Gemini response must be a string when present."),
         )
+    output = encodable_text(output) if output is not None else None
     usage = _usage(stats) if "stats" in value else None
     if isinstance(usage, ResultError):
         usage_error: ResultError | None = usage
@@ -105,7 +105,7 @@ def decode(stdout: str) -> DecodedOutput:
             error=result_error,
             timed_out=timed_out,
         )
-    protocol_error = usage_error or model_error
+    protocol_error = usage_error or model_error or document_error(value, "Gemini")
     if protocol_error is not None:
         return DecodedOutput(
             output=output or "",
@@ -120,18 +120,6 @@ def decode(stdout: str) -> DecodedOutput:
             error=ResultError("protocol_error", "Gemini result is missing a response or error."),
         )
     return DecodedOutput(output=output, usage=usage, reported_models=reported_models)
-
-
-def _load(stdout: str) -> object | ResultError:
-    try:
-        value: object = json.loads(stdout)
-    except json.JSONDecodeError as error:
-        return ResultError("protocol_error", f"Invalid Gemini JSON: {error.msg}.")
-    except ValueError:
-        return ResultError("protocol_error", "Invalid Gemini JSON: numeric value is too large.")
-    except RecursionError:
-        return ResultError("protocol_error", "Invalid Gemini JSON: document nesting is too deep.")
-    return value
 
 
 def _provider_error(value: object) -> ResultError:

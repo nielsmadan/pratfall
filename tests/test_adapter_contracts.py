@@ -21,16 +21,20 @@ from pratfall.adapters import (
     codex,
     copilot,
     cursor,
+    droid,
     gemini,
     hermes,
     kiro,
     openclaw,
     opencode,
+    reasonix,
+    vibe,
 )
 from pratfall.adapters.native_args import Flag
 from pratfall.adapters.registry import ADAPTERS, Adapter
 from pratfall.catalog import BY_NAME
 from pratfall.cli import ACTIVITY_LABELS
+from pratfall.codes import Code
 from pratfall.consumer import (
     ByteConsumer,
     ConsumerFactory,
@@ -39,6 +43,7 @@ from pratfall.consumer import (
     decode_with,
 )
 from pratfall.errors import PratError
+from pratfall.limits import STDOUT_BYTES
 from pratfall.models import (
     Activity,
     Capabilities,
@@ -920,56 +925,156 @@ def test_progress_labels_cover_every_activity_category() -> None:
     assert set(ACTIVITY_LABELS) == set(get_args(Activity))
 
 
-_LEGACY_WHOLE_JSON: dict[str, tuple[AdapterModule, dict[str, object]]] = {
+_UNUSED_FIELD = '"unused":null'
+_WHOLE_JSON_DECODERS: dict[str, tuple[AdapterModule, str, str]] = {
     "claude": (
         claude,
-        {
-            "type": "result",
-            "subtype": "success",
-            "is_error": False,
-            "result": "answer",
-            "usage": {"input_tokens": 1, "output_tokens": 1},
-        },
+        "Claude",
+        '{"type":"result","subtype":"success","is_error":false,"result":"answer",'
+        '"usage":{"input_tokens":1,"output_tokens":1},"unused":null}',
     ),
     "cursor": (
         cursor,
-        {"type": "result", "subtype": "success", "is_error": False, "result": "answer"},
+        "Cursor",
+        '{"type":"result","subtype":"success","is_error":false,"result":"answer","unused":null}',
     ),
-    "gemini": (gemini, {"response": "answer"}),
-    "openclaw": (openclaw, {"ok": True, "status": "ok", "final": "answer", "payloads": []}),
+    "droid": (
+        droid,
+        "Droid",
+        '{"type":"result","subtype":"success","is_error":false,"result":"answer","unused":null}',
+    ),
+    "gemini": (gemini, "Gemini", '{"response":"answer","unused":null}'),
+    "openclaw": (
+        openclaw,
+        "OpenClaw",
+        '{"ok":true,"status":"ok","final":"answer","payloads":[],"unused":null}',
+    ),
+    "reasonix": (
+        reasonix,
+        "Reasonix",
+        '{"type":"result","subtype":"success","is_error":false,"result":"answer","unused":null}',
+    ),
+    "vibe": (
+        vibe,
+        "Vibe",
+        '[{"type":"message","role":"assistant",'
+        '"content":[{"type":"text","text":"answer"}],"unused":null}]',
+    ),
 }
-
-
-def _legacy_document(agent: str, extra: str) -> str:
-    envelope = json.dumps(_LEGACY_WHOLE_JSON[agent][1])
-    return f"{envelope[:-1]},{extra}}}"
-
-
-@pytest.mark.parametrize("agent", sorted(_LEGACY_WHOLE_JSON))
-def test_legacy_whole_json_decoders_normalize_excessive_nesting(agent: str) -> None:
-    decoded = _LEGACY_WHOLE_JSON[agent][0].decode("[" * 100_000 + "]" * 100_000)
-    assert decoded.output == ""
-    assert decoded.error is not None
-    assert decoded.error.code == "protocol_error"
-
-
-@pytest.mark.parametrize("agent", sorted(_LEGACY_WHOLE_JSON))
-def test_legacy_whole_json_decoders_normalize_oversized_integers(agent: str) -> None:
-    decoded = _LEGACY_WHOLE_JSON[agent][0].decode(_legacy_document(agent, '"extra":' + "9" * 5000))
-    assert decoded.output == ""
-    assert decoded.error is not None
-    assert decoded.error.code == "protocol_error"
-
-
-@pytest.mark.parametrize("agent", sorted(_LEGACY_WHOLE_JSON))
-@pytest.mark.parametrize(
-    "extra",
-    ['"extra":1,"extra":2', '"extra":NaN', '"extra":' + "9" * 200],
-    ids=["duplicate-key", "nonfinite-number", "wide-number"],
+_WHOLE_JSON_DOCUMENT_GUARDS: tuple[tuple[str, Callable[[], str], Code, str], ...] = (
+    ("framing", lambda: "", "protocol_error", "Invalid {label} JSON: Expecting value."),
+    (
+        "nesting",
+        lambda: "[" * 100_000 + "]" * 100_000,
+        "protocol_error",
+        "Invalid {label} JSON: document nesting is too deep.",
+    ),
+    (
+        "oversized-document",
+        lambda: "a" * (STDOUT_BYTES + 1),
+        "stdout_limit_exceeded",
+        "{label} JSON exceeds 8 MiB.",
+    ),
 )
-def test_legacy_whole_json_decoders_still_accept_unguarded_documents(
-    agent: str, extra: str
-) -> None:
-    decoded = _LEGACY_WHOLE_JSON[agent][0].decode(_legacy_document(agent, extra))
+_WHOLE_JSON_FIELD_GUARDS: tuple[tuple[str, str, str, Code, str], ...] = (
+    (
+        "duplicate-key",
+        '"unused":1,"unused":2',
+        "",
+        "protocol_error",
+        "Invalid {label} JSON: duplicate object key.",
+    ),
+    (
+        "nonfinite-number",
+        '"unused":NaN',
+        "answer",
+        "protocol_error",
+        "{label} JSON contains a nonfinite number.",
+    ),
+    (
+        "infinite-number",
+        '"unused":Infinity',
+        "answer",
+        "protocol_error",
+        "{label} JSON contains a nonfinite number.",
+    ),
+    (
+        "overflowing-exponent",
+        '"unused":1e400',
+        "answer",
+        "protocol_error",
+        "{label} JSON contains a nonfinite number.",
+    ),
+    (
+        "wide-number",
+        '"unused":' + "9" * 200,
+        "",
+        "protocol_error",
+        "Invalid {label} JSON: numeric value is too large.",
+    ),
+    (
+        "huge-number",
+        '"unused":' + "9" * 5000,
+        "",
+        "protocol_error",
+        "Invalid {label} JSON: numeric value is too large.",
+    ),
+    (
+        "lone-surrogate",
+        '"unused":"\\ud800"',
+        "answer",
+        "output_encoding",
+        "Agent output contains invalid Unicode text.",
+    ),
+)
+
+
+def _whole_json_document(agent: str, extra: str) -> str:
+    return _WHOLE_JSON_DECODERS[agent][2].replace(_UNUSED_FIELD, extra)
+
+
+@pytest.mark.parametrize("agent", sorted(_WHOLE_JSON_DECODERS))
+def test_every_whole_document_decoder_accepts_its_baseline_document(agent: str) -> None:
+    decoded = _WHOLE_JSON_DECODERS[agent][0].decode(_WHOLE_JSON_DECODERS[agent][2])
     assert decoded.output == "answer"
     assert decoded.error is None
+
+
+@pytest.mark.parametrize("agent", sorted(_WHOLE_JSON_DECODERS))
+@pytest.mark.parametrize(
+    ("document", "code", "message"),
+    [case[1:] for case in _WHOLE_JSON_DOCUMENT_GUARDS],
+    ids=[case[0] for case in _WHOLE_JSON_DOCUMENT_GUARDS],
+)
+def test_every_whole_document_decoder_reports_one_document_guard(
+    agent: str, document: Callable[[], str], code: Code, message: str
+) -> None:
+    module, label, _ = _WHOLE_JSON_DECODERS[agent]
+    decoded = module.decode(document())
+    assert decoded.output == ""
+    assert decoded.error == ResultError(code, message.format(label=label))
+
+
+@pytest.mark.parametrize("agent", sorted(_WHOLE_JSON_DECODERS))
+@pytest.mark.parametrize(
+    ("extra", "output", "code", "message"),
+    [case[1:] for case in _WHOLE_JSON_FIELD_GUARDS],
+    ids=[case[0] for case in _WHOLE_JSON_FIELD_GUARDS],
+)
+def test_every_whole_document_decoder_rejects_a_guarded_ignored_field(
+    agent: str, extra: str, output: str, code: Code, message: str
+) -> None:
+    module, label, _ = _WHOLE_JSON_DECODERS[agent]
+    decoded = module.decode(_whole_json_document(agent, extra))
+    assert decoded.output == output
+    assert decoded.error == ResultError(code, message.format(label=label))
+
+
+@pytest.mark.parametrize("agent", sorted(_WHOLE_JSON_DECODERS))
+def test_every_whole_document_decoder_clears_an_unencodable_answer(agent: str) -> None:
+    module, _, document = _WHOLE_JSON_DECODERS[agent]
+    decoded = module.decode(document.replace('"answer"', json.dumps("a\ud800")))
+    assert decoded.output == ""
+    assert decoded.error == ResultError(
+        "output_encoding", "Agent output contains invalid Unicode text."
+    )

@@ -22,6 +22,8 @@ The native
 exposes nullable `provider`, `model`, and `costUsd` accounting. Prat joins provider/model when both
 exist, uses the model alone when provider is absent, and reports no model when the provider has no
 model. It passes through only finite nonnegative native USD cost.
+Whole-document parsing is bounded and rejects duplicate keys, excessive numeric width/nesting,
+nonfinite numbers and invalid Unicode anywhere in the document.
 
 Prat passes its exact positive deadline to the process runner. Because current `agent exec`
 accepts only whole-second timeout strings and internally ceilings milliseconds, its native timeout

@@ -16,8 +16,12 @@ def parse(stdout: str, agent: str) -> object:
         return json.loads(
             stdout, parse_int=_integer, parse_float=_number, object_pairs_hook=_object
         )
-    except (ValueError, RecursionError):
-        return ResultError("protocol_error", f"Invalid {agent} JSON document.")
+    except json.JSONDecodeError as error:
+        return _invalid(agent, error.msg)
+    except ValueError as error:
+        return _invalid(agent, str(error))
+    except RecursionError:
+        return _invalid(agent, "document nesting is too deep")
 
 
 def document_error(value: object, agent: str) -> ResultError | None:
@@ -39,8 +43,20 @@ def document_error(value: object, agent: str) -> ResultError | None:
     return None
 
 
+def encodable_text(text: str) -> str:
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return ""
+    return text
+
+
 def encoding_error() -> ResultError:
     return ResultError("output_encoding", "Agent output contains invalid Unicode text.")
+
+
+def _invalid(agent: str, detail: str) -> ResultError:
+    return ResultError("protocol_error", f"Invalid {agent} JSON: {detail}.")
 
 
 def _integer(value: str) -> int:
@@ -59,6 +75,6 @@ def _object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError("duplicate JSON key")
+            raise ValueError("duplicate object key")
         result[key] = value
     return result

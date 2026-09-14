@@ -1,6 +1,5 @@
-import json
-
 from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.adapters.whole_json import document_error, encodable_text, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
 
 _ALLOWED = {
@@ -56,24 +55,20 @@ def validate(resolved: ResolvedProfile) -> None:
 
 
 def decode(stdout: str) -> DecodedOutput:
-    try:
-        value = json.loads(stdout)
-    except json.JSONDecodeError as error:
-        return _protocol(f"Invalid Cursor JSON: {error.msg}.")
-    except ValueError:
-        return _protocol("Invalid Cursor JSON: numeric value is too large.")
-    except RecursionError:
-        return _protocol("Invalid Cursor JSON: document nesting is too deep.")
+    value = parse(stdout, "Cursor")
+    if isinstance(value, ResultError):
+        return DecodedOutput(error=value)
     if not isinstance(value, dict):
         return _protocol("Cursor result must be a JSON object.")
+    output = value.get("result")
     if (
         value.get("type") != "result"
         or value.get("subtype") != "success"
         or value.get("is_error") is not False
-        or not isinstance(value.get("result"), str)
+        or not isinstance(output, str)
     ):
         return _protocol("Cursor success result envelope is malformed.")
-    return DecodedOutput(output=value["result"])
+    return DecodedOutput(output=encodable_text(output), error=document_error(value, "Cursor"))
 
 
 def _protocol(message: str) -> DecodedOutput:
