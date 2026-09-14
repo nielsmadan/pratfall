@@ -118,6 +118,8 @@ native background-process behavior.
 
 Encoding and presentation errors discovered after parent exit still invoke
 [group cleanup](../src/pratfall/cli.py#L768): descendants can survive after closing the pipes.
+An unexpected exception is handled twice for the same reason: once where the process result is
+still bound, so cleanup runs, and once around the whole run for pre-launch failures.
 Both ordinary and progress diagnostics preserve the decoded answer and accounting when stderr
 fails. Ordinary
 diagnostics flush before final result emission; a failed stream is redirected to prevent another

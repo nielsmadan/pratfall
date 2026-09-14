@@ -5,6 +5,7 @@ from typing import Literal
 Code = Literal[
     "executable_not_executable",
     "executable_not_found",
+    "internal_error",
     "interrupted",
     "invalid_arguments",
     "invalid_config",
@@ -24,6 +25,7 @@ Code = Literal[
 
 EXECUTABLE_NOT_EXECUTABLE: Code = "executable_not_executable"
 EXECUTABLE_NOT_FOUND: Code = "executable_not_found"
+INTERNAL_ERROR: Code = "internal_error"
 INTERRUPTED: Code = "interrupted"
 INVALID_ARGUMENTS: Code = "invalid_arguments"
 INVALID_CONFIG: Code = "invalid_config"
@@ -51,6 +53,7 @@ EXIT_CODES: Mapping[Code, int] = MappingProxyType(
     {
         EXECUTABLE_NOT_EXECUTABLE: NOT_EXECUTABLE_EXIT,
         EXECUTABLE_NOT_FOUND: NOT_FOUND_EXIT,
+        INTERNAL_ERROR: FAILURE_EXIT,
         INVALID_ARGUMENTS: USAGE_EXIT,
         INVALID_CONFIG: USAGE_EXIT,
         OUTPUT_ENCODING: FAILURE_EXIT,

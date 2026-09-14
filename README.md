@@ -130,6 +130,9 @@ Launch/completion progress and native stderr diagnostics go to standard error.
 If writing diagnostics fails, Prat cleans up the owned process group and preserves the answer on
 stdout. JSON results also retain accounting and report `output_io_error` unless a prior timeout,
 interruption, or runner error takes precedence.
+An unexpected failure anywhere in a run is normalized the same way and reported as
+`internal_error` after the owned process group is cleaned up; once a result has reached stdout it is
+reported on stderr alone.
 
 `--json` emits exactly one normalized result object for a run,
 including validation and runtime failures:

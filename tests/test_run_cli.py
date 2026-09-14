@@ -2018,3 +2018,282 @@ def test_successful_fake_agent_output_to_early_closed_pipe_returns_one(
     assert completed.returncode == 1
     assert b"BrokenPipeError" not in completed.stderr
     assert b"finished with status success" in completed.stderr
+
+
+GEMINI_SURROGATE_ERROR = r"""import sys
+sys.stdout.write('{"error":{"type":"x","message":"bad\\ud800"}}')
+"""
+
+
+def test_surrogate_provider_message_emits_one_normalized_json_result(tmp_path: Path) -> None:
+    config = write_agent(tmp_path, "gemini", GEMINI_SURROGATE_ERROR)
+    completed = subprocess.run(
+        [sys.executable, "-m", "pratfall", "gm", "prompt", "--json", "--config", str(config)],
+        cwd=tmp_path,
+        env=_progress_env(tmp_path),
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    result = json.loads(completed.stdout)
+    assert completed.returncode == 1
+    assert completed.stdout.count(b"\n") == 1
+    assert result["status"] == "error"
+    assert result["agent"] == "gemini"
+    assert result["error"]["code"] == "internal_error"
+    assert "UnicodeEncodeError" in result["error"]["message"]
+    assert b"Traceback" not in completed.stderr
+
+
+def test_surrogate_provider_message_in_text_mode_keeps_the_native_diagnostic(
+    tmp_path: Path,
+) -> None:
+    config = write_agent(tmp_path, "gemini", GEMINI_SURROGATE_ERROR)
+    completed = subprocess.run(
+        [sys.executable, "-m", "pratfall", "gm", "prompt", "--config", str(config)],
+        cwd=tmp_path,
+        env=_progress_env(tmp_path),
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert completed.stdout == b""
+    assert b"Traceback" not in completed.stderr
+    assert b"prat: bad\\ud800\n" in completed.stderr
+
+
+def _colliding_profiles(tmp_path: Path, count: int) -> Path:
+    names = [f"p{index:04d}" for index in range(count)]
+    bodies = "".join(f'[profiles.{name}]\nagent="gemini"\n' for name in names)
+    command = json.dumps([sys.executable, "-c", "pass"])
+    global_path = tmp_path / "xdg" / "pratfall" / "config.toml"
+    global_path.parent.mkdir(parents=True, exist_ok=True)
+    global_path.write_text(
+        f"version=1\n[agents.gemini]\ncommand={command}\n{bodies}", encoding="utf-8"
+    )
+    local_path = tmp_path / "local.toml"
+    local_path.write_text(f"version=1\n{bodies}", encoding="utf-8")
+    return local_path
+
+
+def _drain(descriptor: int) -> bytes:
+    chunks: list[bytes] = []
+    while True:
+        data = os.read(descriptor, 1 << 20)
+        if not data:
+            return b"".join(chunks)
+        chunks.append(data)
+
+
+def test_progress_dry_run_preview_into_full_shared_stream_normalizes_without_traceback(
+    tmp_path: Path,
+) -> None:
+    local_path = _colliding_profiles(tmp_path, 1000)
+    read_descriptor, write_descriptor = os.pipe()
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "pratfall",
+            "p0000",
+            "-",
+            "--progress",
+            "--dry-run",
+            "--json",
+            "--config",
+            str(local_path),
+        ],
+        cwd=tmp_path,
+        env=_progress_env(tmp_path),
+        stdin=subprocess.PIPE,
+        stdout=write_descriptor,
+        stderr=write_descriptor,
+        start_new_session=True,
+    )
+    os.close(write_descriptor)
+    try:
+        assert process.stdin is not None
+        process.stdin.write(b"Z" * 40000)
+        process.stdin.close()
+        time.sleep(1.0)
+        assert process.poll() is None
+        output = _drain(read_descriptor)
+        assert process.wait(timeout=10) == 1
+        assert b"Traceback" not in output
+        assert b"prat: Unexpected failure: BlockingIOError" in output
+        assert output.count(b'"dry_run": true') == 1
+        assert output.count(b'"status": "error"') == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        os.close(read_descriptor)
+
+
+def _decoder_failure_shim(config: Path) -> str:
+    return (
+        "import sys\n"
+        "from pratfall.adapters.registry import ADAPTERS\n"
+        "from pratfall.cli import main\n"
+        "def boom(_stdout):\n"
+        "    raise KeyError('decoder blew up')\n"
+        'object.__setattr__(ADAPTERS["gemini"], "decode", boom)\n'
+        f"sys.exit(main(['gm', 'prompt', '--json', '--config', {str(config)!r}]))\n"
+    )
+
+
+def test_decoder_exception_normalizes_result_and_cleans_owned_descendant(tmp_path: Path) -> None:
+    lock_path = tmp_path / "decoder-failure.lock"
+    group_path = tmp_path / "decoder-failure.group"
+    descendant = (
+        "import fcntl,os,sys,time;"
+        "lock=open(sys.argv[2],'wb');fcntl.flock(lock,fcntl.LOCK_EX);"
+        "os.close(1);os.close(2);os.write(int(sys.argv[1]),b'1');"
+        "os.close(int(sys.argv[1]));time.sleep(30)"
+    )
+    fixture = f"""import json,os,subprocess,sys
+ready_read, ready_write = os.pipe()
+subprocess.Popen([sys.executable, "-c", {descendant!r}, str(ready_write), {str(lock_path)!r}], pass_fds=(ready_write,))
+os.close(ready_write)
+os.read(ready_read, 1)
+os.close(ready_read)
+open({str(group_path)!r}, "w").write(str(os.getpgrp()))
+print(json.dumps({{"response": "KEEP"}}), flush=True)
+"""
+    config = write_agent(tmp_path, "gemini", fixture)
+    cleaned = False
+    process = subprocess.Popen(
+        [sys.executable, "-c", _decoder_failure_shim(config)],
+        cwd=tmp_path,
+        env=_progress_env(tmp_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=20)
+        result = json.loads(stdout)
+        assert process.returncode == 1
+        assert stdout.count(b"\n") == 1
+        assert result["status"] == "error"
+        assert result["native_exit_code"] == 0
+        assert result["error"] == {
+            "code": "internal_error",
+            "message": "Unexpected failure: KeyError: 'decoder blew up'",
+        }
+        assert b"Traceback" not in stderr
+        cleaned = _lock_is_available(lock_path)
+        assert cleaned
+    finally:
+        if not cleaned and group_path.exists():
+            with suppress(ProcessLookupError):
+                os.killpg(int(group_path.read_text()), signal.SIGKILL)
+        if process.poll() is None:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+
+
+class PartialStdout(io.StringIO):
+    def write(self, value: str) -> int:
+        if value == "\n":
+            raise ValueError("stdout is broken")
+        return super().write(value)
+
+
+def test_failure_after_emitted_output_adds_no_second_stdout_object(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    stdout = PartialStdout()
+    stderr = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr(sys, "stderr", stderr)
+    assert main(["cx", "prompt", "--json", "--config", str(config)]) == 1
+    emitted = stdout.getvalue()
+    assert emitted.count('"schema_version"') == 1
+    assert json.loads(emitted)["status"] == "success"
+    assert "prat: Unexpected failure: ValueError: stdout is broken" in stderr.getvalue()
+
+
+def test_unrepresentable_result_text_emits_a_normalized_object_with_resolved_identity(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "gemini", GEMINI_SURROGATE_ERROR, profile="work")
+    assert main(["work", "prompt", "--json", "--config", str(config)]) == 1
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert captured.out.count("\n") == 1
+    assert result["agent"] == "gemini"
+    assert result["profile"] == "work"
+    assert result["status"] == "error"
+    assert result["error"]["code"] == "internal_error"
+    assert "UnicodeEncodeError" in result["error"]["message"]
+
+
+def test_decoder_exception_is_normalized_with_process_group_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def boom(_resolved: object, _stdout: str) -> DecodedOutput:
+        raise KeyError("decoder blew up")
+
+    config = write_agent(tmp_path, "gemini", 'print("{\\"response\\": \\"KEEP\\"}")')
+    cleaned: list[int] = []
+    monkeypatch.setattr(cli_module, "_decode", boom)
+    monkeypatch.setattr(cli_module, "cleanup_process_group", cleaned.append)
+    assert main(["gm", "prompt", "--json", "--config", str(config)]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert cleaned
+    assert result["status"] == "error"
+    assert result["native_exit_code"] == 0
+    assert result["error"] == {
+        "code": "internal_error",
+        "message": "Unexpected failure: KeyError: 'decoder blew up'",
+    }
+
+
+GEMINI_NON_ASCII = """import json, sys
+sys.stdout.buffer.write(json.dumps({"response": "caf\\u00e9 \\u4e16\\u754c"}).encode() + b"\\n")
+"""
+
+
+def _ascii_stdout_env(tmp_path: Path) -> dict[str, str]:
+    return _progress_env(tmp_path) | {"PYTHONIOENCODING": "ascii"}
+
+
+def test_result_unencodable_for_stdout_emits_exactly_one_json_object(tmp_path: Path) -> None:
+    config = write_agent(tmp_path, "gemini", GEMINI_NON_ASCII, profile="work")
+    completed = subprocess.run(
+        [sys.executable, "-m", "pratfall", "work", "prompt", "--json", "--config", str(config)],
+        cwd=tmp_path,
+        env=_ascii_stdout_env(tmp_path),
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    result = json.loads(completed.stdout)
+    assert completed.returncode == 1
+    assert completed.stdout.count(b"\n") == 1
+    assert result["agent"] == "gemini"
+    assert result["profile"] == "work"
+    assert result["status"] == "error"
+    assert result["error"]["code"] == "internal_error"
+    assert "UnicodeEncodeError" in result["error"]["message"]
+    assert b"Traceback" not in completed.stderr
+
+
+def test_result_unencodable_for_stdout_in_text_mode_reports_on_stderr(tmp_path: Path) -> None:
+    config = write_agent(tmp_path, "gemini", GEMINI_NON_ASCII)
+    completed = subprocess.run(
+        [sys.executable, "-m", "pratfall", "gm", "prompt", "--config", str(config)],
+        cwd=tmp_path,
+        env=_ascii_stdout_env(tmp_path),
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert completed.stdout == b""
+    assert b"prat: Unexpected failure: UnicodeEncodeError" in completed.stderr
+    assert b"Traceback" not in completed.stderr

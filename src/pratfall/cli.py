@@ -17,7 +17,7 @@ from typing import ClassVar, Literal, NoReturn, Protocol
 from pratfall import __version__
 from pratfall.adapters.registry import ADAPTERS
 from pratfall.catalog import AGENTS, MANAGEMENT_COMMANDS
-from pratfall.codes import SIGNAL_EXIT_BASE
+from pratfall.codes import INTERNAL_ERROR, SIGNAL_EXIT_BASE, exit_code_for
 from pratfall.config import config_path, init_config, load_config, option_labels, resolve_profile
 from pratfall.consumer import ByteConsumer
 from pratfall.errors import PratError
@@ -761,6 +761,24 @@ def _decode_process(
     return process, decoded, stderr
 
 
+def _guard[T](action: Callable[[], T], recover: Callable[[Exception], T]) -> T:
+    try:
+        return action()
+    except BrokenPipeError:
+        raise
+    except Exception as error:  # noqa: BLE001 - last resort so no failure escapes as a traceback
+        return recover(error)
+
+
+def _printable(error: Exception) -> str:
+    text = _guard(lambda: f"{type(error).__name__}: {error}", lambda _: type(error).__name__)
+    return text.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
+def _internal_message(error: Exception) -> str:
+    return f"Unexpected failure: {_printable(error)}"
+
+
 def _presentation_error(error: Exception) -> ResultError:
     return ResultError("output_io_error", f"Cannot write diagnostics to stderr: {error}.")
 
@@ -781,10 +799,19 @@ def _after_run_presentation_failure(process: ProcessResult, error: Exception) ->
     return _after_run_failure(process, _presentation_error(error))
 
 
+@dataclass
+class _RunState:
+    json_mode: bool = False
+    emitted: bool = False
+    resolved: ResolvedProfile | None = None
+    process: ProcessResult | None = None
+
+
 def _preview(
     resolved: ResolvedProfile,
     invocation: Invocation,
     cwd: Path,
+    state: _RunState,
     *,
     json_mode: bool,
 ) -> None:
@@ -801,25 +828,41 @@ def _preview(
         "stdin_bytes": len(invocation.stdin),
     }
     if json_mode:
-        print(json.dumps(payload, ensure_ascii=False))
-    else:
-        print(f"command: {shlex.join(invocation.argv)}")
-        print(f"cwd: {cwd}")
-        print(f"timeout: {resolved.options.timeout:g}s")
-        fast = "native" if resolved.options.fast is None else str(resolved.options.fast).lower()
-        print(f"fast: {fast}")
-        print(f"stdin: {len(invocation.stdin)} bytes")
+        _emit_stdout(json.dumps(payload, ensure_ascii=False), state)
+        return
+    fast = "native" if resolved.options.fast is None else str(resolved.options.fast).lower()
+    _emit_stdout(
+        "\n".join(
+            (
+                f"command: {shlex.join(invocation.argv)}",
+                f"cwd: {cwd}",
+                f"timeout: {resolved.options.timeout:g}s",
+                f"fast: {fast}",
+                f"stdin: {len(invocation.stdin)} bytes",
+            )
+        ),
+        state,
+    )
 
 
-def _emit_result(result: dict[str, object], *, json_mode: bool) -> None:
+def _emit_stdout(text: str, state: _RunState) -> None:
+    committed = True
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        committed = False
+        raise
+    finally:
+        state.emitted = state.emitted or committed
+
+
+def _emit_result(result: dict[str, object], state: _RunState, *, json_mode: bool) -> None:
     if json_mode:
-        print(json.dumps(result, ensure_ascii=False))
+        _emit_stdout(json.dumps(result, ensure_ascii=False), state)
         return
     output = result["output"]
     if isinstance(output, str) and output:
-        sys.stdout.write(output)
-        if not output.endswith("\n"):
-            sys.stdout.write("\n")
+        _emit_stdout(output.removesuffix("\n"), state)
 
 
 @dataclass(frozen=True)
@@ -852,6 +895,20 @@ def _execute(plan: _RunPlan, diagnostics: _Diagnostics) -> tuple[ProcessResult, 
         consumer=plan.consumer,
         progress=diagnostics.progress_callback(),
     )
+    return _guard(
+        lambda: _present_run(plan, diagnostics, process),
+        lambda error: (_after_run_internal_failure(process, error), DecodedOutput()),
+    )
+
+
+def _after_run_internal_failure(process: ProcessResult, error: Exception) -> ProcessResult:
+    return _after_run_failure(process, ResultError(INTERNAL_ERROR, _internal_message(error)))
+
+
+def _present_run(
+    plan: _RunPlan, diagnostics: _Diagnostics, process: ProcessResult
+) -> tuple[ProcessResult, DecodedOutput]:
+    resolved = plan.resolved
     process, decoded, native_stderr = _decode_process(resolved, process)
     result = normalize(resolved, process, decoded)
     if native_stderr:
@@ -875,16 +932,51 @@ def _execute(plan: _RunPlan, diagnostics: _Diagnostics) -> tuple[ProcessResult, 
 
 
 def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
-    json_mode = _json_requested(arguments)
+    state = _RunState(json_mode=_json_requested(arguments))
+    return _guard(
+        lambda: _run_selected(arguments, invocation_cwd, state),
+        lambda error: _internal_failure(error, state),
+    )
+
+
+def _cleanup_after(process: ProcessResult | None) -> None:
+    if process is not None and process.process_group is not None:
+        cleanup_process_group(process.process_group)
+
+
+def _internal_failure(error: Exception, state: _RunState) -> int:
+    _cleanup_after(state.process)
+    message = _internal_message(error)
+    with suppress(OSError, ValueError):
+        if state.json_mode and not state.emitted:
+            print(json.dumps(_internal_payload(message, state.resolved), ensure_ascii=False))
+        else:
+            print(f"prat: {message}", file=sys.stderr)
+    return exit_code_for(INTERNAL_ERROR)
+
+
+def _internal_payload(message: str, resolved: ResolvedProfile | None) -> dict[str, object]:
+    payload = validation_error(Exception(message), INTERNAL_ERROR, exit_code_for(INTERNAL_ERROR))
+    if resolved is not None:
+        payload.update(
+            agent=resolved.agent.name, profile=resolved.profile, model=resolved.options.model
+        )
+    return payload
+
+
+def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) -> int:
+    json_mode = state.json_mode
     resolved: ResolvedProfile | None = None
     try:
         parsed = _parse_run(arguments)
         json_mode = parsed.json
+        state.json_mode = json_mode
         with closing(_diagnostics_for(progress=parsed.progress)) as diagnostics:
             config = load_config(parsed.config, cwd=invocation_cwd)
             _validate_config_native_arguments(config)
             _config_warnings(config, diagnostics)
             resolved = resolve_profile(config, parsed.selector, parsed.options)
+            state.resolved = resolved
             label = option_labels(config, parsed.selector, parsed.options).get(
                 "native_args", f"selector {parsed.selector!r}.native_args"
             )
@@ -893,7 +985,7 @@ def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
             prompt = acquire_prompt(parsed.prompt_source, invocation_cwd)
             invocation = _build_invocation(resolved, prompt)
             if parsed.dry_run:
-                _preview(resolved, invocation, cwd, json_mode=json_mode)
+                _preview(resolved, invocation, cwd, state, json_mode=json_mode)
                 return 0
             timeout = resolved.options.timeout
             if timeout is None:
@@ -908,9 +1000,10 @@ def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
                 json_mode=json_mode,
             )
             process, decoded = _execute(plan, diagnostics)
+            state.process = process
         result = normalize(resolved, process, decoded)
         payload = result_dict(result)
-        _emit_result(payload, json_mode=json_mode)
+        _emit_result(payload, state, json_mode=json_mode)
         return result.exit_code
     except InputInterrupted as error:
         exit_code = SIGNAL_EXIT_BASE + error.signum
