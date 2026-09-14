@@ -10,7 +10,7 @@ profile: a few builder guides, plus separate user guides, external references, a
 | Check a native agent's protocol, version baseline, or source evidence | [Native agent interfaces](reference/overview.md) |
 | Prepare a release or maintain Homebrew distribution | [Release and distribution](release.md) |
 | Repeat installed-package checks | [Local package verification](release.md#check-installed-packages-locally) |
-| Understand the documentation choice | [README and Markdown guides](decisions/0001-use-readme-and-markdown-guides.md) |
+| Understand an accepted documentation or architecture choice | [Decisions](decisions/) |
 
 ## Maintenance
 
