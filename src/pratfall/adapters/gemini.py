@@ -67,12 +67,9 @@ def validate(resolved: ResolvedProfile) -> None:
 
 
 def decode(stdout: str) -> DecodedOutput:
-    try:
-        value = json.loads(stdout)
-    except json.JSONDecodeError as error:
-        return _protocol(f"Invalid Gemini JSON: {error.msg}.")
-    except ValueError:
-        return _protocol("Invalid Gemini JSON: numeric value is too large.")
+    value = _load(stdout)
+    if isinstance(value, ResultError):
+        return DecodedOutput(error=value)
     if not isinstance(value, dict):
         return _protocol("Gemini result must be a JSON object.")
     stats = value.get("stats") if "stats" in value else None
@@ -123,6 +120,18 @@ def decode(stdout: str) -> DecodedOutput:
             error=ResultError("protocol_error", "Gemini result is missing a response or error."),
         )
     return DecodedOutput(output=output, usage=usage, reported_models=reported_models)
+
+
+def _load(stdout: str) -> object | ResultError:
+    try:
+        value: object = json.loads(stdout)
+    except json.JSONDecodeError as error:
+        return ResultError("protocol_error", f"Invalid Gemini JSON: {error.msg}.")
+    except ValueError:
+        return ResultError("protocol_error", "Invalid Gemini JSON: numeric value is too large.")
+    except RecursionError:
+        return ResultError("protocol_error", "Invalid Gemini JSON: document nesting is too deep.")
+    return value
 
 
 def _provider_error(value: object) -> ResultError:

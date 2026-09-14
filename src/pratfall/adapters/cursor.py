@@ -60,6 +60,10 @@ def decode(stdout: str) -> DecodedOutput:
         value = json.loads(stdout)
     except json.JSONDecodeError as error:
         return _protocol(f"Invalid Cursor JSON: {error.msg}.")
+    except ValueError:
+        return _protocol("Invalid Cursor JSON: numeric value is too large.")
+    except RecursionError:
+        return _protocol("Invalid Cursor JSON: document nesting is too deep.")
     if not isinstance(value, dict):
         return _protocol("Cursor result must be a JSON object.")
     if (

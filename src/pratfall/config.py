@@ -241,7 +241,7 @@ def _load_file(path: Path, *, required: bool) -> Config:
         raise PratError(f"{path}: cannot read config: {error}.") from error
     try:
         table = tomllib.loads(contents)
-    except tomllib.TOMLDecodeError as error:
+    except (tomllib.TOMLDecodeError, ValueError) as error:
         raise PratError(f"{path}: invalid TOML: {error}.") from error
     _known_keys(table, frozenset({"version", "defaults", "agents", "profiles"}), str(path))
     if type(table.get("version")) is not int or table["version"] != 1:

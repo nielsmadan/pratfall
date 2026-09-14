@@ -111,6 +111,8 @@ def decode(stdout: str) -> DecodedOutput:
         )
     except ValueError:
         return _protocol("Invalid Claude JSON: numeric value is too large.")
+    except RecursionError:
+        return _protocol("Invalid Claude JSON: document nesting is too deep.")
     if not isinstance(value, dict):
         return _protocol("Claude result must be a JSON object.")
     reported_models, model_error = model_map(value.get("modelUsage"), "Claude modelUsage")

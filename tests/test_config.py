@@ -556,3 +556,12 @@ def test_new_agent_profile_collisions_have_exact_migration_diagnostic(
     assert str(failure.value) == (
         f"{path}: profiles.{name}: name is reserved; choose a different profile name."
     )
+
+
+def test_extreme_toml_integer_is_a_normalized_config_error(tmp_path: Path) -> None:
+    path = write_config(tmp_path, "version=" + "9" * 5000 + "\n")
+    with pytest.raises(PratError, match="invalid TOML") as caught:
+        load_config(path)
+    assert caught.value.code == "invalid_config"
+    assert caught.value.exit_code == 2
+    assert str(caught.value).startswith(str(path))

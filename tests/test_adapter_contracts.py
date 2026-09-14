@@ -918,3 +918,58 @@ def test_every_consumer_adapter_charges_its_retained_answer(agent: str) -> None:
 
 def test_progress_labels_cover_every_activity_category() -> None:
     assert set(ACTIVITY_LABELS) == set(get_args(Activity))
+
+
+_LEGACY_WHOLE_JSON: dict[str, tuple[AdapterModule, dict[str, object]]] = {
+    "claude": (
+        claude,
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": "answer",
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        },
+    ),
+    "cursor": (
+        cursor,
+        {"type": "result", "subtype": "success", "is_error": False, "result": "answer"},
+    ),
+    "gemini": (gemini, {"response": "answer"}),
+    "openclaw": (openclaw, {"ok": True, "status": "ok", "final": "answer", "payloads": []}),
+}
+
+
+def _legacy_document(agent: str, extra: str) -> str:
+    envelope = json.dumps(_LEGACY_WHOLE_JSON[agent][1])
+    return f"{envelope[:-1]},{extra}}}"
+
+
+@pytest.mark.parametrize("agent", sorted(_LEGACY_WHOLE_JSON))
+def test_legacy_whole_json_decoders_normalize_excessive_nesting(agent: str) -> None:
+    decoded = _LEGACY_WHOLE_JSON[agent][0].decode("[" * 100_000 + "]" * 100_000)
+    assert decoded.output == ""
+    assert decoded.error is not None
+    assert decoded.error.code == "protocol_error"
+
+
+@pytest.mark.parametrize("agent", sorted(_LEGACY_WHOLE_JSON))
+def test_legacy_whole_json_decoders_normalize_oversized_integers(agent: str) -> None:
+    decoded = _LEGACY_WHOLE_JSON[agent][0].decode(_legacy_document(agent, '"extra":' + "9" * 5000))
+    assert decoded.output == ""
+    assert decoded.error is not None
+    assert decoded.error.code == "protocol_error"
+
+
+@pytest.mark.parametrize("agent", sorted(_LEGACY_WHOLE_JSON))
+@pytest.mark.parametrize(
+    "extra",
+    ['"extra":1,"extra":2', '"extra":NaN', '"extra":' + "9" * 200],
+    ids=["duplicate-key", "nonfinite-number", "wide-number"],
+)
+def test_legacy_whole_json_decoders_still_accept_unguarded_documents(
+    agent: str, extra: str
+) -> None:
+    decoded = _LEGACY_WHOLE_JSON[agent][0].decode(_legacy_document(agent, extra))
+    assert decoded.output == "answer"
+    assert decoded.error is None

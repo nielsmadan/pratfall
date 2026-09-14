@@ -61,6 +61,8 @@ def decode(stdout: str) -> DecodedOutput:
         return _protocol(f"Invalid OpenClaw JSON: {error.msg}.")
     except ValueError:
         return _protocol("Invalid OpenClaw JSON: numeric value is too large.")
+    except RecursionError:
+        return _protocol("Invalid OpenClaw JSON: document nesting is too deep.")
     if not isinstance(value, dict):
         return _protocol("OpenClaw result must be a JSON object.")
     return _decode_envelope(value)
