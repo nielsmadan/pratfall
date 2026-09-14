@@ -10,9 +10,12 @@ pre-commit:
 
 pre-push:
   commands:
-    pylint:
-      run: uv run pylint src/pratfall
-    mypy:
-      run: uv run mypy
-    tests:
+    check:
+      run: just check
+      priority: 1
+    coverage:
+      # just check runs the tests; this re-runs them under --cov, which enforces
+      # fail_under (see [tool.coverage.report]).
       run: uv run pytest tests/ scripts/ -q --cov
+      priority: 2
+
