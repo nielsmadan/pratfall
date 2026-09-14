@@ -866,6 +866,7 @@ def test_fake_dispatch_rejects_unknown_or_wrong_agent_a_tier_controls(
 ) -> None:
     log = tmp_path / "native.jsonl"
     monkeypatch.setenv("PRAT_QA_LOG", str(log))
+    monkeypatch.setenv("PYTHON_COLORS", "0")
     stdin = b"" if agent == "openhands" else prompt.encode()
     completed = subprocess.run(
         [sys.executable, str(SCRIPT), "--fake-native", agent, *arguments],
