@@ -1,24 +1,31 @@
 # Profiles and configuration
 
-The global config is `$XDG_CONFIG_HOME/pratfall/config.toml`, falling back to
-`~/.config/pratfall/config.toml`. An empty `XDG_CONFIG_HOME` uses the fallback. Prat automatically
-reads a TOML `.pratfile` in the directory where it was invoked and merges it over the global
-config. Parent directories are not searched, and `--cwd` does not affect discovery.
+A profile saves an agent and its settings under a reusable name. Store profiles globally for use
+across projects, or locally in a project's `.pratfile`.
 
-`--config PATH` selects a local file instead of `.pratfile`, with relative paths resolved from
-the invocation directory. It is merged over the global config too. Missing global and automatic
-local files are allowed; a missing explicit file fails. Every existing file requires `version = 1`
-and uses the same schema:
+- [Create a profile](#create-a-profile)
+- [Choose a config file](#choose-a-config-file)
+- [Merge global and local settings](#merge-global-and-local-settings)
+- [Configure commands and wrappers](#configure-commands-and-wrappers)
+- [Inspect and validate](#inspect-and-validate)
+- [Upgrade existing profiles](#upgrade-existing-profiles)
+
+## Create a profile
+
+Create an example config, then edit it:
+
+```sh
+prat config init
+prat config path
+```
+
+Both global and local files use the same TOML format:
 
 ```toml
 version = 1
 
 [defaults]
 timeout = 600
-# fast = true
-
-[agents.codex]
-command = ["codex"]
 
 [profiles.simple]
 agent = "codex"
@@ -26,21 +33,62 @@ model = "gpt-5.6-luna"
 effort = "low"
 ```
 
-A profile requires `agent`, using a [full agent name or alias](agents.md). It may set `model`,
-`effort`, `fast`, `timeout`, `native_args`, and agent-backed budget fields. Invocation flags override
-the selected profile, which overrides local defaults, then global defaults. Defaults merge field
-by field. Native argument arrays replace the lower-precedence array, including an empty array.
+Use the profile name as the selector. Flags override its settings for one run:
 
-Profiles from both files are available. A local profile with the same name replaces the entire
-global profile; its omitted fields inherit the merged defaults. Profiles do not inherit from
-each other. Prat prints one warning per duplicate profile to stderr, naming the profile and both
-source files. Warnings also appear with `--json`, keeping stdout available for one JSON result.
-With `--progress`, warnings use the nonblocking stderr writer and may be dropped under
-backpressure. Validation errors name the file and field that supplied the rejected setting,
-including inherited defaults.
+```sh
+prat simple "review this change"
+prat simple --effort high "investigate this failure"
+```
 
-For example, if the global config defines `simple` above, this `.pratfile` changes its model and
-drops the profile's `effort = "low"` setting:
+Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
+`model`, `effort`, `fast`, `timeout`, `native_args`, and the agent's supported budget fields.
+Use `[defaults]` for shared settings.
+
+`fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
+omitting the field preserves it. Other agents reject either value.
+
+## Choose a config file
+
+| Scope | Path |
+| --- | --- |
+| Global | `$XDG_CONFIG_HOME/pratfall/config.toml`, or `~/.config/pratfall/config.toml` when `XDG_CONFIG_HOME` is absent or empty. |
+| Local | `.pratfile` in the directory where you invoke Prat. |
+| Explicit local | `--config PATH`, which replaces automatic `.pratfile` discovery. |
+
+Prat merges the selected local file over the global config. It does not search parent directories,
+and `--cwd` does not affect config discovery. Relative `--config` paths resolve from the invocation
+directory.
+
+Missing global and automatic local files are allowed. A missing file explicitly selected with
+`--config` is an error. Every existing file requires `version = 1`.
+
+Create a local file with:
+
+```sh
+prat --config .pratfile config init
+```
+
+`config init` creates a new example and fails if the file already exists. Ordinary runs never
+write configuration.
+
+## Merge global and local settings
+
+Settings resolve from highest to lowest priority:
+
+**Invocation flags → selected profile → local defaults → global defaults.**
+
+| Setting | Merge rule |
+| --- | --- |
+| `[defaults]` | Merge field by field; local values win. |
+| `[profiles.NAME]` | A local profile replaces the entire global profile with that name. |
+| `[agents.NAME].command` | A local command array replaces the global array for that agent. |
+| `native_args` | The higher-priority array replaces the lower-priority array, even when empty. |
+
+Profiles from both files remain available. Profiles do not inherit from each other; omitted fields
+use the merged defaults.
+
+For example, this `.pratfile` replaces the global `simple` profile above. It changes the model and
+drops `effort = "low"`:
 
 ```toml
 version = 1
@@ -50,47 +98,72 @@ agent = "codex"
 model = "project-model"
 ```
 
-Run it with `prat simple "review this change"`. Any other global profiles remain available.
+Replace `project-model` with a model supported by your agent. Other global profiles remain
+available.
 
-`fast` is an optional boolean for Claude and Codex. `true` and `false` are both explicit overrides;
-when absent, the native setting remains in force. A global default is validated against a built-in
-agent only when that selector is resolved, while every effective profile is validated after merging
-both files and their defaults. All files are checked for syntax, schema, and field types before
-merging. Unsupported agents reject either boolean value.
+Prat warns on stderr when a local profile replaces a global one, naming the profile and both files.
+This also applies to `--json`. With `--progress`, a slow stderr reader can cause warnings to be
+dropped.
 
-`[agents.NAME].command` accepts an executable argv prefix. Bare executable names use `PATH`.
-Local command arrays replace global command arrays for the same agent. Relative executable paths
-containing `/` resolve from the directory of the file that defines that command. Pratfall performs no
-shell, variable, or tilde expansion. Shell functions are not executable files on `PATH`; expose one
-through a trusted executable wrapper and configure that wrapper's argv explicitly.
+## Configure commands and wrappers
 
-If the selected local path is a symlink to the global file, Prat loads it once and reports only
-the selected path. Relative commands still resolve from the selected path's directory.
+Use `[agents.NAME].command` to set an executable and any fixed arguments:
 
-Built-in selectors, aliases, and management commands are reserved profile names. Inspect and
-validate configuration with:
-
-```sh
-prat config path
-prat --config .pratfile config init
-prat --config config.toml config init
-prat --config config.toml config validate
-prat --config config.toml profiles
+```toml
+[agents.codex]
+command = ["codex"]
 ```
 
-`config path` prints the global path unless `--config PATH` is supplied. `config init` writes to
-that same target, creates a new example exclusively, and fails if the destination exists.
-`config validate` checks the effective merged configuration and lists the loaded files. Its JSON
-result includes `sources` in global-to-local order; `path` is the highest-precedence loaded file,
-or the global path when neither file exists. Ordinary runs never write configuration.
+Bare executable names use `PATH`. Relative executable paths containing `/` resolve from the config
+file's directory. Arguments are literal strings: Prat performs no shell, variable, or tilde
+expansion.
 
-New built-in names become reserved when upgrading. In this release, profiles named `openhands`,
-`oh`, `warp`, `iflow`, `if`, `qwen`, `amp`, `reasonix`, `rx`, `droid`, `dr`, `kimi`,
-`vibe`, `crush`, `cr`, `devin`, `dv`, `cortex`, `co`, or `grok` must be renamed, for example
-`[profiles.oh]` to `[profiles.my-openhands]`. Keep the profile's `agent` and options, update commands that invoke its
-old name, then run `prat config validate`. A collision reports
-`profiles.NAME: name is reserved; choose a different profile name.`
+To use a shell function, expose it through a trusted executable wrapper and configure that command.
+See [configuration examples](../../examples/README.md).
 
-Agents with names of four letters or fewer use their full names. Replace the former aliases
-`ki` → `kiro`, `wp` → `warp`, `qw` → `qwen`, `km` → `kimi`, and `mv` → `vibe` in CLI commands
-and profile `agent` fields. The former aliases are now available as custom profile names.
+If the selected local path is a symlink to the global file, Prat loads it once and reports only the
+selected path. Relative commands still resolve from that path's directory.
+
+## Inspect and validate
+
+```sh
+prat profiles
+prat config validate
+prat --config custom.toml profiles
+prat --config custom.toml config validate
+```
+
+`config path` and `config init` target the global file unless `--config PATH` is supplied.
+`config validate` checks the merged configuration and lists the loaded files.
+
+All files are checked for syntax, schema, and field types before merging. Every effective profile
+is then validated with its defaults. Defaults are checked against a built-in agent's capabilities
+when that selector is resolved. Errors name the source file and field, including inherited settings.
+
+In JSON results, `sources` lists loaded files in global-to-local order. `path` is the
+highest-priority loaded file, or the global path if neither file exists.
+
+## Upgrade existing profiles
+
+Built-in names, aliases, and management commands are reserved profile names. When an upgrade
+introduces a collision, rename your profile, update commands that use it, and run
+`prat config validate`.
+
+This release reserves `openhands`, `oh`, `warp`, `iflow`, `if`, `qwen`, `amp`, `reasonix`, `rx`,
+`droid`, `dr`, `kimi`, `vibe`, `crush`, `cr`, `devin`, `dv`, `cortex`, `co`, and `grok`.
+For example, rename `[profiles.oh]` to `[profiles.my-openhands]`, keeping its agent and settings.
+
+A collision reports `profiles.NAME: name is reserved; choose a different profile name.`
+
+Agents with names of four letters or fewer now use their full names. Update commands and profile
+`agent` fields that use these former aliases:
+
+| Former alias | Use instead |
+| --- | --- |
+| `ki` | `kiro` |
+| `wp` | `warp` |
+| `qw` | `qwen` |
+| `km` | `kimi` |
+| `mv` | `vibe` |
+
+The former aliases are available as custom profile names.

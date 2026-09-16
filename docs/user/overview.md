@@ -1,12 +1,12 @@
 # User guides
 
-Start with the [README](../../README.md) for the command map and common invocations.
-Use these guides for the detailed behavior of a particular task.
+The [README](../../README.md) introduces aliases, common parameters, and profiles.
+Choose a guide for the details:
 
-| Task | Guide |
+| I want to… | Guide |
 | --- | --- |
-| Install Pratfall and check native commands | [Getting started](getting-started.md) |
+| Install Pratfall and check my agent commands | [Getting started](getting-started.md) |
 | Choose an agent and check its supported settings | [Agents and limitations](agents.md) |
-| Save model, effort, and native options for reuse | [Profiles and configuration](profiles.md) |
-| Read prompts from files or pipes and control a run | [Running prompts](running.md) |
-| Consume results, failures, usage, and diagnostics | [JSON output](json.md) |
+| Save settings globally or for one project | [Profiles and configuration](profiles.md) |
+| Pass a prompt, set limits, or inspect a run | [Running prompts](running.md) |
+| Read JSON results, usage, and errors | [JSON output](json.md) |

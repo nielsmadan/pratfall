@@ -1,15 +1,24 @@
 # JSON output
 
-Run mode `--json` writes exactly one versioned result object to stdout. Diagnostics remain on
-stderr. Config and argument failures carry the same fields when `--json` is unambiguous, though they
-appear in a different order; JSON objects are unordered, so read by key rather than by position.
-`--progress` adds bounded live activity on stderr without adding extra stdout objects or fields.
+Use `--json` to write one versioned result object to stdout. Diagnostics stay on stderr;
+`--progress` adds bounded live activity there without changing the JSON fields.
+Read fields by name: their order can differ on config or argument errors. Those errors use the
+same fields when `--json` is unambiguous.
+
+- [Run results](#run-results)
+- [Models, usage, and cost](#models-usage-and-cost)
+- [Errors and partial results](#errors-and-partial-results)
+- [Previews and management commands](#previews-and-management-commands)
+
+## Run results
+
+For example, `prat cx --model gpt-5.6-luna --json "review this change"` returns an object like:
 
 ```json
 {
   "schema_version": 1,
   "agent": "codex",
-  "profile": "simple",
+  "profile": null,
   "model": "gpt-5.6-luna",
   "status": "success",
   "output": "Final answer",
@@ -23,34 +32,41 @@ appear in a different order; JSON objects are unordered, so read by key rather t
 }
 ```
 
-`model` is the resolved model requested from the native CLI. It is null when delegated to native
-defaults. `reported_models` is a nullable list of distinct native model identifiers in observed
-order; it can include supporting calls and does not say that every listed model generated final
-text. `cost_usd` is a nullable finite nonnegative cost reported in US dollars by the native CLI.
-It is native run accounting, not a subscription-billing guarantee. Unknown model or cost data stays
-null rather than falling back to the requested model or zero. Copilot credits are not converted to
-USD.
+`status` is `success`, `error`, `timeout`, or `interrupted`. Success has `exit_code: 0` and
+`error: null`. For text adapters, `output` contains complete native stdout with trailing CR/LF
+removed, which may include banners and progress text.
 
-Reasonix's requested `model` selects a configured provider name. Amp, OpenHands and Vibe have no
-generic model override. For text adapters, `output` contains complete native stdout with terminal
-CR/LF removed; banners and progress can be part of that text.
+## Models, usage, and cost
 
-Usage contains nullable `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`,
-`output_tokens`, and `reasoning_output_tokens` fields when a native protocol reports them. Unknown
-usage stays null.
+| Field | Meaning |
+| --- | --- |
+| `model` | Requested model after resolving settings; null when using native defaults. |
+| `reported_models` | List of distinct native model identifiers in observed order, or null if unknown. May include supporting calls, not just models that generated final text. |
+| `cost_usd` | Native run cost in US dollars: a finite, nonnegative number, or null if unknown. This is not a subscription-billing guarantee. |
+| `usage` | Native token counters, or null if unknown. Individual counters can also be null. |
 
-Token fields retain each native protocol's counter semantics. For some agents, native input totals
-already include cached tokens, so do not blindly add `input_tokens` and `cached_input_tokens` to
-estimate billing.
+Unknown model and cost data stay null; Prat does not substitute the requested model or zero.
+Copilot credits are not converted to USD.
 
-Statuses are `success`, `error`, `timeout`, and `interrupted`. Invalid input exits 2, missing and
-non-executable commands exit 127 and 126, timeouts exit 124, and signals exit `128 + signal`.
-Provider and protocol failures exit 1 unless a native nonzero exit has precedence.
+The token counters are `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`,
+`output_tokens`, and `reasoning_output_tokens`. They retain each native protocol's meaning.
+Some native input totals already include cached tokens, so adding `input_tokens` and
+`cached_input_tokens` can double-count them.
 
-## Error codes and exit codes
+Agent-specific accounting rules:
 
-`error` is null on success, and otherwise an object with a stable `code` and a human-readable
-`message`. The vocabulary below is the complete stable set; `exit_code` is determined by the code.
+- **Qwen:** models come only from root assistant messages; usage comes from the final result.
+- **Amp:** uses optional final-result usage and reports no model identity or USD cost.
+- **Reasonix:** `model` selects a configured provider name. It reports native input, output, and
+  cache-read counts. Cache-write counts stay null because its cache-creation field means cache
+  misses. `cost_usd` stays null because its cost alias may use another currency.
+
+Amp, OpenHands, and Vibe have no generic model override.
+
+## Errors and partial results
+
+On failure, `error` contains a stable `code` and a human-readable `message`. These are all the
+stable error codes and their exit codes:
 
 | `code` | `exit_code` | Meaning |
 | --- | --- | --- |
@@ -72,33 +88,33 @@ Provider and protocol failures exit 1 unless a native nonzero exit has precedenc
 | `stderr_limit_exceeded` | 1 | Native stderr exceeded its budget. |
 | `unsupported_platform` | 1 | Process execution requires POSIX. |
 
-A rejected option follows the source that supplied it: a command-line override reports
-`invalid_arguments`, while a `defaults` or profile value reports `invalid_config`. A rejected
-native argument stays `invalid_arguments` from either source.
+The three signal- and status-derived exit codes vary per run; all others are fixed. Provider
+and protocol failures exit 1 unless a native nonzero exit takes precedence.
 
-The three signal- and status-derived rows are computed per run; every other code has the fixed
-exit code above. `internal_error` is the last-resort code: an unexpected failure anywhere in a run
-still produces one result object and still cleans up the owned process group. When the result was
-already written to stdout, the failure is reported on stderr alone so that stdout keeps exactly one
-object. A successful run reports `status` `success`, `exit_code` 0, and null `error`.
-Successfully decoded output, usage, reported models, and cost remain in failed or timed-out results.
-For Codex, a completed assistant message before an unfinished turn ends is returned as partial
-output, while the missing `turn.completed` remains a protocol error.
-Local output framing, state, encoding, and presentation failures also retain fields decoded before
-the failure when they are safe to present.
+A rejected option reports `invalid_arguments` when set on the command line and `invalid_config`
+when set in defaults or a profile. Rejected native arguments always report `invalid_arguments`.
 
-`--dry-run --json` emits a preview with `dry_run`, resolved identity, argv, cwd, timeout, and stdin
-byte count rather than a run status. Prompts carried through argv appear in that preview. Management
-commands use separate versioned inventory or config objects; their errors still contain `status`,
-`exit_code`, and `error`.
+Failed and timed-out results retain decoded output, usage, models, and cost. Local framing,
+state, encoding, and presentation failures retain decoded fields when safe to present.
+Two agent-specific cases:
 
-Agent capability records include `fast`. Doctor inventory records include nullable `version` and
-`version_error` fields, separate from `available`. Without `doctor --versions`, both version fields
-remain null and no configured command is launched. Ordinary probe failures leave doctor at exit 0.
-An interrupted version probe adds interrupted management status and exits with `128 + signal`.
+- **Codex:** a completed assistant message is retained as partial output if the turn never
+  finishes. The missing `turn.completed` remains a protocol error.
+- **Reasonix:** `recovery_paused` is an error even with `native_exit_code: 0`; its partial result
+  is retained.
 
-Qwen reports models only from root assistant messages and takes usage from the final native result.
-Amp also uses only optional final result usage and reports no model identity or USD cost. Reasonix
-reports native input/output/cache-read counts; its cache-creation field means cache misses and its
-USD cost alias may have another currency, so cache-write counts and cost_usd stay null. Reasonix
-recovery_paused is an error outcome even when native_exit_code is zero, with its partial result retained.
+Unexpected failures use `internal_error` and still clean up the owned process group. If the
+result was already written, Prat reports the failure only on stderr to keep stdout to one object.
+
+## Previews and management commands
+
+`--dry-run --json` returns a preview containing `dry_run`, resolved identity, argv, cwd, timeout,
+and stdin byte count, rather than a run status. Prompts passed through argv appear in the preview.
+
+Management commands return separate versioned inventory or config objects. Their errors still
+contain `status`, `exit_code`, and `error`. Agent capability records include `fast`.
+
+Doctor records include `available`, plus nullable `version` and `version_error` fields. Without
+`doctor --versions`, both version fields stay null and no configured command is launched.
+Ordinary version-probe failures leave doctor at exit 0. An interrupted probe adds interrupted
+management status and exits with `128 + signal`.

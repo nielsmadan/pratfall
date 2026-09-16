@@ -1,88 +1,139 @@
 # Running prompts
 
-Run exactly one prompt through a built-in selector or named profile:
+Run one prompt using an [agent name or alias](agents.md), or a [profile you've configured](profiles.md):
 
 ```sh
 prat cx "review this change"
-prat simple --effort low "rebase these commits"
-printf 'multiline\nprompt\n' | prat cc -
-printf 'redirected prompt\n' | prat cc
-prat cx --file request.md
-prat cc --prompt=-leading-dash
 ```
 
-Supply exactly one explicit prompt source: positional text, `--prompt=TEXT`, `-f PATH` /
-`--file PATH`, or stdin through positional `-` or `--file -`. Use `--prompt=TEXT` when prompt text
-begins with a dash; `--prompt=-` is a literal dash. `--file=PATH` is also accepted. With a selector
-and no explicit source, Prat reads redirected stdin. It does not prompt at a terminal. An explicit
-source leaves incidental redirected stdin unread.
+- [Supply a prompt](#supply-a-prompt)
+- [Set options and limits](#set-options-and-limits)
+- [Pass native arguments](#pass-native-arguments)
+- [Preview a run](#preview-a-run)
+- [Watch progress and diagnostics](#watch-progress-and-diagnostics)
+- [Handle timeouts and failures](#handle-timeouts-and-failures)
+- [Output limits](#output-limits)
 
-Every source must be valid UTF-8, nonempty and not whitespace-only, contain no NUL bytes, and stay
-within 1 MiB. Named files must be regular files; symlinks to regular files work, while missing,
-unreadable, directory, and special-file inputs fail with exit 2 before an agent starts. Relative
-file paths resolve from the directory where Prat was invoked, independently of `--cwd`. Gemini,
-Copilot, Cursor, Kiro, OpenHands, Warp, iFlow, Devin and Grok carry prompts in argv and can hit an operating-system argv limit below
-1 MiB.
+## Supply a prompt
 
-Crush 0.93.1 receives the original prompt bytes on stdin and adds two trailing newline characters
-when it constructs its native prompt. Reasonix, Kimi, Vibe and Grok trim surrounding whitespace
-natively. Prat supplies the same acquired bytes for each prompt source before these native
-transformations.
+Choose one explicit prompt source:
 
-Run options can appear before or after the selector. `--model`, `--effort`, `--fast`, `--no-fast`,
-`--timeout`,
-`--max-budget-usd`, `--max-turns`, and `--max-ai-credits` override supported profile fields.
-Claude and Vibe support USD budgets; Vibe maps the value to native `--max-price`. These controls
-retain native counting and overshoot behavior. Vibe's `--max-tokens` is native passthrough only.
-Cortex supports `max_turns` with native per-conversation-round counting. Grok maps `max_turns`
-to its native agentic-turn limit.
-Fast overrides are supported by Claude and Codex. Omitting both flags preserves native behavior;
-`--no-fast` is a real false override. Conflicting fast flags fail before launch.
-`--config PATH` selects a local config to merge over the global config, replacing automatic
-`.pratfile` discovery in the invocation directory. See [configuration merging](profiles.md).
-`--cwd PATH` changes the child working directory and does not change config discovery.
-`--dry-run` acquires and validates the selected input, then prints the resolved argv without
-launching the agent. Prompts carried through stdin
-appear only as a byte count. Gemini, Copilot, Cursor, Kiro, OpenHands, Warp, iFlow, Devin and Grok carry the prompt in
-argv, so their previews include it.
+| Source | Example |
+| --- | --- |
+| Inline text | `prat cx "review this change"` |
+| File | `prat cx --file request.md` |
+| Explicit stdin | `cat request.md \| prat cc -` |
+| Redirected stdin | `cat request.md \| prat cc` |
+| Text starting with a dash | `prat cc --prompt=-leading-dash` |
 
-Use `--progress` to print bounded elapsed-time and activity updates on stderr while an agent runs.
-Structured streaming adapters report only static categories such as reasoning, tool use, and
-answering; Prat never includes native event payloads, prompts, commands, reasoning, or answer text
-in progress lines. Updates are coalesced to at most one per second, with a heartbeat at least every
-five seconds. Backpressure on stderr drops updates rather than delaying the agent deadline. The
-flag applies to one run and is not a profile setting. It does not change final stdout: JSON mode
-still writes exactly one result object.
+`-f PATH` and `--file=PATH` also read files; `--file -` reads stdin. `--prompt=-` passes a literal
+dash. Without an explicit source, Prat reads redirected stdin; at a terminal, it reports a missing
+prompt. An explicit source leaves incidental redirected stdin unread.
 
-Configuration, selected native options, and `--cwd` are validated before reading prompt input.
-Input acquisition waits for EOF before the agent-execution timeout begins. Unavailable or closed
-standard input is an input error; provide inline text or a regular file instead. SIGINT or SIGTERM while
-Prat is reading input returns interrupted status and exits with `128 + signal` without launching an
-agent. A timed-out or failed run can leave edits in the working directory. A later manual rerun is
-a fresh invocation; Prat does not retry automatically or roll back native edits.
-Those results can also contain partial final output and any accounting decoded before failure.
-In particular, Codex assistant messages completed before EOF or the outer timeout are preserved,
-but an unfinished turn still fails rather than becoming a synthetic success.
+Prompts must be valid UTF-8, contain non-whitespace text, have no NUL bytes, and fit within 1 MiB.
+Files must be regular files or symlinks to regular files. Invalid input fails with exit 2 before
+an agent starts. Relative file paths resolve from the invocation directory, independently of
+`--cwd`.
 
-Diagnostic write failures trigger process-group cleanup in both ordinary and progress modes while
-preserving final output on stdout. JSON also retains accounting and reports `output_io_error` unless
-a prior timeout, interruption, or runner error takes precedence. Any other unexpected failure is
-normalized the same way and reported as `internal_error` after the owned process group is cleaned
-up; once a result has reached stdout, the failure is reported on stderr alone.
+Gemini, Copilot, Cursor, Kiro, OpenHands, Warp, iFlow, Devin, and Grok receive prompts as command
+arguments, so the operating system's argument-size limit may be lower than 1 MiB.
+Reasonix, Kimi, Vibe, and Grok trim surrounding whitespace natively. Crush 0.93.1 adds two trailing
+newlines to the original input. Prat supplies the same prompt bytes before these native changes.
 
-Codex, Copilot, Antigravity, OpenCode, Warp, Qwen, Amp and Kimi JSONL output is decoded as it arrives. OpenHands
-decodes its mixed SDK events and native status/summary text incrementally. Prat limits each
-physical event and retained answer/protocol state to 8 MiB and retains at most 16,384 logical
-records. Discarded events do not count toward a cumulative trace limit, so long runs with many
-small progress events can exceed 8 MiB in total. Other structured JSON and text adapters retain
-their complete stdout and keep the 8 MiB whole-output limit. Native stderr is limited to 2 MiB.
-Crossing a limit fails the run explicitly and cleans up the owned process group.
+## Set options and limits
 
-Arguments after `--` are trusted native argv and replace configured `native_args`. Pratfall accepts
-only a finite documented option set and rejects native prompt, output, session, cwd, model, effort,
-fast, and budget controls that it owns. Unsupported options can be placed in a trusted executable
-wrapper.
+Run options can appear before or after the selector and override supported profile fields:
 
-Pratfall preserves native permission defaults. It does not retry, fall back to another agent or
-model, install or log into commands, or edit configuration. Hermes `--run-budget` is a native
-wall-clock wrap-up budget; Pratfall's `--timeout` remains the outer process deadline.
+```sh
+prat cx --model gpt-5.6-luna --effort low "review this change"
+prat cc --timeout 120 --cwd ../project "inspect this failure"
+```
+
+| Control | Flags and behavior |
+| --- | --- |
+| Model and effort | `--model`, `--effort`; support depends on the agent. |
+| Fast mode | `--fast` or `--no-fast` for Claude and Codex. Omitting both preserves native settings; combining them fails before launch. |
+| Execution deadline | `--timeout SECONDS`; defaults to 600 seconds. |
+| Native budgets | `--max-budget-usd`, `--max-turns`, `--max-ai-credits`; support and counting depend on the agent. |
+| Working directory | `--cwd PATH`; changes the agent's directory, not prompt-file resolution or config discovery. |
+| Configuration | `--config PATH`; selects a local file to merge over global config. |
+
+See [agent controls and limitations](agents.md#shared-controls-and-limitations) for budget
+semantics and [profiles](profiles.md) for configuration merging. Native limits retain the agent's
+counting and overshoot behavior. Hermes `--run-budget` controls native wrap-up time;
+Prat's `--timeout` remains the outer deadline.
+
+## Pass native arguments
+
+Put supported native options after `--`:
+
+```sh
+prat cx "inspect this change" -- --sandbox read-only --ephemeral
+prat cc "make the requested edit" -- --permission-mode acceptEdits
+```
+
+These arguments replace the profile's `native_args`. Prat accepts a documented set of native
+options and rejects positional arguments and controls that conflict with its prompt, output,
+session, working directory, model, effort, fast mode, or budget settings. See
+[agent-specific options](agents.md#native-behavior). Other options can be supplied through a
+trusted [command wrapper](profiles.md#configure-commands-and-wrappers).
+
+Prat preserves native permission defaults and inherits authentication and settings. It does not
+install agents, log in, or edit native configuration.
+
+## Preview a run
+
+```sh
+prat cx "review this change" --dry-run
+```
+
+`--dry-run` reads and validates the prompt, then prints the resolved command without launching it.
+Prompts sent through stdin appear as a byte count; prompts sent as command arguments appear in
+full. Add `--json` for a machine-readable preview.
+
+## Watch progress and diagnostics
+
+Final output goes to stdout; progress and diagnostics go to stderr. With `--json`, stdout contains
+one [result object](json.md).
+
+| Flag | What appears on stderr |
+| --- | --- |
+| `--progress` | Elapsed time and activity categories such as reasoning, tool use, and answering. |
+| `--trace` | Captured native stdout, including any native payload text. |
+
+Progress updates contain category labels only, with at most one update per second and a heartbeat
+at least every five seconds. `--progress` applies to one run and cannot be saved in a profile.
+A slow stderr reader can cause progress, trace, and diagnostic writes to be dropped in this mode,
+so they do not delay the agent deadline. Trace can show only what the native CLI emits.
+
+## Handle timeouts and failures
+
+Prat validates configuration, native options, and `--cwd` before reading input. It waits for EOF
+before starting the execution timeout. Closed or unavailable stdin is an input error; use inline
+text or a regular file instead. SIGINT or SIGTERM during input acquisition exits with
+`128 + signal` without launching an agent.
+
+A failed or timed-out run can leave edits in the working directory. Prat does not retry, roll back
+edits, or fall back to another agent or model. A manual rerun starts a fresh invocation.
+
+Failed results can retain partial output and accounting. Diagnostic write failures trigger
+process-group cleanup while preserving final output and accounting. JSON reports `output_io_error`
+unless a timeout, interruption, or runner error takes precedence. Unexpected failures report
+`internal_error`; after a result has reached stdout, the failure is reported only on stderr. See
+[JSON errors and partial results](json.md#errors-and-partial-results) for the full contract.
+
+## Output limits
+
+Streaming output from Codex, Copilot, Antigravity, OpenCode, Warp, Qwen, Amp, Kimi, and OpenHands is
+decoded as it arrives. Other JSON and text adapters retain complete stdout.
+
+| Output | Limit |
+| --- | --- |
+| Individual streaming event and retained answer/protocol state | 8 MiB each |
+| Retained logical records | 16,384 |
+| Complete stdout for non-streaming adapters, or trace capture | 8 MiB |
+| Native stderr | 2 MiB |
+
+Without `--trace`, discarded streaming events have no cumulative output limit, so a long run with
+many small events can exceed 8 MiB in total. Crossing a limit fails the run and cleans up the owned
+process group.
