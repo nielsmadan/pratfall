@@ -9,6 +9,7 @@ prat cx "review this change"
 - [Supply a prompt](#supply-a-prompt)
 - [Apply a template](#apply-a-template)
 - [Include context files](#include-context-files)
+- [Extract code](#extract-code)
 - [Set options and limits](#set-options-and-limits)
 - [Pass native arguments](#pass-native-arguments)
 - [Preview a run](#preview-a-run)
@@ -116,6 +117,30 @@ The shared 1 MiB limit includes the rendered task, all context content, labels a
 Prat reserves label space before reading context files, reads only up to the remaining budget
 plus one overflow byte, and stops on overflow before opening later files. `--dry-run` uses the
 same composition and validation.
+
+## Extract code
+
+```sh
+prat cc -x "Write a Python function"
+prat --extract cx "Write a shell script" --json
+```
+
+`-x` or `--extract` returns the body of the first fenced code block in the decoded answer.
+The opening line must have zero to three leading spaces followed by at least three backticks
+or tildes. An optional info string is allowed; backtick fences cannot have backticks in that
+string. A closing line has zero to three leading spaces, the same fence character repeated at
+least as many times, and only spaces or tabs afterward. Lines end at LF, CRLF or CR.
+
+The first opening fence governs: if it is never closed, or no opening exists, the entire answer
+is returned unchanged. A complete empty block produces empty output. Body indentation, whitespace
+and line endings are preserved without dedenting. Ordinary text output keeps its existing behavior:
+nonempty output gets a final LF if it lacks one, while empty output writes nothing. JSON `output`
+contains the exact extracted body.
+
+Extraction applies to successful and failed runs, including partial answers. It changes only
+`output`; errors, status, accounting, exit codes and native `--trace` remain unchanged. It has no
+effect on a `--dry-run` preview. Like other run flags, it belongs before the native `--` boundary
+and can appear before or after the selector.
 
 ## Set options and limits
 

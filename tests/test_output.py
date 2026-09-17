@@ -1,5 +1,7 @@
 import signal
 
+import pytest
+
 from pratfall.catalog import BY_NAME
 from pratfall.models import (
     DecodedOutput,
@@ -9,12 +11,64 @@ from pratfall.models import (
     ResultError,
     Usage,
 )
-from pratfall.output import normalize, result_dict
+from pratfall.output import extract_code, normalize, result_dict
 from pratfall.runner import ProcessResult
 
 RESOLVED = ResolvedProfile(
     BY_NAME["codex"], "profile", ("codex",), Options(model="model", timeout=10)
 )
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        ("before\n```python\nprint('hello')\n```\nafter", "print('hello')\n"),
+        ("~~~text\n  indented\n\talso indented\n~~~", "  indented\n\talso indented\n"),
+        (" ```\none\n ```", "one\n"),
+        ("  ```\ntwo\n  ```", "two\n"),
+        ("   ```\nthree\n   ```", "three\n"),
+        ("```\nbody\n````` \t\n", "body\n"),
+        ("~~~~`info`\nbody\n~~~~~\t", "body\n"),
+        ("```\n```", ""),
+        ("```\n\n```", "\n"),
+        ("```\nfirst\n```\n~~~\nsecond\n~~~", "first\n"),
+        ("```\r\n  π 🐍\r\n\r\n```\r\n", "  π 🐍\r\n\r\n"),
+        ("```\rbody\r```", "body\r"),
+        ("```\nbody\r\nmore\r```", "body\r\nmore\r"),
+        ("```\nbody\u2028```\u2029\n```", "body\u2028```\u2029\n"),
+        ("```bad`info\n~~~\nvalid\n~~~", "valid\n"),
+        (
+            "````\n```\n~~~\n```` closing text\n    ````\n\t````\n````\u00a0\n````",
+            "```\n~~~\n```` closing text\n    ````\n\t````\n````\u00a0\n",
+        ),
+    ],
+)
+def test_extract_code_preserves_first_fenced_body(answer: str, expected: str) -> None:
+    assert extract_code(answer) == expected
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "",
+        "ordinary answer\n",
+        "```",
+        "```python\nunclosed",
+        "````\nfirst unclosed\n~~~\nother complete block\n~~~\n",
+        "    ```\nnot a fence\n    ```",
+        "\t~~~\nnot a fence\n\t~~~",
+        "``\nshort\n``",
+        "~~\nshort\n~~",
+        "prefix ```\ninline\nend ```",
+        "```bad`info\ninvalid\n```bad`info",
+        "```\nwrong character\n~~~",
+        "````\nshort closing\n```",
+        "```\nclosing info\n``` python",
+        "before\u2028```\nnot an opening\nend",
+    ],
+)
+def test_extract_code_returns_original_without_complete_first_block(answer: str) -> None:
+    assert extract_code(answer) == answer
 
 
 def process(

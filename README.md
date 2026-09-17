@@ -62,6 +62,7 @@ printf 'summarize this checkout\n' | prat gm
 | `-f PATH` / `--file PATH` | Read a prompt from a UTF-8 file; `-` reads stdin. |
 | `-t NAME` / `--template NAME` | Apply a named prompt template. |
 | `--context PATH` | Prepend a context file; repeat to include several. |
+| `-x` / `--extract` | Return the body of the first fenced code block. |
 | `--json` | Return one JSON result with output, status, and available usage. |
 | `--progress` | Show live activity on stderr. |
 | `--trace` | Copy captured native stdout to stderr. |
@@ -88,6 +89,11 @@ prat cx "inspect this change" -- --sandbox read-only
 Prat preserves native authentication and permission defaults. See
 [running prompts](docs/user/running.md) for input rules and run behavior, and
 [JSON output](docs/user/json.md) for result fields and errors.
+
+Use `prat cc -x "Write a Python function"` to extract the first fenced block from an answer.
+Missing or unclosed fences leave the answer unchanged; an empty block produces empty output.
+Extraction also applies to JSON `output` and partial failed answers. See
+[code extraction](docs/user/running.md#extract-code) for fence and newline rules.
 
 ## Profiles
 

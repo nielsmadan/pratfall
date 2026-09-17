@@ -36,6 +36,13 @@ For example, `prat cx --model gpt-5.6-luna --json "review this change"` returns 
 `error: null`. For text adapters, `output` contains complete native stdout with trailing CR/LF
 removed, which may include banners and progress text.
 
+With `-x` or `--extract`, only `output` changes to the exact body of the first fenced code block,
+including its original indentation and line endings. An empty block yields `""`; a missing or
+unclosed first fence leaves the entire answer unchanged. This also applies to partial answers
+on failure, preserving all other fields, exit codes, and raw trace output. See
+[code extraction](running.md#extract-code) for the fence grammar. Unlike ordinary text emission,
+the JSON string does not receive a final newline. Dry-run previews are unaffected.
+
 ## Models, usage, and cost
 
 | Field | Meaning |

@@ -1083,8 +1083,9 @@ def test_prompt_option_can_pass_a_literal_dash(
     assert json.loads(result["output"])["prompt"] == "context\n\n-"
 
 
+@pytest.mark.parametrize("extract", [False, True])
 def test_dry_run_is_a_single_versioned_preview_and_does_not_launch(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], extract: bool
 ) -> None:
     code = "raise SystemExit('must not launch')"
     config = write_agent(
@@ -1094,7 +1095,8 @@ def test_dry_run_is_a_single_versioned_preview_and_does_not_launch(
         profile="safe",
         settings='model="configured"\nnative_args=["--sandbox", "workspace-write"]\n',
     )
-    assert main(["--dry-run", "safe", "prompt", "--config", str(config), "--json"]) == 0
+    flags = ["--extract"] if extract else []
+    assert main(["--dry-run", "safe", "prompt", "--config", str(config), "--json", *flags]) == 0
     result = json.loads(capsys.readouterr().out)
     assert result == {
         "schema_version": 1,
@@ -2654,3 +2656,127 @@ def test_explicit_prompt_rejects_over_budget_pipe_without_waiting_for_eof(tmp_pa
             if process.poll() is None:
                 process.kill()
                 process.wait(timeout=5)
+
+
+@pytest.mark.parametrize("json_mode", [False, True])
+@pytest.mark.parametrize(("native_exit", "provider_error"), [(0, False), (23, False), (0, True)])
+def test_extract_cli_preserves_metadata_trace_and_exit(
+    tmp_path: Path, json_mode: bool, native_exit: int, provider_error: bool
+) -> None:
+    answer = "Explanation\r\n```python\r\n  print('π')\r\n```\r\nAfterword"
+    body = "  print('π')\r\n"
+    envelope = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": provider_error,
+        "result": answer,
+        "usage": {"input_tokens": 2, "output_tokens": 3},
+        "modelUsage": {"native-model": {}},
+        "total_cost_usd": 0.02,
+    }
+    native_stdout = json.dumps(envelope) + "\n"
+    config = write_agent(
+        tmp_path,
+        "claude",
+        f"import sys\nsys.stdin.buffer.read()\nsys.stdout.write({native_stdout!r})\n"
+        f"sys.exit({native_exit})\n",
+        profile="work",
+        settings='model="requested-model"\n',
+    )
+    arguments = ["work", "prompt", "--config", str(config), "--trace"]
+    arguments = ["-x", *arguments, "--json"] if json_mode else [*arguments, "--extract"]
+    completed = subprocess.run(
+        [sys.executable, "-m", "pratfall", *arguments],
+        input=b"",
+        capture_output=True,
+        cwd=tmp_path,
+        env=_progress_env(tmp_path),
+        timeout=10,
+        check=False,
+    )
+    expected_exit = native_exit or int(provider_error)
+    assert completed.returncode == expected_exit
+    assert native_stdout.encode() in completed.stderr
+    if json_mode:
+        result = json.loads(completed.stdout)
+        error = None
+        if native_exit:
+            error = {"code": "native_exit", "message": "Claude Code exited with status 23."}
+        elif provider_error:
+            error = {"code": "provider_error", "message": answer}
+        assert result == {
+            "schema_version": 1,
+            "agent": "claude",
+            "profile": "work",
+            "model": "requested-model",
+            "reported_models": ["native-model"],
+            "cost_usd": 0.02,
+            "status": "error" if expected_exit else "success",
+            "output": body,
+            "exit_code": expected_exit,
+            "native_exit_code": native_exit,
+            "duration_ms": result["duration_ms"],
+            "usage": {
+                "input_tokens": 2,
+                "cached_input_tokens": None,
+                "cache_write_input_tokens": None,
+                "output_tokens": 3,
+                "reasoning_output_tokens": None,
+            },
+            "error": error,
+        }
+        assert isinstance(result["duration_ms"], int)
+        assert result["duration_ms"] >= 0
+    else:
+        assert completed.stdout == body.encode()
+
+
+@pytest.mark.parametrize("json_mode", [False, True])
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [("```\n```", ""), ("plain answer", "plain answer"), ("```\nunclosed", "```\nunclosed")],
+)
+def test_extract_cli_empty_and_fallback_output(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], json_mode: bool, answer: str, expected: str
+) -> None:
+    config = write_agent(tmp_path, "kiro", f"print({answer!r})")
+    flags = ["--json"] if json_mode else []
+    assert main(["kiro", "prompt", "-x", "--config", str(config), *flags]) == 0
+    output = capsys.readouterr().out
+    assert (json.loads(output)["output"] if json_mode else output) == (
+        expected if json_mode or not expected else expected + "\n"
+    )
+
+
+@pytest.mark.parametrize("flag", ["-x", "--extract"])
+def test_extract_flag_after_native_boundary_stays_native(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], flag: str
+) -> None:
+    config = write_agent(tmp_path, "codex", "raise AssertionError('must not launch')")
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", "--config", str(config), "--json", "--", flag]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_arguments"
+    assert flag in result["error"]["message"]
+
+
+@pytest.mark.parametrize("extract", [False, True])
+def test_extract_streaming_partial_answer_keeps_protocol_failure(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], extract: bool
+) -> None:
+    answer = "Before\n~~~\npartial code\n~~~\nAfter"
+    event = {
+        "type": "item.completed",
+        "item": {"id": "answer", "type": "agent_message", "text": answer},
+    }
+    config = write_agent(
+        tmp_path, "codex", f"import sys\nsys.stdin.buffer.read()\nprint({json.dumps(event)!r})"
+    )
+    flags = ["--extract"] if extract else []
+    assert main(["cx", "prompt", "--config", str(config), "--json", *flags]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["output"] == ("partial code\n" if extract else answer)
+    assert result["status"] == "error"
+    assert result["exit_code"] == 1
+    assert result["native_exit_code"] == 0
+    assert result["error"]["code"] == "protocol_error"

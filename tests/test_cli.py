@@ -45,10 +45,12 @@ def test_no_arguments_shows_help(capsys: pytest.CaptureFixture[str]) -> None:
     assert "usage: prat" in capsys.readouterr().out
 
 
-def test_trace_without_selector_uses_normalized_run_error(
+@pytest.mark.parametrize("flag", ["--trace", "-x", "--extract"])
+def test_run_flag_without_selector_uses_normalized_run_error(
     capsys: pytest.CaptureFixture[str],
+    flag: str,
 ) -> None:
-    assert main(["--trace", "--json"]) == 2
+    assert main([flag, "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
     assert result["agent"] is None
     assert result["error"] == {
@@ -72,6 +74,7 @@ def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str])
         "--timeout SECONDS",
         "--cwd PATH",
         "--trace",
+        "-x, --extract",
         "--dry-run",
     ):
         assert flag in output

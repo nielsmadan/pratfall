@@ -35,7 +35,7 @@ from pratfall.models import (
     ResolvedProfile,
     ResultError,
 )
-from pratfall.output import normalize, result_dict, validation_error
+from pratfall.output import extract_code, normalize, result_dict, validation_error
 from pratfall.prompt_input import InputInterrupted, acquire_prompt, prepend_contexts
 from pratfall.prompt_templates import render_template
 from pratfall.runner import ProcessResult, cleanup_process_group, raw_stdout, run
@@ -402,6 +402,8 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             process, decoded = _execute(plan, diagnostics)
             state.process = process
         result = normalize(resolved, process, decoded)
+        if parsed.extract:
+            result = replace(result, output=extract_code(result.output))
         payload = result_dict(result)
         _emit_result(payload, state.stdout, json_mode=json_mode)
         return result.exit_code
