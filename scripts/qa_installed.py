@@ -13,6 +13,7 @@ import signal
 import subprocess
 import sys
 import tarfile
+import termios
 import time
 import zipfile
 from collections.abc import Callable
@@ -1206,6 +1207,30 @@ def _fake_native_failure(agent: str, _prompt: str) -> int:
     return 17
 
 
+def _fake_workflow_fence(agent: str, prompt: str) -> int:
+    assert agent == "claude"
+    answer = (
+        "Before fence\n```json\n"
+        + json.dumps({"prompt": prompt}, ensure_ascii=False)
+        + "\n```\nAfter fence"
+    )
+    print(
+        json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": answer,
+                "usage": {"input_tokens": 3, "output_tokens": 2},
+                "modelUsage": {"workflow-model": {}},
+                "total_cost_usd": 0.125,
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 17 if prompt.startswith("QA_WORKFLOW_FENCE_FAIL") else 0
+
+
 def _fake_large_stream(agent: str, _prompt: str) -> int:
     event = (json.dumps({"type": "future", "discarded": "x" * (1024 * 1024)}) + "\n").encode()
     for _ in range(9):
@@ -1319,6 +1344,7 @@ _NATIVE_CASES: tuple[tuple[str | tuple[str, ...], _NativeCaseHandler], ...] = (
     ("QA_ACCOUNT_OPENCODE", _fake_account_opencode),
     ("QA_ACCOUNT_GROK", _fake_account_grok),
     ("QA_NATIVE_17", _fake_native_failure),
+    ("QA_WORKFLOW_FENCE", _fake_workflow_fence),
     ("QA_STREAM_LARGE", _fake_large_stream),
     ("QA_PROGRESS", _fake_progress),
     (
@@ -1537,9 +1563,7 @@ def _run(
     if config is not None:
         command.extend(("--config", str(config)))
     command.extend(arguments)
-    env = os.environ.copy()
-    env["PRAT_QA_LOG"] = str(root / "native.jsonl")
-    env["XDG_CONFIG_HOME"] = str(root / "xdg")
+    env = _workflow_environment(root)
     env["PATH"] = f"{path or root / 'bin'}{os.pathsep}/usr/bin{os.pathsep}/bin"
     invocation = _start(command, root, env, stdin=stdin)
     try:
@@ -3069,7 +3093,7 @@ def _exercise_q01_q02(context: _ExerciseContext) -> dict[str, object]:
     assert help_text.startswith("usage: prat ")
     for expected in (
         "Run installed coding agents through named profiles.",
-        "{agents,profiles,doctor,config}",
+        "{agents,profiles,templates,doctor,config}",
         "prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]",
         "--progress              Print bounded live activity updates on stderr.",
         "--dry-run               Resolve and print the invocation without launching it.",
@@ -3738,6 +3762,344 @@ def _prepare_exercise(inputs: _ExerciseInputs) -> _ExerciseContext:
     )
 
 
+_EDITOR_CONTROLLER = """import fcntl,json,os,runpy,sys,termios
+from pathlib import Path
+tty = os.open(sys.argv[1], os.O_RDWR)
+fcntl.ioctl(tty, termios.TIOCSCTTY, 0)
+attributes = termios.tcgetattr(tty)
+foreground = os.tcgetpgrp(tty)
+report_path = Path(sys.argv[2])
+sys.argv = sys.argv[3:]
+code = 0
+try:
+    runpy.run_path(sys.argv[0], run_name="__main__")
+except SystemExit as error:
+    code = error.code
+finally:
+    report_path.write_text(json.dumps(dict(
+        code=code, foreground_restored=os.tcgetpgrp(tty) == foreground,
+        attributes_restored=termios.tcgetattr(tty) == attributes,
+    )))
+    os.write(tty, b"QA RESTORED\\n")
+"""
+
+
+def _fake_editor(mode: str, filename: str) -> int:
+    _record_owner()
+    path = Path(filename)
+    record = {
+        "draft": path.read_bytes().decode(),
+        "path": filename,
+        "cwd": os.getcwd(),
+        "tty": [os.isatty(fd) for fd in range(3)],
+        "foreground": os.tcgetpgrp(0) == os.getpgrp(),
+        "session": os.getsid(0),
+        "parent_session": os.getsid(os.getppid()),
+        "group": os.getpgrp(),
+        "parent_group": os.getpgid(os.getppid()),
+        "mode": path.stat().st_mode & 0o777,
+        "parent_mode": path.parent.stat().st_mode & 0o777,
+    }
+    Path("editor.json").write_text(json.dumps(record), encoding="utf-8")
+    os.write(1, b"QA EDITOR READY\n")
+    addition = os.read(0, 1024)
+    attributes = termios.tcgetattr(0)
+    attributes[3] &= ~termios.ECHO
+    termios.tcsetattr(0, termios.TCSANOW, attributes)
+    replacement = path.with_suffix(".saved")
+    replacement.write_bytes(
+        b"" if mode == "empty" else b"QA_WORKFLOW_FENCE\n" + path.read_bytes() + addition
+    )
+    replacement.replace(path)
+    os.write(2, b"QA EDITOR SAVED\n")
+    return 0
+
+
+def _workflow_environment(root: Path) -> dict[str, str]:
+    temporary = root / "temp"
+    temporary.mkdir(exist_ok=True)
+    env = os.environ.copy()
+    env.update(
+        PATH=str(root / "bin"),
+        XDG_CONFIG_HOME=str(root / "xdg"),
+        PRAT_QA_LOG=str(root / "native.jsonl"),
+        TMPDIR=str(temporary),
+        VISUAL="",
+        EDITOR=str(root / "unconfigured-editor"),
+    )
+    return env
+
+
+def _workflow_root(root: Path, name: str, prat: Path) -> tuple[Path, Path]:
+    directory = root / name
+    directory.mkdir(exist_ok=True)
+    for child in ("consumer", "bin", "xdg", "temp"):
+        (directory / child).mkdir(exist_ok=True)
+    config = directory / "config.toml"
+    _write_config(config, prat.with_name("python"), Path(__file__).resolve())
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write('\n[templates.review]\nprompt="Review $$ ${input}"\n')
+        stream.write('\n[templates.complete]\nprompt="Standalone task"\n')
+    return directory, config
+
+
+def _exercise_w_composition(prat: Path, root: Path) -> dict[str, object]:
+    root, config = _workflow_root(root, "composition", prat)
+    consumer = root / "consumer"
+    (consumer / 'context "雪".md').write_bytes(b"$input context\r\n")
+    (consumer / "project").mkdir(exist_ok=True)
+    label = 'context "雪".md'
+    block = '# Context: "context \\"\\u96ea\\".md"\n\n$input context\r\n\n\n'
+    draft = block + block + "Review $ pipeline $input\n\ntask"
+    arguments = [
+        "gm",
+        "task",
+        "-t",
+        "review",
+        "--context",
+        label,
+        "--context",
+        label,
+        "--cwd",
+        "project",
+        "--json",
+    ]
+    listing = _run(prat, root, ["templates", "--json"], config=config)
+    assert listing.returncode == 0
+    assert _json_result(listing) == {
+        "schema_version": 1,
+        "templates": [
+            {"name": "complete", "prompt": "Standalone task", "source": str(config)},
+            {"name": "review", "prompt": "Review $$ ${input}", "source": str(config)},
+        ],
+    }
+    text_listing = _run(prat, root, ["templates"], config=config)
+    assert text_listing.returncode == 0
+    assert text_listing.stdout == b'complete: "Standalone task"\nreview: "Review $$ ${input}"\n'
+    preview = _run(prat, root, [*arguments, "--dry-run"], stdin=b"pipeline $input", config=config)
+    assert preview.returncode == 0
+    preview_result = _json_result(preview)
+    assert preview_result["dry_run"] is True
+    assert _texts(preview_result["argv"])[-1] == "--prompt=" + draft
+    assert preview_result["stdin_bytes"] == 0
+    assert _calls(root / "native.jsonl") == []
+    composed = _run(prat, root, arguments, stdin=b"pipeline $input", config=config)
+    result = _assert_result(
+        composed, returncode=0, status="success", native_exit_code=0, error_code=None
+    )
+    record = _record(json.loads(_text(result["output"])))
+    assert record["prompt"] == draft
+    assert record["cwd"] == str(consumer / "project")
+    standalone = _run(prat, root, ["cx", "-t", "complete", "--json"], config=config)
+    standalone_result = _assert_result(
+        standalone, returncode=0, status="success", native_exit_code=0, error_code=None
+    )
+    assert json.loads(_text(standalone_result["output"]))["prompt"] == "Standalone task"
+    return {
+        "status": "Pass",
+        "listing": _json_result(listing),
+        "preview": preview_result,
+        "prompt": draft,
+        "native_launches": len(_calls(root / "native.jsonl")),
+    }
+
+
+def _assert_workflow_extraction(
+    completed: subprocess.CompletedProcess[bytes], prompt: str, code: int
+) -> dict[str, object]:
+    result = _assert_result(
+        completed,
+        returncode=code,
+        status="error" if code else "success",
+        native_exit_code=code,
+        error_code="native_exit" if code else None,
+        error_message="Claude Code exited with status 17." if code else None,
+    )
+    assert result["output"] == json.dumps({"prompt": prompt}, ensure_ascii=False) + "\n"
+    assert result["reported_models"] == ["workflow-model"]
+    assert result["cost_usd"] == 0.125
+    assert result["usage"] == {
+        "input_tokens": 3,
+        "output_tokens": 2,
+        "cached_input_tokens": None,
+        "cache_write_input_tokens": None,
+        "reasoning_output_tokens": None,
+    }
+    return result
+
+
+def _exercise_w_extraction(prat: Path, root: Path) -> dict[str, object]:
+    root, config = _workflow_root(root, "extraction", prat)
+    observations: dict[str, object] = {"status": "Pass"}
+    for code, prompt in ((0, "QA_WORKFLOW_FENCE café"), (17, "QA_WORKFLOW_FENCE_FAIL 雪")):
+        arguments = ["cc", prompt, "--json", "--trace"]
+        original = _run(prat, root, arguments, config=config)
+        extracted = _run(prat, root, [*arguments, "-x"], config=config)
+        result = _assert_workflow_extraction(extracted, prompt, code)
+        original_result = _json_result(original)
+        assert original.returncode == code
+        assert (
+            original_result["output"]
+            == "Before fence\n```json\n" + _text(result["output"]) + "```\nAfter fence"
+        )
+        for key in (
+            "schema_version",
+            "agent",
+            "profile",
+            "model",
+            "status",
+            "exit_code",
+            "native_exit_code",
+            "error",
+            "usage",
+            "reported_models",
+            "cost_usd",
+        ):
+            assert original_result[key] == result[key]
+        native_records = [
+            json.loads(line)
+            for line in extracted.stderr.splitlines()
+            if line.startswith(b'{"type": "result"')
+        ]
+        assert len(native_records) == 1
+        assert native_records[0]["result"] == original_result["output"]
+        observations["failure" if code else "success"] = {
+            "result": result,
+            "raw_trace_preserved": True,
+        }
+    text = _run(prat, root, ["cc", "QA_WORKFLOW_FENCE text", "-x"], config=config)
+    assert text.returncode == 0
+    assert text.stdout == b'{"prompt": "QA_WORKFLOW_FENCE text"}\n'
+    return observations
+
+
+def _read_terminal_until(master: int, marker: bytes) -> bytes:
+    output = bytearray()
+    deadline = time.monotonic() + HARNESS_TIMEOUT
+    with selectors.DefaultSelector() as selector:
+        selector.register(master, selectors.EVENT_READ)
+        while marker not in output and time.monotonic() < deadline:
+            if selector.select(timeout=0.05):
+                chunk = os.read(master, 65536)
+                if not chunk:
+                    break
+                output.extend(chunk)
+    assert marker in output, f"Terminal did not produce {marker!r}: {bytes(output)!r}"
+    return bytes(output)
+
+
+def _run_editor_workflow(
+    prat: Path, root: Path, config: Path, mode: str
+) -> tuple[subprocess.CompletedProcess[bytes], dict[str, object]]:
+    env = _workflow_environment(root)
+    env["EDITOR"] = shlex.join(
+        [str(prat.with_name("python")), str(Path(__file__).resolve()), "--fake-editor", mode]
+    )
+    report_path = root / "terminal.json"
+    arguments = [
+        str(prat),
+        "--config",
+        str(config),
+        "cc",
+        "task",
+        "-t",
+        "review",
+        "--context",
+        "context.md",
+        "--cwd",
+        "project",
+        "-e",
+        "-x",
+        "--json",
+    ]
+    master, slave = os.openpty()
+    try:
+        command = [
+            str(prat.with_name("python")),
+            "-c",
+            _EDITOR_CONTROLLER,
+            os.ttyname(slave),
+            str(report_path),
+            *arguments,
+        ]
+        invocation = _start(command, root, env, stdin=b"pipeline input")
+        try:
+            process = invocation.process
+            assert process.stdin is not None
+            process.stdin.write(b"pipeline input")
+            process.stdin.close()
+            process.stdin = None
+            _read_terminal_until(master, b"QA EDITOR READY")
+            os.write(master, " + edited café\n".encode())
+            terminal = _read_terminal_until(master, b"QA RESTORED")
+            stdout, stderr = _communicate(_Invocation(process, invocation.owner_path, None))
+            assert process.returncode == 0, stderr
+            report = _record(json.loads(report_path.read_text()))
+            assert report["foreground_restored"] is report["attributes_restored"] is True
+            assert b"QA EDITOR SAVED" in terminal
+            assert list((root / "temp").iterdir()) == []
+            editor = _record(json.loads((root / "consumer" / "editor.json").read_text()))
+            assert editor["tty"] == [True, True, True]
+            assert editor["foreground"] is True
+            assert editor["session"] == editor["parent_session"]
+            assert editor["group"] != editor["parent_group"]
+            assert editor["mode"] == 0o600 and editor["parent_mode"] == 0o700
+            assert Path(_text(editor["path"])).parent.parent == root / "temp"
+            assert not Path(_text(editor["path"])).exists()
+            return subprocess.CompletedProcess(
+                arguments, int(str(report["code"])), stdout, stderr
+            ), editor
+        finally:
+            invocation.process.poll()
+            _cleanup(invocation)
+    finally:
+        os.close(master)
+        os.close(slave)
+
+
+def _exercise_w_editor(prat: Path, root: Path) -> dict[str, object]:
+    root, config = _workflow_root(root, "editor", prat)
+    consumer = root / "consumer"
+    (consumer / "context.md").write_bytes(b"$input context\r\n")
+    (consumer / "project").mkdir(exist_ok=True)
+    draft = '# Context: "context.md"\n\n$input context\r\n\n\nReview $ pipeline input\n\ntask'
+    completed, editor = _run_editor_workflow(prat, root, config, "append")
+    assert editor["draft"] == draft and editor["cwd"] == str(consumer)
+    prompt = "QA_WORKFLOW_FENCE\n" + draft + " + edited café\n"
+    result = _assert_workflow_extraction(completed, prompt, 0)
+    calls = _calls(root / "native.jsonl")
+    assert len(calls) == 1
+    assert calls[0]["prompt"] == calls[0]["stdin"] == prompt
+    assert calls[0]["cwd"] == str(consumer / "project")
+    rejected, rejected_editor = _run_editor_workflow(prat, root, config, "empty")
+    assert rejected_editor["draft"] == draft
+    rejected_result = _assert_input_failure(
+        rejected, "Prompt must not be empty or whitespace-only."
+    )
+    assert _calls(root / "native.jsonl") == calls
+    return {
+        "status": "Pass",
+        "result": result,
+        "rejected_edit": rejected_result,
+        "draft": draft,
+        "terminal_read_write": True,
+        "foreground_restored": True,
+        "attributes_restored": True,
+        "temporary_files_removed": True,
+        "native_launches": 1,
+    }
+
+
+def _exercise_workflows(prat: Path, root: Path, artifact: str) -> dict[str, object]:
+    root = root / f"workflows-{artifact}"
+    root.mkdir(exist_ok=True)
+    return {
+        "W01.composition": _exercise_w_composition(prat, root),
+        "W02.extraction": _exercise_w_extraction(prat, root),
+        "W03.editor": _exercise_w_editor(prat, root),
+    }
+
+
 def _exercise_artifacts(context: _ExerciseContext, results: dict[str, object]) -> None:
     for artifact, entry_point in (("wheel", context.prat), ("sdist", context.sdist_prat)):
         a_results = {
@@ -3752,6 +4114,7 @@ def _exercise_artifacts(context: _ExerciseContext, results: dict[str, object]) -
             else _exercise_versions(entry_point, context.root, context.config),
             **_exercise_a_rejections(entry_point, context.root, context.config),
             **_exercise_a_protocols(entry_point, context.root, context.config),
+            **_exercise_workflows(entry_point, context.root, artifact),
         }
         for case, observation in a_results.items():
             aggregate = _record(results.setdefault(case, {"status": "Pass", "artifacts": {}}))
@@ -3835,6 +4198,7 @@ def main() -> int:
         return 2
     parser = argparse.ArgumentParser()
     parser.add_argument("--fake-native", nargs=argparse.REMAINDER)
+    parser.add_argument("--fake-editor", nargs=2)
     parser.add_argument("native_tail", nargs=argparse.REMAINDER)
     parser.add_argument("--lock-holder", nargs=2, type=Path)
     parser.add_argument("--prat", type=Path)
@@ -3846,6 +4210,8 @@ def main() -> int:
     parser.add_argument("--work-dir", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if args.fake_editor:
+        return _fake_editor(*args.fake_editor)
     if args.fake_native:
         return _fake_native(args.fake_native[0], [*args.fake_native[1:], *args.native_tail])
     if args.native_tail:

@@ -75,7 +75,12 @@ distributions, source checksum and generated notes are saved as one workflow art
 
 Run these checks after changes to parsing, configuration, adapters, normalization, or process
 cleanup. The [harness](../scripts/qa_installed.py) uses fake native commands, a restricted PATH
-and disposable XDG configuration. It spends no inference credits. Python assertions must be
+and disposable XDG configuration. Workflow scenarios run against both wheel and sdist installations,
+covering template listings, composed prompt previews, extraction with native failure metadata and raw
+traces, and a fake editor on a controlling terminal. Editor scenarios verify terminal reads/writes,
+foreground ownership and attribute restoration, and temporary-file cleanup after accepted and rejected
+edits. Editor commands and temporary paths stay inside the QA work directory. The harness spends no
+inference credits. Python assertions must be
 enabled; `-O` and `PYTHONOPTIMIZE` are rejected.
 
 The offline procedure requires an available Python 3.13 interpreter, the synced development

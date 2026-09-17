@@ -209,7 +209,11 @@ test intent does not isolate those effects. Specify expected argv and output ind
 production builders. Give the harness its own deadline and cleanup.
 
 [Installed-package checks](release.md#check-installed-packages-locally) exercise the wheel's shared
-Q/E scenarios and both wheel and sdist adapter scenarios. E13/E14 remain `Not run` in the installed
+Q/E scenarios and both wheel and sdist adapter and W01–W03 prompt-workflow scenarios. The workflow
+checks include exact composition and preview bytes, extracted success/failure answers with retained
+accounting and raw traces, and piped input/output alongside a controlling-terminal fake editor.
+Terminal restoration and temporary-file removal are observed before emergency cleanup, for both an
+accepted edit and an empty rejected edit. E13/E14 remain `Not run` in the installed
 report because adversarial framing and stderr transport are covered by source tests. Per-agent
 tests supply the full malformed-output and retained-state matrices;
 [harness regressions](../scripts/test_qa_installed.py) exercise its assertions separately.

@@ -361,7 +361,7 @@ path.write_bytes(path.read_bytes() + addition)
             "project",
             "--json",
             "--timeout",
-            "0.1",
+            "1",
         ]
     }
     with editor_session(tmp_path, code, request) as session:
@@ -370,7 +370,7 @@ path.write_bytes(path.read_bytes() + addition)
         session.process.stdin.close()
         session.process.stdin = None
         session.wait_for(b"EDITING")
-        time.sleep(0.15)
+        time.sleep(1.1)
         os.write(session.master, b" + edited\n")
         report, stdout, stderr = session.finish()
     draft = '# Context: "context.md"\n\n$input context\n\n\nReview pipeline input\n\ntask'

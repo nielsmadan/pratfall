@@ -2,6 +2,7 @@ import ast
 import importlib.util
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -1112,3 +1113,58 @@ def test_harness_budgets_match_the_catalog() -> None:
 def test_harness_model_and_fast_capabilities_match_the_catalog() -> None:
     assert _harness_without_model() == _catalog_without_model()
     assert _harness_with_fast() == _catalog_with_fast()
+
+
+@pytest.mark.parametrize(
+    "exercise", ["_exercise_w_composition", "_exercise_w_extraction", "_exercise_w_editor"]
+)
+def test_prompt_workflows_through_entry_point(
+    tmp_path: Path,
+    source_entry_point: tuple[Path, Path],
+    exercise: str,
+) -> None:
+    prat, _ = source_entry_point
+    python = prat.with_name("python")
+    python.unlink()
+    python.write_text("#!/bin/sh\nexec " + shlex.quote(sys.executable) + ' "$@"\n')
+    python.chmod(0o755)
+    observation = getattr(qa, exercise)(prat, tmp_path)
+    assert observation["status"] == "Pass"
+
+
+@pytest.mark.parametrize(
+    ("field", "wrong"),
+    [
+        ("output", "Before fence"),
+        ("reported_models", None),
+        ("cost_usd", None),
+        ("usage", None),
+        ("native_exit_code", 0),
+        ("status", "success"),
+    ],
+)
+def test_workflow_extraction_oracle_rejects_metadata_loss(
+    tmp_path: Path, source_entry_point: tuple[Path, Path], field: str, wrong: object
+) -> None:
+    prat, config = source_entry_point
+    prompt = "QA_WORKFLOW_FENCE_FAIL mutation"
+    completed = qa._run(prat, tmp_path, ["cc", prompt, "-x", "--json"], config=config)
+    result = qa._assert_workflow_extraction(completed, prompt, 17)
+    result[field] = wrong
+    completed.stdout = json.dumps(result).encode() + b"\n"
+    with pytest.raises(AssertionError):
+        qa._assert_workflow_extraction(completed, prompt, 17)
+
+
+def test_workflow_environment_isolates_editor_and_temporary_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in ("EDITOR", "VISUAL", "TMPDIR", "XDG_CONFIG_HOME", "PATH"):
+        monkeypatch.setenv(name, "outside-workspace")
+    environment = qa._workflow_environment(tmp_path)
+    assert environment["VISUAL"] == ""
+    assert environment["EDITOR"] == str(tmp_path / "unconfigured-editor")
+    assert environment["TMPDIR"] == str(tmp_path / "temp")
+    assert environment["XDG_CONFIG_HOME"] == str(tmp_path / "xdg")
+    assert environment["PATH"] == str(tmp_path / "bin")
+    assert (tmp_path / "temp").is_dir()

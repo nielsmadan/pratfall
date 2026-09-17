@@ -2220,9 +2220,7 @@ def test_progress_dry_run_preview_into_full_shared_stream_normalizes_without_tra
         assert process.wait(timeout=10) == 1
         assert b"Traceback" not in output
         assert b"prat: Unexpected failure: BlockingIOError" in output
-        # Whether the preview survives depends on where it lands against the pipe
-        # buffer; test_dry_run_is_a_single_versioned_preview_and_does_not_launch
-        # pins that it is emitted exactly once.
+        # Pipe buffering makes preview delivery nondeterministic in this failure case.
         assert output.count(b'"status": "error"') == 0
     finally:
         if process.poll() is None:
