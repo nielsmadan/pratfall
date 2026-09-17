@@ -36,6 +36,10 @@ These contracts were statically checked on 2026-09-11 before accepting fake exec
 
 ## Implementation
 
+An unpaired surrogate in a reported-model identifier produces `protocol_error` through model
+validation. This differs from an unencodable answer's `output_encoding` error and is pinned by
+[the retention contract tests](../../tests/test_retention_contract.py).
+
 Model deduplication in the adapter's [`_assistant`](../../src/pratfall/adapters/qwen.py) handler
 uses list membership and scales quadratically. A synthetic 2026-09-11 review measured about three
 seconds for 16,380 distinct 500-byte root model identifiers, within the byte/record limits. Ordinary native streams

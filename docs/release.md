@@ -83,6 +83,11 @@ edits. Editor commands and temporary paths stay inside the QA work directory. Th
 inference credits. Python assertions must be
 enabled; `-O` and `PYTHONOPTIMIZE` are rejected.
 
+The harness keeps independent expected catalog values. Source parity tests under `just check`
+catch drift early; installed QA compares the real `prat agents --json` output. Transport and argv
+expectations also include passthrough flags, so they are not catalog mirrors. Extend their parity
+checks against adapter `build()` output rather than adding another manually synchronized table.
+
 The offline procedure requires an available Python 3.13 interpreter, the synced development
 environment, and cached Hatchling 1.32.0 plus its dependencies. From the repository root:
 

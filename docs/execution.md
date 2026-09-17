@@ -7,6 +7,7 @@ protocol evidence and version-specific quirks live in the [agent references](ref
 - [Bounded output](#bounded-output)
 - [Completion and accounting](#completion-and-accounting)
 - [Deadline, cleanup and diagnostics](#deadline-cleanup-and-diagnostics)
+- [Known limitations](#known-limitations)
 - [Extending an adapter](#extending-an-adapter)
 - [Test isolation and evidence](#test-isolation-and-evidence)
 
@@ -36,7 +37,8 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   rendering, preserving order, duplicate paths and content bytes. JSON-quoted label and separator
   space is reserved before any context files are read; each read uses the remaining aggregate
   1 MiB budget and final assembly stays within that bound. Explicit prompt plus stdin acquisition
-  also limits the second read to its remaining budget.
+  also limits the second read to its remaining budget. Preserve filesystem resolution of `..`
+  through directory symlinks: lexical normalization such as `abspath` can select a different file.
 - [prompt_editor.py](../src/pratfall/prompt_editor.py) edits the fully composed draft only when
   requested. It uses a private temporary directory and Markdown file, reopens the saved path for
   bounded validation, and runs the configured editor with argv in the invocation directory.
@@ -44,6 +46,9 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   ownership transfers under scoped SIGTTOU suppression; startup SIGTTIN stops resume after handoff.
   Foreground ownership, terminal attributes and handlers restore on every exit. Editor interruption
   and descendant cleanup use bounded TERM/KILL escalation before the native agent deadline begins.
+  Cleanup removes the entire temporary directory, including atomic-save sidecars, and terminates
+  owned descendants even after a successful edit. Keeping the editor in the current session lets
+  it use the controlling terminal; the native runner's new-session strategy cannot be reused here.
 - [catalog.py](../src/pratfall/catalog.py) holds immutable capabilities, not provider model lists.
   [`Adapter`](../src/pratfall/adapters/registry.py) is the adapter assembly point: command
   builder, one validator over the resolved profile, and exactly one of a whole-document decoder or
@@ -58,13 +63,20 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   output and accounting. The requested model remains distinct from models reported by the agent.
   [codes.py](../src/pratfall/codes.py) owns the public `Code` vocabulary and the fixed code-to-exit
   mapping; interruption, native signal and native exit stay computed in `normalize`.
+  Extraction changes only `NormalizedResult.output` after normalization and before serialization;
+  failed runs retain their status, exit code, accounting and raw trace. Success and validation
+  payload constructors keep separate field lists to preserve their emitted key order; update both
+  when adding result fields.
 
 The dependency boundary is acyclic, and runtime code uses only the standard library.
 [test_layering.py](../tests/test_layering.py) machine-enforces that contract: the layer order, each
 module's stated import allowances, absolute internal imports, and the stdlib-only runtime.
+The allow-lists cover every module and import edge; a new module or dependency needs an explicit
+entry even if it points down the layer order. Keep [models.py](../src/pratfall/models.py) a data-only
+kernel, with presentation wording and behavior in the CLI.
 Invocation builders preserve argv execution and inherited native authentication and permissions.
-Child stdin contains explicit bytes, including an empty input when appropriate; it never inherits
-the terminal.
+Native-agent stdin contains explicit bytes, including an empty input when appropriate; it never
+inherits the terminal.
 
 ## Bounded output
 
@@ -80,10 +92,10 @@ which adapters use incremental consumption.
   logical records. Answer separators, identifiers, models, diagnostics, usage and cost snapshots
   count while retained. Replacement must refund the old payload. Numeric representations are
   bounded to 128 bytes.
-- Adapters retain through [`Retention`](../src/pratfall/consumer.py) named slots rather than
-  charging the budget by hand, so retaining a value and paying for it are one operation and
-  replacement refunds automatically. `release` refunds a slot's bytes and record; `commit` stops
-  tracking a slot, leaving its bytes charged permanently. `JsonlConsumer`
+- Adapters account for retained state through [`Retention`](../src/pratfall/consumer.py) named
+  slots, with automatic replacement refunds. The slots track charges, not payload storage;
+  adapters must still charge every retained value. `release` refunds a slot's bytes and record;
+  `commit` stops tracking a slot, leaving its bytes charged permanently. `JsonlConsumer`
   owns the first-error-wins `malformed` policy and its retained diagnostic. A consumer that
   retains an answer it never charged fails the cross-adapter bound
   [conformance](../tests/test_adapter_contracts.py).
@@ -112,6 +124,10 @@ adapters was chosen over four divergent ones, and the tightening is deliberate r
 compatibility guarantee. Rejections name the underlying reason: `parse` reports the
 standard-library decoder message, a duplicate object key, an over-wide numeric literal or excessive
 nesting behind each agent's own message prefix.
+
+Preserve `ConsumerFailure.decoded` when changing consumer error handling: it carries the usable
+partial answer and accounting. Whole-document adapters clear an unencodable answer so the result
+can still be emitted; a surrogate in an ignored field can leave a valid answer intact.
 
 ## Completion and accounting
 
@@ -145,8 +161,8 @@ Repeated interruptions accelerate termination. Timeout/interruption cleanup feed
 before finalizing the consumer once; after a hard local output failure, stdout drains without
 reparsing. [interruption.py](../src/pratfall/interruption.py) is the one signal seam: `handler_for`
 builds a first/repeat handler over shared `InterruptionState`, and `install`, `restore` and the
-`handling` context manager swap SIGINT and SIGTERM dispositions and always put the previous ones
-back. The runner, prompt input and the version probes use it rather than installing handlers directly.
+`handling` context manager swap SIGINT and SIGTERM dispositions and restore the previous ones
+after successful installation. The runner, prompt input, editor and version probes share this seam.
 
 Cleanup covers the owned POSIX process group. Deliberately detached descendants and externally
 managed server processes are outside that boundary. Ordinary successful completion preserves
@@ -174,6 +190,10 @@ stdout contains final text or one JSON result. Native stderr and Pratfall diagno
 One execution path emits the launch line, native stderr and the completion line through the
 invocation's diagnostics writer, so progress is a choice of writer rather than a second run path.
 Trace mode replays captured native stdout on stderr before the completion line.
+The presentation layer's `_StdoutLatch` records whether a result may have been written and never
+resets that state. It observes the actual `print` operation because stdout may use an encoding
+other than UTF-8. `UnicodeEncodeError` means no bytes were committed; other write failures may be
+partial, so their fallback uses stderr to avoid appending a second result.
 Opt-in progress uses the static [`Activity`](../src/pratfall/models.py) category vocabulary, whose
 labels live in `ACTIVITY_LABELS`, through the nonblocking
 [`_ProgressDiagnostics`](../src/pratfall/cli/presentation.py) sink, which sets and restores stderr's
@@ -184,6 +204,25 @@ failures enter normal cleanup and result handling.
 [`_doctor`](../src/pratfall/cli/doctor.py) reuses the runner with a three-second deadline and
 64 KiB per-stream bounds. The CLI selects opaque text and records per-agent probe errors;
 the catalog owns probe arguments.
+
+## Known limitations
+
+- The last-resort `internal_error` guard covers run dispatch. Management dispatch catches only
+  `PratError`, so unexpected management errors can still produce tracebacks. The final stdout
+  flush in `main()` handles `BrokenPipeError`; other flush failures can escape normalization.
+- If the runner raises before returning a `ProcessResult`, dispatch has no process group to clean.
+  The runner's collection `finally` kills the group only while the parent is alive, so an unexpected
+  consumer exception after parent exit can leave owned descendants behind.
+- Runner signal-handler installation precedes its restoring `try/finally`. A failure partway
+  through installation can leave a changed handler installed.
+- Template validation calls the standard library's `Template.get_identifiers()`, whose distinct-name
+  deduplication is quadratic. A large invalid template with thousands of distinct unsupported
+  placeholders can delay configuration loading, even when unselected. Valid templates use only
+  `input` and do not have this distinct-name growth.
+- Whole-document conformance membership in
+  [test_adapter_contracts.py](../tests/test_adapter_contracts.py) is maintained manually. Its shared
+  decoder matrix currently omits Grok, although Grok uses the shared strict parser. This is a gap in
+  shared conformance coverage, not evidence of a Grok decoding defect.
 
 ## Extending an adapter
 
@@ -203,10 +242,27 @@ and cleanup through fake commands in the matching tests; those tests must not sp
 
 ## Test isolation and evidence
 
+Run repository checks from the repository root; pytest's configured cache and temporary paths are
+relative to that directory. `just check`, `just coverage` and `just build` are separate gates.
+
 Parser and consumer probes need explicit fake executable prefixes, isolated config/XDG paths,
 and a restricted PATH. Calling the real parser can reach execution or `config init`; a parser-only
 test intent does not isolate those effects. Specify expected argv and output independently of
 production builders. Give the harness its own deadline and cleanup.
+
+Patch the module that reads a binding and assert that the fake was reached. Patching a package
+re-export can leave the real execution path active while a test passes. Module-object patches
+avoid obsolete import paths, but mypy does not check their string attribute names.
+
+[Retention tests](../tests/test_retention_contract.py) pin exact byte and record boundaries,
+chunk variation, replacements and transient peaks. Update order matters: Codex charges completion
+usage before releasing the answer identifier, so the peak charge determines acceptance even when
+the final totals match. Bound-conformance tests must check answer-length-dependent charging;
+typing and linting cannot detect retained payloads that bypass the budget.
+
+When mutation-testing these contracts, confirm the source edit landed and clear the relevant
+bytecode caches between runs. Same-size edits and reversions within one timestamp second can
+otherwise reuse stale `.pyc` files and make the test result misleading.
 
 [Installed-package checks](release.md#check-installed-packages-locally) exercise the wheel's shared
 Q/E scenarios and both wheel and sdist adapter and W01–W03 prompt-workflow scenarios. The workflow
@@ -225,3 +281,7 @@ signaling. Lock release must be observed after Prat completes and before emergen
 Input-signal checks wait for handler readiness through a harness-only bootstrap; progress checks
 observe stderr while the native fake still waits for release. Fixed startup sleeps and observations
 made after emergency cleanup cannot establish these properties.
+Editor timing tests wait for editor readiness, hold the editor open beyond the agent timeout, and
+leave enough agent startup time for a busy host. Editor PTY subprocesses are not instrumented by
+the current `just coverage` run; assess their behavioral assertions separately from the reported
+module coverage.
