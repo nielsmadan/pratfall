@@ -37,6 +37,7 @@ from pratfall.models import (
 )
 from pratfall.output import normalize, result_dict, validation_error
 from pratfall.prompt_input import InputInterrupted, acquire_prompt
+from pratfall.prompt_templates import render_template
 from pratfall.runner import ProcessResult, cleanup_process_group, raw_stdout, run
 
 
@@ -87,6 +88,15 @@ def _profiles(config: Config, json_mode: bool) -> None:
     _emit({"profiles": records}, lines or ["No profiles configured."], json_mode=json_mode)
 
 
+def _templates(config: Config, json_mode: bool) -> None:
+    records = []
+    lines = []
+    for name, template in sorted(config.templates.items()):
+        records.append({"name": name, "prompt": template.prompt, "source": str(template.source)})
+        lines.append(f"{name}: {json.dumps(template.prompt, ensure_ascii=False)}")
+    _emit({"templates": records}, lines or ["No templates configured."], json_mode=json_mode)
+
+
 def _validate_native_arguments(resolved: ResolvedProfile, label: str) -> None:
     adapter = ADAPTERS.get(resolved.agent.name)
     if adapter is None:
@@ -121,6 +131,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             _agents(args.json)
         elif args.command == "profiles":
             _profiles(config, args.json)
+        elif args.command == "templates":
+            _templates(config, args.json)
         elif args.command == "doctor":
             return _doctor(config, args.json, versions=args.versions)
         else:
@@ -353,7 +365,19 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             label = origins.get("native_args", fallback).label
             _validate_native_arguments(resolved, label)
             cwd = _run_cwd(parsed.cwd, invocation_cwd)
-            prompt = acquire_prompt(parsed.prompt_source, invocation_cwd)
+            template = (
+                config.templates.get(parsed.template) if parsed.template is not None else None
+            )
+            if parsed.template is not None and template is None:
+                raise PratError(
+                    f"Unknown template {parsed.template!r}; run 'prat templates' to list choices.",
+                    code="invalid_arguments",
+                )
+            prompt = acquire_prompt(
+                parsed.prompt_source, invocation_cwd, allow_absent=template is not None
+            )
+            if template is not None:
+                prompt = render_template(template.prompt, prompt)
             invocation = _build_invocation(resolved, prompt)
             if parsed.dry_run:
                 _preview(resolved, invocation, cwd, state.stdout, json_mode=json_mode)

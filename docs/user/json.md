@@ -114,6 +114,10 @@ and stdin byte count, rather than a run status. Prompts passed through argv appe
 Management commands return separate versioned inventory or config objects. Their errors still
 contain `status`, `exit_code`, and `error`. Agent capability records include `fast`.
 
+`prat templates --json` returns `schema_version: 1` and a `templates` array sorted by name. Each
+record contains `name`, the unexpanded `prompt`, and the defining file's absolute `source` path.
+An empty inventory returns an empty array; replacement warnings remain on stderr.
+
 Doctor records include `available`, plus nullable `version` and `version_error` fields. Without
 `doctor --versions`, both version fields stay null and no configured command is launched.
 Ordinary version-probe failures leave doctor at exit 0. An interrupted probe adds interrupted

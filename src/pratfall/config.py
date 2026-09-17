@@ -16,8 +16,10 @@ from pratfall.models import (
     OptionOrigin,
     Options,
     Profile,
+    PromptTemplate,
     ResolvedProfile,
 )
+from pratfall.prompt_templates import validate_template
 
 DEFAULT_TIMEOUT = 600.0
 OPTION_FIELDS = frozenset(Options.__dataclass_fields__)
@@ -242,6 +244,22 @@ def _profiles(table: dict[str, object], path: Path) -> dict[str, Profile]:
     return profiles
 
 
+def _templates(table: dict[str, object], path: Path) -> dict[str, PromptTemplate]:
+    templates: dict[str, PromptTemplate] = {}
+    for name, value in table.items():
+        label = f"{path}: templates.{name}"
+        if re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", name) is None:
+            raise PratError(
+                f"{label}: use letters, digits, underscores or hyphens in template names."
+            )
+        settings = _table(value, label)
+        _known_keys(settings, frozenset({"prompt"}), label)
+        prompt = _string(settings.get("prompt"), f"{label}.prompt")
+        validate_template(prompt, f"{label}.prompt")
+        templates[name] = PromptTemplate(prompt=prompt, source=path)
+    return templates
+
+
 def _load_file(path: Path, *, required: bool) -> Config:
     try:
         contents = path.read_text(encoding="utf-8")
@@ -255,7 +273,9 @@ def _load_file(path: Path, *, required: bool) -> Config:
         table = tomllib.loads(contents)
     except (tomllib.TOMLDecodeError, ValueError) as error:
         raise PratError(f"{path}: invalid TOML: {error}.") from error
-    _known_keys(table, frozenset({"version", "defaults", "agents", "profiles"}), str(path))
+    _known_keys(
+        table, frozenset({"version", "defaults", "agents", "profiles", "templates"}), str(path)
+    )
     if type(table.get("version")) is not int or table["version"] != 1:
         raise PratError(f"{path}: version must be the integer 1.")
     defaults = parse_options(
@@ -263,12 +283,14 @@ def _load_file(path: Path, *, required: bool) -> Config:
     )
     commands = _commands(_table(table.get("agents", {}), f"{path}: agents"), path)
     profiles = _profiles(_table(table.get("profiles", {}), f"{path}: profiles"), path)
+    templates = _templates(_table(table.get("templates", {}), f"{path}: templates"), path)
     return Config(
         path=path,
         exists=True,
         defaults=defaults,
         commands=MappingProxyType(commands),
         profiles=MappingProxyType(profiles),
+        templates=MappingProxyType(templates),
         sources=(path,),
         default_sources=MappingProxyType(
             {name: path for name, value in asdict(defaults).items() if value is not None}
@@ -284,12 +306,18 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
         f"{local_config.path}: profile {name!r} replaces the profile from {global_config.path}."
         for name in collisions
     )
+    template_collisions = sorted(global_config.templates.keys() & local_config.templates.keys())
+    warnings += tuple(
+        f"{local_config.path}: template {name!r} replaces the template from {global_config.path}."
+        for name in template_collisions
+    )
     return Config(
         path=local_config.path,
         exists=True,
         defaults=merge_options(global_config.defaults, local_config.defaults),
         commands=MappingProxyType(dict(global_config.commands) | dict(local_config.commands)),
         profiles=MappingProxyType(dict(global_config.profiles) | dict(local_config.profiles)),
+        templates=MappingProxyType(dict(global_config.templates) | dict(local_config.templates)),
         sources=global_config.sources + local_config.sources,
         warnings=warnings,
         default_sources=MappingProxyType(

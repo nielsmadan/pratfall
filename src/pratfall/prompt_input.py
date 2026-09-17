@@ -28,9 +28,16 @@ class InputInterrupted(Exception):
         self.signum = signum
 
 
-def acquire_prompt(source: PromptSource | None, invocation_cwd: Path) -> bytes:
+def acquire_prompt(
+    source: PromptSource | None, invocation_cwd: Path, *, allow_absent: bool = False
+) -> bytes:
+    implicit = source is None
     if source is None:
+        if allow_absent and (sys.stdin is None or sys.stdin.closed):
+            return b""
         if _stdin_is_terminal():
+            if allow_absent:
+                return b""
             raise PratError(
                 "Provide exactly one prompt as text, --file PATH, or redirected standard input.",
                 code="invalid_arguments",
@@ -46,6 +53,8 @@ def acquire_prompt(source: PromptSource | None, invocation_cwd: Path) -> bytes:
             label = "Prompt file"
         else:
             value = _read_stdin(state)
+            if implicit and allow_absent and not value:
+                return b""
             return _validate(value, "Standard input prompt")
         _raise_if_interrupted(state)
         value = _validate(value, label)

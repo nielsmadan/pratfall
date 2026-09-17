@@ -946,3 +946,31 @@ def test_new_agents_probe_independent_version_argv_with_empty_stdin(
         if record["agent"] in {call["agent"] for call in calls}:
             assert record["version"] == f"{record['agent']} opaque version 1.0"
             assert record["version_error"] is None
+
+
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_templates_listing_is_sorted_and_versioned(
+    json_mode: bool, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / ".pratfile"
+    config.write_text(
+        'version=1\n[templates.zed]\nprompt="last"\n[templates.alpha]\nprompt="Review\\n$input"\n',
+        encoding="utf-8",
+    )
+    assert main(["templates", *(["--json"] if json_mode else [])]) == 0
+    output = capsys.readouterr().out
+    if json_mode:
+        assert json.loads(output) == {
+            "schema_version": 1,
+            "templates": [
+                {"name": "alpha", "prompt": "Review\n$input", "source": str(config)},
+                {"name": "zed", "prompt": "last", "source": str(config)},
+            ],
+        }
+    else:
+        assert output == 'alpha: "Review\\n$input"\nzed: "last"\n'
+
+
+def test_empty_templates_listing(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["templates"]) == 0
+    assert capsys.readouterr().out == "No templates configured.\n"

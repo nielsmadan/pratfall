@@ -60,6 +60,7 @@ printf 'summarize this checkout\n' | prat gm
 | `--timeout SECONDS` | Set the execution deadline; default: 600 seconds. |
 | `--cwd PATH` | Choose the agent's working directory. |
 | `-f PATH` / `--file PATH` | Read a prompt from a UTF-8 file; `-` reads stdin. |
+| `-t NAME` / `--template NAME` | Apply a named prompt template. |
 | `--json` | Return one JSON result with output, status, and available usage. |
 | `--progress` | Show live activity on stderr. |
 | `--trace` | Copy captured native stdout to stderr. |
@@ -124,6 +125,22 @@ Use `[defaults]` for shared settings, `prat profiles` to inspect resolved profil
 
 See [profiles and configuration](docs/user/profiles.md) for defaults, command wrappers, and
 merging rules.
+
+Save reusable prompts separately from agent profiles:
+
+```toml
+[templates.review]
+prompt = "Review the following for bugs:\n\n$input"
+```
+
+```sh
+git diff | prat simple -t review
+prat templates
+```
+
+Templates support `$input`, `${input}`, and `$$` for a literal dollar sign. A template without an
+input placeholder appends supplied input after two newlines and can run on its own. See
+[prompt templates](docs/user/running.md#apply-a-template) for composition and validation rules.
 
 ## More
 

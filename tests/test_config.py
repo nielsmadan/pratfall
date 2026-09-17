@@ -606,3 +606,70 @@ def test_extreme_toml_integer_is_a_normalized_config_error(tmp_path: Path) -> No
     assert caught.value.code == "invalid_config"
     assert caught.value.exit_code == 2
     assert str(caught.value).startswith(str(path))
+
+
+@pytest.mark.parametrize("name", ["work", "cx", "templates", "A_1-z"])
+def test_templates_have_independent_names_and_source(tmp_path: Path, name: str) -> None:
+    path = write_config(tmp_path, f'version=1\n[templates.{name}]\nprompt="Review $input"\n')
+    config = load_config(path)
+    assert config.templates[name].prompt == "Review $input"
+    assert config.templates[name].source == path
+    with pytest.raises(TypeError):
+        config.templates[name] = config.templates[name]  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    ("definition", "message"),
+    [
+        ("templates=[]", "expected a TOML table"),
+        ('templates.work="text"', "expected a TOML table"),
+        ("[templates.work]", "nonempty string"),
+        ('[templates.work]\nprompt=""', "nonempty string"),
+        ("[templates.work]\nprompt=3", "nonempty string"),
+        ('[templates.work]\nprompt="ok"\nagent="codex"', "unknown field"),
+        ('[templates.work]\nprompt="$unknown"', "only.*placeholders"),
+        ('[templates."bad.name"]\nprompt="ok"', "template names"),
+        ('[templates."-bad"]\nprompt="ok"', "template names"),
+    ],
+)
+def test_invalid_template_schema(tmp_path: Path, definition: str, message: str) -> None:
+    path = write_config(tmp_path, "version=1\n" + definition)
+    with pytest.raises(PratError, match=message) as caught:
+        load_config(path)
+    assert str(path) in str(caught.value)
+
+
+def test_template_merge_replaces_whole_definition_and_warns(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text(
+        'version=1\n[templates.work]\nprompt="global $input"\n'
+        '[templates.other]\nprompt="other"\n[profiles.work]\nagent="codex"\n',
+        encoding="utf-8",
+    )
+    local = write_config(tmp_path, 'version=1\n[templates.work]\nprompt="local"\n')
+    config = load_config(local)
+    assert {name: item.prompt for name, item in config.templates.items()} == {
+        "work": "local",
+        "other": "other",
+    }
+    assert config.templates["work"].source == local
+    assert config.templates["other"].source == global_path
+    assert config.profiles["work"].agent == "codex"
+    assert config.warnings == (
+        f"{local}: template 'work' replaces the template from {global_path}.",
+    )
+
+
+def test_invalid_global_template_is_not_hidden_by_replacement(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text('version=1\n[templates.work]\nprompt="$wrong"\n', encoding="utf-8")
+    local = write_config(tmp_path, 'version=1\n[templates.work]\nprompt="valid"\n')
+    with pytest.raises(PratError, match=r"only.*placeholders") as caught:
+        load_config(local)
+    assert str(global_path) in str(caught.value)
+
+
+def test_templates_is_reserved_for_profile_names(tmp_path: Path) -> None:
+    path = write_config(tmp_path, 'version=1\n[profiles.templates]\nagent="codex"\n')
+    with pytest.raises(PratError, match="name is reserved"):
+        load_config(path)

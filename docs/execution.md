@@ -26,6 +26,11 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   location. Aliases of the global file load once through the selected local path, preserving that
   path's command base. The CLI selects one diagnostics writer per invocation and sends
   duplicate-profile warnings through it, before reading the prompt or launching an agent.
+- [prompt_templates.py](../src/pratfall/prompt_templates.py) validates the restricted dollar
+  placeholder syntax at config load and renders after base prompt acquisition. Template definitions
+  retain their source files in immutable config records. Expansion size is checked before repeated
+  substitution; rendered prompts use the same 1 MiB input limit. Unknown template names fail before
+  input acquisition, while selected templates may supply the task without a base prompt.
 - [catalog.py](../src/pratfall/catalog.py) holds immutable capabilities, not provider model lists.
   [`Adapter`](../src/pratfall/adapters/registry.py) is the adapter assembly point: command
   builder, one validator over the resolved profile, and exactly one of a whole-document decoder or

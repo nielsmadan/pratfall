@@ -2395,3 +2395,123 @@ def test_result_unencodable_for_stdout_in_text_mode_reports_on_stderr(tmp_path: 
     assert completed.stdout == b""
     assert b"prat: Unexpected failure: UnicodeEncodeError" in completed.stderr
     assert b"Traceback" not in completed.stderr
+
+
+@pytest.mark.parametrize("flags", [["-t", "work"], ["--template", "work"], ["--template=work"]])
+@pytest.mark.parametrize("before_selector", [False, True])
+def test_template_options_reach_fake_agent(
+    flags: list[str],
+    before_selector: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write('\n[templates.work]\nprompt="Review ${input} then $$input"\n')
+    monkeypatch.setattr(sys, "stdin", io.BytesIO("雪\n".encode()))
+    args = [*flags, "cx", "code $input"] if before_selector else ["cx", "code $input", *flags]
+    assert main([*args, "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert json.loads(result["output"])["prompt"] == "Review 雪\n\n\ncode $input then $input"
+
+
+@pytest.mark.parametrize("stdin", [None, b""])
+def test_template_can_supply_entire_prompt(
+    stdin: bytes | None,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write('\n[templates.work]\nprompt="Review this project"\n')
+    if stdin is not None:
+        monkeypatch.setattr(sys, "stdin", io.BytesIO(stdin))
+    assert main(["cx", "-t", "work", "--config", str(config), "--json"]) == 0
+    assert (
+        json.loads(json.loads(capsys.readouterr().out)["output"])["prompt"] == "Review this project"
+    )
+
+
+def test_unknown_template_fails_before_stdin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", "--template=missing", "--config", str(config), "--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == {
+        "code": "invalid_arguments",
+        "message": "Unknown template 'missing'; run 'prat templates' to list choices.",
+    }
+
+
+@pytest.mark.parametrize(
+    "flags", [["-t", "work", "--template=work"], ["--template"], ["--template="]]
+)
+def test_invalid_template_flags_fail_before_stdin(
+    flags: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["--json", "--config", str(config), "cx", *flags]) == 2
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == "invalid_arguments"
+
+
+@pytest.mark.parametrize("source", [["--prompt="], ["-"], ["--file", "empty.md"]])
+def test_template_keeps_explicit_empty_source_invalid(
+    source: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write('\n[templates.work]\nprompt="Review"\n')
+    (tmp_path / "empty.md").write_bytes(b"")
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b""))
+    assert main(["cx", "-t", "work", *source, "--config", str(config), "--json"]) == 2
+    assert (
+        json.loads(capsys.readouterr().out)["error"]["message"]
+        == "Prompt must not be empty or whitespace-only."
+    )
+
+
+def test_template_dry_run_composes_static_prompt_and_keeps_native_boundary(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "gemini", "raise AssertionError('dry run launched agent')")
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write('\n[templates.work]\nprompt="Review"\n')
+    assert (
+        main(
+            [
+                "gm",
+                "-t",
+                "work",
+                "code",
+                "--config",
+                str(config),
+                "--dry-run",
+                "--json",
+                "--",
+                "--yolo",
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert "--prompt=Review\n\ncode" in result["argv"]
+    assert "--yolo" in result["argv"]
+
+
+def test_template_flag_after_native_boundary_stays_native(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", "--config", str(config), "--json", "--", "--template=work"]) == 2
+    assert "native_args" in json.loads(capsys.readouterr().out)["error"]["message"]

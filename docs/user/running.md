@@ -7,6 +7,7 @@ prat cx "review this change"
 ```
 
 - [Supply a prompt](#supply-a-prompt)
+- [Apply a template](#apply-a-template)
 - [Set options and limits](#set-options-and-limits)
 - [Pass native arguments](#pass-native-arguments)
 - [Preview a run](#preview-a-run)
@@ -54,6 +55,43 @@ Gemini, Copilot, Cursor, Kiro, OpenHands, Warp, iFlow, Devin, and Grok receive p
 arguments, so the operating system's argument-size limit may be lower than 1 MiB.
 Reasonix, Kimi, Vibe, and Grok trim surrounding whitespace natively. Crush 0.93.1 adds two trailing
 newlines to the original input. Prat supplies the same prompt bytes before these native changes.
+
+## Apply a template
+
+Define reusable prompts in the same global or local version-1 TOML configuration:
+
+```toml
+[templates.review]
+prompt = "Review for bugs:\n\n$input"
+
+[templates.summary]
+prompt = "Summarize the current project."
+```
+
+```sh
+git diff | prat cc -t review
+prat --template=review cc --file request.md
+prat cc --template summary
+prat templates
+```
+
+Use `-t NAME`, `--template NAME`, or `--template=NAME` once, before or after the selector.
+Everything after `--` still belongs to the native agent. Unknown template names fail before stdin
+is read. `prat templates` lists names in sorted order with JSON-quoted prompt strings.
+
+`$input` and `${input}` substitute the base prompt, including the existing stdin-first combination
+when both redirected stdin and an explicit source are supplied. `$$` produces one literal dollar
+sign. Other dollar expressions are invalid; use `$$` wherever a literal dollar is needed.
+Substitution happens once: dollar expressions in input text remain literal. Without an input
+placeholder, a template appends nonempty base input after two newlines. Whitespace and line endings
+are preserved.
+
+A template can provide the complete task when no base input is supplied. Terminal, closed or
+unavailable stdin and an empty implicit stdin stream count as absent input. Explicit empty sources
+(`--prompt=`, an empty file, or explicit `-`/`--file -` stdin) still fail; whitespace-only implicit
+stdin also fails. The final rendered task must be nonempty, valid UTF-8, NUL-free and at most 1 MiB.
+Template definitions also have a 1 MiB UTF-8 limit, and repeated substitutions are checked against
+the final limit before allocating their expanded text. `--dry-run` uses the same rendered prompt.
 
 ## Set options and limits
 
@@ -123,10 +161,11 @@ so they do not delay the agent deadline. Trace can show only what the native CLI
 
 ## Handle timeouts and failures
 
-Prat validates configuration, native options, and `--cwd` before reading input. It waits for EOF
-before starting the execution timeout. Closed or unavailable stdin is an input error; use inline
-text or a regular file instead. SIGINT or SIGTERM during input acquisition exits with
-`128 + signal` without launching an agent.
+Prat validates configuration, template names, native options, and `--cwd` before reading input.
+It waits for EOF before starting the execution timeout. Closed or unavailable stdin is an input
+error when stdin is explicitly requested or no other prompt source or template is supplied.
+With a template and no explicit source, it counts as absent input. SIGINT or SIGTERM during input
+acquisition exits with `128 + signal` without launching an agent.
 
 A failed or timed-out run can leave edits in the working directory. Prat does not retry, roll back
 edits, or fall back to another agent or model. A manual rerun starts a fresh invocation.

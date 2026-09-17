@@ -22,6 +22,8 @@ _RUN_VALUE_FLAGS = {
     "--timeout": "timeout",
     "--file": "file",
     "-f": "file",
+    "--template": "template",
+    "-t": "template",
 }
 
 
@@ -36,6 +38,7 @@ class RunArguments:
     options: Options
     progress: bool
     trace: bool
+    template: str | None = None
 
 
 @dataclass(frozen=True)
@@ -85,6 +88,7 @@ Redirected stdin precedes prompt text or file contents, separated by two newline
 run options:
   --prompt=TEXT           Pass prompt text, including text beginning with a dash.
   -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.
+  -t, --template NAME     Apply a named prompt template; additional input is optional.
   --model MODEL           Override the profile model.
   --effort EFFORT         Override the native effort setting.
   --fast / --no-fast      Enable or disable supported native fast mode for this run.
@@ -116,6 +120,7 @@ examples:
     for command, help_text in (
         ("agents", "List built-in agent selectors and supported settings."),
         ("profiles", "List configured profiles and their resolved settings."),
+        ("templates", "List configured prompt templates."),
         ("doctor", "Locate agent executables without running them or checking credentials."),
     ):
         child = subparsers.add_parser(command, help=help_text, allow_abbrev=False)
@@ -138,7 +143,7 @@ examples:
     for name, help_text in (
         ("path", "Print the global config path, or --config PATH."),
         ("init", "Create an example config; fail if the path already exists."),
-        ("validate", "Validate every configured profile without launching an agent."),
+        ("validate", "Validate every configured profile and template without launching an agent."),
     ):
         child = config_commands.add_parser(name, help=help_text, allow_abbrev=False)
         _common_flags(child)
@@ -191,7 +196,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
                     prompt_source, PromptSource("file", _text_option(value, token.name))
                 )
             else:
-                values[field] = value
+                _store_value(values, field, value)
             continue
         if argument.startswith("-") and argument != "-":
             raise PratError(f"unrecognized argument: {argument}", code="invalid_arguments")
@@ -222,7 +227,14 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         options,
         progress,
         trace,
+        _text_option(values.get("template"), "--template"),
     )
+
+
+def _store_value(values: dict[str, str], field: str, value: str) -> None:
+    if field == "template" and field in values:
+        raise PratError("Provide only one template.", code="invalid_arguments")
+    values[field] = value
 
 
 def _scan_run(arguments: list[str]) -> _RunScan:

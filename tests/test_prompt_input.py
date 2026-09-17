@@ -100,3 +100,25 @@ def test_signal_during_validation_interrupts_and_restores_handlers(
 
     assert raised.value.signum == chosen
     assert {candidate: signal.getsignal(candidate) for candidate in previous} == previous
+
+
+@pytest.mark.parametrize("kind", ["terminal", "closed", "unavailable", "empty"])
+def test_optional_base_accepts_absent_input(
+    kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stream = io.BytesIO(b"")
+    if kind == "terminal":
+        monkeypatch.setattr(stream, "isatty", lambda: True)
+    elif kind == "closed":
+        stream.close()
+    monkeypatch.setattr(sys, "stdin", None if kind == "unavailable" else stream)
+    assert acquire_prompt(None, tmp_path, allow_absent=True) == b""
+
+
+@pytest.mark.parametrize("stdin", [b" \n", b"\xff", b"\0"])
+def test_optional_base_still_validates_provided_implicit_input(
+    stdin: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(stdin))
+    with pytest.raises(PratError):
+        acquire_prompt(None, tmp_path, allow_absent=True)

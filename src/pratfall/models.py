@@ -57,6 +57,12 @@ class Profile:
 
 
 @dataclass(frozen=True)
+class PromptTemplate:
+    prompt: str
+    source: Path
+
+
+@dataclass(frozen=True)
 class Config:
     path: Path
     exists: bool = False
@@ -66,6 +72,7 @@ class Config:
     sources: tuple[Path, ...] = ()
     warnings: tuple[str, ...] = ()
     default_sources: Mapping[str, Path] = field(default_factory=lambda: MappingProxyType({}))
+    templates: Mapping[str, PromptTemplate] = field(default_factory=lambda: MappingProxyType({}))
 
 
 @dataclass(frozen=True)

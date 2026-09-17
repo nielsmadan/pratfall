@@ -4,6 +4,7 @@ A profile saves an agent and its settings under a reusable name. Store profiles 
 across projects, or locally in a project's `.pratfile`.
 
 - [Create a profile](#create-a-profile)
+- [Define prompt templates](#define-prompt-templates)
 - [Choose a config file](#choose-a-config-file)
 - [Merge global and local settings](#merge-global-and-local-settings)
 - [Configure commands and wrappers](#configure-commands-and-wrappers)
@@ -47,6 +48,22 @@ Use `[defaults]` for shared settings.
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
 omitting the field preserves it. Other agents reject either value.
 
+## Define prompt templates
+
+`[templates.NAME]` defines a reusable prompt independently of any agent or profile. Its only field
+is the required, nonempty `prompt` string. Names start with a letter or digit, followed by letters,
+digits, underscores or hyphens. Template names have their own namespace: a template can share a
+name with a profile, agent or management command.
+
+```toml
+[templates.review]
+prompt = "Review this change:\n\n$input"
+```
+
+Select it with `prat simple -t review --file change.diff`. Only `$input`, `${input}`, and `$$` are
+supported; malformed or unknown placeholders fail configuration loading even in unused templates.
+See [applying templates](running.md#apply-a-template) for input composition and limits.
+
 ## Choose a config file
 
 | Scope | Path |
@@ -81,6 +98,7 @@ Settings resolve from highest to lowest priority:
 | --- | --- |
 | `[defaults]` | Merge field by field; local values win. |
 | `[profiles.NAME]` | A local profile replaces the entire global profile with that name. |
+| `[templates.NAME]` | A local template replaces the entire global template with that name. |
 | `[agents.NAME].command` | A local command array replaces the global array for that agent. |
 | `native_args` | The higher-priority array replaces the lower-priority array, even when empty. |
 
@@ -105,6 +123,10 @@ Prat warns on stderr when a local profile replaces a global one, naming the prof
 This also applies to `--json`. With `--progress`, a slow stderr reader can cause warnings to be
 dropped.
 
+Templates follow the same replacement and warning rules, naming the template and both source
+files. Definitions in both files are validated before replacement, so an invalid global template
+cannot be hidden by a local override.
+
 ## Configure commands and wrappers
 
 Use `[agents.NAME].command` to set an executable and any fixed arguments:
@@ -128,6 +150,7 @@ selected path. Relative commands still resolve from that path's directory.
 
 ```sh
 prat profiles
+prat templates
 prat config validate
 prat --config custom.toml profiles
 prat --config custom.toml config validate
@@ -152,6 +175,9 @@ introduces a collision, rename your profile, update commands that use it, and ru
 This release reserves `openhands`, `oh`, `warp`, `iflow`, `if`, `qwen`, `amp`, `reasonix`, `rx`,
 `droid`, `dr`, `kimi`, `vibe`, `crush`, `cr`, `devin`, `dv`, `cortex`, `co`, and `grok`.
 For example, rename `[profiles.oh]` to `[profiles.my-openhands]`, keeping its agent and settings.
+
+`templates` is also reserved. Rename an existing `[profiles.templates]` and update invocations
+that select it before upgrading.
 
 A collision reports `profiles.NAME: name is reserved; choose a different profile name.`
 
