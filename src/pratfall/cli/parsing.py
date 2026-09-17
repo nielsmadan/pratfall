@@ -22,6 +22,7 @@ _RUN_VALUE_FLAGS = {
     "--timeout": "timeout",
     "--file": "file",
     "-f": "file",
+    "--context": "context",
     "--template": "template",
     "-t": "template",
 }
@@ -39,6 +40,7 @@ class RunArguments:
     progress: bool
     trace: bool
     template: str | None = None
+    contexts: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -89,6 +91,7 @@ run options:
   --prompt=TEXT           Pass prompt text, including text beginning with a dash.
   -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.
   -t, --template NAME     Apply a named prompt template; additional input is optional.
+  --context PATH         Prepend a UTF-8 context file; repeat to include several.
   --model MODEL           Override the profile model.
   --effort EFFORT         Override the native effort setting.
   --fast / --no-fast      Enable or disable supported native fast mode for this run.
@@ -153,6 +156,7 @@ examples:
 def _parse_run(arguments: list[str]) -> RunArguments:
     scan = _scan_run(arguments)
     values: dict[str, str] = {}
+    contexts: list[str] = []
     selector: str | None = None
     prompt_source: PromptSource | None = None
     json_mode = False
@@ -162,13 +166,9 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     fast: bool | None = None
     for token in scan.tokens:
         argument = token.argument
-        if argument == "--json":
-            json_mode = True
-            continue
-        if argument == "--dry-run":
-            dry_run = True
-            continue
-        if argument in {"--progress", "--trace"}:
+        if argument in {"--json", "--dry-run", "--progress", "--trace"}:
+            json_mode = json_mode or argument == "--json"
+            dry_run = dry_run or argument == "--dry-run"
             progress = progress or argument == "--progress"
             trace = trace or argument == "--trace"
             continue
@@ -195,6 +195,9 @@ def _parse_run(arguments: list[str]) -> RunArguments:
                 prompt_source = _add_prompt_source(
                     prompt_source, PromptSource("file", _text_option(value, token.name))
                 )
+            elif field == "context":
+                _text_option(value, token.name)
+                contexts.append(value)
             else:
                 _store_value(values, field, value)
             continue
@@ -228,6 +231,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         progress,
         trace,
         _text_option(values.get("template"), "--template"),
+        tuple(contexts),
     )
 
 

@@ -36,7 +36,7 @@ from pratfall.models import (
     ResultError,
 )
 from pratfall.output import normalize, result_dict, validation_error
-from pratfall.prompt_input import InputInterrupted, acquire_prompt
+from pratfall.prompt_input import InputInterrupted, acquire_prompt, prepend_contexts
 from pratfall.prompt_templates import render_template
 from pratfall.runner import ProcessResult, cleanup_process_group, raw_stdout, run
 
@@ -378,6 +378,7 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             )
             if template is not None:
                 prompt = render_template(template.prompt, prompt)
+            prompt = prepend_contexts(parsed.contexts, prompt, invocation_cwd)
             invocation = _build_invocation(resolved, prompt)
             if parsed.dry_run:
                 _preview(resolved, invocation, cwd, state.stdout, json_mode=json_mode)

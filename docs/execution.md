@@ -31,6 +31,12 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   retain their source files in immutable config records. Expansion size is checked before repeated
   substitution; rendered prompts use the same 1 MiB input limit. Unknown template names fail before
   input acquisition, while selected templates may supply the task without a base prompt.
+- [prompt_input.py](../src/pratfall/prompt_input.py) reads invocation-relative regular files
+  nonblocking under the shared input signal handlers. Context files are prepended after template
+  rendering, preserving order, duplicate paths and content bytes. JSON-quoted label and separator
+  space is reserved before any context files are read; each read uses the remaining aggregate
+  1 MiB budget and final assembly stays within that bound. Explicit prompt plus stdin acquisition
+  also limits the second read to its remaining budget.
 - [catalog.py](../src/pratfall/catalog.py) holds immutable capabilities, not provider model lists.
   [`Adapter`](../src/pratfall/adapters/registry.py) is the adapter assembly point: command
   builder, one validator over the resolved profile, and exactly one of a whole-document decoder or

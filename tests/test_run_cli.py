@@ -2515,3 +2515,142 @@ def test_template_flag_after_native_boundary_stays_native(
     monkeypatch.setattr(sys, "stdin", UnreadInput())
     assert main(["cx", "--config", str(config), "--json", "--", "--template=work"]) == 2
     assert "native_args" in json.loads(capsys.readouterr().out)["error"]["message"]
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_context_options_compose_outside_template_from_invocation_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    dry_run: bool,
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a") as stream:
+        stream.write('\n[templates.work]\nprompt="Review $input then $input"\n')
+    (tmp_path / "context.md").write_bytes(b"$input\r\n")
+    (tmp_path / "-").write_bytes(b"")
+    child = tmp_path / "child"
+    child.mkdir()
+    (child / "context.md").write_bytes(b"wrong directory")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b"pipe"))
+    flags = ["--dry-run"] if dry_run else []
+    assert (
+        main(
+            [
+                "--context",
+                "context.md",
+                "cx",
+                "task",
+                "--context=-",
+                "--template=work",
+                "--context",
+                "context.md",
+                "--cwd",
+                str(child),
+                "--config",
+                str(config),
+                "--json",
+                *flags,
+            ]
+        )
+        == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+    expected = (
+        b'# Context: "context.md"\n\n$input\r\n\n\n# Context: "-"\n\n\n\n'
+        b'# Context: "context.md"\n\n$input\r\n\n\nReview pipe\n\ntask then pipe\n\ntask'
+    )
+    if dry_run:
+        assert result["stdin_bytes"] == len(expected)
+    else:
+        answer = json.loads(result["output"])
+        assert answer["prompt"].encode() == expected
+        assert answer["cwd"] == str(child)
+
+
+@pytest.mark.parametrize("source", [[], ["--prompt="]])
+def test_context_does_not_supply_missing_task(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    source: list[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b""))
+    assert (
+        main(
+            [
+                "cx",
+                *source,
+                "--context=missing",
+                "--config",
+                str(config),
+                "--json",
+            ]
+        )
+        == 2
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_arguments"
+    assert "empty or whitespace" in result["error"]["message"]
+
+
+@pytest.mark.parametrize("flags", [["--context"], ["--context="], ["--context", "\0"]])
+def test_invalid_context_flags_fail_before_stdin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    flags: list[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", "--config", str(config), "--json", *flags]) == 2
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == "invalid_arguments"
+
+
+def test_context_flag_after_native_boundary_stays_native(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", "--config", str(config), "--json", "--", "--context=missing"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert "native argument" in result["error"]["message"]
+
+
+def test_explicit_prompt_rejects_over_budget_pipe_without_waiting_for_eof(tmp_path: Path) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_bytes(b"x" * (PROMPT_LIMIT - 3))
+    with subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "pratfall",
+            "cx",
+            "--file",
+            str(prompt_file),
+            "--config",
+            str(config),
+            "--json",
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as process:
+        assert process.stdin is not None
+        assert process.stdout is not None
+        try:
+            process.stdin.write(b"xx")
+            process.stdin.flush()
+            assert process.wait(timeout=5) == 2
+            result = json.loads(process.stdout.read())
+            assert result["error"] == {
+                "code": "invalid_arguments",
+                "message": f"Prompt exceeds the {PROMPT_LIMIT} byte limit.",
+            }
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=5)

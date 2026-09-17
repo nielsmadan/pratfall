@@ -1,4 +1,5 @@
 import errno
+import json
 import os
 import select
 import stat
@@ -14,6 +15,8 @@ from pratfall.interruption import InterruptionState, handler_for, handling
 
 PROMPT_LIMIT = 1024 * 1024
 _READ_SIZE = 64 * 1024
+_CONTEXT_PREFIX = b"# Context: "
+_CONTEXT_OVERHEAD = len(_CONTEXT_PREFIX) + 4
 
 
 @dataclass(frozen=True)
@@ -59,8 +62,10 @@ def acquire_prompt(
         _raise_if_interrupted(state)
         value = _validate(value, label)
         if sys.stdin is not None and not sys.stdin.closed and not _stdin_is_terminal():
-            stdin = _read_stdin(state)
+            remaining = max(0, PROMPT_LIMIT - len(value) - 2)
+            stdin = _read_stdin(state, limit=remaining)
             if stdin:
+                _check_size(len(value) + 2 + len(stdin))
                 value = _validate(stdin + b"\n\n" + value, "Combined prompt")
         return value
 
@@ -79,14 +84,54 @@ def _encode_inline(value: str) -> bytes:
         raise PratError("Prompt is not valid UTF-8.", code="invalid_arguments") from error
 
 
-def _read_file(value: str, invocation_cwd: Path, state: InterruptionState) -> bytes:
-    path = Path(os.path.abspath(invocation_cwd / value))
+def prepend_contexts(paths: tuple[str, ...], prompt: bytes, invocation_cwd: Path) -> bytes:
+    if not paths:
+        return prompt
+    state = InterruptionState()
+    with _input_signal_handlers(state):
+        remaining = PROMPT_LIMIT - len(prompt)
+        headers: list[bytes] = []
+        for path in paths:
+            _raise_if_interrupted(state)
+            label_size = 2
+            for character in path:
+                label_size += len(json.dumps(character)) - 2
+                _check_size(PROMPT_LIMIT - remaining + label_size + _CONTEXT_OVERHEAD)
+            remaining -= label_size + _CONTEXT_OVERHEAD
+            _check_size(PROMPT_LIMIT - remaining)
+            headers.append(_CONTEXT_PREFIX + json.dumps(path).encode("ascii") + b"\n\n")
+        parts: list[bytes] = []
+        for path, header in zip(paths, headers, strict=True):
+            _raise_if_interrupted(state)
+            content = _read_file(path, invocation_cwd, state, limit=remaining, label="context file")
+            _check_size(PROMPT_LIMIT - remaining + len(content))
+            _validate(content, "Context file", allow_empty=True)
+            remaining -= len(content)
+            parts.extend((header, content, b"\n\n"))
+        parts.append(prompt)
+        return b"".join(parts)
+
+
+def _check_size(size: int) -> None:
+    if size > PROMPT_LIMIT:
+        raise PratError(f"Prompt exceeds the {PROMPT_LIMIT} byte limit.", code="invalid_arguments")
+
+
+def _read_file(
+    value: str,
+    invocation_cwd: Path,
+    state: InterruptionState,
+    *,
+    limit: int = PROMPT_LIMIT,
+    label: str = "prompt file",
+) -> bytes:
+    path = invocation_cwd / value
     flags = os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
     try:
         descriptor = os.open(path, flags)
     except OSError as error:
         raise PratError(
-            f"Cannot open prompt file {path}: {error.strerror or error}.",
+            f"Cannot open {label} {path}: {error.strerror or error}.",
             code="invalid_arguments",
         ) from error
     try:
@@ -94,17 +139,19 @@ def _read_file(value: str, invocation_cwd: Path, state: InterruptionState) -> by
             mode = os.fstat(descriptor).st_mode
         except OSError as error:
             raise PratError(
-                f"Cannot inspect prompt file {path}: {error.strerror or error}.",
+                f"Cannot inspect {label} {path}: {error.strerror or error}.",
                 code="invalid_arguments",
             ) from error
         if not stat.S_ISREG(mode):
-            raise PratError(f"Prompt file is not a regular file: {path}", code="invalid_arguments")
-        return _read_descriptor(descriptor, state, wait=False, label=f"prompt file {path}")
+            raise PratError(
+                f"{label.capitalize()} is not a regular file: {path}", code="invalid_arguments"
+            )
+        return _read_descriptor(descriptor, state, wait=False, label=f"{label} {path}", limit=limit)
     finally:
         os.close(descriptor)
 
 
-def _read_stdin(state: InterruptionState) -> bytes:
+def _read_stdin(state: InterruptionState, *, limit: int = PROMPT_LIMIT) -> bytes:
     stream = cast(BinaryIO | TextIO, getattr(sys.stdin, "buffer", sys.stdin))
     if stream is None:
         raise PratError(
@@ -114,14 +161,16 @@ def _read_stdin(state: InterruptionState) -> bytes:
     try:
         descriptor = stream.fileno()
     except (AttributeError, OSError, ValueError):
-        return _read_stream(stream, state)
-    return _read_descriptor(descriptor, state, wait=True, label="standard input")
+        return _read_stream(stream, state, limit=limit)
+    return _read_descriptor(descriptor, state, wait=True, label="standard input", limit=limit)
 
 
-def _read_stream(stream: BinaryIO | TextIO, state: InterruptionState) -> bytes:
+def _read_stream(
+    stream: BinaryIO | TextIO, state: InterruptionState, *, limit: int = PROMPT_LIMIT
+) -> bytes:
     _raise_if_interrupted(state)
     try:
-        value = stream.read(PROMPT_LIMIT + 1)
+        value = stream.read(limit + 1)
     except (OSError, ValueError) as error:
         raise PratError(
             f"Cannot read standard input; provide exactly one prompt another way: {error}.",
@@ -135,9 +184,16 @@ def _read_stream(stream: BinaryIO | TextIO, state: InterruptionState) -> bytes:
     return value
 
 
-def _read_descriptor(descriptor: int, state: InterruptionState, *, wait: bool, label: str) -> bytes:
+def _read_descriptor(
+    descriptor: int,
+    state: InterruptionState,
+    *,
+    wait: bool,
+    label: str,
+    limit: int = PROMPT_LIMIT,
+) -> bytes:
     value = bytearray()
-    while len(value) <= PROMPT_LIMIT:
+    while len(value) <= limit:
         _raise_if_interrupted(state)
         if wait:
             try:
@@ -149,7 +205,7 @@ def _read_descriptor(descriptor: int, state: InterruptionState, *, wait: bool, l
             if not readable:
                 continue
         try:
-            chunk = os.read(descriptor, min(_READ_SIZE, PROMPT_LIMIT + 1 - len(value)))
+            chunk = os.read(descriptor, min(_READ_SIZE, limit + 1 - len(value)))
         except BlockingIOError:
             continue
         except OSError as error:
@@ -164,16 +220,15 @@ def _read_descriptor(descriptor: int, state: InterruptionState, *, wait: bool, l
     return bytes(value)
 
 
-def _validate(value: bytes, label: str) -> bytes:
-    if len(value) > PROMPT_LIMIT:
-        raise PratError(f"Prompt exceeds the {PROMPT_LIMIT} byte limit.", code="invalid_arguments")
+def _validate(value: bytes, label: str, *, allow_empty: bool = False) -> bytes:
+    _check_size(len(value))
     if b"\0" in value:
         raise PratError("Prompt must not contain NUL bytes.", code="invalid_arguments")
     try:
         text = value.decode("utf-8")
     except UnicodeDecodeError as error:
         raise PratError(f"{label} is not valid UTF-8.", code="invalid_arguments") from error
-    if not text.strip():
+    if not allow_empty and not text.strip():
         raise PratError("Prompt must not be empty or whitespace-only.", code="invalid_arguments")
     return value
 

@@ -61,6 +61,7 @@ printf 'summarize this checkout\n' | prat gm
 | `--cwd PATH` | Choose the agent's working directory. |
 | `-f PATH` / `--file PATH` | Read a prompt from a UTF-8 file; `-` reads stdin. |
 | `-t NAME` / `--template NAME` | Apply a named prompt template. |
+| `--context PATH` | Prepend a context file; repeat to include several. |
 | `--json` | Return one JSON result with output, status, and available usage. |
 | `--progress` | Show live activity on stderr. |
 | `--trace` | Copy captured native stdout to stderr. |
@@ -141,6 +142,10 @@ prat templates
 Templates support `$input`, `${input}`, and `$$` for a literal dollar sign. A template without an
 input placeholder appends supplied input after two newlines and can run on its own. See
 [prompt templates](docs/user/running.md#apply-a-template) for composition and validation rules.
+
+Add local files with `prat cc "review this" --context notes.md --context design.md`.
+[Context files](docs/user/running.md#include-context-files) precede the templated task in the order
+supplied, with quoted path labels. The complete prompt must fit within 1 MiB.
 
 ## More
 

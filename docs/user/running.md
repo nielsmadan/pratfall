@@ -8,6 +8,7 @@ prat cx "review this change"
 
 - [Supply a prompt](#supply-a-prompt)
 - [Apply a template](#apply-a-template)
+- [Include context files](#include-context-files)
 - [Set options and limits](#set-options-and-limits)
 - [Pass native arguments](#pass-native-arguments)
 - [Preview a run](#preview-a-run)
@@ -92,6 +93,29 @@ unavailable stdin and an empty implicit stdin stream count as absent input. Expl
 stdin also fails. The final rendered task must be nonempty, valid UTF-8, NUL-free and at most 1 MiB.
 Template definitions also have a 1 MiB UTF-8 limit, and repeated substitutions are checked against
 the final limit before allocating their expanded text. `--dry-run` uses the same rendered prompt.
+
+## Include context files
+
+```sh
+prat cc "Review this change" --context notes.md --context design.md
+prat --context=notes.md cc -t review --file request.md
+```
+
+Repeat `--context PATH` or `--context=PATH` before or after the selector. Files are included in
+argument order, including duplicates. Paths resolve from the invocation directory, independently
+of `--cwd`; `--context -` reads a file named `-`. Files must be local regular files (symlinks to
+regular files are accepted), valid UTF-8 and NUL-free. Empty and whitespace-only context files
+are allowed. Content bytes, including original line endings, are preserved.
+
+Each file adds `# Context: <JSON-quoted supplied path>\n\n<file bytes>\n\n` before the task.
+Labels use JSON escaping, including escapes for non-ASCII characters and newlines. They are
+presentation labels, not a security boundary. Context is added after template expansion and
+remains outside substitution. A context file does not supply a missing task.
+
+The shared 1 MiB limit includes the rendered task, all context content, labels and separators.
+Prat reserves label space before reading context files, reads only up to the remaining budget
+plus one overflow byte, and stops on overflow before opening later files. `--dry-run` uses the
+same composition and validation.
 
 ## Set options and limits
 
