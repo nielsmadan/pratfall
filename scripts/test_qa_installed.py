@@ -308,7 +308,7 @@ def _input_entry_point(path: Path) -> None:
         f"    assert list(Path({str(path.parent)!r}).glob('input-signal-*.ready'))\n"
         '    print(json.dumps({"signal": signum}), flush=True)\n'
         "    raise SystemExit(128 + signum)\n"
-        'interrupted.__module__ = "pratfall.prompt_input"\n'
+        'interrupted.__module__ = "pratfall.interruption"\n'
         "signal.signal(signal.SIGTERM, interrupted)\n"
         "signal.pause()\n",
         encoding="utf-8",

@@ -1,3 +1,4 @@
+import io
 import json
 import sys
 from pathlib import Path
@@ -9,6 +10,9 @@ import pytest
 def isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config-home"))
     monkeypatch.chdir(tmp_path)
+    stdin = io.StringIO("")
+    monkeypatch.setattr(stdin, "isatty", lambda: True)
+    monkeypatch.setattr(sys, "stdin", stdin)
 
 
 @pytest.fixture

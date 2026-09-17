@@ -70,7 +70,14 @@ rejected. Native budgets are available through `--max-budget-usd`, `--max-turns`
 `--max-ai-credits` where supported.
 
 Pass one prompt as text, a file, or redirected stdin. Use `--prompt=TEXT` for text starting with
-a dash. Supported native arguments go after `--`, for example:
+a dash. When stdin is redirected alongside text or `--file PATH`, Prat combines stdin first,
+then two newlines, then the explicit prompt:
+
+```sh
+prat cx "how many Rs in strawberry" | prat cx "times 5"
+```
+
+Supported native arguments go after `--`, for example:
 
 ```sh
 prat cx "inspect this change" -- --sandbox read-only

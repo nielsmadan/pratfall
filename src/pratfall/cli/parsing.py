@@ -80,6 +80,7 @@ def build_parser() -> Parser:
   prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]
 
 SELECTOR is an agent name (codex, kiro), alias (cx), or profile. See prat agents.
+Redirected stdin precedes prompt text or file contents, separated by two newlines.
 
 run options:
   --prompt=TEXT           Pass prompt text, including text beginning with a dash.
@@ -104,6 +105,7 @@ examples:
   printf 'multiline prompt\\n' | prat cc -
   prat cc --file prompt.md
   prat cc --prompt=-leading-dash
+  prat cx "how many Rs in strawberry" | prat cx "times 5"
 """,
         allow_abbrev=False,
     )

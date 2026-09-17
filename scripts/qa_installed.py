@@ -33,7 +33,7 @@ arguments = sys.argv[4:]
 original_signal = signal.signal
 def observe_signal(chosen, handler):
     previous = original_signal(chosen, handler)
-    if chosen == signal.SIGTERM and getattr(handler, "__module__", None) == "pratfall.prompt_input":
+    if chosen == signal.SIGTERM and getattr(handler, "__module__", None) == "pratfall.interruption":
         ready.write_text("ready\\n", encoding="utf-8")
     return previous
 signal.signal = observe_signal
@@ -2543,13 +2543,13 @@ def _exercise_e02(context: _EnhancementContext) -> _ScenarioObservation:
     for case in (explicit_inline, explicit_file):
         _assert_result(case, returncode=0, status="success", native_exit_code=0, error_code=None)
     explicit_calls = _calls(log)[-2:]
-    assert explicit_calls[0]["prompt"] == "explicit inline"
-    assert explicit_calls[1]["prompt"] == prompt_bytes.decode()
+    assert explicit_calls[0]["prompt"] == "incidental pipe\n\nexplicit inline"
+    assert explicit_calls[1]["prompt"] == "incidental pipe\n\n" + prompt_bytes.decode()
     return "E02", {
         "status": "Pass",
         "forms": ["automatic_pipe", "positional_dash", "file_dash"],
         "prompt_sha256": hashlib.sha256(piped_prompt).hexdigest(),
-        "explicit_sources_ignored_incidental_pipe": True,
+        "explicit_sources_combined_with_pipe": True,
     }
 
 
@@ -2626,6 +2626,7 @@ def _exercise_e04(context: _EnhancementContext) -> _ScenarioObservation:
         ("implicit_sigint", [], signal.SIGINT),
         ("positional_sigterm", ["-"], signal.SIGTERM),
         ("file_dash_sigint", ["--file", "-"], signal.SIGINT),
+        ("combined_sigterm", ["times 5"], signal.SIGTERM),
     ):
         completed, pending, before = _stdin_pending_run(prat, root, config, source, chosen)
         result = _assert_result(

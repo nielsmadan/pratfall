@@ -28,9 +28,24 @@ Choose one explicit prompt source:
 
 `-f PATH` and `--file=PATH` also read files; `--file -` reads stdin. `--prompt=-` passes a literal
 dash. Without an explicit source, Prat reads redirected stdin; at a terminal, it reports a missing
-prompt. An explicit source leaves incidental redirected stdin unread.
+prompt.
+
+Redirected stdin is also read when you supply inline text or `--file PATH`. Nonempty stdin is
+placed first, followed by two newline bytes and the explicit prompt. Both inputs retain their
+original whitespace. Empty stdin, a terminal, or closed stdin leaves the explicit prompt unchanged.
+An open stdin stream that cannot be read is an input error.
+
+```sh
+prat cx "how many Rs in strawberry" | prat cx "times 5"
+git diff | prat cc "Review these changes"
+```
+
+Use `< /dev/null` when an explicit prompt should run without inherited stdin. The `-` and
+`--file -` forms read stdin once, without adding a separator or another copy of the input.
 
 Prompts must be valid UTF-8, contain non-whitespace text, have no NUL bytes, and fit within 1 MiB.
+An explicit prompt must be valid on its own; the combined prompt, including the separator, must
+also fit within that limit.
 Files must be regular files or symlinks to regular files. Invalid input fails with exit 2 before
 an agent starts. Relative file paths resolve from the invocation directory, independently of
 `--cwd`.

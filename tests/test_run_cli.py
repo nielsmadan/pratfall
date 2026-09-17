@@ -34,6 +34,7 @@ class BrokenOutput:
 
 class UnreadInput:
     buffer: "UnreadInput"
+    closed = False
 
     def __init__(self, *, terminal: bool = False) -> None:
         self.buffer = self
@@ -610,6 +611,40 @@ def test_redirected_stdin_is_the_implicit_prompt_source(
     assert json.loads(result["output"])["prompt"] == "implicit café\n"
 
 
+@pytest.mark.parametrize("agent", ["codex", "gemini"])
+def test_piped_stdin_and_inline_prompt_reach_native_agent(tmp_path: Path, agent: str) -> None:
+    config = write_agent(
+        tmp_path, agent, CODEX_SUCCESS if agent == "codex" else NEW_ADAPTER_FIXTURES[agent]
+    )
+    completed = subprocess.run(
+        [sys.executable, "-m", "pratfall", agent, "times 5", "--config", str(config), "--json"],
+        input=b"3\n",
+        capture_output=True,
+        cwd=tmp_path,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+            "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+        },
+        timeout=10,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["status"] == "success"
+    assert json.loads(result["output"])["prompt"] == "3\n\n\ntimes 5"
+
+
+def test_combined_prompt_dry_run_counts_all_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", "raise SystemExit('must not launch')")
+    monkeypatch.setattr(sys, "stdin", io.BytesIO("雪".encode()))
+    assert main(["cx", "times 5", "--config", str(config), "--dry-run", "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["stdin_bytes"] == len("雪\n\ntimes 5".encode())
+
+
 @pytest.mark.parametrize("form", ["short", "long", "equals"])
 def test_file_prompt_forms_preserve_unicode_and_newlines(
     tmp_path: Path,
@@ -645,7 +680,7 @@ def test_file_dash_reads_stdin(
     assert json.loads(result["output"])["prompt"] == "file dash\n"
 
 
-def test_explicit_file_does_not_read_incidental_stdin(
+def test_explicit_file_combines_redirected_stdin(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -653,10 +688,10 @@ def test_explicit_file_does_not_read_incidental_stdin(
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
     prompt_file = tmp_path / "prompt.md"
     prompt_file.write_text("chosen", encoding="utf-8")
-    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b"context\n"))
     assert main(["cx", "--file", str(prompt_file), "--config", str(config), "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert json.loads(result["output"])["prompt"] == "chosen"
+    assert json.loads(result["output"])["prompt"] == "context\n\n\nchosen"
 
 
 def test_relative_prompt_file_uses_invocation_directory_not_run_cwd(
@@ -961,8 +996,9 @@ def test_stdin_closed_before_startup_is_normalized_and_explicit_sources_work(
 
 
 @pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])
-def test_signal_while_reading_implicit_stdin_is_normalized_without_spawning(
-    tmp_path: Path, chosen: signal.Signals
+@pytest.mark.parametrize("source", [[], ["times 5"]])
+def test_signal_while_reading_stdin_is_normalized_without_spawning(
+    tmp_path: Path, chosen: signal.Signals, source: list[str]
 ) -> None:
     marker = tmp_path / "launched"
     ready = tmp_path / "input-handlers-ready"
@@ -1000,6 +1036,7 @@ raise SystemExit(main(sys.argv[2:]))
             bootstrap,
             str(ready),
             "cx",
+            *source,
             "--config",
             str(config),
             "--json",
@@ -1040,10 +1077,10 @@ def test_prompt_option_can_pass_a_literal_dash(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
-    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"not consumed")))
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"context")))
     assert main(["cx", "--prompt=-", "--config", str(config), "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert json.loads(result["output"])["prompt"] == "-"
+    assert json.loads(result["output"])["prompt"] == "context\n\n-"
 
 
 def test_dry_run_is_a_single_versioned_preview_and_does_not_launch(

@@ -46,9 +46,14 @@ def acquire_prompt(source: PromptSource | None, invocation_cwd: Path) -> bytes:
             label = "Prompt file"
         else:
             value = _read_stdin(state)
-            label = "Standard input prompt"
+            return _validate(value, "Standard input prompt")
         _raise_if_interrupted(state)
-        return _validate(value, label)
+        value = _validate(value, label)
+        if sys.stdin is not None and not sys.stdin.closed and not _stdin_is_terminal():
+            stdin = _read_stdin(state)
+            if stdin:
+                value = _validate(stdin + b"\n\n" + value, "Combined prompt")
+        return value
 
 
 def _stdin_is_terminal() -> bool:
