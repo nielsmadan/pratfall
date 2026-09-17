@@ -90,9 +90,9 @@ def test_signal_during_validation_interrupts_and_restores_handlers(
     }
     original_validate = prompt_input._validate
 
-    def interrupting_validate(value: bytes, label: str) -> bytes:
+    def interrupting_validate(value: bytes, label: str, *, allow_empty: bool = False) -> bytes:
         os.kill(os.getpid(), chosen)
-        return original_validate(value, label)
+        return original_validate(value, label, allow_empty=allow_empty)
 
     monkeypatch.setattr(prompt_input, "_validate", interrupting_validate)
     with pytest.raises(InputInterrupted, match=f"Interrupted by signal {chosen.value}") as raised:
@@ -251,3 +251,20 @@ def test_context_signal_interrupts_read_and_restores_handlers(
         prompt_input.prepend_contexts(("a",), b"task", tmp_path)
     assert caught.value.signum == chosen
     assert {candidate: signal.getsignal(candidate) for candidate in previous} == previous
+
+
+@pytest.mark.parametrize("value", [b"", b" \n\t"])
+@pytest.mark.parametrize("kind", ["stdin", "inline", "file"])
+def test_edit_draft_allows_blank_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: bytes, kind: str
+) -> None:
+    source: PromptSource
+    if kind == "stdin":
+        source = PromptSource("stdin")
+        monkeypatch.setattr(sys, "stdin", io.BytesIO(value))
+    elif kind == "file":
+        (tmp_path / "draft.md").write_bytes(value)
+        source = PromptSource("file", "draft.md")
+    else:
+        source = PromptSource("inline", value.decode())
+    assert acquire_prompt(source, tmp_path, allow_absent=True, allow_blank=True) == value

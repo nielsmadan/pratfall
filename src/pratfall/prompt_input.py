@@ -32,7 +32,11 @@ class InputInterrupted(Exception):
 
 
 def acquire_prompt(
-    source: PromptSource | None, invocation_cwd: Path, *, allow_absent: bool = False
+    source: PromptSource | None,
+    invocation_cwd: Path,
+    *,
+    allow_absent: bool = False,
+    allow_blank: bool = False,
 ) -> bytes:
     implicit = source is None
     if source is None:
@@ -58,15 +62,17 @@ def acquire_prompt(
             value = _read_stdin(state)
             if implicit and allow_absent and not value:
                 return b""
-            return _validate(value, "Standard input prompt")
+            return _validate(value, "Standard input prompt", allow_empty=allow_blank)
         _raise_if_interrupted(state)
-        value = _validate(value, label)
+        value = _validate(value, label, allow_empty=allow_blank)
         if sys.stdin is not None and not sys.stdin.closed and not _stdin_is_terminal():
             remaining = max(0, PROMPT_LIMIT - len(value) - 2)
             stdin = _read_stdin(state, limit=remaining)
             if stdin:
                 _check_size(len(value) + 2 + len(stdin))
-                value = _validate(stdin + b"\n\n" + value, "Combined prompt")
+                value = _validate(
+                    stdin + b"\n\n" + value, "Combined prompt", allow_empty=allow_blank
+                )
         return value
 
 
@@ -245,3 +251,10 @@ def _input_signal_handlers(state: InterruptionState) -> Iterator[None]:
             yield
     finally:
         _raise_if_interrupted(state)
+
+
+def read_edited_prompt(path: Path, state: InterruptionState) -> bytes:
+    _raise_if_interrupted(state)
+    value = _read_file(str(path), path.parent, state, label="edited prompt")
+    _raise_if_interrupted(state)
+    return _validate(value, "Edited prompt")

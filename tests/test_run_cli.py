@@ -2780,3 +2780,60 @@ def test_extract_streaming_partial_answer_keeps_protocol_failure(
     assert result["exit_code"] == 1
     assert result["native_exit_code"] == 0
     assert result["error"]["code"] == "protocol_error"
+
+
+@pytest.mark.parametrize("flag", ["-e", "--edit"])
+@pytest.mark.parametrize("before_selector", [True, False])
+def test_edit_rejects_preview_before_reading_input(
+    flag: str,
+    before_selector: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    arguments = [flag, "cx"] if before_selector else ["cx", flag]
+    assert main([*arguments, "--dry-run", "--json", "--file", "missing"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["message"] == "--edit cannot be combined with --dry-run."
+
+
+@pytest.mark.parametrize("flag", ["-e", "--edit"])
+def test_edit_after_native_boundary_stays_native(
+    flag: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", "--json", "--", flag]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert flag in result["error"]["message"]
+
+
+@pytest.mark.parametrize("value", [b"\xff", b"\0", b"x" * (PROMPT_LIMIT + 1)])
+def test_edit_validates_initial_draft_before_opening_editor(
+    value: bytes, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(value))
+    monkeypatch.setenv("EDITOR", "/nonexistent/editor")
+    assert main(["cx", "--edit", "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["message"] in {
+        "Standard input prompt is not valid UTF-8.",
+        "Prompt must not contain NUL bytes.",
+        f"Prompt exceeds the {PROMPT_LIMIT} byte limit.",
+    }
+
+
+def test_edit_requires_controlling_terminal(tmp_path: Path) -> None:
+    completed = subprocess.run(
+        [sys.executable, "-m", "pratfall", "cx", "--edit", "--json"],
+        input=b"draft",
+        capture_output=True,
+        cwd=tmp_path,
+        env=_progress_env(tmp_path) | {"TMPDIR": str(tmp_path)},
+        start_new_session=True,
+        timeout=10,
+        check=False,
+    )
+    assert completed.returncode == 2
+    result = json.loads(completed.stdout)
+    assert result["error"]["code"] == "invalid_arguments"
+    assert "/dev/tty" in result["error"]["message"]

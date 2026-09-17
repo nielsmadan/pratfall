@@ -9,6 +9,7 @@ prat cx "review this change"
 - [Supply a prompt](#supply-a-prompt)
 - [Apply a template](#apply-a-template)
 - [Include context files](#include-context-files)
+- [Edit the prompt](#edit-the-prompt)
 - [Extract code](#extract-code)
 - [Set options and limits](#set-options-and-limits)
 - [Pass native arguments](#pass-native-arguments)
@@ -47,7 +48,8 @@ Use `< /dev/null` when an explicit prompt should run without inherited stdin. Th
 `--file -` forms read stdin once, without adding a separator or another copy of the input.
 
 Prompts must be valid UTF-8, contain non-whitespace text, have no NUL bytes, and fit within 1 MiB.
-An explicit prompt must be valid on its own; the combined prompt, including the separator, must
+With `--edit`, the initial draft may be empty or whitespace-only; all other input checks still apply.
+Otherwise, an explicit prompt must be valid on its own; the combined prompt, including the separator, must
 also fit within that limit.
 Files must be regular files or symlinks to regular files. Invalid input fails with exit 2 before
 an agent starts. Relative file paths resolve from the invocation directory, independently of
@@ -117,6 +119,36 @@ The shared 1 MiB limit includes the rendered task, all context content, labels a
 Prat reserves label space before reading context files, reads only up to the remaining budget
 plus one overflow byte, and stops on overflow before opening later files. `--dry-run` uses the
 same composition and validation.
+
+## Edit the prompt
+
+```sh
+prat cx --edit
+git diff | prat cc -t review --context notes.md --edit
+VISUAL='code --wait' prat cx -e "Review this draft"
+```
+
+`-e` or `--edit` opens the complete draft after stdin acquisition, template expansion and context
+composition. You can start with no input or a blank draft, including an explicitly empty file or
+an input-only template. The initial draft still must be UTF-8, NUL-free and within 1 MiB. After the
+editor exits successfully, the saved file must also contain non-whitespace text before an agent
+can run. Saving by replacing the file is supported.
+
+Prat selects the first nonblank `VISUAL`, then `EDITOR`, then `vi`. The command is split using
+shell-style quoting and run as arguments without a shell; variables, pipelines and command
+substitutions are not expanded. Relative editor paths and the editor's working directory use the
+invocation directory, independently of `--cwd`. Configure a GUI editor's wait flag when needed.
+The draft lives in a private temporary Markdown file, removed after success or failure.
+
+The editor reads and writes `/dev/tty`, so redirected stdin remains prompt input and stdout
+remains the final answer or JSON result. A controlling terminal is required. Prat gives the editor
+foreground terminal ownership and restores ownership and terminal settings afterward. Editor
+failures return a normalized error before agent execution; SIGINT and SIGTERM return `128 + signal`
+and terminate the editor's process group, escalating to SIGKILL after a bounded grace period.
+Repeated signals accelerate cleanup. Editor descendants in that group are cleaned up on completion.
+
+Editing time is outside `--timeout`. `--edit` and `--dry-run` are incompatible and fail before any
+prompt or context input is read. The flag can appear before or after the selector, before `--`.
 
 ## Extract code
 
@@ -213,7 +245,7 @@ so they do not delay the agent deadline. Trace can show only what the native CLI
 Prat validates configuration, template names, native options, and `--cwd` before reading input.
 It waits for EOF before starting the execution timeout. Closed or unavailable stdin is an input
 error when stdin is explicitly requested or no other prompt source or template is supplied.
-With a template and no explicit source, it counts as absent input. SIGINT or SIGTERM during input
+With a template or `--edit` and no explicit source, it counts as absent input. SIGINT or SIGTERM during input
 acquisition exits with `128 + signal` without launching an agent.
 
 A failed or timed-out run can leave edits in the working directory. Prat does not retry, roll back

@@ -8,6 +8,8 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("VISUAL", raising=False)
+    monkeypatch.setenv("EDITOR", "/nonexistent/prat-test-editor")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config-home"))
     monkeypatch.chdir(tmp_path)
     stdin = io.StringIO("")

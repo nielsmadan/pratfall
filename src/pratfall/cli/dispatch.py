@@ -36,6 +36,7 @@ from pratfall.models import (
     ResultError,
 )
 from pratfall.output import extract_code, normalize, result_dict, validation_error
+from pratfall.prompt_editor import edit_prompt
 from pratfall.prompt_input import InputInterrupted, acquire_prompt, prepend_contexts
 from pratfall.prompt_templates import render_template
 from pratfall.runner import ProcessResult, cleanup_process_group, raw_stdout, run
@@ -374,11 +375,16 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
                     code="invalid_arguments",
                 )
             prompt = acquire_prompt(
-                parsed.prompt_source, invocation_cwd, allow_absent=template is not None
+                parsed.prompt_source,
+                invocation_cwd,
+                allow_absent=template is not None or parsed.edit,
+                allow_blank=parsed.edit,
             )
             if template is not None:
-                prompt = render_template(template.prompt, prompt)
+                prompt = render_template(template.prompt, prompt, allow_blank=parsed.edit)
             prompt = prepend_contexts(parsed.contexts, prompt, invocation_cwd)
+            if parsed.edit:
+                prompt = edit_prompt(prompt, invocation_cwd)
             invocation = _build_invocation(resolved, prompt)
             if parsed.dry_run:
                 _preview(resolved, invocation, cwd, state.stdout, json_mode=json_mode)

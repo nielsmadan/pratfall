@@ -61,6 +61,7 @@ printf 'summarize this checkout\n' | prat gm
 | `--cwd PATH` | Choose the agent's working directory. |
 | `-f PATH` / `--file PATH` | Read a prompt from a UTF-8 file; `-` reads stdin. |
 | `-t NAME` / `--template NAME` | Apply a named prompt template. |
+| `-e` / `--edit` | Edit the complete prompt in `VISUAL`, `EDITOR`, or `vi`. |
 | `--context PATH` | Prepend a context file; repeat to include several. |
 | `-x` / `--extract` | Return the body of the first fenced code block. |
 | `--json` | Return one JSON result with output, status, and available usage. |
@@ -152,6 +153,10 @@ input placeholder appends supplied input after two newlines and can run on its o
 Add local files with `prat cc "review this" --context notes.md --context design.md`.
 [Context files](docs/user/running.md#include-context-files) precede the templated task in the order
 supplied, with quoted path labels. The complete prompt must fit within 1 MiB.
+
+Use `prat cx --edit` to write a prompt in your editor, or add `--edit` to revise the complete
+stdin, template and context draft before execution. Editing needs a controlling terminal and
+cannot be combined with `--dry-run`. See [editor prompts](docs/user/running.md#edit-the-prompt).
 
 ## More
 

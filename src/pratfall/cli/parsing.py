@@ -42,6 +42,7 @@ class RunArguments:
     template: str | None = None
     contexts: tuple[str, ...] = ()
     extract: bool = False
+    edit: bool = False
 
 
 @dataclass(frozen=True)
@@ -93,7 +94,8 @@ run options:
   -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.
   -t, --template NAME     Apply a named prompt template; additional input is optional.
   --context PATH         Prepend a UTF-8 context file; repeat to include several.
-  -x, --extract          Return the first fenced code block from the answer.
+  -x, --extract           Return the first fenced code block from the answer.
+  -e, --edit              Edit the complete prompt in VISUAL, EDITOR, or vi.
   --model MODEL           Override the profile model.
   --effort EFFORT         Override the native effort setting.
   --fast / --no-fast      Enable or disable supported native fast mode for this run.
@@ -166,15 +168,26 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     progress = False
     trace = False
     extract = False
+    edit = False
     fast: bool | None = None
     for token in scan.tokens:
         argument = token.argument
-        if argument in {"--json", "--dry-run", "--progress", "--trace", "-x", "--extract"}:
+        if argument in {
+            "--json",
+            "--dry-run",
+            "--progress",
+            "--trace",
+            "-x",
+            "--extract",
+            "-e",
+            "--edit",
+        }:
             json_mode = json_mode or argument == "--json"
             dry_run = dry_run or argument == "--dry-run"
             progress = progress or argument == "--progress"
             trace = trace or argument == "--trace"
             extract = extract or argument in {"-x", "--extract"}
+            edit = edit or argument in {"-e", "--edit"}
             continue
         if argument in {"--fast", "--no-fast"}:
             fast_value = argument == "--fast"
@@ -214,6 +227,8 @@ def _parse_run(arguments: list[str]) -> RunArguments:
             prompt_source = _add_prompt_source(prompt_source, source)
     if selector is None:
         raise PratError("A selector is required.", code="invalid_arguments")
+    if edit and dry_run:
+        raise PratError("--edit cannot be combined with --dry-run.", code="invalid_arguments")
     options = Options(
         model=_text_option(values.get("model"), "--model"),
         effort=_text_option(values.get("effort"), "--effort"),
@@ -237,6 +252,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         _text_option(values.get("template"), "--template"),
         tuple(contexts),
         extract,
+        edit,
     )
 
 
@@ -348,6 +364,8 @@ def _management_mode(arguments: list[str]) -> bool:
             "--trace",
             "-x",
             "--extract",
+            "-e",
+            "--edit",
             "--fast",
             "--no-fast",
         } or argument.startswith("--prompt="):

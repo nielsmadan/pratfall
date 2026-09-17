@@ -65,3 +65,7 @@ def test_expansion_limit_is_checked_before_substitution(
     else:
         expected = base + base if prompt == "$input$input" else b"Task\n\n" + base
         assert render_template(prompt, base) == expected
+
+
+def test_editor_can_receive_blank_rendered_template() -> None:
+    assert render_template("$input", b" \n", allow_blank=True) == b" \n"

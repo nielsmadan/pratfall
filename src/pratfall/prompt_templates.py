@@ -12,7 +12,7 @@ def validate_template(prompt: str, label: str) -> None:
         raise PratError(f"{label}: template exceeds the {PROMPT_LIMIT} byte limit.")
 
 
-def render_template(prompt: str, base: bytes) -> bytes:
+def render_template(prompt: str, base: bytes, *, allow_blank: bool = False) -> bytes:
     template = Template(prompt)
     size = len(prompt.encode("utf-8"))
     interpolated = False
@@ -29,6 +29,6 @@ def render_template(prompt: str, base: bytes) -> bytes:
     rendered = template.substitute(input=base.decode("utf-8")).encode("utf-8")
     if not interpolated and base:
         rendered += b"\n\n" + base
-    if not rendered.decode("utf-8").strip():
+    if not allow_blank and not rendered.decode("utf-8").strip():
         raise PratError("Prompt must not be empty or whitespace-only.", code="invalid_arguments")
     return rendered

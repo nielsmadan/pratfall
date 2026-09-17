@@ -37,6 +37,13 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   space is reserved before any context files are read; each read uses the remaining aggregate
   1 MiB budget and final assembly stays within that bound. Explicit prompt plus stdin acquisition
   also limits the second read to its remaining budget.
+- [prompt_editor.py](../src/pratfall/prompt_editor.py) edits the fully composed draft only when
+  requested. It uses a private temporary directory and Markdown file, reopens the saved path for
+  bounded validation, and runs the configured editor with argv in the invocation directory.
+  The editor gets `/dev/tty` for all streams and a process group in the current session. Foreground
+  ownership transfers under scoped SIGTTOU suppression; startup SIGTTIN stops resume after handoff.
+  Foreground ownership, terminal attributes and handlers restore on every exit. Editor interruption
+  and descendant cleanup use bounded TERM/KILL escalation before the native agent deadline begins.
 - [catalog.py](../src/pratfall/catalog.py) holds immutable capabilities, not provider model lists.
   [`Adapter`](../src/pratfall/adapters/registry.py) is the adapter assembly point: command
   builder, one validator over the resolved profile, and exactly one of a whole-document decoder or
