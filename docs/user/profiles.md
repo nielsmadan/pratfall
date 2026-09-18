@@ -46,7 +46,7 @@ prat simple --effort high "investigate this failure"
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
 `model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `instructions`,
-`instructions_file`, `tools`, `disabled_tools`, and the agent's supported budget fields.
+`instructions_file`, `tools`, `disabled_tools`, `native_agent`, and the agent's supported budget fields.
 Use `[defaults]` for shared settings.
 
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
@@ -104,6 +104,7 @@ Settings resolve from highest to lowest priority:
 | `[profiles.NAME]` | A local profile replaces the entire global profile with that name. |
 | `[templates.NAME]` | A local template replaces the entire global template with that name. |
 | `[agents.NAME].command` | A local command array replaces the global array for that agent. |
+| `native_agent` | The higher-priority string replaces the lower-priority selection. |
 | `instructions`, `instructions_file` | One override group: either higher-priority form clears the lower-priority form. |
 | `native_args`, `add_dirs`, `tools`, `disabled_tools` | The higher-priority array replaces the lower-priority array, even when empty. |
 
@@ -284,3 +285,23 @@ validated when the configuration loads. Keep allowlists in profiles when mixing 
 allowlist does not neutralize an unsupported inherited `tools` field. Native flag collisions and
 unrepresentable list delimiters fail before prompt input; ordinary config inspection reads no
 auxiliary resources and launches no native command.
+
+## Configure native agent selection
+
+```toml
+[profiles.review]
+agent = "claude"
+native_agent = "reviewer"
+```
+
+`agent` chooses the Prat backend, `review` names the Prat profile, and `native_agent` selects an
+existing native persona. Claude, Copilot and Vibe support this string. CLI `--native-agent`
+overrides the profile, local defaults and global defaults, in that order. Omission inherits;
+empty or whitespace-only names do not clear a selection. Names must be NUL-free valid UTF-8
+and are forwarded literally. `prat profiles` includes the resolved selection.
+
+Backend-specific defaults apply to every profile: putting `native_agent` in `[defaults]` makes
+an unsupported profile invalid even if it is not selected. Config validation and listing do not
+discover native names or read/write agent definitions. The selected persona can change native
+permissions, including automatic approval with Vibe's `auto-approve` agent. See
+[native agent selection](running.md#select-a-native-agent) for native collisions and limitations.

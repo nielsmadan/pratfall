@@ -13,7 +13,7 @@ use native settings or a trusted command prefix selecting an existing `VIBE_ACTI
 limits may interrupt after usage exceeds them, so Prat adds no stronger spending guarantee.
 Accepted native flags `--max-tokens`, `--enabled-tools`, and `--disabled-tools` each take one value.
 Max tokens counts cumulative prompt plus completion tokens; it is only native passthrough.
-Prompt/output, budgets, model/effort, agent/config/cwd/worktree/session/resume/continue, harness,
+Prompt/output, budgets, model/effort, native agent/config/cwd/worktree/session/resume/continue, harness,
 setup/update and remote controls are reserved or rejected. `--teleport` is explicitly reserved:
 it may synchronize/push Git state and changes JSON to a remote-history object. No remote aliases
 are declared by the pinned parser. Version probing uses `--version`.
@@ -53,3 +53,17 @@ Native per-source disabling and permission decisions remain authoritative; Prat 
 Equivalent native flags conflict only with active public settings; existing native-only filters
 remain supported. Empty `disabled_tools` clears Prat inheritance without adding a native flag.
 Verification used pinned source inspection and fake argv tests, not an authenticated native run.
+
+## Native agent selection (verified 2026-09-18)
+
+The [v2.25.2 parser](https://github.com/mistralai/mistral-vibe/blob/v2.25.2/vibe/cli/entrypoint.py)
+defines `--agent NAME` with built-ins `ask`, `plan`, `accept-edits`, `smart-approve`,
+`auto-approve`, and custom definitions under `~/.vibe/agents/NAME.toml`. Its programmatic help
+states: “Tool approval follows the selected --agent (or 'default_agent' config)”.
+Prat maps `native_agent` to `--agent=NAME` and leaves name resolution to Vibe.
+
+Selecting `auto-approve` can automatically approve tools. Public selection therefore changes
+native permission behavior as defined by the chosen agent; Prat injects no `--auto-approve`,
+`--yolo`, or other approval flags. The previously reserved native `--agent` stays reserved;
+public selection is the supported interface. Prat discovers no names and writes no definitions.
+Verification used pinned parser inspection and fake argv tests, not authenticated execution.

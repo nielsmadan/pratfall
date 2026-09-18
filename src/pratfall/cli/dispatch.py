@@ -57,6 +57,7 @@ def _agents(json_mode: bool) -> None:
             "fast": caps.fast,
             "add_dirs": caps.add_dirs,
             "instructions": caps.instructions,
+            "native_agent": caps.native_agent,
             "tools": caps.tools,
             "disabled_tools": caps.disabled_tools,
             "tools_empty": caps.tools_empty,
@@ -82,6 +83,7 @@ def _agents(json_mode: bool) -> None:
                 "instructions",
                 "tools",
                 "disabled_tools",
+                "native_agent",
             )
             if getattr(caps, field)
         ]
@@ -114,6 +116,7 @@ def _profiles(config: Config, json_mode: bool) -> None:
                     "instructions_file",
                     "tools",
                     "disabled_tools",
+                    "native_agent",
                 }
                 else value
             )

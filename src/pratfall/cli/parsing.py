@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from pratfall.catalog import MANAGEMENT_COMMANDS
+from pratfall.config import validate_native_agent
 from pratfall.errors import PratError
 from pratfall.instructions import validate_instructions
 from pratfall.models import MAX_TURNS, OptionOrigin, Options
@@ -20,6 +21,7 @@ _RUN_VALUE_FLAGS = {
     "--max-budget-usd": "max_budget_usd",
     "--max-turns": "max_turns",
     "--model": "model",
+    "--native-agent": "native_agent",
     "--timeout": "timeout",
     "--file": "file",
     "-f": "file",
@@ -103,6 +105,7 @@ run options:
   -x, --extract           Return the first fenced code block from the answer.
   -e, --edit              Edit the complete prompt in VISUAL, EDITOR, or vi.
   --model MODEL           Override the profile model.
+  --native-agent NAME     Select a native agent/persona for Claude, Copilot, or Vibe.
   --effort EFFORT         Override the native effort setting.
   --fast / --no-fast      Enable or disable supported native fast mode for this run.
   --timeout SECONDS       Set the wall-clock deadline.
@@ -289,6 +292,13 @@ def _run_options(
         add_dirs=tuple(repeated["add_dirs"]) or None,
         tools=tuple(repeated["tools"]) or None,
         disabled_tools=tuple(repeated["disabled_tools"]) or None,
+        native_agent=(
+            validate_native_agent(
+                values["native_agent"], OptionOrigin("--native-agent", "invalid_arguments")
+            )
+            if "native_agent" in values
+            else None
+        ),
         native_args=native_arguments,
     )
 

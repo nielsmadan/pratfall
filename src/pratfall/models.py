@@ -18,6 +18,7 @@ class Capabilities:
     fast: bool = False
     add_dirs: bool = False
     instructions: bool = False
+    native_agent: bool = False
     tools: bool = False
     disabled_tools: bool = False
     tools_empty: bool = False
@@ -52,6 +53,7 @@ class Options:
     instructions_file: str | None = None
     tools: tuple[str, ...] | None = None
     disabled_tools: tuple[str, ...] | None = None
+    native_agent: str | None = None
     native_args: tuple[str, ...] | None = None
 
 

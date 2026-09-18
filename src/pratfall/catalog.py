@@ -18,6 +18,7 @@ AGENTS = (
             instructions=True,
             tools=True,
             disabled_tools=True,
+            native_agent=True,
             tools_empty=True,
             tools_scope="built-ins; MCP unaffected; EndConversation may remain",
             disabled_tools_scope="native deny rules; EndConversation exception",
@@ -50,6 +51,7 @@ AGENTS = (
             add_dirs=True,
             tools=True,
             disabled_tools=True,
+            native_agent=True,
             tools_empty=True,
             tools_scope="model-visible tools",
             disabled_tools_scope="model-visible tools",
@@ -141,6 +143,7 @@ AGENTS = (
         ("vibe",),
         Capabilities(
             model=False,
+            native_agent=True,
             budgets=frozenset({"max_turns", "max_budget_usd"}),
             tools=True,
             disabled_tools=True,

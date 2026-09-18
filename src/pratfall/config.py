@@ -76,6 +76,16 @@ def _string(value: object, label: str) -> str:
     return value
 
 
+def validate_native_agent(value: object, origin: OptionOrigin) -> str:
+    if not isinstance(value, str) or not value.strip() or "\0" in value:
+        raise _rejected(origin, "expected a nonempty native agent name without NUL bytes.")
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise _rejected(origin, "native agent name must be valid UTF-8.") from error
+    return value
+
+
 def _number(value: object, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise PratError(f"{label}: expected a finite positive number.")
@@ -166,6 +176,11 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
         )
         if "disabled_tools" in table
         else None,
+        native_agent=(
+            validate_native_agent(table["native_agent"], OptionOrigin(f"{label}.native_agent"))
+            if "native_agent" in table
+            else None
+        ),
         native_args=(
             _arguments(table["native_args"], f"{label}.native_args")
             if "native_args" in table
@@ -204,8 +219,13 @@ def validate_capabilities(
     if origins is not None:
         fields.update(origins)
     caps = agent.capabilities
-    if options.model is not None and not caps.model:
-        raise _rejected(fields["model"], f"{agent.label} does not support a model override.")
+    for name, setting in (
+        ("model", "a model override"),
+        ("native_agent", "native agent selection"),
+        ("fast", "a fast-mode override"),
+    ):
+        if getattr(options, name) is not None and not getattr(caps, name):
+            raise _rejected(fields[name], f"{agent.label} does not support {setting}.")
     if options.effort is not None:
         if not caps.effort:
             raise _rejected(fields["effort"], f"{agent.label} does not support an effort override.")
@@ -231,8 +251,6 @@ def validate_capabilities(
         raise _rejected(
             fields["disabled_tools"], f"{agent.label} does not support disabling tools."
         )
-    if options.fast is not None and not caps.fast:
-        raise _rejected(fields["fast"], f"{agent.label} does not support a fast-mode override.")
 
 
 def option_origins(

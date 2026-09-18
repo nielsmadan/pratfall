@@ -74,3 +74,13 @@ in task-tracking tools. Explicit native permission denials continue to apply.
 Equivalent native flags conflict only when the corresponding public list is active. Empty
 `disabled_tools` clears Prat inheritance without adding a native deny flag. Evidence is source
 inspection and fake argv tests, not an authenticated vendor run.
+
+## Native agent selection (verified 2026-09-18)
+
+The [CLI reference](https://code.claude.com/docs/en/cli-reference) describes `--agent` as:
+“Specify an agent for the current session (overrides the `agent` setting)”. Prat forwards
+`native_agent` with `--agent=NAME`, preserving the complete name as one argument. Native-only
+`--agent` remains accepted; it conflicts with an active public selection. Native `--agents`
+definitions remain a distinct accepted passthrough option. Prat discovers no names and writes
+no definitions. Native persona configuration, including permission behavior, remains authoritative.
+Verification used documentation and fake executable argv tests, not authenticated execution.

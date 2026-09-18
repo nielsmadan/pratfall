@@ -55,6 +55,7 @@ printf 'summarize this checkout\n' | prat gm
 | Parameter | Purpose |
 | --- | --- |
 | `--model MODEL` | Select a native model. |
+| `--native-agent NAME` | Select a native agent/persona for Claude, Copilot, or Vibe. |
 | `--effort EFFORT` | Set reasoning effort. |
 | `--fast` / `--no-fast` | Override fast mode for Claude or Codex. |
 | `--timeout SECONDS` | Set the execution deadline; default: 600 seconds. |
@@ -72,7 +73,7 @@ printf 'summarize this checkout\n' | prat gm
 | `--trace` | Copy captured native stdout to stderr. |
 | `--dry-run` | Preview the resolved invocation without launching the agent. |
 
-Model, effort, fast mode, extra directories, instructions, tool availability, and budget support depend on the agent; unsupported settings are
+Model, effort, fast mode, extra directories, instructions, tool availability, native agent selection, and budget support depend on the agent; unsupported settings are
 rejected. Native budgets are available through `--max-budget-usd`, `--max-turns`, and
 `--max-ai-credits` where supported.
 
@@ -105,7 +106,12 @@ Use `prat cc --instructions "Cite file paths" "review this change"` or
 Claude, Codex, Qwen and Droid support instructions. Codex replaces any native configured
 `developer_instructions` value for this invocation. See [instruction rules and limits](docs/user/running.md#append-instructions).
 
-Prat preserves native authentication and permission defaults. See
+Use `prat cc --native-agent reviewer "review this change"` to select an existing native agent.
+This differs from a Prat profile or backend selector. The selected persona may change native
+permissions; Vibe's `auto-approve` agent permits automatic tool approval. Prat adds no approval
+flags. See [native agent selection](docs/user/running.md#select-a-native-agent).
+
+Prat preserves native authentication and the selected native agent's permission behavior. See
 [running prompts](docs/user/running.md) for input rules and run behavior, and
 [JSON output](docs/user/json.md) for result fields and errors.
 

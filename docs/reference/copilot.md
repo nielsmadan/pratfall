@@ -71,3 +71,12 @@ flags, preventing ambiguous tool-set expansion. Explicit native permission denia
 
 No approval flags are injected. Verification used primary documentation/package evidence and
 fake argv tests, not authenticated vendor execution.
+
+## Native agent selection (verified 2026-09-18)
+
+The [programmatic reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-programmatic-reference#using-custom-agents)
+states: “You can delegate work to a specialized agent by using the `--agent` option.” Its example
+selects an existing `code-review` custom agent. Prat maps `native_agent` to `--agent=NAME` and
+adds no permission approval. Names are literal and native configuration remains authoritative.
+Native-only `--agent` stays accepted; an active public selection conflicts with it.
+Verification used primary documentation and fake executable argv tests, not authenticated execution.

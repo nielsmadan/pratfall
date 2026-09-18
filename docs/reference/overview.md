@@ -38,6 +38,14 @@ fake-executable decoder tests, not new live native runs. Prat exposes only obser
 identifiers and native USD cost fields described below. Missing data remains null; requested models,
 published prices, and non-USD credits are not used as substitutes.
 
+Native agent selection was verified on 2026-09-18 for [Claude](claude.md#native-agent-selection-verified-2026-09-18),
+[Copilot](copilot.md#native-agent-selection-verified-2026-09-18), and
+[Vibe](vibe.md#native-agent-selection-verified-2026-09-18), using `--agent=NAME`. The selected
+persona retains its native permission behavior; Vibe includes an auto-approve persona.
+[OpenCode](opencode.md#native-agent-selection-verified-2026-09-18) is excluded because unknown
+or subagent-only names fall back to its default. These checks used primary sources and fake
+argv fixtures without authenticated execution.
+
 ## Interface comparison
 
 | Agent | Native invocation | Model | Effort | Native limits | Evidence |

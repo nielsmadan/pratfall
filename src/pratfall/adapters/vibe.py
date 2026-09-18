@@ -46,6 +46,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append(f"--enabled-tools={tool}")
     for tool in resolved.options.disabled_tools or ():
         argv.append(f"--disabled-tools={tool}")
+    if resolved.options.native_agent is not None:
+        argv.append(f"--agent={resolved.options.native_agent}")
     return Invocation((*argv, *arguments), prompt)
 
 

@@ -296,3 +296,16 @@ whole-document JSON and disables the invocation's auto-update check.
   protocol error rather than exact accounting.
 
 The version diagnostic is `--version`; normal doctor does not execute it.
+
+## Native agent selection
+
+Claude Code, Copilot and Vibe support `--native-agent NAME` / `native_agent`, mapped to
+`--agent=NAME`. `prat agents --json` exposes the boolean `native_agent` capability. Other agents
+reject public selection, including OpenCode: its native CLI falls back to the default when a
+name is unknown or identifies a subagent-only definition. Existing native-only OpenCode
+`--agent` passthrough remains accepted.
+
+This is a native persona within the selected backend, separate from Prat profiles and selectors.
+Prat preserves literal names and leaves discovery, definitions and resolution to the native CLI.
+Personas can change native permission behavior; Vibe's `auto-approve` persona can approve tool
+calls automatically. Prat adds no approval flags. See [selection rules](running.md#select-a-native-agent).

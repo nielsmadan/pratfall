@@ -1190,3 +1190,10 @@ def test_harness_tool_capabilities_match_the_catalog() -> None:
         frozenset(agent.name for agent in catalog.AGENTS if agent.capabilities.tools_empty)
         == qa._TOOLS_EMPTY
     )
+
+
+def test_harness_native_agent_capabilities_match_the_catalog() -> None:
+    assert (
+        frozenset(agent.name for agent in catalog.AGENTS if agent.capabilities.native_agent)
+        == qa._NATIVE_AGENTS
+    )

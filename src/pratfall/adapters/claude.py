@@ -103,6 +103,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append("--tools=" + ",".join(options.tools))
     if options.disabled_tools:
         argv.append("--disallowedTools=" + ",".join(options.disabled_tools))
+    if options.native_agent is not None:
+        argv.append(f"--agent={options.native_agent}")
     argv.extend(arguments)
     return Invocation(tuple(argv), prompt)
 
@@ -116,6 +118,8 @@ def validate(resolved: ResolvedProfile) -> None:
             "--append-system-prompt": _ALLOWED["--append-system-prompt"],
             "--append-system-prompt-file": Flag(1),
         }
+    if resolved.options.native_agent is not None:
+        reserved |= {"--agent": _ALLOWED["--agent"]}
     validate_tool_values(resolved.options.tools, "tools", comma=True, whitespace=True, trim=True)
     validate_tool_values(resolved.options.disabled_tools, "disabled_tools", comma=True, trim=True)
     if resolved.options.tools is not None:
