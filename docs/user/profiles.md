@@ -11,6 +11,7 @@ across projects, or locally in a project's `.pratfile`.
 - [Inspect and validate](#inspect-and-validate)
 - [Extra directories](#extra-directories)
 - [Appended instructions](#appended-instructions)
+- [Pi profiles](#pi-profiles)
 - [Tool availability](#tool-availability)
 - [Upgrade existing profiles](#upgrade-existing-profiles)
 
@@ -276,7 +277,7 @@ native behavior. `disabled_tools = []` clears Prat's inherited exclusions and is
 unsupported agents; it does not clear native permission denials.
 
 `tools = []` actively requests no tools in the [documented native scope](running.md#control-tool-availability).
-Claude and Copilot can represent it; Qwen, Droid, Vibe and unsupported agents reject it.
+Claude, Copilot and Pi can represent it; Qwen, Droid, Vibe and unsupported agents reject it.
 Claude's MCP tools and, while other tools remain, `EndConversation` are outside its empty built-in
 selection. `prat profiles` displays active `tools=[]` and `prat agents --json` exposes `tools`,
 `disabled_tools`, `tools_empty`, `tools_scope`, and `disabled_tools_scope` capabilities.
@@ -346,3 +347,21 @@ only the winning selected file, before prompt acquisition. `prat profiles` shows
 Schema defaults inherited by an unsupported profile invalidate the configuration even when that
 profile is not selected. Use agent-specific profiles for backend-specific defaults.
 See [schema output](running.md#request-schema-output) for input limits and native validation.
+
+
+## Pi profiles
+
+A Pi profile can select its model, thinking level, tool filters and attachments:
+
+```toml
+[profiles.pi_review]
+agent = "pi"
+model = "anthropic/claude-sonnet-4-5"
+effort = "high"
+tools = ["read", "grep", "find", "ls"]
+disabled_tools = ["bash"]
+attachments = ["notes/context.txt"]
+```
+
+Use a model available in your native Pi configuration. All normal option precedence and
+config-relative attachment path rules apply. See [Pi behavior](agents.md#pi).

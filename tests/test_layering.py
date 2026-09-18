@@ -91,6 +91,7 @@ ADAPTER_AGENTS: frozenset[str] = frozenset(
         "openclaw",
         "opencode",
         "openhands",
+        "pi",
         "qwen",
         "reasonix",
         "vibe",

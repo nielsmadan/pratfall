@@ -852,6 +852,17 @@ _RETENTION_STREAMS: Mapping[str, Callable[[str], str]] = {
             "usage": {"input_tokens": 1, "output_tokens": 1},
         }
     ),
+    "pi": lambda answer: codex_stream(
+        {
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": answer}],
+                "stopReason": "stop",
+            },
+        },
+        {"type": "agent_settled"},
+    ),
     "warp": lambda answer: codex_stream({"type": "agent", "text": answer}),
 }
 _CONSUMER_AGENTS = sorted(

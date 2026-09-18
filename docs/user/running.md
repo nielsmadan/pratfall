@@ -356,6 +356,7 @@ the native agent, and an unknown name can fail or match nothing according to tha
 | Copilot | `--available-tools`; model-visible native tool names | `--excluded-tools`; remove native tools from model visibility | Bare `--available-tools` |
 | Droid | `--restrict-tools`; native tool IDs such as `ApplyPatch` | `--disabled-tools`; native tool IDs such as `execute-cli` | Rejected |
 | Vibe | Repeated `--enabled-tools`; exact names, globs, or `re:` regular expressions | Repeated `--disabled-tools`; same pattern syntax, applied after the allowlist | Rejected |
+| Pi | `--tools`; exact built-in, extension and custom tool names | `--exclude-tools`; exact names, applied after the allowlist | `--tools` with an empty argv value |
 
 Claude's allowlist does not remove MCP tools. `EndConversation` can remain despite allowlists and
 deny rules while another tool is available. A scoped deny rule keeps the tool visible and denies
@@ -426,6 +427,9 @@ Order and duplicates are preserved. CLI paths use the invocation directory, inde
 `--cwd`; config paths use their defining file's directory. Home expansion is supported. Spaces,
 Unicode and leading dashes are literal (`--attach=-image.png`); Codex rejects commas because its
 native image flag splits them. Restrictions also apply to the canonical target of a symlink.
+Pi rejects Unicode spaces that its native path resolver converts to ASCII spaces; see the
+[exact character list](../reference/pi.md#attachments). Pi reads recognized images natively and
+wraps other attachments as text in its prompt.
 Hermes accepts one image; multiple attachments fail before prompt acquisition.
 
 Attachments supplement a task supplied through normal prompt input, a template or the editor.

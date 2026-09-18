@@ -23,6 +23,7 @@ from pratfall.adapters import (
     openclaw,
     opencode,
     openhands,
+    pi,
     qwen,
     reasonix,
     vibe,
@@ -143,6 +144,7 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
             schema_consumer=qwen.schema_consumer,
             validate_schema=qwen.validate_schema,
         ),
+        "pi": Adapter(build=pi.build, validate=pi.validate, consumer=pi.consumer),
         "amp": Adapter(build=amp.build, validate=amp.validate, consumer=amp.consumer),
         "reasonix": Adapter(
             build=reasonix.build, validate=reasonix.validate, whole_document=reasonix.decode

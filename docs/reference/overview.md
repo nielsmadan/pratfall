@@ -10,6 +10,7 @@ installed help, with live observations identified in the individual sections. Ac
 and fast-mode additions were recorded on 2026-09-10 through primary-source review and
 fake-native tests. The twelve later adapters use the static 2026-09-11 baselines below. Grok Build
 was added from official documentation and source inspection on 2026-09-14.
+[Pi](pi.md) uses the v0.85.1 source baseline verified on 2026-09-18.
 These dates describe the original evidence, not fresh compatibility checks. Native releases
 can change the interfaces. Recheck the relevant agent page before updating its contract.
 
@@ -73,6 +74,7 @@ argv fixtures without authenticated execution.
 | [Devin](devin.md) | `devin -p -- PROMPT` | `--model` | Unsupported | None verified | [3000.10.21 baseline](devin.md) |
 | [Cortex Code / CoCo](cortex.md) | `cortex exec --file -` with stdin | `--model` | `--effort minimal\|low\|medium\|high\|max` | `--max-turns` | [1.1.78 baseline](cortex.md) |
 | [Grok Build](grok.md) | `grok --no-auto-update --output-format json --single=PROMPT` | `--model` | `--reasoning-effort none\|minimal\|low\|medium\|high\|xhigh\|max` | `--max-turns` | [Official docs and source](grok.md) |
+| [Pi](pi.md) | `pi --print --mode json` with stdin | `--model` | `--thinking off\|minimal\|low\|medium\|high\|xhigh\|max` | None verified | [v0.85.1 source](pi.md) |
 
 ## Remaining factual verification
 

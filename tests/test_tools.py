@@ -319,9 +319,15 @@ def test_unsupported_tools_rejected_before_input(
 def test_tool_capability_inventory(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["agents", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["agents"]
-    assert {r["name"] for r in records if r["capabilities"]["tools"]} == set(AGENTS)
-    assert {r["name"] for r in records if r["capabilities"]["disabled_tools"]} == set(AGENTS)
-    assert {r["name"] for r in records if r["capabilities"]["tools_empty"]} == {"claude", "copilot"}
+    assert {r["name"] for r in records if r["capabilities"]["tools"]} == set(AGENTS) | {"pi"}
+    assert {r["name"] for r in records if r["capabilities"]["disabled_tools"]} == set(AGENTS) | {
+        "pi"
+    }
+    assert {r["name"] for r in records if r["capabilities"]["tools_empty"]} == {
+        "claude",
+        "copilot",
+        "pi",
+    }
     claude = next(r["capabilities"] for r in records if r["name"] == "claude")
     assert claude["tools_scope"] == "built-ins; MCP unaffected; EndConversation may remain"
     assert claude["disabled_tools_scope"] == "native deny rules; EndConversation exception"

@@ -36,6 +36,7 @@ def native_contract_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> P
         "devin",
         "cortex",
         "grok",
+        "pi",
     ):
         command = [sys.executable, str(script), "--fake-native", agent]
         lines.extend((f"[agents.{agent}]", f"command={json.dumps(command)}"))

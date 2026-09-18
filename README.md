@@ -37,6 +37,10 @@ Choose an agent by name or short alias:
 | Copilot | `copilot` | `cp` |
 | Cursor | `cursor` | `cu` |
 | OpenCode | `opencode` | `oc` |
+| Pi | `pi` | none |
+
+Use `prat pi "review this change"` with Pi v0.85.1 or newer; model, effort, tool filters and
+file/image attachments are supported. Pi trims prompt-edge whitespace.
 
 These are a few of the supported agents. Run `prat agents` for the full list and supported
 settings, or see [all selectors and agent limitations](docs/user/agents.md).

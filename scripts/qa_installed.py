@@ -73,6 +73,7 @@ AGENTS = {
     "devin": "devin",
     "cortex": "cortex",
     "grok": "grok",
+    "pi": "pi",
 }
 ALIASES = {
     "cc": "claude",
@@ -97,6 +98,7 @@ ALIASES = {
 
 VERSION_ARGS = {name: ["--version"] for name in AGENTS} | {"amp": ["version"]}
 _EFFORT_VALUES = {
+    "pi": ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
     "claude": ["low", "medium", "high", "xhigh", "max"],
     "codex": None,
     "antigravity": ["low", "medium", "high"],
@@ -123,6 +125,7 @@ _NO_MODEL = frozenset({"openhands", "amp", "vibe"})
 _FAST = frozenset({"claude", "codex"})
 _ADD_DIRS = frozenset({"claude", "codex", "gemini", "qwen", "copilot"})
 _ATTACHMENT_TYPES = {
+    "pi": ["image", "text file"],
     "codex": ["image"],
     "hermes": ["image"],
     "copilot": ["image", "native document"],
@@ -131,8 +134,9 @@ _ATTACHMENT_TYPES = {
 _SCHEMA = frozenset({"claude", "codex", "qwen"})
 _INSTRUCTIONS = frozenset({"claude", "codex", "qwen", "droid"})
 _NATIVE_AGENTS = frozenset({"claude", "copilot", "vibe"})
-_TOOLS_EMPTY = frozenset({"claude", "copilot"})
+_TOOLS_EMPTY = frozenset({"claude", "copilot", "pi"})
 _TOOLS_SCOPES = {
+    "pi": "built-in, extension and custom tools",
     "claude": "built-ins; MCP unaffected; EndConversation may remain",
     "qwen": "native core allowlist; schema tool exempt; native settings apply",
     "copilot": "model-visible tools",
@@ -140,6 +144,7 @@ _TOOLS_SCOPES = {
     "vibe": "native available tools, including MCP and connectors",
 }
 _DISABLED_TOOLS_SCOPES = {
+    "pi": "built-in, extension and custom tools",
     "claude": "native deny rules; EndConversation exception",
     "qwen": "native deny rules, including schema tool",
     "copilot": "model-visible tools",
@@ -147,6 +152,7 @@ _DISABLED_TOOLS_SCOPES = {
     "vibe": "native available tools, including MCP and connectors",
 }
 _STDIN_PREFIXES = {
+    "pi": ["--print", "--mode", "json"],
     "qwen": ["--output-format", "stream-json"],
     "amp": ["--execute", "--stream-json"],
     "reasonix": ["run", "--output-format", "json"],
@@ -175,6 +181,31 @@ _NATIVE_PREFIXES = {
 }
 _PROMPT_FLAGS = {"grok": "--single=", "openhands": "--task="}
 _NATIVE_OPTIONS = {
+    "pi": {
+        "--model": 1,
+        "--thinking": 1,
+        "--tools": 1,
+        "-t": 1,
+        "--exclude-tools": 1,
+        "-xt": 1,
+        "--provider": 1,
+        "--system-prompt": 1,
+        "--append-system-prompt": 1,
+        "--no-tools": 0,
+        "-nt": 0,
+        "--no-builtin-tools": 0,
+        "-nbt": 0,
+        "--no-extensions": 0,
+        "-ne": 0,
+        "--no-skills": 0,
+        "-ns": 0,
+        "--no-prompt-templates": 0,
+        "-np": 0,
+        "--no-context-files": 0,
+        "-nc": 0,
+        "--no-session": 0,
+        "--offline": 0,
+    },
     "crush": {"--model": 1, "--verbose": 0, "-v": 0, "--debug": 0, "-d": 0},
     "devin": {"--model": 1, "--permission-mode": 1},
     "cortex": {"--model": 1, "--effort": 1, "--max-turns": 1, "--connection": 1, "-c": 1},
@@ -308,6 +339,12 @@ def _native_options(agent: str, arguments: list[str]) -> None:
     while index < len(arguments):
         argument = arguments[index]
         name, equals, value = argument.partition("=")
+        if agent == "pi":
+            assert not equals or not argument.startswith("-"), "Pi requires separate flag values"
+            if argument.startswith("@"):
+                assert Path(argument[1:]).is_file(), "missing Pi attachment"
+                index += 1
+                continue
         if agent == "warp" and argument.startswith("-n") and argument != "-n":
             index += 1
             continue
@@ -356,7 +393,7 @@ def _prompt(agent: str, arguments: list[str], data: bytes) -> str:
         assert prompt.strip(), f"missing {agent} stdin prompt"
         if agent == "crush":
             return prompt + "\n\n"
-        return prompt.strip() if agent in {"reasonix", "kimi", "vibe"} else prompt
+        return prompt.strip() if agent in {"reasonix", "kimi", "vibe", "pi"} else prompt
     if agent == "antigravity":
         return _text(_record(json.loads(data)["message"])["content"])
     if agent in {"gemini", "copilot"}:
@@ -728,7 +765,32 @@ def _answer_opencode(answer: str) -> None:
     )
 
 
+def _answer_pi(answer: str) -> None:
+    message = {
+        "role": "assistant",
+        "content": [{"type": "text", "text": answer}],
+        "stopReason": "stop",
+        "model": "pi-model",
+        "usage": {
+            "input": 3,
+            "output": 2,
+            "cacheRead": 1,
+            "cacheWrite": 4,
+            "cost": {"total": 0.01},
+        },
+    }
+    for event in (
+        {"type": "session", "version": 3, "id": "pi-session"},
+        {"type": "message_end", "message": message},
+        {"type": "turn_end", "message": message, "toolResults": []},
+        {"type": "agent_end", "messages": [message], "willRetry": False},
+        {"type": "agent_settled"},
+    ):
+        print(json.dumps(event))
+
+
 _ANSWER_EMITTERS: dict[str, Callable[[str], None]] = {
+    "pi": _answer_pi,
     "claude": _answer_claude,
     "codex": _answer_codex,
     "gemini": _answer_gemini,
@@ -2387,7 +2449,7 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
     payload = _json_result(completed)
     assert completed.returncode == 0 and payload["schema_version"] == 1
     records = {_text(record["name"]): record for record in _records(payload["agents"])}
-    assert len(_records(payload["agents"])) == len(records) == 23
+    assert len(_records(payload["agents"])) == len(records) == 24
     assert set(records) == set(AGENTS)
     for name, record in records.items():
         assert record["command"] == [AGENTS[name]]

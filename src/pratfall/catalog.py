@@ -196,6 +196,23 @@ AGENTS = (
             budgets=frozenset({"max_turns"}),
         ),
     ),
+    AgentSpec(
+        "pi",
+        "Pi",
+        (),
+        ("pi",),
+        Capabilities(
+            effort=True,
+            effort_values=("off", "minimal", "low", "medium", "high", "xhigh", "max"),
+            tools=True,
+            disabled_tools=True,
+            tools_empty=True,
+            tools_scope="built-in, extension and custom tools",
+            disabled_tools_scope="built-in, extension and custom tools",
+            attachments=True,
+            attachment_types=("image", "text file"),
+        ),
+    ),
 )
 BY_NAME = MappingProxyType({agent.name: agent for agent in AGENTS})
 BY_SELECTOR = MappingProxyType(

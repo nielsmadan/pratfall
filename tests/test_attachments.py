@@ -327,6 +327,7 @@ def test_attachment_inventory(capsys: pytest.CaptureFixture[str]) -> None:
         "hermes": (["image"], 1),
         "copilot": (["image", "native document"], None),
         "opencode": (["file"], None),
+        "pi": (["image", "text file"], None),
     }
     assert main(["agents"]) == 0
     assert "attachment_types=image, attachment_max_count=1" in capsys.readouterr().out
