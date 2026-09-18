@@ -60,7 +60,7 @@ The [configuration reference](https://developers.openai.com/codex/config-referen
 Prat sends `-c developer_instructions=TOML_STRING`, replacing any native configured value for this
 invocation while retaining built-in guidance. It emits a JSON-compatible TOML basic string with
 Unicode scalar values unescaped and DEL escaped; UTF-16 surrogate-pair escapes are not valid TOML.
-Native `-c` / `--config` remain reserved as before.
+Native `-c` / `--config` remain available; only the keys Prat sets are reserved.
 
 Verification used primary documentation/source inspection and fake executable argv tests;
 no authenticated native run was performed for this control.
@@ -98,3 +98,38 @@ and output-string budget, with both representations charged.
 
 Evidence is pinned primary-source inspection and fake executable/consumer tests; no native
 inference was run. Native schema dialect and model support remain authoritative.
+
+
+## Configuration overrides (verified 2026-09-19)
+
+`codex exec --help` declares `-c, --config <key=value>`, documents dotted paths for nested values,
+and parses the value portion as TOML, falling back to a literal string. Prat sets three of those
+keys itself: `developer_instructions` for `--instructions`, `model_reasoning_effort` for
+`--effort`, and `service_tier` for `--fast`. It also owns `model`, which it sets through native
+`--model`; that key is reserved while `--model` is active, without asserting which native source
+would win.
+
+Prat therefore accepts `-c` / `--config` and reserves individual keys instead of the option. An
+override is rejected when its key, or a dotted descendant of it, is one Prat sets for an active
+public option; the same key is accepted when that option is absent. All five native spellings are
+checked: `-c KEY=VALUE`, `-cKEY=VALUE`, `-c=KEY=VALUE`, `--config KEY=VALUE` and
+`--config=KEY=VALUE`. Clap drops one separator after a short flag, so `-c=KEY=VALUE` sets `KEY`
+and the leading `=` is stripped before the key is read; the long form has no such spelling, and
+`--config==KEY=VALUE` fails natively with `Empty key in override`.
+
+Key comparison strips surrounding whitespace because Codex honors it. Observed on codex-cli
+0.155.0 through `codex debug prompt-input`, which renders the model-visible developer message
+without running inference:
+
+- `-c developer_instructions='"FIRST"' -c developer_instructions='"SECOND"'` produced `SECOND`,
+  and `FIRST` did not appear. The last occurrence wins, so an unreserved key would silently
+  override the corresponding public option, which Prat emits earlier in argv.
+- `-c 'developer_instructions = "SPACED"'` produced `SPACED`, so whitespace around `=` is honored.
+- `-c '"developer_instructions"="QUOTEDKEY"'` and its single-quoted form produced no developer
+  instructions, so TOML-quoted keys are not an alternative spelling to check.
+- `-c='developer_instructions="EQUALSJOINED"'` produced `EQUALSJOINED`, confirming the short
+  flag honors an `=` separator, while `--config=='developer_instructions="X"'` returned
+  `Error: Empty key in override`.
+
+These observations were recorded against 0.155.0, newer than this page's 0.153.4 baseline. Native
+TOML parsing, key validity and precedence among native configuration sources remain authoritative.

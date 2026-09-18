@@ -28,11 +28,11 @@ def validate_flags(
     while index < len(arguments):
         argument = arguments[index]
         if argument.startswith("@"):
-            _fail(agent, argument, "response files are not accepted")
+            fail_native_argument(agent, argument, "response files are not accepted")
         name, has_equals = _split_long(argument)
         spec = reserved.get(name)
         if spec is not None or _joined_match(argument, reserved) is not None:
-            _fail(agent, argument, "this option is controlled by prat")
+            fail_native_argument(agent, argument, "this option is controlled by prat")
         if spec is None:
             spec = allowed.get(name)
         if spec is None:
@@ -41,13 +41,13 @@ def validate_flags(
                 index += 1
                 continue
             if not argument.startswith("-") or argument == "-":
-                _fail(
+                fail_native_argument(
                     agent, argument, "native positional arguments and subcommands are not accepted"
                 )
-            _fail(agent, argument, "unknown native option")
+            fail_native_argument(agent, argument, "unknown native option")
         if has_equals:
             if spec.arity != 1 and not spec.variadic:
-                _fail(agent, argument, "this option does not take a value")
+                fail_native_argument(agent, argument, "this option does not take a value")
             index = _consume_variadic(arguments, index + 1) if spec.variadic else index + 1
             continue
         if spec.variadic:
@@ -55,9 +55,11 @@ def validate_flags(
             continue
         if spec.arity == 1:
             if index + 1 >= len(arguments):
-                _fail(agent, argument, "missing native option value")
+                fail_native_argument(agent, argument, "missing native option value")
             if arguments[index + 1].startswith(("-", "@")):
-                _fail(agent, argument, "missing native option value; use the =VALUE form")
+                fail_native_argument(
+                    agent, argument, "missing native option value; use the =VALUE form"
+                )
             index += 2
         else:
             index += 1
@@ -82,7 +84,7 @@ def _joined_match(argument: str, flags: Mapping[str, Flag]) -> str | None:
     return None
 
 
-def _fail(agent: str, argument: str, reason: str) -> NoReturn:
+def fail_native_argument(agent: str, argument: str, reason: str) -> NoReturn:
     raise PratError(
         f"{agent} native argument {argument!r}: {reason}; use a trusted executable wrapper "
         "for unsupported native arguments.",

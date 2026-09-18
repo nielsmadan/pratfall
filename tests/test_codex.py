@@ -362,3 +362,76 @@ def test_codex_schema_strict_event_json(record: str) -> None:
 def test_codex_schema_invalid_unicode_answer() -> None:
     decoded = codex.decode_schema(codex_stream(schema_message('"\\ud800"')))
     assert decoded.error is not None and decoded.error.code == "output_encoding"
+
+
+_OWNED_CONFIG = (
+    ("developer_instructions", Options(instructions="native guidance")),
+    ("developer_instructions", Options(instructions_file="instructions.md")),
+    ("model", Options(model="gpt-5.6-luna")),
+    ("model_reasoning_effort", Options(effort="high")),
+    ("service_tier", Options(fast=True)),
+)
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ("-c", "shell_environment_policy.inherit=all"),
+        ("-cshell_environment_policy.inherit=all",),
+        ("--config", "sandbox_workspace_write.network_access=true"),
+        ("--config=sandbox_workspace_write.network_access=true",),
+    ],
+)
+def test_codex_accepts_unowned_config_overrides(arguments: tuple[str, ...]) -> None:
+    codex.validate(resolved("codex", Options(effort="high", native_args=arguments)))
+
+
+@pytest.mark.parametrize("key", [key for key, _ in _OWNED_CONFIG])
+def test_codex_allows_owned_config_key_without_the_public_option(key: str) -> None:
+    codex.validate(resolved("codex", Options(native_args=("-c", f"{key}=1"))))
+
+
+@pytest.mark.parametrize(("key", "options"), _OWNED_CONFIG)
+@pytest.mark.parametrize("form", ["-c {}=1", "-c{}=1", "-c={}=1", "--config {}=1", "--config={}=1"])
+def test_codex_rejects_owned_config_key_when_the_public_option_is_active(
+    key: str, options: Options, form: str
+) -> None:
+    arguments = tuple(form.format(key).split(" "))
+    with pytest.raises(PratError, match="controlled by prat"):
+        codex.validate(resolved("codex", replace(options, native_args=arguments)))
+
+
+@pytest.mark.parametrize(("key", "options"), _OWNED_CONFIG)
+@pytest.mark.parametrize("spacing", ["{} =1", " {}=1", "{}\t= 1"])
+def test_codex_rejects_owned_config_key_around_native_whitespace(
+    key: str, options: Options, spacing: str
+) -> None:
+    arguments = ("-c", spacing.format(key))
+    with pytest.raises(PratError, match="controlled by prat"):
+        codex.validate(resolved("codex", replace(options, native_args=arguments)))
+
+
+@pytest.mark.parametrize(("key", "options"), _OWNED_CONFIG)
+def test_codex_rejects_owned_config_descendant_when_the_public_option_is_active(
+    key: str, options: Options
+) -> None:
+    with pytest.raises(PratError, match="controlled by prat"):
+        codex.validate(resolved("codex", replace(options, native_args=("-c", f"{key}.nested=1"))))
+
+
+@pytest.mark.parametrize(("key", "options"), _OWNED_CONFIG)
+def test_codex_rejects_owned_config_key_without_a_value_separator(
+    key: str, options: Options
+) -> None:
+    with pytest.raises(PratError, match="controlled by prat"):
+        codex.validate(resolved("codex", replace(options, native_args=("-c", key))))
+
+
+def test_codex_config_override_reports_the_native_argument() -> None:
+    with pytest.raises(PratError, match=r"'-c model_reasoning_effort=\"low\"'"):
+        codex.validate(
+            resolved(
+                "codex",
+                Options(effort="high", native_args=("-c", 'model_reasoning_effort="low"')),
+            )
+        )

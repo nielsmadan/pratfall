@@ -208,13 +208,17 @@ Put supported native options after `--`:
 ```sh
 prat cx "inspect this change" -- --sandbox read-only --ephemeral
 prat cc "make the requested edit" -- --permission-mode acceptEdits
+prat cx --effort high "review this" -- -c shell_environment_policy.inherit=all
 ```
 
 These arguments replace the profile's `native_args`. Prat accepts a documented set of native
 options and rejects positional arguments and controls that conflict with its prompt, output,
-session, working directory, model, effort, fast mode, or budget settings. See
-[agent-specific options](agents.md#native-behavior). Other options can be supplied through a
-trusted [command wrapper](profiles.md#configure-commands-and-wrappers).
+session, working directory, model, effort, fast mode, or budget settings. Codex's `-c` / `--config`
+overrides are accepted; only the individual keys Prat sets are rejected, and only while the
+matching public option is active. See [agent-specific options](agents.md#native-behavior) and the
+[Codex configuration contract](../reference/codex.md#configuration-overrides-verified-2026-09-19).
+Other options can be supplied through a trusted
+[command wrapper](profiles.md#configure-commands-and-wrappers).
 
 Prat preserves native permission defaults and inherits authentication and settings. It does not
 install agents, log in, or edit native configuration.

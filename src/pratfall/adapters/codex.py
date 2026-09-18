@@ -1,8 +1,8 @@
 import json
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 
-from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.adapters.native_args import Flag, fail_native_argument, validate_flags
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
     ConsumerFailure,
@@ -31,9 +31,11 @@ _ALLOWED = {
         "--strict-config",
     )
 } | {
-    name: Flag(1, joined=name in {"-i", "-p", "-s"})
+    name: Flag(1, joined=name in {"-c", "-i", "-p", "-s"})
     for name in (
         "--add-dir",
+        "--config",
+        "-c",
         "--disable",
         "--enable",
         "--image",
@@ -48,13 +50,11 @@ _ALLOWED = {
     )
 }
 _RESERVED = {name: Flag(0) for name in ("--json",)} | {
-    name: Flag(1, joined=name in {"-c", "-C", "-m", "-o"})
+    name: Flag(1, joined=name in {"-C", "-m", "-o"})
     for name in (
         "--cd",
         "-C",
         "--color",
-        "--config",
-        "-c",
         "--model",
         "-m",
         "--output-last-message",
@@ -108,6 +108,43 @@ def validate(resolved: ResolvedProfile) -> None:
                     option="attachments",
                 )
     validate_flags("Codex", resolved.options.native_args or (), _ALLOWED, reserved)
+    _reject_owned_config_keys(resolved)
+
+
+def _reject_owned_config_keys(resolved: ResolvedProfile) -> None:
+    options = resolved.options
+    owned = set()
+    if options.instructions is not None or options.instructions_file is not None:
+        owned.add("developer_instructions")
+    if options.model is not None:
+        owned.add("model")
+    if options.effort is not None:
+        owned.add("model_reasoning_effort")
+    if options.fast is not None:
+        owned.add("service_tier")
+    if not owned:
+        return
+    for argument, value in _config_overrides(options.native_args or ()):
+        key = value.split("=", 1)[0].strip()
+        if key in owned or any(key.startswith(f"{name}.") for name in owned):
+            fail_native_argument("Codex", argument, "this configuration key is controlled by prat")
+
+
+def _config_overrides(arguments: tuple[str, ...]) -> Iterator[tuple[str, str]]:
+    # Runs after validate_flags, which guarantees every separated -c is followed by a value.
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in {"-c", "--config"}:
+            yield f"{argument} {arguments[index + 1]}", arguments[index + 1]
+            index += 2
+            continue
+        if argument.startswith("--config="):
+            yield argument, argument.removeprefix("--config=")
+        elif argument.startswith("-c") and argument != "-c":
+            # Clap drops one separator after a short flag, so -c=KEY=VALUE sets KEY.
+            yield argument, argument.removeprefix("-c").removeprefix("=")
+        index += 1
 
 
 @dataclass

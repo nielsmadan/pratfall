@@ -174,7 +174,12 @@ def test_build_emits_exactly_the_capabilities_the_catalog_declares(
     assert carriers
     for index in carriers:
         assert index in added
-        assert _owning_flag(variant, index) in _reserved(agent)
+        flag = _owning_flag(variant, index)
+        if flag in _reserved(agent):
+            continue
+        supplied = replace(options, native_args=(flag, variant[index]))
+        with pytest.raises(PratError, match="controlled by prat"):
+            ADAPTERS[agent].validate(resolved(agent, supplied))
 
 
 @pytest.mark.parametrize("agent", sorted(ADAPTERS))
@@ -207,23 +212,25 @@ def test_validate_rejects_unknown_native_arguments(agent: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("agent", "arguments"),
+    ("agent", "arguments", "options"),
     [
-        ("claude", ("--model=native",)),
-        ("claude", ("-pprint",)),
-        ("claude", ("-rsession",)),
-        ("claude", ("--output-format", "text")),
-        ("claude", ("--settings", '{"fastMode": true}')),
-        ("codex", ("-mnative",)),
-        ("codex", ("--cd=/tmp",)),
-        ("codex", ("-cmodel=other",)),
-        ("codex", ("--json",)),
+        ("claude", ("--model=native",), Options()),
+        ("claude", ("-pprint",), Options()),
+        ("claude", ("-rsession",), Options()),
+        ("claude", ("--output-format", "text"), Options()),
+        ("claude", ("--settings", '{"fastMode": true}'), Options()),
+        ("codex", ("-mnative",), Options()),
+        ("codex", ("--cd=/tmp",), Options()),
+        ("codex", ("-cmodel=other",), Options(model="conformance-model")),
+        ("codex", ("--json",), Options()),
     ],
 )
-def test_owned_native_flags_are_rejected(agent: str, arguments: tuple[str, ...]) -> None:
+def test_owned_native_flags_are_rejected(
+    agent: str, arguments: tuple[str, ...], options: Options
+) -> None:
     adapter: AdapterModule = claude if agent == "claude" else codex
     with pytest.raises(PratError, match="controlled by prat"):
-        adapter.validate(resolved(agent, Options(native_args=arguments)))
+        adapter.validate(resolved(agent, replace(options, native_args=arguments)))
 
 
 @pytest.mark.parametrize(
