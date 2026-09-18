@@ -78,3 +78,23 @@ both `--image` and `-i`; existing native-only use remains accepted.
 
 Native image decoding, vision-capable model support and payload limits remain authoritative.
 Evidence is primary source inspection and fake executable argv tests; no native inference executed.
+
+
+## Schema output (verified 2026-09-18)
+
+The [exec CLI at revision 7498521d](https://github.com/openai/codex/blob/7498521d288b9b3b96ffba4eedf089d8d6e06a84/codex-rs/exec/src/cli.rs)
+declares `long = "output-schema", value_name = "FILE"`. Prat passes a private snapshot of the
+validated original schema bytes, alive through decoding and removed afterward. Active public
+schemas reserve `--output-schema`; native-only use remains compatible. Image transport retains
+its option terminator before the final stdin sentinel.
+
+The [SDK thread implementation at the same revision](https://github.com/openai/codex/blob/7498521d288b9b3b96ffba4eedf089d8d6e06a84/sdk/typescript/src/thread.ts#L117)
+assigns `finalResponse = event.item.text;` for each completed `agent_message`. Prat's schema
+consumer selects this final message, requires successful `turn.completed`, and parses strict JSON.
+Interim prose may precede it; joined previous-turn output and phase fields are not used.
+Missing or malformed final JSON fails; later native failures remain failures. The latest valid
+structured partial and observed usage survive failures. Replacement refunds the encoded answer
+and output-string budget, with both representations charged.
+
+Evidence is pinned primary-source inspection and fake executable/consumer tests; no native
+inference was run. Native schema dialect and model support remain authoritative.

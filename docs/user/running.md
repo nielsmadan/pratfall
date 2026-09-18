@@ -449,11 +449,16 @@ prat cc --schema answer.schema.json "Summarize the project's public APIs"
 prat cc --schema answer.schema.json --json "Summarize the project's public APIs"
 ```
 
-Claude supports `--schema PATH` and the `schema` profile/default setting. The native agent
+Claude, Codex and Qwen support `--schema PATH` and the `schema` profile/default setting. The native agent
 receives the validated schema and enforces its own JSON Schema dialect and keyword support.
 Prat does not validate answers against the schema, fetch `$ref` URLs, or retry failed output.
 Claude uses draft-07 validation; `format` is an annotation. Native versions before 2.1.205 could
 silently ignore invalid schemas; Prat still rejects a claimed success without structured output.
+Qwen requires v0.24.0 or newer for schemas; ordinary v0.23 output remains supported. Prat does not
+probe versions automatically. Qwen roots must accept objects and cannot use root `$ref`; wrap a
+reference in `allOf`. Prat rejects obvious nonobject roots; uncertain composition and dialect
+validation remain native. Explicit tool excludes and native permission denials still apply to
+Qwen's synthetic `structured_output` tool, even if they prevent a schema answer.
 
 The selected schema must be a regular UTF-8 JSON file, at most 1 MiB, with an object or boolean
 root. Prat rejects duplicate keys, nonfinite numbers, numeric literals wider than 128 bytes,
@@ -469,6 +474,17 @@ native errors, timeouts and interruption retain their precedence and safe partia
 The encoded structured value and output string both count toward the 8 MiB retained-state budget.
 
 `--extract` cannot be combined with schema output, including an inherited schema. An active public
-schema conflicts with native `--json-schema`; native-only passthrough remains accepted without
-activating Prat's schema decoder. Dry runs show the original schema source and transport. Claude
-passes inline JSON, so the operating system's argv-size limit may be lower than the file limit.
+schema conflicts with the corresponding native flag: Claude `--json-schema` or Codex
+`--output-schema`. Native-only passthrough remains accepted for these two without activating
+Prat's schema decoder. Qwen's native `--json-schema` remains reserved.
+
+Claude passes inline JSON, so the operating system's argv-size limit may be lower than the file
+limit. Codex uses `--output-schema FILE`; Qwen uses `--json-schema @FILE`. Both file transports
+read a private snapshot of the validated original bytes, removed after execution and decoding.
+Dry runs show the original schema source and replace the temporary transport path with a label.
+
+Codex selects the last completed `agent_message` and requires `turn.completed`. Interim prose may
+precede the JSON answer; previous turns are never joined for schema parsing. Qwen selects the
+terminal success's `structured_result`, ignoring interim text and tool-call payloads. A later
+failed or malformed final answer remains a failure, with the latest safe structured partial
+retained where available.

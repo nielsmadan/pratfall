@@ -31,6 +31,7 @@ AGENTS = (
         ("cx",),
         ("codex",),
         Capabilities(
+            schema=True,
             effort=True,
             fast=True,
             add_dirs=True,
@@ -118,6 +119,7 @@ AGENTS = (
         (),
         ("qwen",),
         Capabilities(
+            schema=True,
             budgets=frozenset({"max_turns"}),
             add_dirs=True,
             instructions=True,

@@ -1,17 +1,20 @@
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from adapter_helpers import resolved as resolved_profile
 from pratfall.adapters import qwen
+from pratfall.adapters.registry import ADAPTERS
 from pratfall.catalog import BY_NAME
 from pratfall.cli import main
 from pratfall.config import load_config, resolve_profile
 from pratfall.consumer import ConsumerFailure, ConsumerLimits
 from pratfall.errors import PratError
-from pratfall.models import Options, ResolvedProfile, Usage
+from pratfall.models import Options, PreparedSchema, ResolvedProfile, Usage
+from pratfall.schema import parse_json
 
 
 def stream(*events: object) -> str:
@@ -331,3 +334,162 @@ def test_qwen_invalid_final_usage_preserves_answer(usage: object) -> None:
     decoded = qwen.decode(stream(result(usage=usage)))
     assert decoded.output == "final" and decoded.usage is None
     assert decoded.error is not None and decoded.error.code == "protocol_error"
+
+
+@pytest.mark.parametrize("value", [None, False, 0, "", "雪", [], {}, {"answer": [1, True]}])
+@pytest.mark.parametrize("chunk", [1, 13, 65536])
+def test_qwen_schema_terminal_result_parity(value: object, chunk: int) -> None:
+    text = stream(
+        assistant("interim"),
+        assistant("child", parent_tool_use_id="tool"),
+        result(structured_result=value, result="not authoritative", structured_output="wrong"),
+    )
+    consumer = qwen.schema_consumer()
+    encoded = text.encode()
+    for start in range(0, len(encoded), chunk):
+        consumer.feed(encoded[start : start + chunk])
+    decoded = consumer.finish()
+    assert decoded == qwen.decode_schema(text) == ADAPTERS["qwen"].for_schema(True).decode(text)
+    assert decoded.error is None
+    assert decoded.structured_output_present and decoded.structured_output == value
+    assert json.loads(decoded.output) == value
+    assert decoded.reported_models == ("root-model",)
+    assert decoded.usage == Usage(input_tokens=3, output_tokens=2, cached_input_tokens=1)
+
+
+@pytest.mark.parametrize(
+    "ending",
+    [
+        result(),
+        result(structured_output={"wrong": True}),
+        result(subtype="error_during_execution", is_error=True, error={"message": "denied"}),
+        assistant("later"),
+    ],
+)
+def test_qwen_schema_later_failure_keeps_safe_partial(ending: dict[str, object]) -> None:
+    decoded = qwen.decode_schema(stream(result(structured_result={"safe": True}), ending))
+    assert decoded.output == '{"safe":true}'
+    assert decoded.error is not None
+    assert decoded.error.code == ("provider_error" if ending.get("is_error") else "protocol_error")
+
+
+def test_qwen_schema_ignores_child_and_tool_answers() -> None:
+    decoded = qwen.decode_schema(
+        stream(
+            assistant(
+                message={
+                    "model": "root",
+                    "content": [
+                        {"type": "tool_use", "name": "structured_output", "input": {"wrong": 1}},
+                    ],
+                }
+            ),
+            result(structured_result={"wrong": 2}, parent_tool_use_id="child"),
+        )
+    )
+    assert decoded.output == "" and not decoded.structured_output_present
+    assert decoded.error is not None and decoded.error.code == "protocol_error"
+
+
+def test_qwen_schema_recovers_from_intermediate_subagent_error() -> None:
+    decoded = qwen.decode_schema(
+        stream(
+            result(subtype="error_during_execution", is_error=True, error={"message": "child"}),
+            assistant(),
+            result(structured_result={}),
+        )
+    )
+    assert decoded.error is None and decoded.output == "{}"
+
+
+def test_qwen_schema_replacement_budget_and_failed_replacement() -> None:
+    consumer = qwen.schema_consumer(ConsumerLimits(state_bytes=8, records=2))
+    for _ in range(20):
+        consumer.feed(stream(result(structured_result={}, usage=None)).encode())
+    consumer.feed(stream(result(structured_result=None, usage=None)).encode())
+    with pytest.raises(ConsumerFailure, match="retained output state"):
+        consumer.feed(stream(result(structured_result="large", usage=None)).encode())
+    with pytest.raises(ConsumerFailure) as failure:
+        consumer.finish()
+    assert failure.value.decoded is not None
+    assert failure.value.decoded.output == "null"
+
+
+@pytest.mark.parametrize(
+    "payload,code",
+    [
+        ('{"a":1,"a":2}', "protocol_error"),
+        ("NaN", "protocol_error"),
+        ("1e999", "protocol_error"),
+        ("1" * 129, "protocol_error"),
+        ('"\\ud800"', "output_encoding"),
+        ("[" * 65 + "0" + "]" * 65, "protocol_error"),
+    ],
+)
+def test_qwen_schema_strict_terminal_value(payload: str, code: str) -> None:
+    text = (
+        '{"type":"result","subtype":"success","is_error":false,"structured_result":' + payload + "}"
+    )
+    decoded = qwen.decode_schema(text)
+    assert decoded.error is not None and decoded.error.code == code
+    assert not decoded.structured_output_present
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        False,
+        {"type": "string"},
+        {"type": ["array", "null"]},
+        {"const": 1},
+        {"enum": [1, None]},
+        {"anyOf": [{"type": "string"}, {"type": "number"}]},
+        {"allOf": [{"type": "object"}, {"type": "string"}]},
+        {"oneOf": [False]},
+        {"$ref": "#/$defs/object"},
+    ],
+)
+def test_qwen_schema_rejects_known_unusable_roots(document: object) -> None:
+    with pytest.raises(PratError):
+        qwen.validate_schema(PreparedSchema(json.dumps(document), parse_json(json.dumps(document))))
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        True,
+        {},
+        {"type": "object"},
+        {"type": ["object", "null"]},
+        {"const": {}},
+        {"enum": [None, {}]},
+        {"anyOf": [{"type": "string"}, {"type": "object"}]},
+        {"allOf": [{"$ref": "#/$defs/object"}]},
+        {"not": {"type": "object"}},
+    ],
+)
+def test_qwen_schema_defers_uncertain_dialect_validation(document: object) -> None:
+    qwen.validate_schema(PreparedSchema(json.dumps(document), parse_json(json.dumps(document))))
+
+
+def test_qwen_schema_transport_preserves_explicit_tool_denial() -> None:
+    profile = replace(
+        resolved_profile(
+            "qwen",
+            Options(schema="source", tools=("read_file",), disabled_tools=("structured_output",)),
+        ),
+        prepared_schema=PreparedSchema("{}", {}, "/private/schema.json"),
+    )
+    qwen.validate(profile)
+    invocation = qwen.build(profile, b"task")
+    assert invocation.argv == (
+        "qwen-wrapper",
+        "native",
+        "--output-format",
+        "stream-json",
+        "--core-tools=read_file",
+        "--exclude-tools=structured_output",
+        "--json-schema",
+        "@/private/schema.json",
+    )
+    assert invocation.stdin == b"task"

@@ -11,7 +11,9 @@ from pratfall.consumer import (
     decode_with,
 )
 from pratfall.errors import PratError
+from pratfall.limits import JSON_DEPTH
 from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
+from pratfall.schema import StructuredAnswer, parse_json, retain_answer
 
 _TURN_SLOTS = ("answer", "join", "answer_id", "turn")
 
@@ -79,6 +81,10 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--add-dir", directory))
     for attachment in resolved.options.attachments or ():
         argv.append(f"--image={attachment}")
+    if resolved.prepared_schema is not None:
+        if resolved.prepared_schema.path is None:
+            raise ValueError("Prepared schema requires a file snapshot.")
+        argv.extend(("--output-schema", resolved.prepared_schema.path))
     argv.extend(arguments)
     if options.attachments:
         argv.append("--")
@@ -90,6 +96,8 @@ def validate(resolved: ResolvedProfile) -> None:
     reserved = _RESERVED | (
         {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
     )
+    if resolved.options.schema is not None:
+        reserved |= {"--output-schema": _ALLOWED["--output-schema"]}
     if resolved.options.attachments:
         reserved |= {name: _ALLOWED[name] for name in ("--image", "-i")}
         for path in resolved.options.attachments:
@@ -265,3 +273,75 @@ def _event_error(value: object, fallback: str) -> ResultError:
     if not isinstance(value, Mapping) or not isinstance(value.get("message"), str):
         return ResultError("protocol_error", "Codex failure event is malformed.")
     return ResultError("provider_error", value["message"] or fallback)
+
+
+def schema_consumer(limits: ConsumerLimits = DEFAULT_CONSUMER_LIMITS) -> JsonlConsumer:
+    return _SchemaConsumer(limits)
+
+
+def decode_schema(stdout: str) -> DecodedOutput:
+    return decode_with(schema_consumer, stdout)
+
+
+class _SchemaConsumer(_Consumer):
+    def __init__(self, limits: ConsumerLimits) -> None:
+        super().__init__(limits)
+        self.answer: StructuredAnswer | None = None
+        self.numeric_bytes = limits.numeric_bytes
+        self.current_valid = False
+
+    def parse_record(self, line: str) -> object:
+        return parse_json(line, max_depth=JSON_DEPTH + 2, numeric_bytes=self.numeric_bytes)
+
+    def apply(self, event: dict[str, object]) -> Activity | None:
+        event_type = event["type"]
+        if event_type == "turn.started":
+            self.current_valid = False
+            self.state.completed = False
+            return "working"
+        if event_type == "turn.completed":
+            usage = _usage(event.get("usage"))
+            if isinstance(usage, ResultError):
+                self.malformed(usage.message)
+            else:
+                self.retain.usage("usage", usage)
+                self.state.usage = usage
+                self.state.completed = True
+            return "finishing"
+        if event_type == "item.completed":
+            item = event.get("item")
+            if isinstance(item, dict) and item.get("type") == "agent_message":
+                self.state.completed = False
+                self.current_valid = False
+                if not isinstance(item.get("id"), str) or not isinstance(item.get("text"), str):
+                    self.malformed("Codex agent_message item is malformed.")
+                    return "answering"
+                try:
+                    value = parse_json(item["text"], numeric_bytes=self.numeric_bytes)
+                except UnicodeEncodeError as error:
+                    raise ConsumerFailure(
+                        ResultError("output_encoding", "Codex answer contains invalid Unicode.")
+                    ) from error
+                except ValueError:
+                    return "answering"
+                self.answer = retain_answer(value, self.retain)
+                self.current_valid = True
+                return "answering"
+        return super().apply(event)
+
+    def result(self) -> DecodedOutput:
+        error = self.state.provider_error or self.protocol_error
+        if error is None and not self.failed:
+            if not self.state.completed:
+                error = ResultError("protocol_error", "Codex stream ended without turn.completed.")
+            elif not self.current_valid:
+                error = ResultError(
+                    "protocol_error", "Codex final agent_message is missing or is not strict JSON."
+                )
+        return DecodedOutput(
+            output=self.answer.output if self.answer is not None else "",
+            structured_output=self.answer.value if self.answer is not None else None,
+            structured_output_present=self.answer is not None,
+            usage=self.state.usage,
+            error=error,
+        )

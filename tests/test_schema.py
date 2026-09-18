@@ -13,7 +13,7 @@ from typing import Literal
 import pytest
 
 from pratfall import schema as schema_module
-from pratfall.adapters import claude
+from pratfall.adapters import claude, codex, qwen
 from pratfall.adapters.registry import ADAPTERS
 from pratfall.catalog import BY_NAME
 from pratfall.cli import dispatch, main
@@ -329,7 +329,11 @@ def test_schema_cleanup_failure_is_observable_with_native_exit(
 def test_schema_inventory(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["agents", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["agents"]
-    assert {item["name"] for item in records if item["capabilities"]["schema"]} == {"claude"}
+    assert {item["name"] for item in records if item["capabilities"]["schema"]} == {
+        "claude",
+        "codex",
+        "qwen",
+    }
 
 
 def test_parse_json_preserves_boundary_depth_and_escaped_brackets() -> None:
@@ -620,3 +624,217 @@ def test_schema_fake_interruption_keeps_final_answer(
     assert result["status"] == "interrupted"
     assert result["structured_output"] == {"answer": 42}
     assert result["cost_usd"] == 0.25
+
+
+@pytest.mark.parametrize("agent", ["codex", "qwen"])
+@pytest.mark.parametrize("json_mode", [False, True])
+@pytest.mark.parametrize("exit_code", [0, 7])
+@pytest.mark.parametrize("malformed", [False, True])
+def test_schema_file_native_transport_and_cleanup(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    agent: str,
+    json_mode: bool,
+    exit_code: int,
+    malformed: bool,
+) -> None:
+    source = tmp_path / "schema source.json"
+    original = b'{ "type": "object", "title": "original" }\n'
+    source.write_bytes(original)
+    snapshot_log = tmp_path / "call.json"
+    script = tmp_path / "native.py"
+    flag = "--output-schema" if agent == "codex" else "--json-schema"
+    native = (
+        '{"type":"result","subtype":"success","is_error":false,"structured_result":'
+        '{"answer":42},"usage":{"input_tokens":2,"output_tokens":3}}\n'
+    )
+    if agent == "codex":
+        native = (
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {"id": "a", "type": "agent_message", "text": '{"answer":42}'},
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "type": "turn.completed",
+                    "usage": {"input_tokens": 2, "cached_input_tokens": 0, "output_tokens": 3},
+                }
+            )
+            + "\n"
+        )
+    if malformed:
+        native += (
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {"id": "later", "type": "agent_message", "text": "malformed final"},
+                }
+            )
+            + '\n{"type":"turn.completed","usage":{"input_tokens":2,'
+            '"cached_input_tokens":0,"output_tokens":3}}\n'
+            if agent == "codex"
+            else '{"type":"result","subtype":"success","is_error":false,'
+            '"result":"missing structured_result","usage":{"input_tokens":2,"output_tokens":3}}\n'
+        )
+    script.write_text(
+        "import json,sys\nfrom pathlib import Path\n"
+        f"arg=sys.argv[sys.argv.index({flag!r})+1]\n"
+        "path=Path(arg.removeprefix('@'))\n"
+        f"Path({str(source)!r}).write_text('changed source')\n"
+        f"Path({str(snapshot_log)!r}).write_text(json.dumps({{"
+        "'argv':sys.argv[1:],'stdin':sys.stdin.read(),'snapshot':str(path),"
+        "'data':path.read_text(),'mode':path.stat().st_mode & 0o777,"
+        "'directory_mode':path.parent.stat().st_mode & 0o777}))\n"
+        f"print({native!r},end='')\nsys.exit({exit_code})\n"
+    )
+    config = tmp_path / ".pratfile"
+    config.write_text(
+        f"version=1\n[agents.{agent}]\ncommand=" + json.dumps([sys.executable, str(script)]) + "\n"
+    )
+    args = [agent, "--schema", str(source), "--trace", "task"] + (["--json"] if json_mode else [])
+    assert main(args) == (exit_code or int(malformed))
+    captured = capsys.readouterr()
+    assert native in captured.err
+    if json_mode:
+        result = json.loads(captured.out)
+        assert result["output"] == '{"answer":42}'
+        assert result["structured_output"] == {"answer": 42}
+        assert result["usage"]["input_tokens"] == 2
+        assert result["native_exit_code"] == exit_code
+        assert result["status"] == ("error" if exit_code or malformed else "success")
+        if exit_code or malformed:
+            assert result["error"]["code"] == ("native_exit" if exit_code else "protocol_error")
+    else:
+        assert captured.out == '{"answer":42}\n'
+    call = json.loads(snapshot_log.read_text())
+    snapshot = call.pop("snapshot")
+    expected_argv = (
+        ["exec", "--json", flag, snapshot, "-"]
+        if agent == "codex"
+        else ["--output-format", "stream-json", flag, "@" + snapshot]
+    )
+    assert call == {
+        "argv": expected_argv,
+        "stdin": "task",
+        "data": original.decode(),
+        "mode": 0o600,
+        "directory_mode": 0o700,
+    }
+    assert not Path(snapshot).parent.exists()
+
+
+@pytest.mark.parametrize("agent", ["codex", "qwen"])
+def test_schema_file_preview_config_override_and_independent_cwd(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], agent: str
+) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    source = config_dir / "profile.json"
+    source.write_text('{"type":"object"}')
+    chosen = tmp_path / "chosen.json"
+    chosen.write_text('{"type":"object","title":"chosen"}')
+    config = config_dir / "profiles.toml"
+    config.write_text(f'version=1\n[profiles.work]\nagent="{agent}"\nschema="profile.json"\n')
+    base = ["--config", str(config), "work", "--cwd", str(run_dir), "--dry-run", "--json", "task"]
+    for extra, expected in (([], source), (["--schema", "chosen.json"], chosen)):
+        assert main([*base, *extra]) == 0
+        result = json.loads(capsys.readouterr().out)
+        assert result["schema"] == str(expected)
+        assert result["schema_transport"] == "temporary prepared file"
+        assert result["cwd"] == str(run_dir)
+        token = ("" if agent == "codex" else "@") + "<temporary prepared schema>"
+        assert token in result["argv"]
+
+
+@pytest.mark.parametrize("from_config", [False, True])
+def test_qwen_schema_root_rejected_before_input_with_origin(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    from_config: bool,
+) -> None:
+    source = tmp_path / "schema.json"
+    source.write_text('{"type":"array"}')
+
+    def forbidden(*args: object, **kwargs: object) -> bytes:
+        pytest.fail("prompt acquired before root validation")
+
+    monkeypatch.setattr(dispatch, "acquire_prompt", forbidden)
+    if from_config:
+        (tmp_path / ".pratfile").write_text(
+            'version=1\n[profiles.work]\nagent="qwen"\nschema="schema.json"\n'
+        )
+        args = ["work"]
+    else:
+        args = ["qwen", "--schema", str(source)]
+    assert main([*args, "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == ("invalid_config" if from_config else "invalid_arguments")
+    assert "root must accept objects" in error["message"]
+    assert (
+        "profiles.work.schema" if from_config else "command line: selector 'qwen'.schema"
+    ) in error["message"]
+
+
+@pytest.mark.parametrize("agent", ["codex", "qwen"])
+@pytest.mark.parametrize("depth", [64, 65])
+def test_schema_answer_depth_independent_of_event_envelope(agent: str, depth: int) -> None:
+    answer = "[" * depth + "0" + "]" * depth
+    if agent == "codex":
+        text = (
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "id": "answer",
+                        "type": "agent_message",
+                        "text": answer,
+                    },
+                }
+            )
+            + '\n{"type":"turn.completed","usage":{"input_tokens":0,'
+            '"cached_input_tokens":0,"output_tokens":0}}'
+        )
+    else:
+        text = (
+            '{"type":"result","subtype":"success","is_error":false,"structured_result":'
+            + answer
+            + "}"
+        )
+    decoded = ADAPTERS[agent].for_schema(True).decode(text)
+    if depth == 64:
+        assert decoded.error is None and decoded.output == answer
+    else:
+        assert decoded.error is not None and decoded.error.code == "protocol_error"
+
+
+@pytest.mark.parametrize("agent", ["codex", "qwen"])
+def test_schema_consumer_custom_numeric_budget(agent: str) -> None:
+    factory = codex.schema_consumer if agent == "codex" else qwen.schema_consumer
+    consumer = factory(ConsumerLimits(numeric_bytes=2))
+    if agent == "codex":
+        text = (
+            json.dumps(
+                {
+                    "type": "item.completed",
+                    "item": {
+                        "id": "answer",
+                        "type": "agent_message",
+                        "text": "123",
+                    },
+                }
+            )
+            + '\n{"type":"turn.completed","usage":{"input_tokens":0,'
+            '"cached_input_tokens":0,"output_tokens":0}}'
+        )
+    else:
+        text = '{"type":"result","subtype":"success","is_error":false,"structured_result":123}'
+    consumer.feed(text.encode())
+    decoded = consumer.finish()
+    assert decoded.error is not None and decoded.error.code == "protocol_error"
+    assert not decoded.structured_output_present

@@ -1,8 +1,14 @@
+import json
+from dataclasses import replace
+
 import pytest
 
 from adapter_helpers import codex_stream, codex_usage, resolved
 from pratfall.adapters import codex
-from pratfall.models import Options, ResultError, Usage
+from pratfall.adapters.registry import ADAPTERS
+from pratfall.consumer import ConsumerFailure, ConsumerLimits
+from pratfall.errors import PratError
+from pratfall.models import Options, PreparedSchema, ResultError, Usage
 
 
 def test_codex_builds_verified_stdin_invocation_and_toml_quotes_effort() -> None:
@@ -216,3 +222,143 @@ def test_codex_top_level_error_is_provider_failure() -> None:
     assert decoded.error is not None
     assert decoded.error.code == "provider_error"
     assert decoded.error.message == "API unavailable"
+
+
+def schema_message(text: str, identifier: str = "answer") -> dict[str, object]:
+    return {
+        "type": "item.completed",
+        "item": {"id": identifier, "type": "agent_message", "text": text},
+    }
+
+
+def test_codex_schema_build_and_native_collision() -> None:
+    profile = replace(
+        resolved("codex", Options(schema="source", attachments=("/image.png",))),
+        prepared_schema=PreparedSchema('{"type":"object"}', {"type": "object"}, "/snapshot"),
+    )
+    assert codex.build(profile, b"prompt").argv == (
+        "codex-wrapper",
+        "native",
+        "exec",
+        "--json",
+        "--image=/image.png",
+        "--output-schema",
+        "/snapshot",
+        "--",
+        "-",
+    )
+    for arguments in (("--output-schema", "native"), ("--output-schema=native",)):
+        native = resolved("codex", Options(native_args=arguments))
+        codex.validate(native)
+        with pytest.raises(PratError, match="controlled by prat"):
+            codex.validate(replace(native, options=replace(native.options, schema="source")))
+
+
+@pytest.mark.parametrize("value", [None, False, 0, "", "雪", [], {}, {"answer": [1, True]}])
+@pytest.mark.parametrize("chunk", [1, 11, 65536])
+def test_codex_schema_final_message_parity(value: object, chunk: int) -> None:
+    text = codex_stream(
+        {"type": "turn.started"},
+        schema_message("Planning prose"),
+        schema_message(json.dumps(value), "final"),
+        {"type": "turn.completed", "usage": codex_usage()},
+    )
+    bound = ADAPTERS["codex"].for_schema(True)
+    consumer = codex.schema_consumer()
+    encoded = text.encode()
+    for start in range(0, len(encoded), chunk):
+        consumer.feed(encoded[start : start + chunk])
+    decoded = consumer.finish()
+    assert decoded == codex.decode_schema(text) == bound.decode(text)
+    assert decoded.error is None
+    assert decoded.structured_output_present
+    assert decoded.structured_output == value
+    assert json.loads(decoded.output) == value
+    assert decoded.usage == Usage(24_901, 8_960, 0, 8, 0)
+
+
+def test_codex_schema_selects_last_turn_without_joining() -> None:
+    text = codex_stream(
+        schema_message('{"first":1}'),
+        {"type": "turn.completed", "usage": codex_usage()},
+        {"type": "turn.started"},
+        schema_message("[2]"),
+        {"type": "turn.completed", "usage": codex_usage(output_tokens=9)},
+    )
+    decoded = codex.decode_schema(text)
+    assert decoded.output == "[2]"
+    assert decoded.error is None
+    assert decoded.usage is not None and decoded.usage.output_tokens == 9
+    assert codex.decode(text).output == '{"first":1}\n[2]'
+
+
+@pytest.mark.parametrize(
+    "last", ["prose", "", '{"a":1,"a":2}', "NaN", "1e999", "1" * 129, "[" * 65 + "0" + "]" * 65]
+)
+def test_codex_schema_bad_final_keeps_safe_partial(last: str) -> None:
+    decoded = codex.decode_schema(
+        codex_stream(
+            schema_message('{"partial":true}'),
+            schema_message(last),
+            {"type": "turn.completed", "usage": codex_usage()},
+        )
+    )
+    assert decoded.output == '{"partial":true}'
+    assert decoded.structured_output == {"partial": True}
+    assert decoded.error is not None and decoded.error.code == "protocol_error"
+    assert decoded.usage is not None
+
+
+@pytest.mark.parametrize(
+    "ending",
+    [
+        [],
+        [{"type": "turn.started"}],
+        [{"type": "turn.started"}, {"type": "turn.completed", "usage": codex_usage()}],
+        [{"type": "turn.failed", "error": {"message": "denied"}}],
+    ],
+)
+def test_codex_schema_completion_and_failure(ending: list[dict[str, object]]) -> None:
+    decoded = codex.decode_schema(codex_stream(schema_message("null"), *ending))
+    assert decoded.output == "null" and decoded.structured_output_present
+    assert decoded.error is not None
+    assert decoded.error.code == (
+        "provider_error" if ending and ending[-1]["type"] == "turn.failed" else "protocol_error"
+    )
+
+
+def test_codex_schema_missing_message() -> None:
+    decoded = codex.decode_schema(codex_stream({"type": "turn.completed", "usage": codex_usage()}))
+    assert decoded.output == "" and not decoded.structured_output_present
+    assert decoded.error is not None and decoded.error.code == "protocol_error"
+
+
+def test_codex_schema_replacement_refunds_and_charges_both_representations() -> None:
+    consumer = codex.schema_consumer(ConsumerLimits(state_bytes=8, records=1))
+    for _ in range(20):
+        consumer.feed(codex_stream(schema_message("null")).encode())
+    with pytest.raises(ConsumerFailure, match="retained output state"):
+        consumer.feed(codex_stream(schema_message('"too large"')).encode())
+    with pytest.raises(ConsumerFailure) as failure:
+        consumer.finish()
+    assert failure.value.decoded is not None
+    assert failure.value.decoded.output == "null"
+    assert failure.value.decoded.structured_output_present
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        '{"type":"item.completed","item":{"id":"x","type":"agent_message","text":"null","text":"0"}}',
+        '{"type":"future","payload":NaN}',
+        '{"type":"future","payload":' + "[" * 65 + "0" + "]" * 65 + "}",
+    ],
+)
+def test_codex_schema_strict_event_json(record: str) -> None:
+    decoded = codex.decode_schema(record)
+    assert decoded.error is not None and decoded.error.code == "protocol_error"
+
+
+def test_codex_schema_invalid_unicode_answer() -> None:
+    decoded = codex.decode_schema(codex_stream(schema_message('"\\ud800"')))
+    assert decoded.error is not None and decoded.error.code == "output_encoding"

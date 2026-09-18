@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from pratfall.adapters.accounting import model
 from pratfall.adapters.native_args import (
     Flag,
@@ -12,7 +14,18 @@ from pratfall.consumer import (
     decode_with,
     retained_utf8,
 )
-from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
+from pratfall.errors import PratError
+from pratfall.limits import JSON_DEPTH
+from pratfall.models import (
+    Activity,
+    DecodedOutput,
+    Invocation,
+    PreparedSchema,
+    ResolvedProfile,
+    ResultError,
+    Usage,
+)
+from pratfall.schema import StructuredAnswer, parse_json, retain_answer
 
 _ALLOWED = {name: Flag(0) for name in ("--debug", "-d")} | {
     name: Flag(1)
@@ -72,6 +85,10 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append(f"--core-tools={tool}")
     for tool in resolved.options.disabled_tools or ():
         argv.append(f"--exclude-tools={tool}")
+    if resolved.prepared_schema is not None:
+        if resolved.prepared_schema.path is None:
+            raise ValueError("Prepared schema requires a file snapshot.")
+        argv.extend(("--json-schema", "@" + resolved.prepared_schema.path))
     return Invocation((*argv, *arguments), prompt)
 
 
@@ -193,18 +210,22 @@ class _Consumer(JsonlConsumer):
             return
         valid_result = False
         try:
-            if failure is None:
-                text = event.get("result")
-                if not isinstance(text, str):
-                    self.malformed("Qwen result text is malformed.")
-                    return
-                self._text(text)
+            if failure is None and not self._success(event):
+                return
             valid_result = True
         finally:
             self._retain_result(
                 event.get("usage"), failure if valid_result else self.provider_error
             )
         self.completed = failure is None
+
+    def _success(self, event: dict[str, object]) -> bool:
+        text = event.get("result")
+        if not isinstance(text, str):
+            self.malformed("Qwen result text is malformed.")
+            return False
+        self._text(text)
+        return True
 
     def _retain_result(self, value: object, failure: ResultError | None) -> None:
         usage = _usage(value)
@@ -247,3 +268,80 @@ def _usage(value: object) -> Usage | ResultError | None:
         output_tokens=value["output_tokens"],
         cached_input_tokens=value.get("cache_read_input_tokens"),
     )
+
+
+def validate_schema(prepared: PreparedSchema) -> None:
+    value = prepared.value
+    if isinstance(value, dict) and "$ref" in value:
+        raise PratError("Qwen rejects root $ref; wrap it in allOf.", option="schema")
+    if not _may_accept_object(value):
+        raise PratError("Qwen schema root must accept objects.", option="schema")
+
+
+def _may_accept_object(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if not isinstance(value, dict):
+        return True
+    types = value.get("type")
+    if isinstance(types, str) and types != "object":
+        return False
+    if isinstance(types, list) and "object" not in types:
+        return False
+    if "const" in value and not isinstance(value["const"], dict):
+        return False
+    enum = value.get("enum")
+    if isinstance(enum, list) and not any(isinstance(item, dict) for item in enum):
+        return False
+    for keyword in ("anyOf", "oneOf", "allOf"):
+        branches = value.get(keyword)
+        if isinstance(branches, list):
+            accepts = [_may_accept_object(branch) for branch in branches]
+            if not (all(accepts) if keyword == "allOf" else any(accepts)):
+                return False
+    return True
+
+
+def schema_consumer(limits: ConsumerLimits = DEFAULT_CONSUMER_LIMITS) -> JsonlConsumer:
+    return _SchemaConsumer(limits)
+
+
+def decode_schema(stdout: str) -> DecodedOutput:
+    return decode_with(schema_consumer, stdout)
+
+
+class _SchemaConsumer(_Consumer):
+    def __init__(self, limits: ConsumerLimits) -> None:
+        super().__init__(limits)
+        self.answer: StructuredAnswer | None = None
+        self.numeric_bytes = limits.numeric_bytes
+
+    def parse_record(self, line: str) -> object:
+        return parse_json(line, max_depth=JSON_DEPTH + 2, numeric_bytes=self.numeric_bytes)
+
+    def apply(self, event: dict[str, object]) -> Activity | None:
+        if event["type"] == "result" and event.get("parent_tool_use_id") is not None:
+            self.result_last = False
+            return None
+        return super().apply(event)
+
+    def _text(self, text: str) -> None:
+        pass
+
+    def _success(self, event: dict[str, object]) -> bool:
+        if "structured_result" not in event:
+            self.malformed("Qwen success is missing structured_result.")
+            return False
+        self.answer = retain_answer(event["structured_result"], self.retain)
+        return True
+
+    def result(self) -> DecodedOutput:
+        decoded = super().result()
+        if self.answer is None:
+            return decoded
+        return replace(
+            decoded,
+            output=self.answer.output,
+            structured_output=self.answer.value,
+            structured_output_present=True,
+        )

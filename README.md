@@ -69,7 +69,7 @@ printf 'summarize this checkout\n' | prat gm
 | `-e` / `--edit` | Edit the complete prompt in `VISUAL`, `EDITOR`, or `vi`. |
 | `--context PATH` | Prepend a context file; repeat to include several. |
 | `-x` / `--extract` | Return the body of the first fenced code block. |
-| `--schema PATH` | Request native JSON Schema output from a UTF-8 file (Claude). |
+| `--schema PATH` | Request native JSON Schema output from a UTF-8 file (Claude, Codex, Qwen 0.24+). |
 | `--json` | Return one JSON result with output, status, and available usage. |
 | `--progress` | Show live activity on stderr. |
 | `--trace` | Copy captured native stdout to stderr. |

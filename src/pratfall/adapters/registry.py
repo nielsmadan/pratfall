@@ -82,6 +82,8 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
             build=codex.build,
             validate=codex.validate,
             consumer=codex.consumer,
+            schema_transport="file",
+            schema_consumer=codex.schema_consumer,
         ),
         "gemini": Adapter(
             build=gemini.build,
@@ -133,7 +135,14 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
             validate=warp.validate,
             consumer=warp.consumer,
         ),
-        "qwen": Adapter(build=qwen.build, validate=qwen.validate, consumer=qwen.consumer),
+        "qwen": Adapter(
+            build=qwen.build,
+            validate=qwen.validate,
+            consumer=qwen.consumer,
+            schema_transport="file",
+            schema_consumer=qwen.schema_consumer,
+            validate_schema=qwen.validate_schema,
+        ),
         "amp": Adapter(build=amp.build, validate=amp.validate, consumer=amp.consumer),
         "reasonix": Adapter(
             build=reasonix.build, validate=reasonix.validate, whole_document=reasonix.decode

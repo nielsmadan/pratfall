@@ -128,7 +128,7 @@ _ATTACHMENT_TYPES = {
     "copilot": ["image", "native document"],
     "opencode": ["file"],
 }
-_SCHEMA = frozenset({"claude"})
+_SCHEMA = frozenset({"claude", "codex", "qwen"})
 _INSTRUCTIONS = frozenset({"claude", "codex", "qwen", "droid"})
 _NATIVE_AGENTS = frozenset({"claude", "copilot", "vibe"})
 _TOOLS_EMPTY = frozenset({"claude", "copilot"})

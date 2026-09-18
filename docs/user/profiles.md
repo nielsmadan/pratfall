@@ -338,6 +338,7 @@ agent = "claude"
 schema = "schemas/answer.json"
 ```
 
+Schemas are supported for Claude, Codex and Qwen (v0.24.0+).
 `schema` is a nonempty path string relative to its defining config file. CLI `--schema PATH`
 overrides it relative to the invocation directory. Prat preserves symlink/`..` traversal and reads
 only the winning selected file, before prompt acquisition. `prat profiles` shows source paths;

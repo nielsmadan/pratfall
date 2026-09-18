@@ -15,13 +15,13 @@ from pratfall.models import JsonValue, OptionOrigin, PreparedSchema, ResultError
 from pratfall.prompt_input import read_bounded_file
 
 
-def validate_json(value: object) -> JsonValue:
+def validate_json(value: object, *, max_depth: int = JSON_DEPTH) -> JsonValue:
     pending = [(value, 0)]
     while pending:
         item, depth = pending.pop()
         if isinstance(item, dict | list):
-            if depth >= JSON_DEPTH:
-                raise ValueError(f"JSON nesting exceeds {JSON_DEPTH} containers")
+            if depth >= max_depth:
+                raise ValueError(f"JSON nesting exceeds {max_depth} containers")
             if isinstance(item, dict):
                 for key, child in item.items():
                     if not isinstance(key, str):
@@ -44,18 +44,20 @@ def validate_json(value: object) -> JsonValue:
     return cast(JsonValue, value)
 
 
-def parse_json(text: str) -> JsonValue:
+def parse_json(
+    text: str, *, max_depth: int = JSON_DEPTH, numeric_bytes: int = NUMERIC_BYTES
+) -> JsonValue:
     try:
         value = json.loads(
             text,
             object_pairs_hook=_object,
-            parse_int=_integer,
-            parse_float=_number,
+            parse_int=lambda value: _integer(value, numeric_bytes),
+            parse_float=lambda value: _number(value, numeric_bytes),
             parse_constant=_constant,
         )
     except RecursionError as error:
         raise ValueError("JSON nesting is excessive") from error
-    return validate_json(value)
+    return validate_json(value, max_depth=max_depth)
 
 
 def encode_json(value: object) -> str:
@@ -71,19 +73,19 @@ def _object(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
     return result
 
 
-def _integer(value: str) -> int:
-    _numeric_width(value)
+def _integer(value: str, limit: int) -> int:
+    _numeric_width(value, limit)
     return int(value)
 
 
-def _number(value: str) -> float:
-    _numeric_width(value)
+def _number(value: str, limit: int) -> float:
+    _numeric_width(value, limit)
     return float(value)
 
 
-def _numeric_width(value: str) -> None:
-    if len(value) > NUMERIC_BYTES:
-        raise ValueError(f"JSON numeric value exceeds {NUMERIC_BYTES} bytes")
+def _numeric_width(value: str, limit: int) -> None:
+    if len(value) > limit:
+        raise ValueError(f"JSON numeric value exceeds {limit} bytes")
 
 
 def _constant(value: str) -> JsonValue:

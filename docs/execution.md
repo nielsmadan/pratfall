@@ -80,6 +80,13 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   restrictions only where verified. No full schema validator or network `$ref` access is added.
   `Adapter.for_schema()` binds optional schema decoder/consumer implementations once, retaining the
   same direct, convenience and incremental seams and leaving the runner schema-neutral.
+  Codex and Qwen use private file snapshots. Their schema JSONL consumers override only the record
+  parser with strict JSON validation; ordinary protocol parsing stays compatible. Schema events
+  allow two additional envelope containers, while answers independently retain the 64-container
+  limit. Configured consumer numeric widths apply to event literals and Codex's answer JSON.
+  Codex replaces the last valid structured partial without joining turns; the last completed
+  message and successful turn govern completion. Qwen retains only success `structured_result`
+  answers and keeps root-model/final-result accounting.
 - [`run`](../src/pratfall/runner.py) owns POSIX process lifecycle and passes bytes to a
   schema-neutral consumer. Adapters own native protocol transitions; they do not manage processes.
   Its result carries either a `RawCapture` of complete stdout or a `ConsumedCapture` of the

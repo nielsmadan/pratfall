@@ -54,11 +54,20 @@ quiet one-shot path.
 
 ### Schema output
 
-Claude supports `--schema PATH` / `schema`, mapped to native `--json-schema JSON`.
-Prat selects the terminal `structured_output` field and emits its compact JSON serialization as
-`output`, with the parsed value in the JSON envelope's `structured_output` field. Native validation
-remains authoritative. See [schema output rules](running.md#request-schema-output) and
-[Claude's verified contract](../reference/claude.md#schema-output-verified-2026-09-18).
+`--schema PATH` / `schema` is supported by these agents:
+
+| Agent | Native transport | Authoritative answer |
+| --- | --- | --- |
+| Claude | `--json-schema JSON` | Terminal `structured_output`. |
+| Codex | `--output-schema FILE` | Last completed `agent_message`, with `turn.completed`. |
+| Qwen 0.24+ | `--json-schema @FILE` | Terminal success `structured_result`. |
+
+Prat emits compact JSON as `output` and the parsed value as `structured_output`. Native dialect
+validation remains authoritative; Qwen roots must accept objects. No implicit version probe runs.
+See [schema output rules](running.md#request-schema-output) and the verified contracts for
+[Claude](../reference/claude.md#schema-output-verified-2026-09-18),
+[Codex](../reference/codex.md#schema-output-verified-2026-09-18) and
+[Qwen](../reference/qwen.md#schema-output-verified-2026-09-18).
 
 ### Budgets
 

@@ -124,7 +124,7 @@ def test_agents_text(capsys: pytest.CaptureFixture[str]) -> None:
     )
     assert "kiro: model, effort" in lines
     assert "warp: model" in lines
-    assert "qwen: model, add_dirs, instructions, tools, disabled_tools, max_turns" in lines
+    assert "qwen: model, add_dirs, instructions, schema, tools, disabled_tools, max_turns" in lines
     assert "amp: none" in lines
     assert "kimi: model" in lines
     assert "vibe: tools, disabled_tools, native_agent, max_budget_usd, max_turns" in lines

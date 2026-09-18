@@ -233,11 +233,11 @@ class JsonlConsumer:
         if not line.strip():
             return None
         try:
-            event = json.loads(
-                line,
-                parse_int=self._parse_int,
-                parse_float=self._parse_float,
-            )
+            event = self.parse_record(line)
+        except UnicodeEncodeError as error:
+            raise ConsumerFailure(
+                ResultError("output_encoding", "Agent output contains invalid Unicode text.")
+            ) from error
         except json.JSONDecodeError as error:
             self.malformed(f"Invalid {self._name} JSONL on line {self._line_number}: {error.msg}.")
             return None
@@ -251,6 +251,9 @@ class JsonlConsumer:
             self.malformed(f"Malformed {self._name} event on line {self._line_number}.")
             return None
         return self.apply(event)
+
+    def parse_record(self, line: str) -> object:
+        return json.loads(line, parse_int=self._parse_int, parse_float=self._parse_float)
 
     @property
     def type_field(self) -> str:

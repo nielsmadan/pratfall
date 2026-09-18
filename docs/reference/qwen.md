@@ -1,4 +1,4 @@
-# Qwen Code 0.23.3
+# Qwen Code
 
 **Evidence recorded:** 2026-09-11.
 **Method:** Static primary-source and package inspection; native agents were not executed.
@@ -96,3 +96,32 @@ These tool-control guarantees target v0.24.0; no version probe is performed.
 Equivalent native core/exclude flags conflict with active public lists. Empty `disabled_tools`
 clears Prat inheritance without adding an exclusion. Evidence is primary-source inspection and
 fake argv tests; no authenticated native run was performed.
+
+
+## Schema output (verified 2026-09-18)
+
+Schema mode requires v0.24.0+, without an implicit version probe. Ordinary v0.23.3 output remains
+supported. The [v0.24 structured-output guide](https://github.com/QwenLM/qwen-code/blob/v0.24.0/docs/users/features/structured-output.md)
+states: “The schema root must accept object-typed values.” It rejects root `$ref`, accepting a
+reference wrapped in `allOf`. Prat rejects root `$ref` and obvious nonobject boolean, type, const,
+enum and anyOf/oneOf/allOf combinations. Other keywords and uncertain compositions remain native
+Ajv's responsibility; Prat does not resolve references or validate answers against the schema.
+
+Prat passes `--json-schema @FILE` using a private snapshot of the original validated bytes. This
+keeps the 1 MiB public schema limit independent of argv-size limits. Existing native-only
+`--json-schema` remains reserved. Snapshot lifetime covers execution and decoding; previews label
+the temporary path.
+
+The [v0.24 result builder](https://github.com/QwenLM/qwen-code/blob/v0.24.0/packages/cli/src/nonInteractive/io/BaseJsonOutputAdapter.ts)
+checks `const hasStructured = 'structuredResult' in options;`, normalizes undefined to null, and
+emits both JSON-stringified `result` and raw `structured_result`. Prat uses property membership
+for terminal-success `structured_result`, preserving null. Intermediate prose, child assistant
+messages and synthetic tool arguments cannot establish success. Native failure results and final
+usage retain their ordinary semantics; schema answers use strict bounded JSON parsing.
+
+The same guide states: “`structured_output` deliberately bypasses the `--core-tools` allowlist”.
+Explicit excludes and native permission denials still apply. Prat adds no tool override or
+permission approval, even when a denial prevents structured output.
+
+Evidence is pinned primary-source inspection and fake executable/consumer tests; no native
+inference was run.

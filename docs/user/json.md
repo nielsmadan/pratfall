@@ -56,6 +56,9 @@ JSON null is a present answer when `output` is `"null"`; false, zero, empty stri
 objects also remain distinct from missing output. Missing or malformed required output fails with
 `protocol_error` (invalid Unicode uses `output_encoding`). Safe partial answers and accounting
 survive errors, native nonzero exits, timeouts and interruption. No internal presence flag is emitted.
+Codex selects only the last completed message and requires successful turn completion. Qwen
+(v0.24+) reads native `structured_result` from the terminal success, even when its value is null;
+intermediate tool arguments and child messages do not supply a final answer.
 `--extract` and schema output cannot be combined. See [schema output](running.md#request-schema-output).
 
 ## Models, usage, and cost
