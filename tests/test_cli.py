@@ -118,10 +118,10 @@ def test_agents_inventory_reports_aliases_and_capabilities(
 def test_agents_text(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["agents"]) == 0
     lines = capsys.readouterr().out.splitlines()
-    assert "claude (cc): model, effort, fast, max_budget_usd, max_turns" in lines
+    assert "claude (cc): model, effort, fast, add_dirs, max_budget_usd, max_turns" in lines
     assert "kiro: model, effort" in lines
     assert "warp: model" in lines
-    assert "qwen: model, max_turns" in lines
+    assert "qwen: model, add_dirs, max_turns" in lines
     assert "amp: none" in lines
     assert "kimi: model" in lines
     assert "vibe: max_budget_usd, max_turns" in lines
@@ -363,6 +363,7 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
                 "max_turns": None,
                 "max_ai_credits": None,
                 "fast": None,
+                "add_dirs": None,
                 "native_args": [],
             },
         }
@@ -977,3 +978,17 @@ def test_templates_listing_is_sorted_and_versioned(
 def test_empty_templates_listing(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["templates"]) == 0
     assert capsys.readouterr().out == "No templates configured.\n"
+
+
+def test_agents_inventory_exposes_extra_directory_support(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["agents", "--json"]) == 0
+    records = json.loads(capsys.readouterr().out)["agents"]
+    assert {record["name"] for record in records if record["capabilities"]["add_dirs"]} == {
+        "claude",
+        "codex",
+        "gemini",
+        "qwen",
+        "copilot",
+    }

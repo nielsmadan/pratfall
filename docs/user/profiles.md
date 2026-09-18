@@ -9,6 +9,7 @@ across projects, or locally in a project's `.pratfile`.
 - [Merge global and local settings](#merge-global-and-local-settings)
 - [Configure commands and wrappers](#configure-commands-and-wrappers)
 - [Inspect and validate](#inspect-and-validate)
+- [Extra directories](#extra-directories)
 - [Upgrade existing profiles](#upgrade-existing-profiles)
 
 ## Create a profile
@@ -42,7 +43,7 @@ prat simple --effort high "investigate this failure"
 ```
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
-`model`, `effort`, `fast`, `timeout`, `native_args`, and the agent's supported budget fields.
+`model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, and the agent's supported budget fields.
 Use `[defaults]` for shared settings.
 
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
@@ -100,7 +101,7 @@ Settings resolve from highest to lowest priority:
 | `[profiles.NAME]` | A local profile replaces the entire global profile with that name. |
 | `[templates.NAME]` | A local template replaces the entire global template with that name. |
 | `[agents.NAME].command` | A local command array replaces the global array for that agent. |
-| `native_args` | The higher-priority array replaces the lower-priority array, even when empty. |
+| `native_args`, `add_dirs` | The higher-priority array replaces the lower-priority array, even when empty. |
 
 Profiles from both files remain available. Profiles do not inherit from each other; omitted fields
 use the merged defaults.
@@ -165,6 +166,37 @@ when that selector is resolved. Errors name the source file and field, including
 
 In JSON results, `sources` lists loaded files in global-to-local order. `path` is the
 highest-priority loaded file, or the global path if neither file exists.
+
+## Extra directories
+
+Use `add_dirs` in a profile or `[defaults]`:
+
+```toml
+[profiles.monorepo]
+agent = "codex"
+add_dirs = ["../shared", "../other project"]
+```
+
+Claude, Codex, Gemini, Qwen and Copilot support extra directories. Each relative path uses the
+file defining that value as its base, including inherited global defaults. `~` expands to the
+user's home. Paths preserve directory-symlink traversal through `..`; no shell or variable
+expansion occurs. A higher-priority list replaces the entire inherited list. `add_dirs = []`
+clears inherited directories and is neutral even for an agent without directory support.
+
+Defaults apply to every profile. An unsupported profile must clear `add_dirs` explicitly or
+whole-config capability validation fails, even when another profile is selected. The inventory
+shows resolved paths. Configuration listing and validation do not check directory existence;
+only the selected run checks directories, before reading the prompt or opening an editor.
+Gemini and Qwen reject paths containing commas or ending in whitespace because their native
+parsers split commas and trim values. A nonempty public list conflicts with the corresponding
+native directory flags in `native_args`; empty lists leave native flags usable.
+
+Selected directory paths are canonicalized through the filesystem before native argv is built.
+This preserves symlink/`..` targets even when a native parser would otherwise collapse `..`
+lexically. Config inspection retains the joined source spelling and does not inspect targets.
+
+The Gemini/Qwen delimiter restrictions apply to both configured spellings and selected canonical
+targets. Configuration validation rejects an unrepresentable spelling without inspecting its target.
 
 ## Upgrade existing profiles
 

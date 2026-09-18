@@ -48,3 +48,15 @@ report few models; this performance case remains deferred. The runner checks dea
 - [Pratfall adapter](../../src/pratfall/adapters/qwen.py)
 - [Shared execution boundary](../execution.md)
 - [Interface comparison and evidence scope](overview.md)
+
+## Extra directories (verified 2026-09-18)
+
+The [v0.24.0 option declarations](https://github.com/QwenLM/qwen-code/blob/v0.24.0/packages/cli/src/config/top-level-options.ts)
+define `--include-directories` with alias `--add-dir`; the same declaration exists in v0.23.3.
+The [parser](https://github.com/QwenLM/qwen-code/blob/v0.24.0/packages/cli/src/config/config.ts)
+splits comma-separated values and trims each segment. Prat repeats `--include-directories PATH`
+and rejects commas or surrounding whitespace in resolved paths. Both native aliases conflict
+with a nonempty public directory list.
+
+Verification used primary documentation/source inspection and fake executable argv tests;
+no authenticated native run was performed for this control.

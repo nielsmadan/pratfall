@@ -19,6 +19,7 @@ from pratfall.models import (
     PromptTemplate,
     ResolvedProfile,
 )
+from pratfall.option_paths import resolve_path
 from pratfall.prompt_templates import validate_template
 
 DEFAULT_TIMEOUT = 600.0
@@ -106,7 +107,14 @@ def _arguments(value: object, label: str) -> tuple[str, ...]:
     return tuple(value)
 
 
-def parse_options(table: dict[str, object], label: str) -> Options:
+def _directories(value: object, label: str, base: Path | None) -> tuple[str, ...]:
+    paths = tuple(_string(item, label) for item in _arguments(value, label))
+    if base is None:
+        return paths
+    return tuple(resolve_path(item, base, OptionOrigin(label)) for item in paths)
+
+
+def parse_options(table: dict[str, object], label: str, *, base: Path | None = None) -> Options:
     _known_keys(table, OPTION_FIELDS, label)
     return Options(
         model=_string(table["model"], f"{label}.model") if "model" in table else None,
@@ -126,6 +134,9 @@ def parse_options(table: dict[str, object], label: str) -> Options:
             else None
         ),
         fast=_boolean(table["fast"], f"{label}.fast") if "fast" in table else None,
+        add_dirs=_directories(table["add_dirs"], f"{label}.add_dirs", base)
+        if "add_dirs" in table
+        else None,
         native_args=(
             _arguments(table["native_args"], f"{label}.native_args")
             if "native_args" in table
@@ -167,6 +178,8 @@ def validate_capabilities(
     for field in ("max_budget_usd", "max_turns", "max_ai_credits"):
         if getattr(options, field) is not None and field not in caps.budgets:
             raise _rejected(fields[field], f"{agent.label} does not support this budget.")
+    if options.add_dirs and not caps.add_dirs:
+        raise _rejected(fields["add_dirs"], f"{agent.label} does not support extra directories.")
     if options.fast is not None and not caps.fast:
         raise _rejected(fields["fast"], f"{agent.label} does not support a fast-mode override.")
 
@@ -238,7 +251,7 @@ def _profiles(table: dict[str, object], path: Path) -> dict[str, Profile]:
         except PratError as error:
             raise PratError(f"{label}.agent: {error}") from error
         options = parse_options(
-            {key: val for key, val in settings.items() if key != "agent"}, label
+            {key: val for key, val in settings.items() if key != "agent"}, label, base=path.parent
         )
         profiles[name] = Profile(agent=agent.name, options=options, source=path)
     return profiles
@@ -279,7 +292,9 @@ def _load_file(path: Path, *, required: bool) -> Config:
     if type(table.get("version")) is not int or table["version"] != 1:
         raise PratError(f"{path}: version must be the integer 1.")
     defaults = parse_options(
-        _table(table.get("defaults", {}), f"{path}: defaults"), f"{path}: defaults"
+        _table(table.get("defaults", {}), f"{path}: defaults"),
+        f"{path}: defaults",
+        base=path.parent,
     )
     commands = _commands(_table(table.get("agents", {}), f"{path}: agents"), path)
     profiles = _profiles(_table(table.get("profiles", {}), f"{path}: profiles"), path)

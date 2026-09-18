@@ -59,6 +59,7 @@ printf 'summarize this checkout\n' | prat gm
 | `--fast` / `--no-fast` | Override fast mode for Claude or Codex. |
 | `--timeout SECONDS` | Set the execution deadline; default: 600 seconds. |
 | `--cwd PATH` | Choose the agent's working directory. |
+| `--add-dir PATH` | Add a native workspace directory; repeat for several. |
 | `-f PATH` / `--file PATH` | Read a prompt from a UTF-8 file; `-` reads stdin. |
 | `-t NAME` / `--template NAME` | Apply a named prompt template. |
 | `-e` / `--edit` | Edit the complete prompt in `VISUAL`, `EDITOR`, or `vi`. |
@@ -69,7 +70,7 @@ printf 'summarize this checkout\n' | prat gm
 | `--trace` | Copy captured native stdout to stderr. |
 | `--dry-run` | Preview the resolved invocation without launching the agent. |
 
-Model, effort, fast mode, and budget support depend on the agent; unsupported settings are
+Model, effort, fast mode, extra directories, and budget support depend on the agent; unsupported settings are
 rejected. Native budgets are available through `--max-budget-usd`, `--max-turns`, and
 `--max-ai-credits` where supported.
 
@@ -86,6 +87,10 @@ Supported native arguments go after `--`, for example:
 ```sh
 prat cx "inspect this change" -- --sandbox read-only
 ```
+
+Use `prat cx --add-dir ../shared "review both projects"` to include an extra directory.
+Claude, Codex, Gemini, Qwen and Copilot support this setting with their native access semantics.
+Paths resolve from the invocation directory, independently of `--cwd`.
 
 Prat preserves native authentication and permission defaults. See
 [running prompts](docs/user/running.md) for input rules and run behavior, and

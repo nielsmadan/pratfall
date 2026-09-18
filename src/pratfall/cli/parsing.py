@@ -23,6 +23,7 @@ _RUN_VALUE_FLAGS = {
     "--file": "file",
     "-f": "file",
     "--context": "context",
+    "--add-dir": "add_dirs",
     "--template": "template",
     "-t": "template",
 }
@@ -104,6 +105,7 @@ run options:
   --max-turns COUNT       Set a supported native turn limit.
   --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
   --cwd PATH              Set the agent working directory.
+  --add-dir PATH          Add a native workspace directory; repeat to include several.
   --config PATH           Merge PATH over global config instead of .pratfile.
   --json                  Print one normalized JSON result.
   --progress              Print bounded live activity updates on stderr.
@@ -161,6 +163,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     scan = _scan_run(arguments)
     values: dict[str, str] = {}
     contexts: list[str] = []
+    add_dirs: list[str] = []
     selector: str | None = None
     prompt_source: PromptSource | None = None
     json_mode = False
@@ -212,9 +215,9 @@ def _parse_run(arguments: list[str]) -> RunArguments:
                 prompt_source = _add_prompt_source(
                     prompt_source, PromptSource("file", _text_option(value, token.name))
                 )
-            elif field == "context":
+            elif field in {"add_dirs", "context"}:
                 _text_option(value, token.name)
-                contexts.append(value)
+                (add_dirs if field == "add_dirs" else contexts).append(value)
             else:
                 _store_value(values, field, value)
             continue
@@ -237,6 +240,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         max_turns=_integer_option(values.get("max_turns"), "--max-turns"),
         max_ai_credits=_number_option(values.get("max_ai_credits"), "--max-ai-credits"),
         fast=fast,
+        add_dirs=tuple(add_dirs) if add_dirs else None,
         native_args=scan.native_arguments,
     )
     return RunArguments(

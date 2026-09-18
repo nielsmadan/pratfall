@@ -118,13 +118,18 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append(f"--effort={options.effort}")
     if options.max_ai_credits is not None:
         argv.append(f"--max-ai-credits={options.max_ai_credits}")
+    for directory in options.add_dirs or ():
+        argv.append(f"--add-dir={directory}")
     argv.extend(arguments)
     argv.append(f"--prompt={prompt.decode('utf-8')}")
     return Invocation(tuple(argv), b"")
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("Copilot", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    reserved = _RESERVED | (
+        {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
+    )
+    validate_flags("Copilot", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
 @dataclass

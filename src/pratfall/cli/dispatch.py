@@ -1,7 +1,7 @@
 import argparse
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import closing, suppress
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
@@ -9,7 +9,7 @@ from pathlib import Path
 from pratfall.adapters.registry import ADAPTERS
 from pratfall.catalog import AGENTS
 from pratfall.cli.doctor import _doctor
-from pratfall.cli.parsing import _json_requested, _parse_run, _run_cwd
+from pratfall.cli.parsing import RunArguments, _json_requested, _parse_run, _run_cwd
 from pratfall.cli.presentation import (
     _config_warnings,
     _Diagnostics,
@@ -35,6 +35,7 @@ from pratfall.models import (
     ResolvedProfile,
     ResultError,
 )
+from pratfall.option_paths import prepare_directories, resolve_path
 from pratfall.output import extract_code, normalize, result_dict, validation_error
 from pratfall.prompt_editor import edit_prompt
 from pratfall.prompt_input import InputInterrupted, acquire_prompt, prepend_contexts
@@ -53,6 +54,7 @@ def _agents(json_mode: bool) -> None:
             "effort_values": list(caps.effort_values) or None,
             "budgets": sorted(caps.budgets),
             "fast": caps.fast,
+            "add_dirs": caps.add_dirs,
         }
         records.append(
             {
@@ -63,7 +65,9 @@ def _agents(json_mode: bool) -> None:
                 "capabilities": capabilities,
             }
         )
-        supported = [field for field in ("model", "effort", "fast") if getattr(caps, field)]
+        supported = [
+            field for field in ("model", "effort", "fast", "add_dirs") if getattr(caps, field)
+        ]
         supported.extend(sorted(caps.budgets))
         selectors = agent.name
         if agent.aliases:
@@ -83,7 +87,11 @@ def _profiles(config: Config, json_mode: bool) -> None:
         for key, value in options.items():
             if value is None or value == ():
                 continue
-            rendered = json.dumps(value, ensure_ascii=False) if key == "native_args" else value
+            rendered = (
+                json.dumps(value, ensure_ascii=False)
+                if key in {"native_args", "add_dirs"}
+                else value
+            )
             description += f" {key}={rendered}"
         lines.append(description)
     _emit({"profiles": records}, lines or ["No profiles configured."], json_mode=json_mode)
@@ -98,14 +106,20 @@ def _templates(config: Config, json_mode: bool) -> None:
     _emit({"templates": records}, lines or ["No templates configured."], json_mode=json_mode)
 
 
-def _validate_native_arguments(resolved: ResolvedProfile, label: str) -> None:
+def _validate_native_arguments(
+    resolved: ResolvedProfile, label: str, origins: Mapping[str, OptionOrigin]
+) -> None:
     adapter = ADAPTERS.get(resolved.agent.name)
     if adapter is None:
         return
     try:
         adapter.validate(resolved)
     except PratError as error:
-        raise PratError(f"{label}: {error}", code=error.code) from error
+        origin = origins.get(error.option) if error.option is not None else None
+        raise PratError(
+            f"{origin.label if origin is not None else label}: {error}",
+            code=origin.code if origin is not None else error.code,
+        ) from error
 
 
 def _validate_config_native_arguments(config: Config) -> None:
@@ -114,7 +128,7 @@ def _validate_config_native_arguments(config: Config) -> None:
         source = config.profiles[name].source or config.path
         fallback = OptionOrigin(f"{source}: profiles.{name}.native_args")
         label = option_origins(config, name).get("native_args", fallback).label
-        _validate_native_arguments(resolved, label)
+        _validate_native_arguments(resolved, label, option_origins(config, name))
 
 
 def _dispatch(args: argparse.Namespace) -> int:
@@ -348,6 +362,21 @@ def _internal_payload(message: str, resolved: ResolvedProfile | None) -> dict[st
     )
 
 
+def _resolve_run_paths(parsed: RunArguments, invocation_cwd: Path) -> RunArguments:
+    if parsed.options.add_dirs is None:
+        return parsed
+    origin = OptionOrigin("command line: --add-dir", "invalid_arguments")
+    paths = tuple(resolve_path(value, invocation_cwd, origin) for value in parsed.options.add_dirs)
+    return replace(parsed, options=replace(parsed.options, add_dirs=paths))
+
+
+def _prepare_run_directories(resolved: ResolvedProfile, origin: OptionOrigin) -> ResolvedProfile:
+    if not resolved.options.add_dirs:
+        return resolved
+    paths = prepare_directories(resolved.options.add_dirs, origin)
+    return replace(resolved, options=replace(resolved.options, add_dirs=paths))
+
+
 def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) -> int:
     json_mode = state.json_mode
     resolved: ResolvedProfile | None = None
@@ -356,6 +385,7 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
         json_mode = parsed.json
         state.json_mode = json_mode
         with closing(_diagnostics_for(progress=parsed.progress)) as diagnostics:
+            parsed = _resolve_run_paths(parsed, invocation_cwd)
             config = load_config(parsed.config, cwd=invocation_cwd)
             _validate_config_native_arguments(config)
             _config_warnings(config, diagnostics)
@@ -364,7 +394,10 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             fallback = OptionOrigin(f"selector {parsed.selector!r}.native_args")
             origins = option_origins(config, parsed.selector, parsed.options)
             label = origins.get("native_args", fallback).label
-            _validate_native_arguments(resolved, label)
+            resolved = _prepare_run_directories(
+                resolved, origins.get("add_dirs", OptionOrigin("add_dirs", "invalid_arguments"))
+            )
+            _validate_native_arguments(resolved, label, origins)
             cwd = _run_cwd(parsed.cwd, invocation_cwd)
             template = (
                 config.templates.get(parsed.template) if parsed.template is not None else None

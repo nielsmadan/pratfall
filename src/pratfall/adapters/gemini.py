@@ -1,5 +1,5 @@
 from pratfall.adapters.accounting import model_map
-from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.adapters.native_args import Flag, validate_directory_values, validate_flags
 from pratfall.adapters.whole_json import document_error, encodable_text, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
@@ -56,13 +56,21 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     argv = [*resolved.command, "--output-format", "json"]
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
+    for directory in resolved.options.add_dirs or ():
+        argv.extend(("--include-directories", directory))
     argv.extend(arguments)
     argv.append(f"--prompt={prompt.decode('utf-8')}")
     return Invocation(tuple(argv), b"")
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("Gemini", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    validate_directory_values(resolved.options.add_dirs or ())
+    reserved = _RESERVED | (
+        {"--include-directories": _ALLOWED["--include-directories"]}
+        if resolved.options.add_dirs
+        else {}
+    )
+    validate_flags("Gemini", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
 def decode(stdout: str) -> DecodedOutput:

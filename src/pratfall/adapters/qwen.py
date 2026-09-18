@@ -1,5 +1,5 @@
 from pratfall.adapters.accounting import model
-from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.adapters.native_args import Flag, validate_directory_values, validate_flags
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
     ConsumerLimits,
@@ -10,7 +10,14 @@ from pratfall.consumer import (
 from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
 _ALLOWED = {name: Flag(0) for name in ("--debug", "-d")} | {
-    name: Flag(1) for name in ("--approval-mode", "--system-prompt", "--append-system-prompt")
+    name: Flag(1)
+    for name in (
+        "--approval-mode",
+        "--system-prompt",
+        "--append-system-prompt",
+        "--include-directories",
+        "--add-dir",
+    )
 }
 _RESERVED = {
     name: Flag(0, joined=name in {"-c"})
@@ -52,11 +59,22 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--model", resolved.options.model))
     if resolved.options.max_turns is not None:
         argv.extend(("--max-session-turns", str(resolved.options.max_turns)))
+    for directory in resolved.options.add_dirs or ():
+        argv.extend(("--include-directories", directory))
     return Invocation((*argv, *arguments), prompt)
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("Qwen", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    validate_directory_values(resolved.options.add_dirs or ())
+    reserved = _RESERVED | (
+        {
+            "--include-directories": _ALLOWED["--include-directories"],
+            "--add-dir": _ALLOWED["--add-dir"],
+        }
+        if resolved.options.add_dirs
+        else {}
+    )
+    validate_flags("Qwen", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
 def decode(stdout: str) -> DecodedOutput:

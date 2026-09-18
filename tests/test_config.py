@@ -673,3 +673,47 @@ def test_templates_is_reserved_for_profile_names(tmp_path: Path) -> None:
     path = write_config(tmp_path, 'version=1\n[profiles.templates]\nagent="codex"\n')
     with pytest.raises(PratError, match="name is reserved"):
         load_config(path)
+
+
+def test_directory_paths_follow_layer_origins_and_replace_lists(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text('version=1\n[defaults]\nadd_dirs=["global"]\n')
+    local = tmp_path / "local" / "settings.toml"
+    local.parent.mkdir()
+    local.write_text(
+        'version=1\n[defaults]\nadd_dirs=["local"]\n'
+        '[profiles.extra]\nagent="codex"\nadd_dirs=["profile", "profile"]\n'
+        '[profiles.clear]\nagent="cursor"\nadd_dirs=[]\n'
+    )
+    config = load_config(local)
+    assert resolve_profile(config, "cx").options.add_dirs == (str(local.parent / "local"),)
+    assert resolve_profile(config, "extra").options.add_dirs == (
+        str(local.parent / "profile"),
+        str(local.parent / "profile"),
+    )
+    assert resolve_profile(config, "clear").options.add_dirs == ()
+    assert resolve_profile(config, "extra", Options(add_dirs=())).options.add_dirs == ()
+    assert resolve_profile(config, "extra", Options(add_dirs=("/cli",))).options.add_dirs == (
+        "/cli",
+    )
+    local.write_text('version=1\n[profiles.extra]\nagent="codex"\n')
+    assert resolve_profile(load_config(local), "extra").options.add_dirs == (
+        str(global_path.parent / "global"),
+    )
+
+
+@pytest.mark.parametrize("value", ['"directory"', "[1]", '[""]', '[" "]'])
+def test_directory_config_requires_nonempty_path_strings(tmp_path: Path, value: str) -> None:
+    path = tmp_path / "bad.toml"
+    path.write_text(f"version=1\n[defaults]\nadd_dirs={value}\n")
+    with pytest.raises(PratError, match=r"defaults.add_dirs"):
+        load_config(path)
+
+
+def test_directory_defaults_validate_every_effective_profile(tmp_path: Path) -> None:
+    path = tmp_path / "settings.toml"
+    path.write_text(
+        'version=1\n[defaults]\nadd_dirs=["missing"]\n[profiles.other]\nagent="cursor"\n'
+    )
+    with pytest.raises(PratError, match=r"defaults.add_dirs.*does not support extra directories"):
+        load_config(path)

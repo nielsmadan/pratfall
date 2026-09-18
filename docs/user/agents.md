@@ -65,6 +65,22 @@ Claude fast mode is passed as an inline `fastMode` setting for the current invoc
 mode is passed as `service_tier="priority"`; false selects `service_tier="default"`. Pratfall does
 not edit native settings, choose a different model, or infer account eligibility or pricing.
 
+### Extra directories
+
+| Agent | Native mapping | Native scope |
+| --- | --- | --- |
+| Claude Code | `--add-dir PATH` | Additional directories for file access. |
+| Codex | `--add-dir PATH` | Additional writable roots alongside the workspace. |
+| Gemini | `--include-directories PATH` | Additional workspace directories. |
+| Qwen Code | `--include-directories PATH` | Additional workspace directories. |
+| Copilot | `--add-dir=PATH` | Additional entries in the allowed-paths list. |
+
+`--add-dir` / `add_dirs` is unsupported for other agents unless the configured list is empty.
+These settings retain each agent's native permissions and tool approvals; Prat adds no automatic
+approval flags. Gemini and Qwen split commas and trim each value, so Prat rejects directory names
+that would change during parsing. Directory availability does not prepend files to the prompt;
+use `--context` for that behavior.
+
 ### Antigravity timeouts
 
 Antigravity's documented `--print-timeout` examples apply to print mode. Its stdin-stream timeout
@@ -122,7 +138,7 @@ Support targets 0.23.3 with plain stdin and stream-json output.
 - **Permissions:** Qwen denies unresolved interactive approvals.
 - **Controls:** `max_turns` maps to `--max-session-turns` with native counting semantics. No
   generic effort or spend cap is verified. Native flags include `--debug`/`-d`, `--approval-mode`,
-  `--system-prompt` and `--append-system-prompt`.
+  `--system-prompt`, `--append-system-prompt`, `--include-directories` and its `--add-dir` alias.
 - **Output:** the final valid result at end of stream determines completion. An intermediate
   subagent error can be followed by root success. Root assistant text and models exclude child
   messages; final usage replaces message snapshots.

@@ -4,6 +4,12 @@ from typing import NoReturn
 
 from pratfall.errors import PratError
 
+_ECMASCRIPT_TRIM_CHARACTERS = (
+    "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
+
 
 @dataclass(frozen=True)
 class Flag:
@@ -82,3 +88,14 @@ def _fail(agent: str, argument: str, reason: str) -> NoReturn:
         "for unsupported native arguments.",
         code="invalid_arguments",
     )
+
+
+def validate_directory_values(paths: tuple[str, ...]) -> None:
+    for value in paths:
+        if "," in value or value != value.strip(_ECMASCRIPT_TRIM_CHARACTERS):
+            raise PratError(
+                f"Directory path {value!r} cannot contain commas or surrounding whitespace "
+                "with this agent.",
+                code="invalid_arguments",
+                option="add_dirs",
+            )

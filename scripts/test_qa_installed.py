@@ -1168,3 +1168,8 @@ def test_workflow_environment_isolates_editor_and_temporary_paths(
     assert environment["XDG_CONFIG_HOME"] == str(tmp_path / "xdg")
     assert environment["PATH"] == str(tmp_path / "bin")
     assert (tmp_path / "temp").is_dir()
+
+
+def test_harness_directory_capabilities_match_the_catalog() -> None:
+    supported = frozenset(agent.name for agent in catalog.AGENTS if agent.capabilities.add_dirs)
+    assert supported == qa._ADD_DIRS

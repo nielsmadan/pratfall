@@ -27,6 +27,13 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   location. Aliases of the global file load once through the selected local path, preserving that
   path's command base. The CLI selects one diagnostics writer per invocation and sends
   duplicate-profile warnings through it, before reading the prompt or launching an agent.
+- [option_paths.py](../src/pratfall/option_paths.py) resolves auxiliary directory paths from their
+  defining config file or invocation directory without filesystem inspection or lexical `..`
+  normalization. Dispatch canonicalizes and checks selected directory targets before native
+  validation and prompt acquisition, preserving symlink/`..` traversal even with native lexical
+  path normalization. Adapter
+  validation owns native delimiter restrictions and marks option-specific errors so diagnostics
+  retain the winning setting's provenance.
 - [prompt_templates.py](../src/pratfall/prompt_templates.py) validates the restricted dollar
   placeholder syntax at config load and renders after base prompt acquisition. Template definitions
   retain their source files in immutable config records. Expansion size is checked before repeated

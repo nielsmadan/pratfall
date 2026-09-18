@@ -121,6 +121,7 @@ _BUDGETS = {
 }
 _NO_MODEL = frozenset({"openhands", "amp", "vibe"})
 _FAST = frozenset({"claude", "codex"})
+_ADD_DIRS = frozenset({"claude", "codex", "gemini", "qwen", "copilot"})
 _STDIN_PREFIXES = {
     "qwen": ["--output-format", "stream-json"],
     "amp": ["--execute", "--stream-json"],
@@ -2235,6 +2236,7 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
             "effort_values": _EFFORT_VALUES.get(name),
             "budgets": _BUDGETS.get(name, []),
             "fast": name in _FAST,
+            "add_dirs": name in _ADD_DIRS,
         }
     assert len(ALIASES) == 17 and not set(ALIASES).intersection(AGENTS)
     doctor = _run(prat, root, ["doctor", "--json"], config=config)
@@ -2327,6 +2329,7 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "model": "profile-model",
                     "effort": None,
                     "fast": None,
+                    "add_dirs": None,
                     "timeout": 7.0,
                     "max_turns": 3,
                     "max_budget_usd": None,
@@ -3227,6 +3230,7 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "max_turns": None,
                     "max_ai_credits": None,
                     "fast": None,
+                    "add_dirs": None,
                     "native_args": [],
                 },
             }

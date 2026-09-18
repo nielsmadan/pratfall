@@ -33,3 +33,13 @@ nonfinite numbers and invalid Unicode anywhere in the document.
 - [Pratfall adapter](../../src/pratfall/adapters/gemini.py)
 - [Shared execution boundary](../execution.md)
 - [Interface comparison and evidence scope](overview.md)
+
+## Extra directories (verified 2026-09-18)
+
+The [pinned option source](https://github.com/google-gemini/gemini-cli/blob/09e048fd61bc56df18676211f65703e7f0075f3a/packages/cli/src/config/config.ts)
+defines `include-directories` as an array with one argument per occurrence. Its
+`coerceCommaSeparated` splits commas and trims values. Prat repeats `--include-directories PATH`
+and rejects commas or surrounding whitespace in resolved paths to prevent native rewriting.
+
+Verification used primary documentation/source inspection and fake executable argv tests;
+no authenticated native run was performed for this control.

@@ -14,10 +14,13 @@ AGENTS = (
             effort_values=("low", "medium", "high", "xhigh", "max"),
             budgets=frozenset({"max_budget_usd", "max_turns"}),
             fast=True,
+            add_dirs=True,
         ),
     ),
-    AgentSpec("codex", "Codex", ("cx",), ("codex",), Capabilities(effort=True, fast=True)),
-    AgentSpec("gemini", "Gemini", ("gm",), ("gemini",)),
+    AgentSpec(
+        "codex", "Codex", ("cx",), ("codex",), Capabilities(effort=True, fast=True, add_dirs=True)
+    ),
+    AgentSpec("gemini", "Gemini", ("gm",), ("gemini",), Capabilities(add_dirs=True)),
     AgentSpec(
         "antigravity",
         "Antigravity",
@@ -34,6 +37,7 @@ AGENTS = (
             effort=True,
             effort_values=("low", "medium", "high", "xhigh", "max"),
             budgets=frozenset({"max_ai_credits"}),
+            add_dirs=True,
         ),
     ),
     AgentSpec(
@@ -72,7 +76,13 @@ AGENTS = (
     AgentSpec("openhands", "OpenHands", ("oh",), ("openhands",), Capabilities(model=False)),
     AgentSpec("warp", "Warp", (), ("oz",)),
     AgentSpec("iflow", "iFlow", ("if",), ("iflow",)),
-    AgentSpec("qwen", "Qwen Code", (), ("qwen",), Capabilities(budgets=frozenset({"max_turns"}))),
+    AgentSpec(
+        "qwen",
+        "Qwen Code",
+        (),
+        ("qwen",),
+        Capabilities(budgets=frozenset({"max_turns"}), add_dirs=True),
+    ),
     AgentSpec("amp", "Amp", (), ("amp",), Capabilities(model=False), version_args=("version",)),
     AgentSpec("reasonix", "Reasonix", ("rx",), ("reasonix",), Capabilities(effort=True)),
     AgentSpec(

@@ -17,6 +17,7 @@ prat cx "review this change"
 - [Watch progress and diagnostics](#watch-progress-and-diagnostics)
 - [Handle timeouts and failures](#handle-timeouts-and-failures)
 - [Output limits](#output-limits)
+- [Include extra directories](#include-extra-directories)
 
 ## Supply a prompt
 
@@ -272,3 +273,30 @@ decoded as it arrives. Other JSON and text adapters retain complete stdout.
 Without `--trace`, discarded streaming events have no cumulative output limit, so a long run with
 many small events can exceed 8 MiB in total. Crossing a limit fails the run and cleans up the owned
 process group.
+
+## Include extra directories
+
+```sh
+prat cx --add-dir ../shared --add-dir "../other project" "review the integration"
+```
+
+`--add-dir PATH` is repeatable before or after the selector. It replaces profile/default
+`add_dirs` with the supplied list, preserving order and duplicates. Relative CLI paths use the
+invocation directory, independently of `--cwd`; config paths use their defining file's directory.
+`~` expands to the user's home. Symlinks and `..` retain filesystem traversal semantics.
+Spaces and leading dashes in names are supported; `--add-dir=-directory` is also accepted.
+
+The selected paths must exist as directories, including for `--dry-run`. Unsupported settings,
+native flag collisions and invalid directories fail before prompt files, stdin, context or editor
+input is acquired. Directory contents are read by the native agent; paths are not snapshots.
+`config validate` and `profiles` do not inspect those directories.
+
+Claude, Codex and Copilot use native `--add-dir`; Gemini and Qwen use `--include-directories`.
+Gemini and Qwen cannot represent commas or trailing whitespace in these paths, so Prat rejects
+those names. See [agent directory semantics](agents.md#extra-directories) for access scope.
+Native directory flags after `--` remain supported when public `add_dirs` is absent or empty;
+combining them with a nonempty public list is an error, including Qwen's `--add-dir` alias.
+
+Selected directory paths are canonicalized through the filesystem before native argv is built.
+This preserves symlink/`..` targets even when a native parser would otherwise collapse `..`
+lexically. Config inspection retains the joined source spelling and does not inspect targets.

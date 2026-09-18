@@ -71,13 +71,18 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     if options.fast is not None:
         service_tier = "priority" if options.fast else "default"
         argv.extend(("-c", f"service_tier={json.dumps(service_tier)}"))
+    for directory in resolved.options.add_dirs or ():
+        argv.extend(("--add-dir", directory))
     argv.extend(arguments)
     argv.append("-")
     return Invocation(tuple(argv), prompt)
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("Codex", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    reserved = _RESERVED | (
+        {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
+    )
+    validate_flags("Codex", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
 @dataclass

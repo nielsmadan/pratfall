@@ -16,6 +16,7 @@ class Capabilities:
     effort_values: tuple[str, ...] = ()
     budgets: frozenset[str] = frozenset()
     fast: bool = False
+    add_dirs: bool = False
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,7 @@ class Options:
     max_turns: int | None = None
     max_ai_credits: float | None = None
     fast: bool | None = None
+    add_dirs: tuple[str, ...] | None = None
     native_args: tuple[str, ...] | None = None
 
 

@@ -95,12 +95,17 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--max-turns", str(options.max_turns)))
     if options.fast is not None:
         argv.extend(("--settings", json.dumps({"fastMode": options.fast})))
+    for directory in resolved.options.add_dirs or ():
+        argv.extend(("--add-dir", directory))
     argv.extend(arguments)
     return Invocation(tuple(argv), prompt)
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("Claude Code", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    reserved = _RESERVED | (
+        {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
+    )
+    validate_flags("Claude Code", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
 def decode(stdout: str) -> DecodedOutput:

@@ -2835,3 +2835,317 @@ def test_edit_requires_controlling_terminal(tmp_path: Path) -> None:
     result = json.loads(completed.stdout)
     assert result["error"]["code"] == "invalid_arguments"
     assert "/dev/tty" in result["error"]["message"]
+
+
+@pytest.mark.parametrize("agent", ["claude", "codex", "gemini", "qwen", "copilot"])
+def test_extra_directories_reach_fake_agent_in_order(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], agent: str
+) -> None:
+    directories = [tmp_path / "two words", tmp_path / "-dash"]
+    for directory in directories:
+        directory.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    log = tmp_path / "argv.json"
+    code = (
+        "import json, os, pathlib, sys\n"
+        f"pathlib.Path({str(log)!r}).write_text(json.dumps({{"
+        "'argv': sys.argv[1:], 'cwd': os.getcwd(), 'stdin': sys.stdin.read()}))\n"
+    )
+    code += {
+        "claude": CLAUDE_SUCCESS,
+        "codex": CODEX_SUCCESS,
+        "gemini": NEW_ADAPTER_FIXTURES["gemini"],
+        "copilot": NEW_ADAPTER_FIXTURES["copilot"],
+        "qwen": (
+            'print(json.dumps({"type": "result", "subtype": "success", '
+            '"is_error": False, "result": "ok"}))\n'
+        ),
+    }[agent]
+    config = write_agent(tmp_path, agent, code)
+    assert (
+        main(
+            [
+                "--add-dir",
+                "two words",
+                agent,
+                "task",
+                "--add-dir=-dash",
+                "--add-dir",
+                "two words",
+                "--cwd",
+                str(work),
+                "--config",
+                str(config),
+                "--json",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    expected = {
+        "claude": ["-p", "--output-format", "json"],
+        "codex": ["exec", "--json"],
+        "gemini": ["--output-format", "json"],
+        "qwen": ["--output-format", "stream-json"],
+        "copilot": ["--output-format=json"],
+    }[agent]
+    for directory in [*directories, directories[0]]:
+        if agent == "copilot":
+            expected.append(f"--add-dir={directory}")
+        else:
+            flag = "--include-directories" if agent in {"gemini", "qwen"} else "--add-dir"
+            expected.extend([flag, str(directory)])
+    expected.extend(["-"] if agent == "codex" else [])
+    expected.extend(["--prompt=task"] if agent in {"gemini", "copilot"} else [])
+    record = json.loads(log.read_text())
+    assert record == {
+        "argv": expected,
+        "cwd": str(work),
+        "stdin": "" if agent in {"gemini", "copilot"} else "task",
+    }
+
+
+@pytest.mark.parametrize("agent", ["claude", "codex", "gemini", "qwen", "copilot"])
+@pytest.mark.parametrize("inline", [False, True])
+def test_extra_directories_collide_only_when_public_setting_is_active(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], agent: str, inline: bool
+) -> None:
+    directory = tmp_path / "extra"
+    directory.mkdir()
+    flag = "--include-directories" if agent in {"gemini", "qwen"} else "--add-dir"
+    native = [f"{flag}=native"] if inline else [flag, "native"]
+    assert main([agent, "task", "--dry-run", "--json", "--", *native]) == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert all(item in preview["argv"] for item in native)
+    assert main([agent, "--add-dir", str(directory), "--dry-run", "--json", "--", *native]) == 2
+    assert "controlled by prat" in json.loads(capsys.readouterr().out)["error"]["message"]
+
+
+def test_qwen_directory_native_alias_collides(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["qwen", "--add-dir", str(tmp_path), "--json", "--", "--add-dir=native"]) == 2
+    assert "controlled by prat" in json.loads(capsys.readouterr().out)["error"]["message"]
+
+
+@pytest.mark.parametrize("agent", ["gemini", "qwen"])
+@pytest.mark.parametrize(
+    "name",
+    ["comma,name"]
+    + [
+        f"trailing{chr(codepoint)}"
+        for codepoint in (
+            0x0009,
+            0x000A,
+            0x000B,
+            0x000C,
+            0x000D,
+            0x0020,
+            0x00A0,
+            0x1680,
+            *range(0x2000, 0x200B),
+            0x2028,
+            0x2029,
+            0x202F,
+            0x205F,
+            0x3000,
+            0xFEFF,
+        )
+    ],
+)
+def test_extra_directories_reject_native_path_rewriting_before_input(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    agent: str,
+    name: str,
+) -> None:
+    (tmp_path / name).mkdir()
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main([agent, "--add-dir", name, "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "invalid_arguments"
+    assert "command line:" in error["message"]
+    assert "commas or surrounding whitespace" in error["message"]
+
+
+@pytest.mark.parametrize("agent", ["gemini", "qwen"])
+@pytest.mark.parametrize("suffix", ["\u001c", "\u001d", "\u001e", "\u001f", "\u0085"])
+def test_extra_directories_preserve_whitespace_that_native_parsers_keep(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], agent: str, suffix: str
+) -> None:
+    directory = tmp_path / f"extra{suffix}"
+    directory.mkdir()
+    assert main([agent, "task", "--add-dir", str(directory), "--dry-run", "--json"]) == 0
+    argv = json.loads(capsys.readouterr().out)["argv"]
+    assert argv[argv.index("--include-directories") + 1] == str(directory)
+
+
+@pytest.mark.parametrize("agent", ["gemini", "qwen"])
+def test_directory_config_rejects_native_byte_order_mark_trimming(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], agent: str
+) -> None:
+    path = tmp_path / "settings.toml"
+    path.write_text(f'version=1\n[profiles.extra]\nagent="{agent}"\nadd_dirs=["missing\ufeff"]\n')
+    assert main(["--config", str(path), "config", "validate", "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "invalid_config"
+    assert error["message"].startswith(f"{path}: profiles.extra.add_dirs:")
+    assert "commas or surrounding whitespace" in error["message"]
+
+
+@pytest.mark.parametrize("agent", ["claude", "codex", "copilot"])
+def test_extra_directories_preserve_commas(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], agent: str
+) -> None:
+    directory = tmp_path / "comma,name"
+    directory.mkdir()
+    assert main([agent, "task", "--add-dir", str(directory), "--dry-run", "--json"]) == 0
+    argv = json.loads(capsys.readouterr().out)["argv"]
+    assert (f"--add-dir={directory}" if agent == "copilot" else str(directory)) in argv
+
+
+@pytest.mark.parametrize("failure", ["missing", "file", "unsupported"])
+def test_extra_directories_fail_before_prompt_files_stdin_or_editor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: str,
+) -> None:
+    directory = tmp_path / "extra"
+    if failure == "file":
+        directory.write_text("not a directory")
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert (
+        main(
+            [
+                "cursor" if failure == "unsupported" else "codex",
+                "--add-dir",
+                str(directory),
+                "--file",
+                "/unread-prompt",
+                "--edit",
+                "--json",
+            ]
+        )
+        == 2
+    )
+    message = json.loads(capsys.readouterr().out)["error"]["message"]
+    assert (
+        "extra directories" in message if failure == "unsupported" else "not a directory" in message
+    )
+
+
+@pytest.mark.parametrize("agent", ["claude", "codex", "gemini", "qwen", "copilot"])
+def test_extra_directories_preserve_symlink_parent_traversal(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], agent: str
+) -> None:
+    target = tmp_path / "real" / "child"
+    target.mkdir(parents=True)
+    (target.parent / "extra").mkdir()
+    (tmp_path / "link").symlink_to(target, target_is_directory=True)
+    path = tmp_path / "link" / ".." / "extra"
+    assert main([agent, "task", "--add-dir", "link/../extra", "--dry-run", "--json"]) == 0
+    expected = str(path.resolve(strict=True))
+    if agent == "copilot":
+        expected = f"--add-dir={expected}"
+    assert expected in json.loads(capsys.readouterr().out)["argv"]
+
+
+def test_directory_config_management_does_not_stat_auxiliary_paths(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "paths.toml"
+    path.write_text(
+        'version=1\n[profiles.extra]\nagent="codex"\nadd_dirs=["missing"]\n'
+        '[profiles.clear]\nagent="cursor"\nadd_dirs=[]\n'
+    )
+    assert main(["--config", str(path), "config", "validate"]) == 0
+    capsys.readouterr()
+    assert main(["--config", str(path), "profiles", "--json"]) == 0
+    records = json.loads(capsys.readouterr().out)["profiles"]
+    assert records[0]["options"]["add_dirs"] == []
+    assert records[1]["options"]["add_dirs"] == [str(tmp_path / "missing")]
+    assert main(["extra", "--config", str(path), "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "invalid_config"
+    assert f"{path}: profiles.extra.add_dirs: not a directory" in error["message"]
+
+
+def test_config_directory_traversal_and_cli_override_preserve_origins(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = tmp_path / "config"
+    base.mkdir()
+    target = tmp_path / "target" / "child"
+    target.mkdir(parents=True)
+    (target.parent / "extra").mkdir()
+    (base / "link").symlink_to(target, target_is_directory=True)
+    path = base / "settings.toml"
+    path.write_text('version=1\n[profiles.extra]\nagent="codex"\nadd_dirs=["link/../extra"]\n')
+    assert main(["extra", "task", "--config", str(path), "--dry-run", "--json"]) == 0
+    assert str(target.parent / "extra") in json.loads(capsys.readouterr().out)["argv"]
+    override = tmp_path / " leading space"
+    override.mkdir()
+    assert (
+        main(
+            [
+                "extra",
+                "task",
+                "--config",
+                str(path),
+                "--add-dir",
+                " leading space",
+                "--dry-run",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    argv = json.loads(capsys.readouterr().out)["argv"]
+    assert argv[-3:] == ["--add-dir", str(override), "-"]
+
+
+def test_cleared_directory_setting_preserves_native_only_flags(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "settings.toml"
+    path.write_text(
+        'version=1\n[defaults]\nadd_dirs=["missing"]\n'
+        '[profiles.clear]\nagent="codex"\nadd_dirs=[]\n'
+        'native_args=["--add-dir=native"]\n'
+    )
+    assert main(["clear", "task", "--config", str(path), "--dry-run", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["argv"][-2:] == ["--add-dir=native", "-"]
+
+
+def test_directory_delimiter_error_names_inherited_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "settings.toml"
+    path.write_text('version=1\n[defaults]\nadd_dirs=["comma,name"]\n')
+    (tmp_path / "comma,name").mkdir()
+    assert main(["gm", "--config", str(path), "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "invalid_config"
+    assert error["message"].startswith(f"{path}: defaults.add_dirs (selector 'gm'):")
+
+
+@pytest.mark.parametrize("agent", ["gemini", "qwen"])
+@pytest.mark.parametrize("name", ["comma,target", "target\ufeff"])
+def test_canonical_directory_target_must_be_natively_representable(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], agent: str, name: str
+) -> None:
+    target = tmp_path / name
+    target.mkdir()
+    (tmp_path / "alias").symlink_to(target, target_is_directory=True)
+    path = tmp_path / "settings.toml"
+    path.write_text(f'version=1\n[profiles.extra]\nagent="{agent}"\nadd_dirs=["alias"]\n')
+    assert main(["--config", str(path), "config", "validate", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["valid"] is True
+    assert main([agent, "--add-dir", "alias", "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "invalid_arguments"
+    assert repr(str(target)) in error["message"]
+    assert "commas or surrounding whitespace" in error["message"]
