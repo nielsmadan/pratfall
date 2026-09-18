@@ -81,6 +81,20 @@ approval flags. Gemini and Qwen split commas and trim each value, so Prat reject
 that would change during parsing. Directory availability does not prepend files to the prompt;
 use `--context` for that behavior.
 
+### Appended instructions
+
+| Agent | Native mapping |
+| --- | --- |
+| Claude Code | `--append-system-prompt=TEXT` |
+| Codex | `-c developer_instructions=TOML_STRING` |
+| Qwen Code | `--append-system-prompt=TEXT` |
+| Droid | `--append-system-prompt=TEXT` |
+
+Other agents reject both `instructions` and `instructions_file`. Built-in guidance remains in
+place; Codex's value replaces an existing native configured `developer_instructions` value.
+Prat reads file content itself and forwards validated text through the same mapping. Native
+argument-size limits still apply. See [instruction inputs](running.md#append-instructions).
+
 ### Antigravity timeouts
 
 Antigravity's documented `--print-timeout` examples apply to print mode. Its stdin-stream timeout

@@ -17,6 +17,7 @@ class Capabilities:
     budgets: frozenset[str] = frozenset()
     fast: bool = False
     add_dirs: bool = False
+    instructions: bool = False
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,8 @@ class Options:
     max_ai_credits: float | None = None
     fast: bool | None = None
     add_dirs: tuple[str, ...] | None = None
+    instructions: str | None = None
+    instructions_file: str | None = None
     native_args: tuple[str, ...] | None = None
 
 

@@ -55,6 +55,8 @@ _QWEN_RESULT_ERRORS = {"error_during_execution", "error_max_turns"}
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
     argv = [*resolved.command, "--output-format", "stream-json"]
+    if resolved.options.instructions is not None:
+        argv.append(f"--append-system-prompt={resolved.options.instructions}")
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
     if resolved.options.max_turns is not None:
@@ -74,6 +76,8 @@ def validate(resolved: ResolvedProfile) -> None:
         if resolved.options.add_dirs
         else {}
     )
+    if resolved.options.instructions is not None or resolved.options.instructions_file is not None:
+        reserved |= {"--append-system-prompt": _ALLOWED["--append-system-prompt"]}
     validate_flags("Qwen", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

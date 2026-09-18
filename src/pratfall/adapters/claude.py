@@ -84,6 +84,8 @@ _RESERVED = {
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
     argv = [*resolved.command, "-p", "--output-format", "json"]
+    if resolved.options.instructions is not None:
+        argv.append(f"--append-system-prompt={resolved.options.instructions}")
     options = resolved.options
     if options.model is not None:
         argv.extend(("--model", options.model))
@@ -105,6 +107,11 @@ def validate(resolved: ResolvedProfile) -> None:
     reserved = _RESERVED | (
         {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
     )
+    if resolved.options.instructions is not None or resolved.options.instructions_file is not None:
+        reserved |= {
+            "--append-system-prompt": _ALLOWED["--append-system-prompt"],
+            "--append-system-prompt-file": Flag(1),
+        }
     validate_flags("Claude Code", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

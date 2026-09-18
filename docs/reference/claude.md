@@ -43,3 +43,14 @@ an individual `--add-dir PATH` occurrence, preserving native file-access permiss
 
 Verification used primary documentation/source inspection and fake executable argv tests;
 no authenticated native run was performed for this control.
+
+## Appended instructions (verified 2026-09-18)
+
+The [CLI reference](https://code.claude.com/docs/en/cli-reference) describes
+`--append-system-prompt`: “Append custom text to the end of the default system prompt”.
+Prat uses `--append-system-prompt=TEXT`, including for validated file contents, retaining native
+built-in guidance. Existing native append text remains supported alone; an active public form
+conflicts with native append text or file flags.
+
+Verification used primary documentation/source inspection and fake executable argv tests;
+no authenticated native run was performed for this control.

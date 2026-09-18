@@ -10,6 +10,7 @@ across projects, or locally in a project's `.pratfile`.
 - [Configure commands and wrappers](#configure-commands-and-wrappers)
 - [Inspect and validate](#inspect-and-validate)
 - [Extra directories](#extra-directories)
+- [Appended instructions](#appended-instructions)
 - [Upgrade existing profiles](#upgrade-existing-profiles)
 
 ## Create a profile
@@ -43,7 +44,8 @@ prat simple --effort high "investigate this failure"
 ```
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
-`model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, and the agent's supported budget fields.
+`model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `instructions`,
+`instructions_file`, and the agent's supported budget fields.
 Use `[defaults]` for shared settings.
 
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
@@ -97,10 +99,11 @@ Settings resolve from highest to lowest priority:
 
 | Setting | Merge rule |
 | --- | --- |
-| `[defaults]` | Merge field by field; local values win. |
+| `[defaults]` | Merge field by field; local values win, with the instruction pair grouped below. |
 | `[profiles.NAME]` | A local profile replaces the entire global profile with that name. |
 | `[templates.NAME]` | A local template replaces the entire global template with that name. |
 | `[agents.NAME].command` | A local command array replaces the global array for that agent. |
+| `instructions`, `instructions_file` | One override group: either higher-priority form clears the lower-priority form. |
 | `native_args`, `add_dirs` | The higher-priority array replaces the lower-priority array, even when empty. |
 
 Profiles from both files remain available. Profiles do not inherit from each other; omitted fields
@@ -197,6 +200,30 @@ lexically. Config inspection retains the joined source spelling and does not ins
 
 The Gemini/Qwen delimiter restrictions apply to both configured spellings and selected canonical
 targets. Configuration validation rejects an unrepresentable spelling without inspecting its target.
+
+## Appended instructions
+
+```toml
+[profiles.review]
+agent = "claude"
+instructions_file = "rules/review.md"
+```
+
+Use either `instructions = "Cite file paths"` or `instructions_file = "rules.md"` in any profile
+or `[defaults]`, for Claude, Codex, Qwen or Droid. Both fields in the same table are an error.
+They are one override group across CLI, profile, local defaults and global defaults: a higher
+layer's text replaces an inherited file, and a higher layer's file replaces inherited text.
+Only the winning field retains source provenance. Blank text is invalid, not a clearing value.
+
+A file path is based on its defining config's directory even when inherited. Configuration
+listing and validation check types, inline text, capabilities and native conflicts without
+opening instruction files. Only a selected run reads its winning file, before prompt acquisition.
+Backend-specific defaults affect every profile: an unsupported profile makes whole-config
+capability validation fail even when another profile is selected. Put instructions on supported
+profiles when sharing a config across other backends.
+
+Codex replaces its native configured `developer_instructions` value for the invocation, while
+retaining its built-in guidance. See [content bounds and native mappings](running.md#append-instructions).
 
 ## Upgrade existing profiles
 

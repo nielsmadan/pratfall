@@ -15,10 +15,15 @@ AGENTS = (
             budgets=frozenset({"max_budget_usd", "max_turns"}),
             fast=True,
             add_dirs=True,
+            instructions=True,
         ),
     ),
     AgentSpec(
-        "codex", "Codex", ("cx",), ("codex",), Capabilities(effort=True, fast=True, add_dirs=True)
+        "codex",
+        "Codex",
+        ("cx",),
+        ("codex",),
+        Capabilities(effort=True, fast=True, add_dirs=True, instructions=True),
     ),
     AgentSpec("gemini", "Gemini", ("gm",), ("gemini",), Capabilities(add_dirs=True)),
     AgentSpec(
@@ -81,7 +86,7 @@ AGENTS = (
         "Qwen Code",
         (),
         ("qwen",),
-        Capabilities(budgets=frozenset({"max_turns"}), add_dirs=True),
+        Capabilities(budgets=frozenset({"max_turns"}), add_dirs=True, instructions=True),
     ),
     AgentSpec("amp", "Amp", (), ("amp",), Capabilities(model=False), version_args=("version",)),
     AgentSpec("reasonix", "Reasonix", ("rx",), ("reasonix",), Capabilities(effort=True)),
@@ -91,6 +96,7 @@ AGENTS = (
         ("dr",),
         ("droid",),
         Capabilities(
+            instructions=True,
             effort=True,
             effort_values=(
                 "none",

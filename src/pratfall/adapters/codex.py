@@ -64,6 +64,9 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
     argv = [*resolved.command, "exec", "--json"]
     options = resolved.options
+    if options.instructions is not None:
+        value = json.dumps(options.instructions, ensure_ascii=False).replace("\x7f", "\\u007f")
+        argv.extend(("-c", f"developer_instructions={value}"))
     if options.model is not None:
         argv.extend(("--model", options.model))
     if options.effort is not None:

@@ -41,6 +41,8 @@ _RESERVED = {
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
     argv = [*resolved.command, "exec", "--output-format", "json"]
+    if resolved.options.instructions is not None:
+        argv.append(f"--append-system-prompt={resolved.options.instructions}")
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
     if resolved.options.effort is not None:
@@ -49,7 +51,10 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("Droid", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    reserved = _RESERVED.copy()
+    if resolved.options.instructions is not None or resolved.options.instructions_file is not None:
+        reserved |= {"--append-system-prompt": Flag(1), "--append-system-prompt-file": Flag(1)}
+    validate_flags("Droid", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
 def decode(stdout: str) -> DecodedOutput:

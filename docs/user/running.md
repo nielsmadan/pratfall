@@ -18,6 +18,7 @@ prat cx "review this change"
 - [Handle timeouts and failures](#handle-timeouts-and-failures)
 - [Output limits](#output-limits)
 - [Include extra directories](#include-extra-directories)
+- [Append instructions](#append-instructions)
 
 ## Supply a prompt
 
@@ -300,3 +301,34 @@ combining them with a nonempty public list is an error, including Qwen's `--add-
 Selected directory paths are canonicalized through the filesystem before native argv is built.
 This preserves symlink/`..` targets even when a native parser would otherwise collapse `..`
 lexically. Config inspection retains the joined source spelling and does not inspect targets.
+
+## Append instructions
+
+```sh
+prat cc --instructions "Cite file paths in the answer" "review this change"
+prat cx --instructions-file rules.md "review this change"
+```
+
+Claude, Codex, Qwen and Droid accept appended instructions. Choose exactly one form per invocation
+or config table. The text is native instruction content, separate from the task prompt, templates
+and context files; instructions alone do not supply a task. Prat preserves built-in guidance.
+Codex sets `developer_instructions` for this run, replacing a value from native configuration
+rather than concatenating with it. Native settings files are never changed.
+
+Text and file content must be nonempty UTF-8 without NUL bytes and at most **1 MiB (1,048,576
+bytes)**, independently of the prompt's 1 MiB limit. Whitespace-only content is rejected. Prat
+preserves newlines and all accepted text exactly. It reads the winning file once, with a bounded
+read from a regular file, before acquiring prompt stdin or starting an editor. Missing,
+unreadable, nonregular, oversized and invalid UTF-8 files fail with the setting's source.
+Unsupported settings and conflicting native arguments fail before reading the instruction file.
+
+CLI file paths resolve from the invocation directory, independently of `--cwd`; config file
+paths resolve from the defining config's directory. `~` expands, and symlink/`..` traversal keeps
+filesystem semantics. Shell syntax and variables in instruction text are literal data.
+Only the selected winning file is read; see [override rules](profiles.md#appended-instructions).
+`--dry-run` reads and validates it and displays the native argument containing its contents.
+
+All four adapters pass the prepared content in native argv. Operating-system argument-size
+limits can be lower than Prat's input limit, including when using `--instructions-file`.
+The append flags in existing Claude/Qwen `native_args` remain available when neither public
+instruction form is active; combining them with public instructions is an error.

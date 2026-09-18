@@ -258,3 +258,9 @@ def read_edited_prompt(path: Path, state: InterruptionState) -> bytes:
     value = _read_file(str(path), path.parent, state, label="edited prompt")
     _raise_if_interrupted(state)
     return _validate(value, "Edited prompt")
+
+
+def read_bounded_file(path: Path, *, limit: int, label: str) -> bytes:
+    state = InterruptionState()
+    with _input_signal_handlers(state):
+        return _read_file(str(path), path.parent, state, limit=limit, label=label)

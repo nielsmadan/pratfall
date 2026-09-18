@@ -34,6 +34,11 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   path normalization. Adapter
   validation owns native delimiter restrictions and marks option-specific errors so diagnostics
   retain the winning setting's provenance.
+- [instructions.py](../src/pratfall/instructions.py) validates instruction text and reads only the
+  selected winning instruction file through the bounded regular-file reader in `prompt_input`.
+  Config keeps immutable declarative text/path options and grouped provenance; dispatch prepares
+  a selected copy after capability/native checks and before prompt acquisition. All adapters use
+  literal argv text, and Codex's TOML string encoding preserves non-BMP Unicode and escapes DEL.
 - [prompt_templates.py](../src/pratfall/prompt_templates.py) validates the restricted dollar
   placeholder syntax at config load and renders after base prompt acquisition. Template definitions
   retain their source files in immutable config records. Expansion size is checked before repeated

@@ -60,3 +60,14 @@ with a nonempty public directory list.
 
 Verification used primary documentation/source inspection and fake executable argv tests;
 no authenticated native run was performed for this control.
+
+## Appended instructions (verified 2026-09-18)
+
+The [v0.24.0 option declarations](https://github.com/QwenLM/qwen-code/blob/v0.24.0/packages/cli/src/config/top-level-options.ts)
+describe `--append-system-prompt`: “Append instructions to the main session system prompt for this
+run. Can be combined with --system-prompt.” The same append option was supported in the v0.23.3
+baseline. Prat passes `--append-system-prompt=TEXT`, retaining leading dashes as value data.
+Native-only append text remains supported; either active public instruction form conflicts with it.
+
+Verification used primary documentation/source inspection and fake executable argv tests;
+no authenticated native run was performed for this control.

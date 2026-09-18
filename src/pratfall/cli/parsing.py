@@ -8,7 +8,8 @@ from typing import NoReturn
 
 from pratfall.catalog import MANAGEMENT_COMMANDS
 from pratfall.errors import PratError
-from pratfall.models import MAX_TURNS, Options
+from pratfall.instructions import validate_instructions
+from pratfall.models import MAX_TURNS, OptionOrigin, Options
 from pratfall.prompt_input import PromptSource
 
 _RUN_VALUE_FLAGS = {
@@ -24,6 +25,8 @@ _RUN_VALUE_FLAGS = {
     "-f": "file",
     "--context": "context",
     "--add-dir": "add_dirs",
+    "--instructions": "instructions",
+    "--instructions-file": "instructions_file",
     "--template": "template",
     "-t": "template",
 }
@@ -106,6 +109,8 @@ run options:
   --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
   --cwd PATH              Set the agent working directory.
   --add-dir PATH          Add a native workspace directory; repeat to include several.
+  --instructions TEXT     Append instructions while preserving native built-in guidance.
+  --instructions-file PATH  Read appended instructions from a UTF-8 file.
   --config PATH           Merge PATH over global config instead of .pratfile.
   --json                  Print one normalized JSON result.
   --progress              Print bounded live activity updates on stderr.
@@ -232,17 +237,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         raise PratError("A selector is required.", code="invalid_arguments")
     if edit and dry_run:
         raise PratError("--edit cannot be combined with --dry-run.", code="invalid_arguments")
-    options = Options(
-        model=_text_option(values.get("model"), "--model"),
-        effort=_text_option(values.get("effort"), "--effort"),
-        timeout=_number_option(values.get("timeout"), "--timeout"),
-        max_budget_usd=_number_option(values.get("max_budget_usd"), "--max-budget-usd"),
-        max_turns=_integer_option(values.get("max_turns"), "--max-turns"),
-        max_ai_credits=_number_option(values.get("max_ai_credits"), "--max-ai-credits"),
-        fast=fast,
-        add_dirs=tuple(add_dirs) if add_dirs else None,
-        native_args=scan.native_arguments,
-    )
+    options = _run_options(values, fast, add_dirs, scan.native_arguments)
     return RunArguments(
         selector,
         prompt_source,
@@ -257,6 +252,38 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         tuple(contexts),
         extract,
         edit,
+    )
+
+
+def _run_options(
+    values: dict[str, str],
+    fast: bool | None,
+    add_dirs: list[str],
+    native_arguments: tuple[str, ...] | None,
+) -> Options:
+    if "instructions" in values and "instructions_file" in values:
+        raise PratError(
+            "--instructions and --instructions-file cannot be used together.",
+            code="invalid_arguments",
+        )
+    return Options(
+        instructions=(
+            validate_instructions(
+                values["instructions"], OptionOrigin("--instructions", "invalid_arguments")
+            )
+            if "instructions" in values
+            else None
+        ),
+        instructions_file=_text_option(values.get("instructions_file"), "--instructions-file"),
+        model=_text_option(values.get("model"), "--model"),
+        effort=_text_option(values.get("effort"), "--effort"),
+        timeout=_number_option(values.get("timeout"), "--timeout"),
+        max_budget_usd=_number_option(values.get("max_budget_usd"), "--max-budget-usd"),
+        max_turns=_integer_option(values.get("max_turns"), "--max-turns"),
+        max_ai_credits=_number_option(values.get("max_ai_credits"), "--max-ai-credits"),
+        fast=fast,
+        add_dirs=tuple(add_dirs) if add_dirs else None,
+        native_args=native_arguments,
     )
 
 

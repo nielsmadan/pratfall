@@ -9,6 +9,7 @@ from types import MappingProxyType
 
 from pratfall.catalog import BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent
 from pratfall.errors import PratError
+from pratfall.instructions import validate_instructions
 from pratfall.models import (
     MAX_TURNS,
     AgentSpec,
@@ -116,7 +117,24 @@ def _directories(value: object, label: str, base: Path | None) -> tuple[str, ...
 
 def parse_options(table: dict[str, object], label: str, *, base: Path | None = None) -> Options:
     _known_keys(table, OPTION_FIELDS, label)
+    if "instructions" in table and "instructions_file" in table:
+        raise PratError(f"{label}: instructions and instructions_file cannot be used together.")
+    instructions_file = (
+        _string(table["instructions_file"], f"{label}.instructions_file")
+        if "instructions_file" in table
+        else None
+    )
+    if instructions_file is not None and base is not None:
+        instructions_file = resolve_path(
+            instructions_file, base, OptionOrigin(f"{label}.instructions_file")
+        )
     return Options(
+        instructions=(
+            validate_instructions(table["instructions"], OptionOrigin(f"{label}.instructions"))
+            if "instructions" in table
+            else None
+        ),
+        instructions_file=instructions_file,
         model=_string(table["model"], f"{label}.model") if "model" in table else None,
         effort=_string(table["effort"], f"{label}.effort") if "effort" in table else None,
         timeout=_number(table["timeout"], f"{label}.timeout") if "timeout" in table else None,
@@ -148,8 +166,16 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
 def merge_options(*layers: Options) -> Options:
     values: dict[str, object] = {}
     for layer in layers:
+        _clear_instruction_peer(values, layer)
         values.update({key: value for key, value in asdict(layer).items() if value is not None})
     return parse_options(values, "options")
+
+
+def _clear_instruction_peer[T](values: dict[str, T], layer: Options) -> None:
+    if layer.instructions is not None:
+        values.pop("instructions_file", None)
+    if layer.instructions_file is not None:
+        values.pop("instructions", None)
 
 
 def _rejected(origin: OptionOrigin, message: str) -> PratError:
@@ -180,6 +206,9 @@ def validate_capabilities(
             raise _rejected(fields[field], f"{agent.label} does not support this budget.")
     if options.add_dirs and not caps.add_dirs:
         raise _rejected(fields["add_dirs"], f"{agent.label} does not support extra directories.")
+    for name in ("instructions", "instructions_file"):
+        if getattr(options, name) is not None and not caps.instructions:
+            raise _rejected(fields[name], f"{agent.label} does not support appended instructions.")
     if options.fast is not None and not caps.fast:
         raise _rejected(fields["fast"], f"{agent.label} does not support a fast-mode override.")
 
@@ -193,6 +222,7 @@ def option_origins(
     }
     profile = config.profiles.get(selector)
     if profile is not None:
+        _clear_instruction_peer(origins, profile.options)
         origins.update(
             {
                 name: OptionOrigin(f"{profile.source or config.path}: profiles.{selector}.{name}")
@@ -201,6 +231,7 @@ def option_origins(
             }
         )
     if overrides is not None:
+        _clear_instruction_peer(origins, overrides)
         origins.update(
             {
                 name: OptionOrigin(
@@ -326,6 +357,9 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
         f"{local_config.path}: template {name!r} replaces the template from {global_config.path}."
         for name in template_collisions
     )
+    default_sources = dict(global_config.default_sources)
+    _clear_instruction_peer(default_sources, local_config.defaults)
+    default_sources.update(local_config.default_sources)
     return Config(
         path=local_config.path,
         exists=True,
@@ -335,9 +369,7 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
         templates=MappingProxyType(dict(global_config.templates) | dict(local_config.templates)),
         sources=global_config.sources + local_config.sources,
         warnings=warnings,
-        default_sources=MappingProxyType(
-            dict(global_config.default_sources) | dict(local_config.default_sources)
-        ),
+        default_sources=MappingProxyType(default_sources),
     )
 
 

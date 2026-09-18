@@ -28,3 +28,14 @@ accepting fixtures; no native binary was executed in this task.
 - [Pratfall adapter](../../src/pratfall/adapters/droid.py)
 - [Shared execution boundary](../execution.md)
 - [Interface comparison and evidence scope](overview.md)
+
+## Appended instructions (verified 2026-09-18)
+
+The [exec reference](https://docs.factory.ai/droid-exec/overview) describes
+`--append-system-prompt <text>`: “Append custom text to end of system prompt”. It also lists a
+native file variant. Prat reads the winning file itself and uses `--append-system-prompt=TEXT`
+for both public forms, preserving built-in guidance. Native append text and file flags conflict
+with active public instructions; the native-only allowlist remains unchanged.
+
+Verification used primary documentation/source inspection and fake executable argv tests;
+no authenticated native run was performed for this control.

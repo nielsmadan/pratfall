@@ -25,6 +25,7 @@ from pratfall.codes import INTERNAL_ERROR, SIGNAL_EXIT_BASE, exit_code_for
 from pratfall.config import config_path, init_config, load_config, option_origins, resolve_profile
 from pratfall.consumer import ByteConsumer, CapturingConsumer
 from pratfall.errors import PratError
+from pratfall.instructions import read_instructions
 from pratfall.models import (
     Config,
     ConsumedCapture,
@@ -55,6 +56,7 @@ def _agents(json_mode: bool) -> None:
             "budgets": sorted(caps.budgets),
             "fast": caps.fast,
             "add_dirs": caps.add_dirs,
+            "instructions": caps.instructions,
         }
         records.append(
             {
@@ -66,7 +68,9 @@ def _agents(json_mode: bool) -> None:
             }
         )
         supported = [
-            field for field in ("model", "effort", "fast", "add_dirs") if getattr(caps, field)
+            field
+            for field in ("model", "effort", "fast", "add_dirs", "instructions")
+            if getattr(caps, field)
         ]
         supported.extend(sorted(caps.budgets))
         selectors = agent.name
@@ -89,7 +93,7 @@ def _profiles(config: Config, json_mode: bool) -> None:
                 continue
             rendered = (
                 json.dumps(value, ensure_ascii=False)
-                if key in {"native_args", "add_dirs"}
+                if key in {"native_args", "add_dirs", "instructions", "instructions_file"}
                 else value
             )
             description += f" {key}={rendered}"
@@ -363,11 +367,16 @@ def _internal_payload(message: str, resolved: ResolvedProfile | None) -> dict[st
 
 
 def _resolve_run_paths(parsed: RunArguments, invocation_cwd: Path) -> RunArguments:
-    if parsed.options.add_dirs is None:
-        return parsed
-    origin = OptionOrigin("command line: --add-dir", "invalid_arguments")
-    paths = tuple(resolve_path(value, invocation_cwd, origin) for value in parsed.options.add_dirs)
-    return replace(parsed, options=replace(parsed.options, add_dirs=paths))
+    options = parsed.options
+    if options.add_dirs is not None:
+        origin = OptionOrigin("command line: --add-dir", "invalid_arguments")
+        paths = tuple(resolve_path(value, invocation_cwd, origin) for value in options.add_dirs)
+        options = replace(options, add_dirs=paths)
+    if options.instructions_file is not None:
+        origin = OptionOrigin("command line: --instructions-file", "invalid_arguments")
+        path = resolve_path(options.instructions_file, invocation_cwd, origin)
+        options = replace(options, instructions_file=path)
+    return replace(parsed, options=options)
 
 
 def _prepare_run_directories(resolved: ResolvedProfile, origin: OptionOrigin) -> ResolvedProfile:
@@ -377,13 +386,26 @@ def _prepare_run_directories(resolved: ResolvedProfile, origin: OptionOrigin) ->
     return replace(resolved, options=replace(resolved.options, add_dirs=paths))
 
 
+def _prepare_run_instructions(
+    resolved: ResolvedProfile, origins: Mapping[str, OptionOrigin]
+) -> ResolvedProfile:
+    if resolved.options.instructions_file is None:
+        return resolved
+    text = read_instructions(
+        resolved.options.instructions_file,
+        origins.get("instructions_file", OptionOrigin("instructions_file")),
+    )
+    return replace(
+        resolved, options=replace(resolved.options, instructions=text, instructions_file=None)
+    )
+
+
 def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) -> int:
     json_mode = state.json_mode
     resolved: ResolvedProfile | None = None
     try:
         parsed = _parse_run(arguments)
-        json_mode = parsed.json
-        state.json_mode = json_mode
+        json_mode = state.json_mode = parsed.json
         with closing(_diagnostics_for(progress=parsed.progress)) as diagnostics:
             parsed = _resolve_run_paths(parsed, invocation_cwd)
             config = load_config(parsed.config, cwd=invocation_cwd)
@@ -407,6 +429,7 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
                     f"Unknown template {parsed.template!r}; run 'prat templates' to list choices.",
                     code="invalid_arguments",
                 )
+            resolved = _prepare_run_instructions(resolved, origins)
             prompt = acquire_prompt(
                 parsed.prompt_source,
                 invocation_cwd,

@@ -52,3 +52,15 @@ as additional writable directories and explicitly allows repetition. Prat forwar
 
 Verification used primary documentation/source inspection and fake executable argv tests;
 no authenticated native run was performed for this control.
+
+## Appended instructions (verified 2026-09-18)
+
+The [configuration reference](https://developers.openai.com/codex/config-reference) describes
+`developer_instructions`: “Additional developer instructions injected into the session (optional).”
+Prat sends `-c developer_instructions=TOML_STRING`, replacing any native configured value for this
+invocation while retaining built-in guidance. It emits a JSON-compatible TOML basic string with
+Unicode scalar values unescaped and DEL escaped; UTF-16 surrogate-pair escapes are not valid TOML.
+Native `-c` / `--config` remain reserved as before.
+
+Verification used primary documentation/source inspection and fake executable argv tests;
+no authenticated native run was performed for this control.
