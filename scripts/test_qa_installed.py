@@ -1120,7 +1120,16 @@ def test_harness_model_and_fast_capabilities_match_the_catalog() -> None:
 
 
 @pytest.mark.parametrize(
-    "exercise", ["_exercise_w_composition", "_exercise_w_extraction", "_exercise_w_editor"]
+    "exercise",
+    [
+        "_exercise_w_composition",
+        "_exercise_w_extraction",
+        "_exercise_w_editor",
+        "_exercise_w_controls",
+        "_exercise_w_control_layers",
+        "_exercise_w_schemas",
+        "_exercise_w_control_rejections",
+    ],
 )
 def test_prompt_workflows_through_entry_point(
     tmp_path: Path,
@@ -1220,3 +1229,131 @@ def test_harness_schema_capabilities_match_the_catalog() -> None:
     assert (
         frozenset(agent.name for agent in catalog.AGENTS if agent.capabilities.schema) == qa._SCHEMA
     )
+
+
+@pytest.mark.parametrize("agent", ["claude", "codex", "qwen"])
+@pytest.mark.parametrize(
+    "field",
+    [
+        "output",
+        "structured_output",
+        "usage",
+        "reported_models",
+        "cost_usd",
+        "schema_version",
+        "native_exit_code",
+    ],
+)
+def test_schema_oracle_rejects_metadata_loss(
+    agent: str, field: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert qa._fake_schema(agent, "QA_CONTROLS_SCHEMA_FAIL") == 17
+    trace = capsys.readouterr().out.encode()
+    label = {"claude": "Claude Code", "codex": "Codex", "qwen": "Qwen Code"}[agent]
+    result = {
+        "schema_version": 1,
+        "output": '{"answer":"café 雪"}',
+        "structured_output": {"answer": "café 雪"},
+        "status": "error",
+        "exit_code": 17,
+        "native_exit_code": 17,
+        "error": {"code": "native_exit", "message": f"{label} exited with status 17."},
+        "usage": {
+            "input_tokens": 3,
+            "output_tokens": 2,
+            "cached_input_tokens": None if agent == "claude" else 1,
+            "cache_write_input_tokens": None,
+            "reasoning_output_tokens": None,
+        },
+        "reported_models": None if agent == "codex" else ["schema-model"],
+        "cost_usd": 0.125 if agent == "claude" else None,
+    }
+    completed = subprocess.CompletedProcess([], 17, json.dumps(result).encode() + b"\n", trace)
+    qa._assert_schema_result(completed, agent, 17)
+    result[field] = "lost"
+    completed.stdout = json.dumps(result).encode() + b"\n"
+    with pytest.raises(AssertionError):
+        qa._assert_schema_result(completed, agent, 17)
+
+
+@pytest.mark.parametrize(
+    "agent", ["claude", "codex", "gemini", "qwen", "copilot", "droid", "vibe", "hermes", "opencode"]
+)
+def test_controls_fake_rejects_added_approval_flags(tmp_path: Path, agent: str) -> None:
+    root, _ = qa._controls_root(Path(sys.executable), tmp_path, "controls")
+    _, _, expected = next(case for case in qa._control_cases(root) if case[0] == agent)
+    arguments = qa._control_argv(agent, [*expected, "--yolo"], "QA_CONTROLS")
+    data = b"" if agent in {"gemini", "copilot"} else b"QA_CONTROLS"
+    with pytest.raises(AssertionError, match=r"unexpected .* option"):
+        qa._prompt(agent, arguments, data)
+        qa._control_observations(agent, arguments)
+
+
+def test_codex_controls_fake_requires_attachment_terminator(tmp_path: Path) -> None:
+    image = tmp_path / "image.bin"
+    image.write_bytes(b"\xff")
+    with pytest.raises(AssertionError):
+        qa._control_observations("codex", ["exec", "--json", "--image=" + str(image), "-"])
+
+
+@pytest.mark.parametrize(
+    ("field", "wrong"), [("bytes", "00"), ("mode", 0o644), ("parent_mode", 0o755)]
+)
+def test_schema_snapshot_oracle_rejects_changed_observations(
+    tmp_path: Path, field: str, wrong: object
+) -> None:
+    (tmp_path / "temp").mkdir()
+    snapshot = {
+        "path": str(tmp_path / "temp" / "removed" / "schema.json"),
+        "bytes": qa._SCHEMA_BYTES.hex(),
+        "mode": 0o600,
+        "parent_mode": 0o700,
+    }
+    qa._assert_schema_snapshot(tmp_path, {"snapshot": snapshot})
+    snapshot[field] = wrong
+    with pytest.raises(AssertionError):
+        qa._assert_schema_snapshot(tmp_path, {"snapshot": snapshot})
+
+
+@pytest.mark.parametrize("agent", ["claude", "codex", "qwen"])
+def test_schema_workflow_oracle_rejects_config_bytes_for_cli_override(
+    tmp_path: Path,
+    source_entry_point: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    agent: str,
+) -> None:
+    prat, _ = source_entry_point
+    python = prat.with_name("python")
+    python.unlink()
+    python.write_text("#!/bin/sh\nexec " + shlex.quote(sys.executable) + ' "$@"\n')
+    python.chmod(0o755)
+    read_calls = qa._calls
+    substitutions: list[str] = []
+
+    def substituted_calls(path: Path) -> list[dict[str, object]]:
+        calls: list[dict[str, object]] = read_calls(path)
+        if not calls or calls[-1]["agent"] != agent:
+            return calls
+        record = calls[-1]
+        if agent == "claude":
+            argv = qa._texts(record["argv"])
+            if qa._CLI_SCHEMA_BYTES.decode() in argv:
+                index = argv.index("--json-schema") + 1
+                argv[index] = qa._SCHEMA_BYTES.decode()
+                record["argv"] = argv
+                substitutions.append(argv[index])
+        else:
+            snapshot = qa._record(record["snapshot"])
+            if snapshot["bytes"] == qa._CLI_SCHEMA_BYTES.hex():
+                snapshot["bytes"] = qa._SCHEMA_BYTES.hex()
+                substitutions.append(bytes.fromhex(qa._text(snapshot["bytes"])).decode())
+        return calls
+
+    monkeypatch.setattr(qa, "_calls", substituted_calls)
+    with pytest.raises(AssertionError):
+        qa._exercise_w_schemas(prat, tmp_path)
+    assert substitutions == [qa._SCHEMA_BYTES.decode()]
+    root = tmp_path / "schemas"
+    assert (root / "schema.json").read_bytes() == qa._SCHEMA_BYTES
+    assert (root / "consumer" / "cli-schema.json").read_bytes() == qa._CLI_SCHEMA_BYTES
+    assert json.loads(qa._CLI_SCHEMA_BYTES)["required"] == ["answer"]

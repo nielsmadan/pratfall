@@ -311,11 +311,15 @@ bytecode caches between runs. Same-size edits and reversions within one timestam
 otherwise reuse stale `.pyc` files and make the test result misleading.
 
 [Installed-package checks](release.md#check-installed-packages-locally) exercise the wheel's shared
-Q/E scenarios and both wheel and sdist adapter and W01–W03 prompt-workflow scenarios. The workflow
+Q/E scenarios and both wheel and sdist adapter and W01–W07 workflow scenarios. The workflow
 checks include exact composition and preview bytes, extracted success/failure answers with retained
 accounting and raw traces, and piped input/output alongside a controlling-terminal fake editor.
 Terminal restoration and temporary-file removal are observed before emergency cleanup, for both an
-accepted edit and an empty rejected edit. E13/E14 remain `Not run` in the installed
+accepted edit and an empty rejected edit. W04–W07 cover combined public controls, four-layer
+configuration, native schema protocols and early rejection with stdin held open. Schema snapshot
+bytes, permissions and lifetime are observed inside the native fake; removal is checked after
+the entrypoint returns. Independent expected argv covers all nine agents with public control support.
+E13/E14 remain `Not run` in the installed
 report because adversarial framing and stderr transport are covered by source tests. Per-agent
 tests supply the full malformed-output and retained-state matrices;
 [harness regressions](../scripts/test_qa_installed.py) exercise its assertions separately.

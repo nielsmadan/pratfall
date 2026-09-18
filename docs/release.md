@@ -79,7 +79,14 @@ and disposable XDG configuration. Workflow scenarios run against both wheel and 
 covering template listings, composed prompt previews, extraction with native failure metadata and raw
 traces, and a fake editor on a controlling terminal. Editor scenarios verify terminal reads/writes,
 foreground ownership and attribute restoration, and temporary-file cleanup after accepted and rejected
-edits. Editor commands and temporary paths stay inside the QA work directory. The harness spends no
+edits. W04–W07 also run both installations through all six public control families: exact native
+argv and composed prompts across nine agents, CLI/config path origins under a different `--cwd`,
+layer precedence and empty-array clearing, binary attachments, native agent and tool selection,
+and Claude/Codex/Qwen schema text/JSON output. Schema checks retain raw trace and accounting on
+native failure, observe private snapshot bytes and permissions during execution, and check removal
+after the entrypoint exits. Rejection checks keep stdin open and supply an editor trap to prove failure
+before input acquisition for unsupported controls, native collisions and invalid selected resources.
+Editor commands and temporary paths stay inside the QA work directory. The harness spends no
 inference credits. Python assertions must be
 enabled; `-O` and `PYTHONOPTIMIZE` are rejected.
 

@@ -178,7 +178,14 @@ _NATIVE_OPTIONS = {
     "crush": {"--model": 1, "--verbose": 0, "-v": 0, "--debug": 0, "-d": 0},
     "devin": {"--model": 1, "--permission-mode": 1},
     "cortex": {"--model": 1, "--effort": 1, "--max-turns": 1, "--connection": 1, "-c": 1},
-    "droid": {"--model": 1, "--reasoning-effort": 1, "--auto": 1},
+    "droid": {
+        "--model": 1,
+        "--reasoning-effort": 1,
+        "--auto": 1,
+        "--append-system-prompt": 1,
+        "--restrict-tools": 1,
+        "--disabled-tools": 1,
+    },
     "grok": {
         "--model": 1,
         "--reasoning-effort": 1,
@@ -196,6 +203,7 @@ _NATIVE_OPTIONS = {
     },
     "kimi": {"--model": 1, "--thinking": 0, "--no-thinking": 0, "--plan": 0, "--debug": 0},
     "vibe": {
+        "--agent": 1,
         "--max-turns": 1,
         "--max-price": 1,
         "--max-tokens": 1,
@@ -212,6 +220,10 @@ _NATIVE_OPTIONS = {
     },
     "iflow": {"--model": 1, "--thinking": 0, "--plan": 0, "--default": 0},
     "qwen": {
+        "--include-directories": 1,
+        "--core-tools": 1,
+        "--exclude-tools": 1,
+        "--json-schema": 1,
         "--model": 1,
         "--max-session-turns": 1,
         "--debug": 0,
@@ -229,6 +241,44 @@ _NATIVE_OPTIONS = {
         "--show-thinking": 0,
     },
 }
+
+_NATIVE_OPTIONS.update(
+    {
+        "claude": {
+            "--append-system-prompt": 1,
+            "--add-dir": 1,
+            "--tools": 1,
+            "--disallowedTools": 1,
+            "--agent": 1,
+            "--json-schema": 1,
+        },
+        "codex": {"-c": 1, "--add-dir": 1, "--image": 1, "--output-schema": 1},
+        "gemini": {"--include-directories": 1},
+        "copilot": {
+            "--add-dir": 1,
+            "--available-tools": 1,
+            "--excluded-tools": 1,
+            "--agent": 1,
+            "--attachment": 1,
+        },
+        "hermes": {"--image": 1},
+        "opencode": {"--file": 1},
+    }
+)
+_CONTROL_PREFIXES = {
+    "claude": ["-p", "--output-format", "json"],
+    "codex": ["exec", "--json"],
+    "gemini": ["--output-format", "json"],
+    "copilot": ["--output-format=json"],
+    "hermes": ["chat", "--oneshot", "--quiet", "--query-file", "-"],
+    "opencode": ["run", "--format", "json"],
+}
+_SCHEMA_BYTES = b'{\n  "type": "object", "properties": {"answer": {"type": "string"}}\n}\n'
+_CLI_SCHEMA_BYTES = (
+    b'{\n  "type": "object", "properties": {"answer": {"type": "string"}},\n'
+    b'  "required": ["answer"], "additionalProperties": false\n}\n'
+)
+_SCHEMA_ANSWER = {"answer": "café 雪"}
 
 
 def _text(value: object) -> str:
@@ -1386,6 +1436,89 @@ _NATIVE_CASES: tuple[tuple[str | tuple[str, ...], _NativeCaseHandler], ...] = (
 )
 
 
+def _control_observations(agent: str, arguments: list[str]) -> dict[str, object]:
+    if agent in _CONTROL_PREFIXES:
+        prefix = _CONTROL_PREFIXES[agent]
+        assert arguments[: len(prefix)] == prefix
+        options = arguments[len(prefix) :]
+        if agent == "codex":
+            attached = any(arg.startswith("--image=") for arg in options)
+            suffix = ["--", "-"] if attached else ["-"]
+            assert options[-len(suffix) :] == suffix
+            options = options[: -len(suffix)]
+        elif agent in {"gemini", "copilot"}:
+            assert options[-1].startswith("--prompt=")
+            options = options[:-1]
+        _native_options(agent, options)
+    observations: dict[str, object] = {}
+    attachments = [
+        arg.split("=", 1)[1]
+        for arg in arguments
+        if arg.startswith(("--image=", "--attachment=", "--file="))
+    ]
+    if attachments:
+        observations["attachments"] = [Path(path).read_bytes().hex() for path in attachments]
+    if agent in {"codex", "qwen"}:
+        flag = "--output-schema" if agent == "codex" else "--json-schema"
+        if flag in arguments:
+            path = Path(arguments[arguments.index(flag) + 1].removeprefix("@"))
+            observations["snapshot"] = {
+                "path": str(path),
+                "bytes": path.read_bytes().hex(),
+                "mode": path.stat().st_mode & 0o777,
+                "parent_mode": path.parent.stat().st_mode & 0o777,
+            }
+    return observations
+
+
+def _fake_schema(agent: str, prompt: str) -> int:
+    failed = "QA_CONTROLS_SCHEMA_FAIL" in prompt
+    if agent == "claude":
+        print(
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "structured_output": _SCHEMA_ANSWER,
+                    "usage": {"input_tokens": 3, "output_tokens": 2},
+                    "modelUsage": {"schema-model": {}},
+                    "total_cost_usd": 0.125,
+                }
+            )
+        )
+    elif agent == "codex":
+        _answer_codex("intermediate prose")
+        _answer_codex(json.dumps(_SCHEMA_ANSWER, ensure_ascii=False))
+    else:
+        assert agent == "qwen"
+        print(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "parent_tool_use_id": None,
+                    "message": {
+                        "role": "assistant",
+                        "model": "schema-model",
+                        "content": [{"type": "text", "text": "intermediate prose"}],
+                    },
+                }
+            )
+        )
+        print(
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "structured_result": _SCHEMA_ANSWER,
+                    "usage": {"input_tokens": 3, "output_tokens": 2, "cache_read_input_tokens": 1},
+                }
+            )
+        )
+    return 17 if failed else 0
+
+
 def _fake_native(agent: str, arguments: list[str]) -> int:
     _record_owner()
     if _is_version_probe(agent, arguments):
@@ -1399,7 +1532,11 @@ def _fake_native(agent: str, arguments: list[str]) -> int:
         "prompt": prompt,
         "cwd": os.getcwd(),
     }
+    if "QA_CONTROLS" in prompt:
+        record.update(_control_observations(agent, arguments))
     _write_native_record(record)
+    if "QA_CONTROLS_SCHEMA" in prompt:
+        return _fake_schema(agent, prompt)
     a_tier_exit = _fake_a_tier(agent, prompt)
     if a_tier_exit is not None:
         return a_tier_exit
@@ -4144,6 +4281,469 @@ def _exercise_w_editor(prat: Path, root: Path) -> dict[str, object]:
     }
 
 
+def _controls_root(prat: Path, root: Path, name: str) -> tuple[Path, Path]:
+    root, config = _workflow_root(root, name, prat)
+    lines = ["version = 1", "[templates.review]", 'prompt="Review $$ ${input}"']
+    for agent in AGENTS:
+        command = [
+            str(prat.with_name("python")),
+            str(Path(__file__).resolve()),
+            "--fake-native",
+            agent,
+        ]
+        lines.extend((f"[agents.{agent}]", f"command={json.dumps(command)}"))
+    config.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    consumer = root / "consumer"
+    for directory in (root / "config dir", consumer / "cli dir", consumer / "project"):
+        directory.mkdir(exist_ok=True)
+    (consumer / "image.bin").write_bytes(b"\x00\xff\x80image\r\n")
+    (consumer / "context.md").write_bytes(b"context $input\r\n")
+    (consumer / "rules.md").write_bytes("CLI rules café\r\n".encode())
+    (root / "rules.md").write_bytes(b"config rules\r\n")
+    (root / "schema.json").write_bytes(_SCHEMA_BYTES)
+    (consumer / "cli-schema.json").write_bytes(_CLI_SCHEMA_BYTES)
+    return root, config
+
+
+def _control_cases(root: Path) -> list[tuple[str, list[str], list[str]]]:
+    directory = str(root / "consumer" / "cli dir")
+    attachment = str(root / "consumer" / "image.bin")
+    dirs = ["--add-dir", "cli dir"]
+    tools = ["--tools", "Read", "--tools", "Search", "--disable-tools", "Write"]
+    instructions = ["--instructions-file", "rules.md"]
+    persona = ["--native-agent", "reviewer"]
+    attach = ["--attach", "image.bin"]
+    return [
+        (
+            "claude",
+            dirs + instructions + tools + persona,
+            [
+                "--append-system-prompt=CLI rules café\r\n",
+                "--add-dir",
+                directory,
+                "--tools=Read,Search",
+                "--disallowedTools=Write",
+                "--agent=reviewer",
+            ],
+        ),
+        (
+            "codex",
+            dirs + instructions + attach,
+            [
+                "-c",
+                'developer_instructions="CLI rules café\\r\\n"',
+                "--add-dir",
+                directory,
+                "--image=" + attachment,
+            ],
+        ),
+        ("gemini", dirs, ["--include-directories", directory]),
+        (
+            "qwen",
+            dirs + instructions + tools,
+            [
+                "--append-system-prompt=CLI rules café\r\n",
+                "--include-directories",
+                directory,
+                "--core-tools=Read",
+                "--core-tools=Search",
+                "--exclude-tools=Write",
+            ],
+        ),
+        (
+            "copilot",
+            dirs + tools + persona + attach,
+            [
+                "--add-dir=" + directory,
+                "--available-tools=Read,Search",
+                "--excluded-tools=Write",
+                "--agent=reviewer",
+                "--attachment=" + attachment,
+            ],
+        ),
+        (
+            "droid",
+            instructions + tools,
+            [
+                "--append-system-prompt=CLI rules café\r\n",
+                "--restrict-tools=Read,Search",
+                "--disabled-tools=Write",
+            ],
+        ),
+        (
+            "vibe",
+            tools + persona,
+            [
+                "--enabled-tools=Read",
+                "--enabled-tools=Search",
+                "--disabled-tools=Write",
+                "--agent=reviewer",
+            ],
+        ),
+        ("hermes", attach, ["--image=" + attachment]),
+        ("opencode", attach, ["--file=" + attachment]),
+    ]
+
+
+def _control_argv(agent: str, options: list[str], prompt: str) -> list[str]:
+    prefix = _CONTROL_PREFIXES.get(agent, _STDIN_PREFIXES.get(agent, []))
+    suffix = ["--prompt=" + prompt] if agent in {"gemini", "copilot"} else []
+    if agent == "codex":
+        suffix = ["--", "-"] if any(arg.startswith("--image=") for arg in options) else ["-"]
+    return [*prefix, *options, *suffix]
+
+
+def _assert_control_call(
+    root: Path, agent: str, options: list[str], prompt: str
+) -> dict[str, object]:
+    record = _calls(root / "native.jsonl")[-1]
+    assert record["agent"] == agent
+    assert record["argv"] == _control_argv(agent, options, prompt)
+    assert record["prompt"] == prompt
+    assert record["stdin"] == ("" if agent in {"gemini", "copilot"} else prompt)
+    assert record["cwd"] == str(root / "consumer" / "project")
+    if agent in _ATTACHMENT_TYPES:
+        assert record["attachments"] == [b"\x00\xff\x80image\r\n".hex()]
+    return record
+
+
+def _exercise_w_controls(prat: Path, root: Path) -> dict[str, object]:
+    root, config = _controls_root(prat, root, "controls")
+    prompt = (
+        '# Context: "context.md"\n\ncontext $input\r\n\n\nReview $ pipeline\n\nQA_CONTROLS task'
+    )
+    observations: dict[str, object] = {"status": "Pass"}
+    for agent, flags, expected in _control_cases(root):
+        completed = _run(
+            prat,
+            root,
+            [
+                agent,
+                "QA_CONTROLS task",
+                "-t",
+                "review",
+                "--context",
+                "context.md",
+                "--cwd",
+                "project",
+                "--json",
+                *flags,
+            ],
+            stdin=b"pipeline",
+            config=config,
+        )
+        result = _assert_result(
+            completed, returncode=0, status="success", native_exit_code=0, error_code=None
+        )
+        record = _assert_control_call(root, agent, expected, prompt)
+        assert json.loads(_text(result["output"])) == record
+        observations[agent] = record
+    return observations
+
+
+def _exercise_w_control_layers(prat: Path, root: Path) -> dict[str, object]:
+    root, config = _controls_root(prat, root, "control-layers")
+    global_config = root / "xdg" / "pratfall" / "config.toml"
+    global_config.parent.mkdir(exist_ok=True)
+    global_config.write_text(
+        'version=1\n[defaults]\ninstructions_file="missing-global"\n'
+        'add_dirs=["missing-global"]\ntools=["Global"]\n'
+        'disabled_tools=["GlobalDeny"]\nnative_agent="global"\n'
+    )
+    with config.open("a") as stream:
+        stream.write(
+            '[defaults]\ninstructions="local"\nadd_dirs=["config dir"]\n'
+            'tools=["Local"]\ndisabled_tools=["LocalDeny"]\nnative_agent="local"\n'
+            '[profiles.layered]\nagent="claude"\ninstructions_file="rules.md"\n'
+            'tools=["Profile"]\ndisabled_tools=[]\nnative_agent="profile"\n'
+            '[profiles.cleared]\nagent="claude"\nadd_dirs=[]\ntools=[]\n'
+            'disabled_tools=[]\ninstructions="cleared"\n'
+        )
+    cases = [
+        (
+            ["layered"],
+            [
+                "--append-system-prompt=config rules\r\n",
+                "--add-dir",
+                str(root / "config dir"),
+                "--tools=Profile",
+                "--agent=profile",
+            ],
+        ),
+        (
+            [
+                "layered",
+                "--instructions",
+                "CLI inline",
+                "--add-dir",
+                "cli dir",
+                "--tools",
+                "CLI",
+                "--disable-tools",
+                "CLIDeny",
+                "--native-agent",
+                "cli",
+            ],
+            [
+                "--append-system-prompt=CLI inline",
+                "--add-dir",
+                str(root / "consumer" / "cli dir"),
+                "--tools=CLI",
+                "--disallowedTools=CLIDeny",
+                "--agent=cli",
+            ],
+        ),
+        (
+            ["cleared", "--instructions-file", "rules.md"],
+            ["--append-system-prompt=CLI rules café\r\n", "--tools=", "--agent=local"],
+        ),
+    ]
+    observations: list[dict[str, object]] = []
+    for flags, expected in cases:
+        completed = _run(
+            prat, root, [*flags, "QA_CONTROLS layers", "--cwd", "project", "--json"], config=config
+        )
+        _assert_result(
+            completed, returncode=0, status="success", native_exit_code=0, error_code=None
+        )
+        observations.append(_assert_control_call(root, "claude", expected, "QA_CONTROLS layers"))
+    neutral = root / "neutral.toml"
+    neutral.write_text(
+        config.read_text().split("[defaults]")[0]
+        + '[profiles.neutral]\nagent="amp"\nattachments=[]\nadd_dirs=[]\ndisabled_tools=[]\n'
+    )
+    global_config.write_text(
+        'version=1\n[defaults]\nattachments=["missing"]\n'
+        'add_dirs=["missing"]\ndisabled_tools=["Write"]\n'
+    )
+    completed = _run(
+        prat, root, ["neutral", "QA_CONTROLS neutral", "--cwd", "project", "--json"], config=neutral
+    )
+    _assert_result(completed, returncode=0, status="success", native_exit_code=0, error_code=None)
+    cleared = _assert_control_call(root, "amp", [], "QA_CONTROLS neutral")
+    return {"status": "Pass", "layers": observations, "neutral_arrays": cleared}
+
+
+def _assert_schema_result(
+    completed: subprocess.CompletedProcess[bytes], agent: str, code: int
+) -> dict[str, object]:
+    assert completed.returncode == code, completed.stderr
+    assert len(completed.stdout.splitlines()) == 1
+    result = _json_result(completed)
+    assert result["schema_version"] == 1
+    assert result["output"] == json.dumps(_SCHEMA_ANSWER, ensure_ascii=False, separators=(",", ":"))
+    assert result["structured_output"] == _SCHEMA_ANSWER
+    assert "structured_output_present" not in result
+    assert result["status"] == ("error" if code else "success")
+    assert result["exit_code"] == result["native_exit_code"] == code
+    label = {"claude": "Claude Code", "codex": "Codex", "qwen": "Qwen Code"}[agent]
+    expected_error = {"code": "native_exit", "message": f"{label} exited with status 17."}
+    assert result["error"] == (expected_error if code else None)
+    assert result["usage"] == {
+        "input_tokens": 3,
+        "output_tokens": 2,
+        "cached_input_tokens": None if agent == "claude" else 1,
+        "cache_write_input_tokens": None,
+        "reasoning_output_tokens": None,
+    }
+    assert result["reported_models"] == (None if agent == "codex" else ["schema-model"])
+    assert result["cost_usd"] == (0.125 if agent == "claude" else None)
+    trace = [json.loads(line) for line in completed.stderr.splitlines() if line.startswith(b"{")]
+    assert trace
+    terminal = trace[-1]
+    if agent == "claude":
+        assert terminal["structured_output"] == _SCHEMA_ANSWER
+        assert "result" not in terminal
+    elif agent == "qwen":
+        assert terminal["structured_result"] == _SCHEMA_ANSWER
+    else:
+        assert terminal["type"] == "turn.completed"
+        assert json.loads(trace[-2]["item"]["text"]) == _SCHEMA_ANSWER
+        assert trace[1]["item"]["text"] == "intermediate prose"
+    return result
+
+
+def _assert_schema_snapshot(
+    root: Path, record: dict[str, object], expected_bytes: bytes = _SCHEMA_BYTES
+) -> str:
+    snapshot = _record(record["snapshot"])
+    path = Path(_text(snapshot["path"]))
+    assert snapshot["bytes"] == expected_bytes.hex()
+    assert snapshot["mode"] == 0o600 and snapshot["parent_mode"] == 0o700
+    assert path.parent.parent == root / "temp"
+    assert not path.parent.exists()
+    assert list((root / "temp").iterdir()) == []
+    return str(path)
+
+
+def _exercise_w_schemas(prat: Path, root: Path) -> dict[str, object]:
+    root, config = _controls_root(prat, root, "schemas")
+    with config.open("a") as stream:
+        for agent in ("claude", "codex", "qwen"):
+            stream.write(
+                f'[profiles.{agent}-schema]\nagent="{agent}"\nschema="schema.json"\n'
+                'instructions_file="rules.md"\nadd_dirs=["config dir"]\n'
+            )
+            if agent == "qwen":
+                stream.write('tools=["Read"]\ndisabled_tools=["submit_final_result"]\n')
+            if agent == "codex":
+                stream.write('attachments=["consumer/image.bin"]\n')
+    observations: dict[str, object] = {"status": "Pass"}
+    for agent in ("claude", "codex", "qwen"):
+        flags = [agent + "-schema", "--cwd", "project"]
+        calls_before = _calls(root / "native.jsonl")
+        preview = _run(
+            prat, root, [*flags, "QA_CONTROLS_SCHEMA", "--dry-run", "--json"], config=config
+        )
+        assert _calls(root / "native.jsonl") == calls_before
+        assert preview.returncode == 0, preview.stderr
+        shown = _json_result(preview)
+        assert shown["schema"] == str(root / "schema.json")
+        transport = "inline JSON" if agent == "claude" else "temporary prepared file"
+        assert shown["schema_transport"] == transport
+        if agent != "claude":
+            placeholder = "<temporary prepared schema>"
+            assert sum(placeholder in arg for arg in _texts(shown["argv"])) == 1
+            assert all(str(root / "temp") not in arg for arg in _texts(shown["argv"]))
+        assert list((root / "temp").iterdir()) == []
+        for code in (0, 17):
+            prompt = "QA_CONTROLS_SCHEMA_FAIL" if code else "QA_CONTROLS_SCHEMA"
+            completed = _run(prat, root, [*flags, prompt, "--json", "--trace"], config=config)
+            result = _assert_schema_result(completed, agent, code)
+            record = _calls(root / "native.jsonl")[-1]
+            schema_path = str(root / "schema.json")
+            if agent != "claude":
+                schema_path = _assert_schema_snapshot(root, record)
+            if agent == "claude":
+                expected = [
+                    "--append-system-prompt=config rules\r\n",
+                    "--add-dir",
+                    str(root / "config dir"),
+                    "--json-schema",
+                    _SCHEMA_BYTES.decode(),
+                ]
+            elif agent == "codex":
+                expected = [
+                    "-c",
+                    'developer_instructions="config rules\\r\\n"',
+                    "--add-dir",
+                    str(root / "config dir"),
+                    "--image=" + str(root / "consumer/image.bin"),
+                    "--output-schema",
+                    schema_path,
+                ]
+            else:
+                expected = [
+                    "--append-system-prompt=config rules\r\n",
+                    "--include-directories",
+                    str(root / "config dir"),
+                    "--core-tools=Read",
+                    "--exclude-tools=submit_final_result",
+                    "--json-schema",
+                    "@" + schema_path,
+                ]
+            _assert_control_call(root, agent, expected, prompt)
+            observations[f"{agent}.{code}"] = {"result": result, "native": record}
+        text = _run(
+            prat, root, [*flags, "QA_CONTROLS_SCHEMA", "--schema", "cli-schema.json"], config=config
+        )
+        assert text.returncode == 0, text.stderr
+        assert (
+            text.stdout
+            == json.dumps(_SCHEMA_ANSWER, ensure_ascii=False, separators=(",", ":")).encode()
+            + b"\n"
+        )
+        record = _calls(root / "native.jsonl")[-1]
+        if agent == "claude":
+            argv = _texts(record["argv"])
+            assert argv[argv.index("--json-schema") + 1] == _CLI_SCHEMA_BYTES.decode()
+        else:
+            _assert_schema_snapshot(root, record, _CLI_SCHEMA_BYTES)
+        observations[f"{agent}.cli-schema"] = record
+    return observations
+
+
+def _reject_before_input(
+    prat: Path, root: Path, config: Path, arguments: list[str]
+) -> dict[str, object]:
+    command = [str(prat), "--config", str(config), "--json", "--edit", *arguments]
+    invocation = _start(command, root, _workflow_environment(root), stdin=b"")
+    process = invocation.process
+    try:
+        assert process.stdin is not None
+        process.wait(timeout=HARNESS_TIMEOUT)
+        process.stdin.close()
+        process.stdin = None
+        stdout, stderr = _communicate(_Invocation(process, invocation.owner_path, None))
+        completed = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+        assert process.returncode == 2, stderr
+        result = _json_result(completed)
+        assert result["status"] == "error" and result["native_exit_code"] is None
+        assert result["structured_output"] is None
+        assert result["output"] == ""
+        error = _record(result["error"])
+        assert error["code"] in {"invalid_arguments", "invalid_config"}
+        message = _text(error["message"])
+        assert "editor" not in message.lower() and "terminal" not in message.lower()
+        assert _calls(root / "native.jsonl") == []
+        assert list((root / "temp").iterdir()) == []
+        return result
+    finally:
+        _cleanup(invocation)
+
+
+def _exercise_w_control_rejections(prat: Path, root: Path) -> dict[str, object]:
+    root, config = _controls_root(prat, root, "control-rejections")
+    (root / "consumer" / "invalid.json").write_text('{"type": "object", "type": "string"}')
+    cases = {
+        "unsupported-instructions": ["amp", "--instructions-file", "missing"],
+        "unsupported-directories": ["amp", "--add-dir", "missing"],
+        "unsupported-tools": ["amp", "--tools", "Read"],
+        "unsupported-persona": ["amp", "--native-agent", "reviewer"],
+        "unsupported-attachments": ["amp", "--attach", "missing"],
+        "unsupported-schema": ["amp", "--schema", "missing"],
+        "collision-tools": ["claude", "--tools", "Read", "--", "--tools=Write"],
+        "collision-instructions": [
+            "claude",
+            "--instructions",
+            "text",
+            "--",
+            "--append-system-prompt=native",
+        ],
+        "collision-directories": ["claude", "--add-dir", "cli dir", "--", "--add-dir=native"],
+        "collision-persona": ["claude", "--native-agent", "reviewer", "--", "--agent=native"],
+        "collision-attachments": ["codex", "--attach", "image.bin", "--", "--image=native"],
+        "collision-schema": ["claude", "--schema", "cli-schema.json", "--", "--json-schema={}"],
+        "schema-extract": ["claude", "--schema", "missing", "--extract"],
+        "invalid-schema": ["qwen", "--schema", "invalid.json"],
+        "invalid-instructions": ["claude", "--instructions-file", "missing"],
+        "invalid-directory": ["codex", "--add-dir", "image.bin"],
+        "invalid-attachment": ["codex", "--attach", "project"],
+        "hermes-count": ["hermes", "--attach", "image.bin", "--attach", "image.bin"],
+    }
+    observations: dict[str, object] = {"status": "Pass"}
+    for name, arguments in cases.items():
+        observations[name] = _reject_before_input(prat, root, config, arguments)
+        message = _text(_record(_record(observations[name])["error"])["message"])
+        if name.startswith("collision"):
+            assert "this option is controlled by prat" in message
+        elif name.startswith("unsupported"):
+            assert "does not support" in message
+    fragments = {
+        "schema-extract": "cannot be used together",
+        "invalid-schema": "duplicate object key",
+        "invalid-instructions": "Cannot open instructions file",
+        "invalid-directory": "not a directory",
+        "invalid-attachment": "not a regular attachment file",
+        "hermes-count": "at most 1",
+    }
+    for name, fragment in fragments.items():
+        message = _text(_record(_record(observations[name])["error"])["message"])
+        assert fragment.lower() in message.lower(), message
+    assert _calls(root / "native.jsonl") == []
+    return observations
+
+
 def _exercise_workflows(prat: Path, root: Path, artifact: str) -> dict[str, object]:
     root = root / f"workflows-{artifact}"
     root.mkdir(exist_ok=True)
@@ -4151,6 +4751,10 @@ def _exercise_workflows(prat: Path, root: Path, artifact: str) -> dict[str, obje
         "W01.composition": _exercise_w_composition(prat, root),
         "W02.extraction": _exercise_w_extraction(prat, root),
         "W03.editor": _exercise_w_editor(prat, root),
+        "W04.controls": _exercise_w_controls(prat, root),
+        "W05.control-layers": _exercise_w_control_layers(prat, root),
+        "W06.schemas": _exercise_w_schemas(prat, root),
+        "W07.control-rejections": _exercise_w_control_rejections(prat, root),
     }
 
 
