@@ -39,3 +39,17 @@ with active public instructions; the native-only allowlist remains unchanged.
 
 Verification used primary documentation/source inspection and fake executable argv tests;
 no authenticated native run was performed for this control.
+
+## Tool availability (verified 2026-09-18)
+
+The [exec reference](https://docs.factory.ai/droid-exec/overview) defines `--restrict-tools` as:
+“Restrict the run to only the specified tools (comma or space separated list)”. It also defines
+`--disabled-tools` and the separate `--additional-tools` expansion. Names are native IDs, such as
+`ApplyPatch` and `execute-cli`; Prat does not translate them or add `--auto`.
+
+Prat emits `--restrict-tools=LIST` and `--disabled-tools=LIST`, comma-joining each list and rejecting
+commas or Unicode whitespace (including U+FEFF) inside IDs. A faithful empty restriction is not
+established, so `tools=[]` is rejected. Equivalent native flags and `--additional-tools` conflict
+with the corresponding active public controls. The native-only acceptance set remains unchanged.
+Existing native permission denials remain authoritative. Verification used primary documentation
+and fake argv tests; no authenticated native run was performed.

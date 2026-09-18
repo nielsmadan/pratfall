@@ -123,6 +123,21 @@ _NO_MODEL = frozenset({"openhands", "amp", "vibe"})
 _FAST = frozenset({"claude", "codex"})
 _ADD_DIRS = frozenset({"claude", "codex", "gemini", "qwen", "copilot"})
 _INSTRUCTIONS = frozenset({"claude", "codex", "qwen", "droid"})
+_TOOLS_EMPTY = frozenset({"claude", "copilot"})
+_TOOLS_SCOPES = {
+    "claude": "built-ins; MCP unaffected; EndConversation may remain",
+    "qwen": "native core allowlist; schema tool exempt; native settings apply",
+    "copilot": "model-visible tools",
+    "droid": "native run tools",
+    "vibe": "native available tools, including MCP and connectors",
+}
+_DISABLED_TOOLS_SCOPES = {
+    "claude": "native deny rules; EndConversation exception",
+    "qwen": "native deny rules, including schema tool",
+    "copilot": "model-visible tools",
+    "droid": "native run tools",
+    "vibe": "native available tools, including MCP and connectors",
+}
 _STDIN_PREFIXES = {
     "qwen": ["--output-format", "stream-json"],
     "amp": ["--execute", "--stream-json"],
@@ -2239,6 +2254,11 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
             "fast": name in _FAST,
             "add_dirs": name in _ADD_DIRS,
             "instructions": name in _INSTRUCTIONS,
+            "tools": name in _TOOLS_SCOPES,
+            "disabled_tools": name in _DISABLED_TOOLS_SCOPES,
+            "tools_empty": name in _TOOLS_EMPTY,
+            "tools_scope": _TOOLS_SCOPES.get(name),
+            "disabled_tools_scope": _DISABLED_TOOLS_SCOPES.get(name),
         }
     assert len(ALIASES) == 17 and not set(ALIASES).intersection(AGENTS)
     doctor = _run(prat, root, ["doctor", "--json"], config=config)
@@ -2334,6 +2354,8 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "add_dirs": None,
                     "instructions": None,
                     "instructions_file": None,
+                    "tools": None,
+                    "disabled_tools": None,
                     "timeout": 7.0,
                     "max_turns": 3,
                     "max_budget_usd": None,
@@ -3237,6 +3259,8 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "add_dirs": None,
                     "instructions": None,
                     "instructions_file": None,
+                    "tools": None,
+                    "disabled_tools": None,
                     "native_args": [],
                 },
             }

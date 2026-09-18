@@ -11,6 +11,7 @@ across projects, or locally in a project's `.pratfile`.
 - [Inspect and validate](#inspect-and-validate)
 - [Extra directories](#extra-directories)
 - [Appended instructions](#appended-instructions)
+- [Tool availability](#tool-availability)
 - [Upgrade existing profiles](#upgrade-existing-profiles)
 
 ## Create a profile
@@ -45,7 +46,7 @@ prat simple --effort high "investigate this failure"
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
 `model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `instructions`,
-`instructions_file`, and the agent's supported budget fields.
+`instructions_file`, `tools`, `disabled_tools`, and the agent's supported budget fields.
 Use `[defaults]` for shared settings.
 
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
@@ -104,7 +105,7 @@ Settings resolve from highest to lowest priority:
 | `[templates.NAME]` | A local template replaces the entire global template with that name. |
 | `[agents.NAME].command` | A local command array replaces the global array for that agent. |
 | `instructions`, `instructions_file` | One override group: either higher-priority form clears the lower-priority form. |
-| `native_args`, `add_dirs` | The higher-priority array replaces the lower-priority array, even when empty. |
+| `native_args`, `add_dirs`, `tools`, `disabled_tools` | The higher-priority array replaces the lower-priority array, even when empty. |
 
 Profiles from both files remain available. Profiles do not inherit from each other; omitted fields
 use the merged defaults.
@@ -252,3 +253,34 @@ Agents with names of four letters or fewer now use their full names. Update comm
 | `mv` | `vibe` |
 
 The former aliases are available as custom profile names.
+
+## Tool availability
+
+```toml
+[profiles.read]
+agent = "claude"
+tools = ["Read", "Grep"]
+disabled_tools = ["mcp__*"]
+
+[profiles.no_tools]
+agent = "copilot"
+tools = []
+disabled_tools = []
+```
+
+`tools` and `disabled_tools` are arrays of nonempty native names or patterns. Each array replaces
+its inherited value: CLI → profile → local defaults → global defaults. Omitting a field preserves
+native behavior. `disabled_tools = []` clears Prat's inherited exclusions and is neutral even on
+unsupported agents; it does not clear native permission denials.
+
+`tools = []` actively requests no tools in the [documented native scope](running.md#control-tool-availability).
+Claude and Copilot can represent it; Qwen, Droid, Vibe and unsupported agents reject it.
+Claude's MCP tools and, while other tools remain, `EndConversation` are outside its empty built-in
+selection. `prat profiles` displays active `tools=[]` and `prat agents --json` exposes `tools`,
+`disabled_tools`, `tools_empty`, `tools_scope`, and `disabled_tools_scope` capabilities.
+
+Backend-specific defaults affect every profile that inherits them, including unused profiles
+validated when the configuration loads. Keep allowlists in profiles when mixing agents: an empty
+allowlist does not neutralize an unsupported inherited `tools` field. Native flag collisions and
+unrepresentable list delimiters fail before prompt input; ordinary config inspection reads no
+auxiliary resources and launches no native command.

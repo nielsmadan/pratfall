@@ -53,3 +53,21 @@ form; it does not add `--allow-all-paths` or tool approvals.
 
 Verification used primary documentation/source inspection and fake executable argv tests;
 no authenticated native run was performed for this control.
+
+## Tool availability (verified 2026-09-18)
+
+The [programmatic reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-programmatic-reference)
+says `--available-tools` will “Restrict the model to only the tools you list” and describes quoted
+comma-separated lists. `--excluded-tools` removes tools from model visibility. These differ from
+permission approvals (`--allow-tool`) and denials (`--deny-tool`). Prat emits
+`--available-tools=LIST` and `--excluded-tools=LIST`, rejecting commas and surrounding native
+whitespace inside entries. Names remain Copilot's native vocabulary.
+
+The pinned 1.0.83 package's variadic zero-value contract above establishes bare
+`--available-tools` as an empty selection. Prat uses it for `tools=[]`; following arguments are
+flags, so the empty selection cannot consume prompt text. Equivalent native flags conflict with
+active public lists. An active public allowlist also conflicts with native MCP enable/addition
+flags, preventing ambiguous tool-set expansion. Explicit native permission denials remain accepted.
+
+No approval flags are injected. Verification used primary documentation/package evidence and
+fake argv tests, not authenticated vendor execution.

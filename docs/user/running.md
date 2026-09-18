@@ -332,3 +332,55 @@ All four adapters pass the prepared content in native argv. Operating-system arg
 limits can be lower than Prat's input limit, including when using `--instructions-file`.
 The append flags in existing Claude/Qwen `native_args` remain available when neither public
 instruction form is active; combining them with public instructions is an error.
+
+## Control tool availability
+
+```sh
+prat cc --tools Read --tools Grep --disable-tools 'mcp__*' "review this checkout"
+prat qwen --tools ReadFileTool --disable-tools ShellTool "summarize the README"
+prat vibe --tools 'read*' --disable-tools 're:^bash$' "review this checkout"
+```
+
+Repeat `--tools NAME` and `--disable-tools NAME` before or after the selector. Each occurrence is
+one native name or pattern; Prat preserves order and duplicates. CLI lists replace configured
+lists. Use `--tools=-name` when a value starts with a dash. Config `tools=[]` is an active empty
+allowlist; an empty CLI string is invalid. The names, patterns and effective tool set belong to
+the native agent, and an unknown name can fail or match nothing according to that agent.
+
+| Agent | Allowlist (`--tools`) | Exclusions (`--disable-tools`) | Empty allowlist |
+| --- | --- | --- | --- |
+| Claude | `--tools`; built-in names such as `Read`, `Grep`, or native preset `default` | `--disallowedTools`; names, MCP patterns and permission rules such as `Bash(rm *)` | `--tools=""`; built-ins only, with the exception below |
+| Qwen | `--core-tools`; native names and aliases such as `ReadFileTool` | `--exclude-tools`; native deny rules | Rejected |
+| Copilot | `--available-tools`; model-visible native tool names | `--excluded-tools`; remove native tools from model visibility | Bare `--available-tools` |
+| Droid | `--restrict-tools`; native tool IDs such as `ApplyPatch` | `--disabled-tools`; native tool IDs such as `execute-cli` | Rejected |
+| Vibe | Repeated `--enabled-tools`; exact names, globs, or `re:` regular expressions | Repeated `--disabled-tools`; same pattern syntax, applied after the allowlist | Rejected |
+
+Claude's allowlist does not remove MCP tools. `EndConversation` can remain despite allowlists and
+deny rules while another tool is available. A scoped deny rule keeps the tool visible and denies
+matching calls; it is not equivalent to removing the entire tool. See the
+[Claude contract](../reference/claude.md#tool-availability-verified-2026-09-18).
+
+Qwen's v0.24 tool contract filters ordinary native tools but its synthetic schema tool bypasses
+core allowlists and obeys explicit excludes and permission denials. Native configuration still
+participates: Qwen combines configured core entries with CLI entries when deciding exemptions
+from automatic headless exclusions. Selecting a write/execute tool can remove that default
+headless exclusion, without adding a permission allow rule. Prat never inserts `--allowed-tools`
+or removes explicit native denials. See the [Qwen contract](../reference/qwen.md#tool-availability-verified-2026-09-18).
+
+Vibe filters native available tools, including MCP and connector tools, with exclusions applied
+last. Native source disabling and permission decisions remain authoritative. These controls
+select availability; Prat adds no permission approval, retries, or OS sandbox.
+
+Commas are rejected in values for Claude, Qwen, Copilot and Droid because those native list
+transports split commas. Surrounding native whitespace is rejected too. Claude allowlist names
+and Droid IDs also reject Unicode whitespace, including U+FEFF, because their tool-name lists
+have space-delimited forms. Claude/Qwen exclusion patterns retain internal spaces. Vibe patterns
+retain commas, spaces and regular-expression syntax. Quote patterns to protect them from your shell.
+
+Accepted native-only tool arguments remain supported after `--`. A corresponding active public
+setting rejects equivalent native flags, including Claude's `--disallowed-tools` alias. A public
+Copilot allowlist also conflicts with `--enable-all-github-mcp-tools`, `--enable-mcp-server`,
+`--add-github-mcp-tool`, and
+`--add-github-mcp-toolset`; Droid tool controls conflict with `--additional-tools`.
+Use either the public setting or its native counterpart. Native permission denials can still be
+combined with public availability controls.

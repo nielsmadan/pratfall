@@ -18,6 +18,11 @@ class Capabilities:
     fast: bool = False
     add_dirs: bool = False
     instructions: bool = False
+    tools: bool = False
+    disabled_tools: bool = False
+    tools_empty: bool = False
+    tools_scope: str | None = None
+    disabled_tools_scope: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +50,8 @@ class Options:
     add_dirs: tuple[str, ...] | None = None
     instructions: str | None = None
     instructions_file: str | None = None
+    tools: tuple[str, ...] | None = None
+    disabled_tools: tuple[str, ...] | None = None
     native_args: tuple[str, ...] | None = None
 
 

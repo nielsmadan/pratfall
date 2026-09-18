@@ -155,6 +155,17 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
         add_dirs=_directories(table["add_dirs"], f"{label}.add_dirs", base)
         if "add_dirs" in table
         else None,
+        tools=tuple(
+            _string(item, f"{label}.tools") for item in _arguments(table["tools"], f"{label}.tools")
+        )
+        if "tools" in table
+        else None,
+        disabled_tools=tuple(
+            _string(item, f"{label}.disabled_tools")
+            for item in _arguments(table["disabled_tools"], f"{label}.disabled_tools")
+        )
+        if "disabled_tools" in table
+        else None,
         native_args=(
             _arguments(table["native_args"], f"{label}.native_args")
             if "native_args" in table
@@ -209,6 +220,17 @@ def validate_capabilities(
     for name in ("instructions", "instructions_file"):
         if getattr(options, name) is not None and not caps.instructions:
             raise _rejected(fields[name], f"{agent.label} does not support appended instructions.")
+    if options.tools is not None:
+        if not caps.tools:
+            raise _rejected(fields["tools"], f"{agent.label} does not support tool allowlists.")
+        if not options.tools and not caps.tools_empty:
+            raise _rejected(
+                fields["tools"], f"{agent.label} cannot represent an empty tool allowlist."
+            )
+    if options.disabled_tools and not caps.disabled_tools:
+        raise _rejected(
+            fields["disabled_tools"], f"{agent.label} does not support disabling tools."
+        )
     if options.fast is not None and not caps.fast:
         raise _rejected(fields["fast"], f"{agent.label} does not support a fast-mode override.")
 

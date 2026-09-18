@@ -99,3 +99,36 @@ def validate_directory_values(paths: tuple[str, ...]) -> None:
                 code="invalid_arguments",
                 option="add_dirs",
             )
+
+
+def validate_tool_values(
+    values: tuple[str, ...] | None,
+    option: str,
+    *,
+    comma: bool = False,
+    whitespace: bool = False,
+    trim: bool = False,
+) -> None:
+    for value in values or ():
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError as error:
+            raise PratError(
+                "Tool names and patterns must be valid UTF-8.",
+                code="invalid_arguments",
+                option=option,
+            ) from error
+        if (
+            (comma and "," in value)
+            or (
+                whitespace
+                and any(char.isspace() or char in _ECMASCRIPT_TRIM_CHARACTERS for char in value)
+            )
+            or (trim and value != value.strip(_ECMASCRIPT_TRIM_CHARACTERS))
+        ):
+            raise PratError(
+                f"Tool name or pattern {value!r} contains a native list delimiter "
+                "or surrounding whitespace; use one native name or pattern per value.",
+                code="invalid_arguments",
+                option=option,
+            )

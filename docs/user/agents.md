@@ -101,6 +101,11 @@ Antigravity's documented `--print-timeout` examples apply to print mode. Its std
 contract is not verified, so Pratfall relies on its configured outer `--timeout` and strict terminal
 event checks instead of forwarding the print-only option.
 
+Tool availability controls are supported by Claude, Qwen, Copilot, Droid and Vibe. Their
+[native scopes and empty-list behavior](running.md#control-tool-availability) differ; inventory
+JSON includes support booleans, scope descriptions and `tools_empty`. These are native tool
+filters, not an OS sandbox or a permission approval mechanism.
+
 ## Native behavior
 
 ### OpenHands

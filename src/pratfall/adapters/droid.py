@@ -1,4 +1,4 @@
-from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
 from pratfall.adapters.whole_json import document_error, encoding_error, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
 
@@ -47,6 +47,10 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--model", resolved.options.model))
     if resolved.options.effort is not None:
         argv.extend(("--reasoning-effort", resolved.options.effort))
+    if resolved.options.tools is not None:
+        argv.append("--restrict-tools=" + ",".join(resolved.options.tools))
+    if resolved.options.disabled_tools:
+        argv.append("--disabled-tools=" + ",".join(resolved.options.disabled_tools))
     return Invocation((*argv, *arguments), prompt)
 
 
@@ -54,6 +58,14 @@ def validate(resolved: ResolvedProfile) -> None:
     reserved = _RESERVED.copy()
     if resolved.options.instructions is not None or resolved.options.instructions_file is not None:
         reserved |= {"--append-system-prompt": Flag(1), "--append-system-prompt-file": Flag(1)}
+    validate_tool_values(resolved.options.tools, "tools", comma=True, whitespace=True, trim=True)
+    validate_tool_values(
+        resolved.options.disabled_tools, "disabled_tools", comma=True, whitespace=True, trim=True
+    )
+    if resolved.options.tools is not None:
+        reserved |= {"--restrict-tools": Flag(1), "--additional-tools": Flag(1)}
+    if resolved.options.disabled_tools:
+        reserved |= {"--disabled-tools": Flag(1), "--additional-tools": Flag(1)}
     validate_flags("Droid", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

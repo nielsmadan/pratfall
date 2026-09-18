@@ -54,3 +54,23 @@ conflicts with native append text or file flags.
 
 Verification used primary documentation/source inspection and fake executable argv tests;
 no authenticated native run was performed for this control.
+
+## Tool availability (verified 2026-09-18)
+
+The [CLI reference](https://code.claude.com/docs/en/cli-reference) states: “The flag doesn’t affect
+MCP tools”. `--tools` selects built-ins; an empty string selects none, but `EndConversation` can
+remain while MCP tools remain. The native `default` preset selects the default set. Deny rules
+via `--disallowedTools` / `--disallowed-tools` remove bare-name matches, while scoped rules such
+as `Bash(rm *)` deny matching calls and retain the tool. `EndConversation` has a documented
+exception while other tools remain.
+
+The [official Python SDK transport](https://github.com/anthropics/claude-agent-sdk-python/blob/e773e44608c4873f30c8ebf78d69410e2a8b0901/src/claude_agent_sdk/_internal/transport/subprocess_cli.py)
+constructs both `tools` and `disallowed_tools` with comma joins, and passes an empty string for an
+empty `tools` list. Prat uses `--tools=LIST` and `--disallowedTools=LIST`; commas inside entries are
+rejected. Allowlist names reject Unicode whitespace; deny patterns preserve internal spaces.
+Prat never maps availability to `--allowedTools`, which grants automatic permission and can opt
+in task-tracking tools. Explicit native permission denials continue to apply.
+
+Equivalent native flags conflict only when the corresponding public list is active. Empty
+`disabled_tools` clears Prat inheritance without adding a native deny flag. Evidence is source
+inspection and fake argv tests, not an authenticated vendor run.

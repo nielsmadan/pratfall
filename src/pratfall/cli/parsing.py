@@ -25,6 +25,8 @@ _RUN_VALUE_FLAGS = {
     "-f": "file",
     "--context": "context",
     "--add-dir": "add_dirs",
+    "--tools": "tools",
+    "--disable-tools": "disabled_tools",
     "--instructions": "instructions",
     "--instructions-file": "instructions_file",
     "--template": "template",
@@ -109,6 +111,8 @@ run options:
   --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
   --cwd PATH              Set the agent working directory.
   --add-dir PATH          Add a native workspace directory; repeat to include several.
+  --tools NAME            Restrict native tool availability; repeat for several.
+  --disable-tools NAME    Disable native tools or patterns; repeat for several.
   --instructions TEXT     Append instructions while preserving native built-in guidance.
   --instructions-file PATH  Read appended instructions from a UTF-8 file.
   --config PATH           Merge PATH over global config instead of .pratfile.
@@ -168,7 +172,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     scan = _scan_run(arguments)
     values: dict[str, str] = {}
     contexts: list[str] = []
-    add_dirs: list[str] = []
+    repeated: dict[str, list[str]] = {"add_dirs": [], "tools": [], "disabled_tools": []}
     selector: str | None = None
     prompt_source: PromptSource | None = None
     json_mode = False
@@ -220,9 +224,9 @@ def _parse_run(arguments: list[str]) -> RunArguments:
                 prompt_source = _add_prompt_source(
                     prompt_source, PromptSource("file", _text_option(value, token.name))
                 )
-            elif field in {"add_dirs", "context"}:
+            elif field in {*repeated, "context"}:
                 _text_option(value, token.name)
-                (add_dirs if field == "add_dirs" else contexts).append(value)
+                (contexts if field == "context" else repeated[field]).append(value)
             else:
                 _store_value(values, field, value)
             continue
@@ -237,7 +241,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         raise PratError("A selector is required.", code="invalid_arguments")
     if edit and dry_run:
         raise PratError("--edit cannot be combined with --dry-run.", code="invalid_arguments")
-    options = _run_options(values, fast, add_dirs, scan.native_arguments)
+    options = _run_options(values, fast, repeated, scan.native_arguments)
     return RunArguments(
         selector,
         prompt_source,
@@ -258,7 +262,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
 def _run_options(
     values: dict[str, str],
     fast: bool | None,
-    add_dirs: list[str],
+    repeated: dict[str, list[str]],
     native_arguments: tuple[str, ...] | None,
 ) -> Options:
     if "instructions" in values and "instructions_file" in values:
@@ -282,7 +286,9 @@ def _run_options(
         max_turns=_integer_option(values.get("max_turns"), "--max-turns"),
         max_ai_credits=_number_option(values.get("max_ai_credits"), "--max-ai-credits"),
         fast=fast,
-        add_dirs=tuple(add_dirs) if add_dirs else None,
+        add_dirs=tuple(repeated["add_dirs"]) or None,
+        tools=tuple(repeated["tools"]) or None,
+        disabled_tools=tuple(repeated["disabled_tools"]) or None,
         native_args=native_arguments,
     )
 

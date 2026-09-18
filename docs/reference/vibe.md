@@ -36,3 +36,20 @@ contracts were frozen before fixtures; no native execution or setup was performe
 - [Pratfall adapter](../../src/pratfall/adapters/vibe.py)
 - [Shared execution boundary](../execution.md)
 - [Interface comparison and evidence scope](overview.md)
+
+## Tool availability (verified 2026-09-18)
+
+The [v2.25.2 parser](https://github.com/mistralai/mistral-vibe/blob/v2.25.2/vibe/cli/entrypoint.py)
+defines repeatable `--enabled-tools` and `--disabled-tools`. Its vocabulary includes exact names,
+globs and `re:` regular expressions. Prat repeats `--enabled-tools=PATTERN` and
+`--disabled-tools=PATTERN`, preserving commas, spaces, backslashes and pattern syntax as data.
+
+The [tool manager](https://github.com/mistralai/mistral-vibe/blob/v2.25.2/vibe/core/tools/manager.py)
+first filters disabled native sources, then applies the enabled patterns, then disabled patterns
+to the available tools, including MCP and connectors. An empty enabled list is falsy and does
+not activate the allowlist, so Prat rejects `tools=[]` instead of inventing a no-match pattern.
+Native per-source disabling and permission decisions remain authoritative; Prat adds no approvals.
+
+Equivalent native flags conflict only with active public settings; existing native-only filters
+remain supported. Empty `disabled_tools` clears Prat inheritance without adding a native flag.
+Verification used pinned source inspection and fake argv tests, not an authenticated native run.

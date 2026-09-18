@@ -57,6 +57,11 @@ def _agents(json_mode: bool) -> None:
             "fast": caps.fast,
             "add_dirs": caps.add_dirs,
             "instructions": caps.instructions,
+            "tools": caps.tools,
+            "disabled_tools": caps.disabled_tools,
+            "tools_empty": caps.tools_empty,
+            "tools_scope": caps.tools_scope,
+            "disabled_tools_scope": caps.disabled_tools_scope,
         }
         records.append(
             {
@@ -69,7 +74,15 @@ def _agents(json_mode: bool) -> None:
         )
         supported = [
             field
-            for field in ("model", "effort", "fast", "add_dirs", "instructions")
+            for field in (
+                "model",
+                "effort",
+                "fast",
+                "add_dirs",
+                "instructions",
+                "tools",
+                "disabled_tools",
+            )
             if getattr(caps, field)
         ]
         supported.extend(sorted(caps.budgets))
@@ -89,11 +102,19 @@ def _profiles(config: Config, json_mode: bool) -> None:
         records.append({"name": name, "agent": resolved.agent.name, "options": options})
         description = f"{name}: {resolved.agent.name}"
         for key, value in options.items():
-            if value is None or value == ():
+            if value is None or (value == () and key != "tools"):
                 continue
             rendered = (
                 json.dumps(value, ensure_ascii=False)
-                if key in {"native_args", "add_dirs", "instructions", "instructions_file"}
+                if key
+                in {
+                    "native_args",
+                    "add_dirs",
+                    "instructions",
+                    "instructions_file",
+                    "tools",
+                    "disabled_tools",
+                }
                 else value
             )
             description += f" {key}={rendered}"

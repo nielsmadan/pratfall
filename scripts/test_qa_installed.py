@@ -1173,3 +1173,20 @@ def test_workflow_environment_isolates_editor_and_temporary_paths(
 def test_harness_directory_capabilities_match_the_catalog() -> None:
     supported = frozenset(agent.name for agent in catalog.AGENTS if agent.capabilities.add_dirs)
     assert supported == qa._ADD_DIRS
+
+
+def test_harness_tool_capabilities_match_the_catalog() -> None:
+    assert {
+        agent.name: agent.capabilities.tools_scope
+        for agent in catalog.AGENTS
+        if agent.capabilities.tools
+    } == qa._TOOLS_SCOPES
+    assert {
+        agent.name: agent.capabilities.disabled_tools_scope
+        for agent in catalog.AGENTS
+        if agent.capabilities.disabled_tools
+    } == qa._DISABLED_TOOLS_SCOPES
+    assert (
+        frozenset(agent.name for agent in catalog.AGENTS if agent.capabilities.tools_empty)
+        == qa._TOOLS_EMPTY
+    )

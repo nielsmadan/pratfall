@@ -2,7 +2,7 @@ import math
 from dataclasses import dataclass, field
 
 from pratfall.adapters.accounting import model
-from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
     ConsumerFailure,
@@ -120,6 +120,13 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append(f"--max-ai-credits={options.max_ai_credits}")
     for directory in options.add_dirs or ():
         argv.append(f"--add-dir={directory}")
+    if options.tools is not None:
+        if options.tools:
+            argv.append("--available-tools=" + ",".join(options.tools))
+        else:
+            argv.append("--available-tools")
+    if options.disabled_tools:
+        argv.append("--excluded-tools=" + ",".join(options.disabled_tools))
     argv.extend(arguments)
     argv.append(f"--prompt={prompt.decode('utf-8')}")
     return Invocation(tuple(argv), b"")
@@ -129,6 +136,21 @@ def validate(resolved: ResolvedProfile) -> None:
     reserved = _RESERVED | (
         {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
     )
+    validate_tool_values(resolved.options.tools, "tools", comma=True, trim=True)
+    validate_tool_values(resolved.options.disabled_tools, "disabled_tools", comma=True, trim=True)
+    if resolved.options.tools is not None:
+        reserved |= {
+            name: _ALLOWED[name]
+            for name in (
+                "--available-tools",
+                "--enable-mcp-server",
+                "--enable-all-github-mcp-tools",
+                "--add-github-mcp-tool",
+                "--add-github-mcp-toolset",
+            )
+        }
+    if resolved.options.disabled_tools:
+        reserved |= {"--excluded-tools": _ALLOWED["--excluded-tools"]}
     validate_flags("Copilot", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

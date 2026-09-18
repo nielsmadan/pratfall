@@ -1,7 +1,7 @@
 import json
 
 from pratfall.adapters.accounting import cost, model_map
-from pratfall.adapters.native_args import Flag, validate_flags
+from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
 from pratfall.adapters.whole_json import document_error, encodable_text, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
@@ -99,6 +99,10 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--settings", json.dumps({"fastMode": options.fast})))
     for directory in resolved.options.add_dirs or ():
         argv.extend(("--add-dir", directory))
+    if options.tools is not None:
+        argv.append("--tools=" + ",".join(options.tools))
+    if options.disabled_tools:
+        argv.append("--disallowedTools=" + ",".join(options.disabled_tools))
     argv.extend(arguments)
     return Invocation(tuple(argv), prompt)
 
@@ -112,6 +116,12 @@ def validate(resolved: ResolvedProfile) -> None:
             "--append-system-prompt": _ALLOWED["--append-system-prompt"],
             "--append-system-prompt-file": Flag(1),
         }
+    validate_tool_values(resolved.options.tools, "tools", comma=True, whitespace=True, trim=True)
+    validate_tool_values(resolved.options.disabled_tools, "disabled_tools", comma=True, trim=True)
+    if resolved.options.tools is not None:
+        reserved |= {"--tools": _ALLOWED["--tools"]}
+    if resolved.options.disabled_tools:
+        reserved |= {name: _ALLOWED[name] for name in ("--disallowedTools", "--disallowed-tools")}
     validate_flags("Claude Code", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
