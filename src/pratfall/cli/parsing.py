@@ -21,6 +21,7 @@ _RUN_VALUE_FLAGS = {
     "--max-budget-usd": "max_budget_usd",
     "--max-turns": "max_turns",
     "--model": "model",
+    "--schema": "schema",
     "--native-agent": "native_agent",
     "--timeout": "timeout",
     "--file": "file",
@@ -121,6 +122,7 @@ run options:
   --instructions TEXT     Append instructions while preserving native built-in guidance.
   --instructions-file PATH  Read appended instructions from a UTF-8 file.
   --config PATH           Merge PATH over global config instead of .pratfile.
+  --schema PATH           Request native JSON Schema output from a UTF-8 file.
   --json                  Print one normalized JSON result.
   --progress              Print bounded live activity updates on stderr.
   --trace                 Print captured native stdout on stderr.
@@ -281,6 +283,7 @@ def _run_options(
             code="invalid_arguments",
         )
     return Options(
+        schema=_text_option(values.get("schema"), "--schema"),
         instructions=(
             validate_instructions(
                 values["instructions"], OptionOrigin("--instructions", "invalid_arguments")

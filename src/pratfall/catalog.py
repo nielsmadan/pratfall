@@ -10,6 +10,7 @@ AGENTS = (
         ("cc",),
         ("claude",),
         Capabilities(
+            schema=True,
             effort=True,
             effort_values=("low", "medium", "high", "xhigh", "max"),
             budgets=frozenset({"max_budget_usd", "max_turns"}),

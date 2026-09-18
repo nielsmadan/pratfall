@@ -138,7 +138,11 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
         instructions_file = resolve_path(
             instructions_file, base, OptionOrigin(f"{label}.instructions_file")
         )
+    schema = _string(table["schema"], f"{label}.schema") if "schema" in table else None
+    if schema is not None and base is not None:
+        schema = resolve_path(schema, base, OptionOrigin(f"{label}.schema"))
     return Options(
+        schema=schema,
         instructions=(
             validate_instructions(table["instructions"], OptionOrigin(f"{label}.instructions"))
             if "instructions" in table
@@ -224,6 +228,7 @@ def validate_capabilities(
     caps = agent.capabilities
     for name, setting in (
         ("model", "a model override"),
+        ("schema", "schema output"),
         ("native_agent", "native agent selection"),
         ("fast", "a fast-mode override"),
     ):

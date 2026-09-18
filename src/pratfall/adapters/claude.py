@@ -1,9 +1,12 @@
 import json
+from dataclasses import replace
 
 from pratfall.adapters.accounting import cost, model_map
 from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
 from pratfall.adapters.whole_json import document_error, encodable_text, parse
+from pratfall.consumer import ConsumerFailure, ConsumerLimits, Retention, StateBudget
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
+from pratfall.schema import retain_answer
 
 _ALLOWED = {
     name: Flag(0)
@@ -105,6 +108,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append("--disallowedTools=" + ",".join(options.disabled_tools))
     if options.native_agent is not None:
         argv.append(f"--agent={options.native_agent}")
+    if resolved.prepared_schema is not None:
+        argv.extend(("--json-schema", resolved.prepared_schema.text))
     argv.extend(arguments)
     return Invocation(tuple(argv), prompt)
 
@@ -118,6 +123,8 @@ def validate(resolved: ResolvedProfile) -> None:
             "--append-system-prompt": _ALLOWED["--append-system-prompt"],
             "--append-system-prompt-file": Flag(1),
         }
+    if resolved.options.schema is not None:
+        reserved |= {"--json-schema": _ALLOWED["--json-schema"]}
     if resolved.options.native_agent is not None:
         reserved |= {"--agent": _ALLOWED["--agent"]}
     validate_tool_values(resolved.options.tools, "tools", comma=True, whitespace=True, trim=True)
@@ -129,7 +136,11 @@ def validate(resolved: ResolvedProfile) -> None:
     validate_flags("Claude Code", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
-def decode(stdout: str) -> DecodedOutput:
+def decode_schema(stdout: str) -> DecodedOutput:
+    return decode(stdout, schema=True)
+
+
+def decode(stdout: str, *, schema: bool = False) -> DecodedOutput:
     value = parse(stdout, "Claude")
     if isinstance(value, ResultError):
         return DecodedOutput(error=value)
@@ -151,6 +162,10 @@ def decode(stdout: str) -> DecodedOutput:
     usage = None if isinstance(decoded_usage, ResultError) else decoded_usage
     usage_error = decoded_usage if isinstance(decoded_usage, ResultError) else None
     if subtype == "success":
+        if schema and not is_error:
+            return _structured_success(
+                value, usage, reported_models, cost_usd, usage_error or accounting_error
+            )
         return _decode_success(
             value,
             is_error,
@@ -269,3 +284,57 @@ def _usage(value: object) -> Usage | ResultError:
 
 def _protocol(message: str) -> DecodedOutput:
     return DecodedOutput(error=ResultError("protocol_error", message))
+
+
+def _structured_success(
+    value: dict[str, object],
+    usage: Usage | None,
+    reported_models: tuple[str, ...] | None,
+    cost_usd: int | float | None,
+    protocol_error: ResultError | None,
+) -> DecodedOutput:
+    output = value.get("result")
+    decoded = DecodedOutput(
+        output=encodable_text(output) if isinstance(output, str) else "",
+        usage=usage,
+        reported_models=reported_models,
+        cost_usd=cost_usd,
+        error=protocol_error,
+    )
+    if "structured_output" not in value:
+        return replace(
+            decoded,
+            error=protocol_error
+            or ResultError("protocol_error", "Claude success is missing structured_output."),
+        )
+    retain = Retention(StateBudget(ConsumerLimits()))
+    retained_usage = None
+    retained_cost = None
+    retained_models: list[str] = []
+    retained_error = None
+    try:
+        retain.usage("usage", usage)
+        retained_usage = usage
+        retain.numbers("cost", (cost_usd,))
+        retained_cost = cost_usd
+        for index, model in enumerate(reported_models or ()):
+            retain.text(f"model:{index}", model, record=True)
+            retained_models.append(model)
+        if protocol_error is not None:
+            retain.text("error", protocol_error.message)
+            retained_error = protocol_error
+        answer = retain_answer(value["structured_output"], retain)
+    except ConsumerFailure as failure:
+        return replace(
+            decoded,
+            usage=retained_usage,
+            cost_usd=retained_cost,
+            reported_models=tuple(retained_models) or None,
+            error=retained_error or failure.error,
+        )
+    return replace(
+        decoded,
+        output=answer.output,
+        structured_output=answer.value,
+        structured_output_present=True,
+    )

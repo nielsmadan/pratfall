@@ -84,3 +84,24 @@ The [CLI reference](https://code.claude.com/docs/en/cli-reference) describes `--
 definitions remain a distinct accepted passthrough option. Prat discovers no names and writes
 no definitions. Native persona configuration, including permission behavior, remains authoritative.
 Verification used documentation and fake executable argv tests, not authenticated execution.
+
+## Schema output (verified 2026-09-18)
+
+The [headless guide](https://code.claude.com/docs/en/headless#get-structured-output) states that
+structured output is in the `structured_output` field. Prat maps `--schema PATH` to inline
+`--json-schema JSON` alongside its existing `--output-format json`. It validates and reads only
+the selected source before acquiring input. Native-only `--json-schema` remains compatible;
+an active public schema rejects the native duplicate.
+
+The [SDK error contract](https://code.claude.com/docs/en/agent-sdk/structured-outputs#error-handling)
+says of success without structured output: “Treat that case as a failure as well.” Prat requires
+field presence, accepts every JSON value including null, and does not require `result: string`
+in schema mode. It retains native `error_max_structured_output_retries` diagnostics and accounting.
+Ordinary mode keeps its string-result contract. Schema decoding errors clean the owned process
+group after parent exit without overriding native exit, timeout or interruption precedence.
+
+The same SDK guide establishes draft-07 validation and support for all basic JSON types;
+`format` is an unenforced annotation. No additional Claude root restriction is imposed locally.
+Native versions before 2.1.205 could silently ignore invalid schemas; a missing structured answer
+still fails in Prat. Prat adds no retries, full schema validator or network reference resolution.
+Evidence consists of official documentation and fake-process tests; no inference was executed.

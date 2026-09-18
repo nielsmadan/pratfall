@@ -215,6 +215,7 @@ def test_result_check_rejects_false_pass() -> None:
         "native_exit_code": 0,
         "reported_models": None,
         "cost_usd": None,
+        "structured_output": None,
         "error": None,
     }
     completed = subprocess.CompletedProcess(["prat"], 0, json.dumps(result).encode() + b"\n", b"")
@@ -249,6 +250,7 @@ def _input_error(message: str) -> subprocess.CompletedProcess[bytes]:
         "native_exit_code": None,
         "reported_models": None,
         "cost_usd": None,
+        "structured_output": None,
         "error": {"code": "invalid_arguments", "message": message},
     }
     return subprocess.CompletedProcess(["prat"], 2, json.dumps(result).encode() + b"\n", b"")
@@ -694,6 +696,7 @@ def source_entry_point(tmp_path: Path) -> tuple[Path, Path]:
             {
                 "reported_models": ["gemini-primary", "gemini-helper"],
                 "cost_usd": None,
+                "structured_output": None,
                 "usage": {
                     "input_tokens": 6,
                     "cached_input_tokens": 2,
@@ -932,6 +935,7 @@ def test_protocol_oracle_rejects_incorrect_retained_fields(field: str, wrong: ob
         "output": "QWEN_RECOVERED",
         "reported_models": ["root-model"],
         "cost_usd": None,
+        "structured_output": None,
         "usage": {
             "input_tokens": 37,
             "cached_input_tokens": 5,
@@ -1210,3 +1214,9 @@ def test_harness_attachment_capabilities_match_the_catalog() -> None:
         for agent in catalog.AGENTS
         if agent.capabilities.attachment_max_count is not None
     } == {"hermes": 1}
+
+
+def test_harness_schema_capabilities_match_the_catalog() -> None:
+    assert (
+        frozenset(agent.name for agent in catalog.AGENTS if agent.capabilities.schema) == qa._SCHEMA
+    )

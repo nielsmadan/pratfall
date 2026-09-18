@@ -2,7 +2,7 @@ import argparse
 import json
 import sys
 from collections.abc import Callable, Mapping
-from contextlib import closing, suppress
+from contextlib import ExitStack, closing, suppress
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
@@ -42,6 +42,7 @@ from pratfall.prompt_editor import edit_prompt
 from pratfall.prompt_input import InputInterrupted, acquire_prompt, prepend_contexts
 from pratfall.prompt_templates import render_template
 from pratfall.runner import ProcessResult, cleanup_process_group, raw_stdout, run
+from pratfall.schema import prepare_schema
 
 
 def _agents(json_mode: bool) -> None:
@@ -60,6 +61,7 @@ def _agents(json_mode: bool) -> None:
             "attachment_types": list(caps.attachment_types) or None,
             "attachment_max_count": caps.attachment_max_count,
             "instructions": caps.instructions,
+            "schema": caps.schema,
             "native_agent": caps.native_agent,
             "tools": caps.tools,
             "disabled_tools": caps.disabled_tools,
@@ -85,6 +87,7 @@ def _agents(json_mode: bool) -> None:
                 "add_dirs",
                 "attachments",
                 "instructions",
+                "schema",
                 "tools",
                 "disabled_tools",
                 "native_agent",
@@ -122,6 +125,7 @@ def _profiles(config: Config, json_mode: bool) -> None:
                     "add_dirs",
                     "attachments",
                     "instructions",
+                    "schema",
                     "instructions_file",
                     "tools",
                     "disabled_tools",
@@ -210,7 +214,9 @@ def _build_invocation(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 
 def _decode(resolved: ResolvedProfile, stdout: str) -> DecodedOutput:
-    return ADAPTERS[resolved.agent.name].decode(stdout)
+    return (
+        ADAPTERS[resolved.agent.name].for_schema(resolved.options.schema is not None).decode(stdout)
+    )
 
 
 def _decode_process(
@@ -236,6 +242,22 @@ def _decode_process(
         process = _after_run_failure(process, encoding_error)
     if decoded is None:
         decoded = _decode(resolved, stdout) if stdout is not None else DecodedOutput()
+    if resolved.options.schema is not None and decoded.error is not None:
+        cleanup_error = (
+            cleanup_process_group(process.process_group)
+            if process.process_group is not None
+            else None
+        )
+        if cleanup_error is not None:
+            stderr += f"\nprat: Process-group cleanup failed: {cleanup_error}.\n"
+            failure = decoded.error
+            decoded = replace(
+                decoded,
+                error=ResultError(
+                    failure.code,
+                    f"{failure.message} Process-group cleanup failed: {cleanup_error}.",
+                ),
+            )
     return process, decoded, stderr
 
 
@@ -413,6 +435,9 @@ def _resolve_run_paths(parsed: RunArguments, invocation_cwd: Path) -> RunArgumen
         origin = OptionOrigin("command line: --instructions-file", "invalid_arguments")
         path = resolve_path(options.instructions_file, invocation_cwd, origin)
         options = replace(options, instructions_file=path)
+    if options.schema is not None:
+        origin = OptionOrigin("command line: --schema", "invalid_arguments")
+        options = replace(options, schema=resolve_path(options.schema, invocation_cwd, origin))
     return replace(parsed, options=options)
 
 
@@ -451,19 +476,46 @@ def _prepare_run_paths(
     return resolved
 
 
+def _validate_schema_extraction(resolved: ResolvedProfile, extract: bool) -> None:
+    if resolved.options.schema is not None and extract:
+        raise PratError("--schema and --extract cannot be used together.", code="invalid_arguments")
+
+
+def _prepare_run_schema(
+    resolved: ResolvedProfile, origins: Mapping[str, OptionOrigin], resources: ExitStack
+) -> ResolvedProfile:
+    if resolved.options.schema is None:
+        return resolved
+    adapter = ADAPTERS[resolved.agent.name]
+    transport = adapter.schema_transport
+    if transport is None:
+        raise PratError("Agent does not support schema output.", code="invalid_arguments")
+    origin = origins.get("schema", OptionOrigin("schema"))
+    prepared = resources.enter_context(prepare_schema(resolved.options.schema, origin, transport))
+    if adapter.validate_schema is not None:
+        try:
+            adapter.validate_schema(prepared)
+        except PratError as error:
+            raise PratError(f"{origin.label}: {error}", code=origin.code) from error
+    return replace(resolved, prepared_schema=prepared)
+
+
 def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) -> int:
-    json_mode = state.json_mode
     resolved: ResolvedProfile | None = None
     try:
         parsed = _parse_run(arguments)
-        json_mode = state.json_mode = parsed.json
-        with closing(_diagnostics_for(progress=parsed.progress)) as diagnostics:
+        state.json_mode = parsed.json
+        with (
+            ExitStack() as resources,
+            closing(_diagnostics_for(progress=parsed.progress)) as diagnostics,
+        ):
             parsed = _resolve_run_paths(parsed, invocation_cwd)
             config = load_config(parsed.config, cwd=invocation_cwd)
             _validate_config_native_arguments(config)
             _config_warnings(config, diagnostics)
             resolved = resolve_profile(config, parsed.selector, parsed.options)
             state.resolved = resolved
+            _validate_schema_extraction(resolved, parsed.extract)
             fallback = OptionOrigin(f"selector {parsed.selector!r}.native_args")
             origins = option_origins(config, parsed.selector, parsed.options)
             label = origins.get("native_args", fallback).label
@@ -477,6 +529,7 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
                     f"Unknown template {parsed.template!r}; run 'prat templates' to list choices.",
                     code="invalid_arguments",
                 )
+            resolved = _prepare_run_schema(resolved, origins, resources)
             resolved = _prepare_run_instructions(resolved, origins)
             prompt = acquire_prompt(
                 parsed.prompt_source,
@@ -491,12 +544,12 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
                 prompt = edit_prompt(prompt, invocation_cwd)
             invocation = _build_invocation(resolved, prompt)
             if parsed.dry_run:
-                _preview(resolved, invocation, cwd, state.stdout, json_mode=json_mode)
+                _preview(resolved, invocation, cwd, state.stdout, json_mode=state.json_mode)
                 return 0
             timeout = resolved.options.timeout
             if timeout is None:
                 raise PratError("Resolved timeout is missing.", code="invalid_arguments")
-            adapter = ADAPTERS[resolved.agent.name]
+            adapter = ADAPTERS[resolved.agent.name].for_schema(resolved.options.schema is not None)
             consumer = adapter.consumer() if adapter.consumer is not None else None
             if parsed.trace and consumer is not None:
                 consumer = CapturingConsumer(consumer)
@@ -506,7 +559,7 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
                 cwd=cwd,
                 timeout=timeout,
                 consumer=consumer,
-                json_mode=json_mode,
+                json_mode=state.json_mode,
                 trace=parsed.trace,
             )
             process, decoded = _execute(plan, diagnostics)
@@ -515,14 +568,14 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
         if parsed.extract:
             result = replace(result, output=extract_code(result.output))
         payload = result_dict(result)
-        _emit_result(payload, state.stdout, json_mode=json_mode)
+        _emit_result(payload, state.stdout, json_mode=state.json_mode)
         return result.exit_code
     except InputInterrupted as error:
         exit_code = SIGNAL_EXIT_BASE + error.signum
         payload = validation_error(
             error, "interrupted", exit_code, status="interrupted", resolved=resolved
         )
-        if json_mode:
+        if state.json_mode:
             print(json.dumps(payload, ensure_ascii=False))
         else:
             print(f"prat: {error}", file=sys.stderr)
@@ -531,7 +584,7 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
         payload = validation_error(
             error, error.code, error.exit_code, status="error", resolved=resolved
         )
-        if json_mode:
+        if state.json_mode:
             print(json.dumps(payload, ensure_ascii=False))
         else:
             print(f"prat: {error}", file=sys.stderr)

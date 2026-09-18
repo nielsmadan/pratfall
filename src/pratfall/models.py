@@ -6,6 +6,8 @@ from typing import Literal
 
 from pratfall.codes import Code
 
+type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
+
 Activity = Literal["starting", "working", "reasoning", "tool", "answering", "finishing"]
 
 
@@ -21,6 +23,7 @@ class Capabilities:
     attachment_types: tuple[str, ...] = ()
     attachment_max_count: int | None = None
     instructions: bool = False
+    schema: bool = False
     native_agent: bool = False
     tools: bool = False
     disabled_tools: bool = False
@@ -57,6 +60,7 @@ class Options:
     instructions_file: str | None = None
     tools: tuple[str, ...] | None = None
     disabled_tools: tuple[str, ...] | None = None
+    schema: str | None = None
     native_agent: str | None = None
     native_args: tuple[str, ...] | None = None
 
@@ -94,11 +98,19 @@ class Config:
 
 
 @dataclass(frozen=True)
+class PreparedSchema:
+    text: str
+    value: JsonValue
+    path: str | None = None
+
+
+@dataclass(frozen=True)
 class ResolvedProfile:
     agent: AgentSpec
     profile: str | None
     command: tuple[str, ...]
     options: Options
+    prepared_schema: PreparedSchema | None = None
 
 
 @dataclass(frozen=True)
@@ -130,6 +142,8 @@ class DecodedOutput:
     timed_out: bool = False
     reported_models: tuple[str, ...] | None = None
     cost_usd: int | float | None = None
+    structured_output: JsonValue = None
+    structured_output_present: bool = False
 
 
 @dataclass(frozen=True)
@@ -159,3 +173,5 @@ class NormalizedResult:
     error: ResultError | None
     reported_models: tuple[str, ...] | None
     cost_usd: int | float | None
+    structured_output: JsonValue = None
+    structured_output_present: bool = False

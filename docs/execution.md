@@ -71,6 +71,15 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   builder, one validator over the resolved profile, and exactly one of a whole-document decoder or
   an incremental consumer factory. The registry synthesizes the whole-document path for consumer
   adapters, so each agent has a single decode path rather than a precedence rule.
+- [schema.py](../src/pratfall/schema.py) reads the winning schema as bounded strict JSON before
+  prompt acquisition. `Options.schema` remains the source path; `PreparedSchema` carries the
+  validated document and optional private snapshot path. Inline transports need no temporary file.
+  File snapshots contain the validated original bytes, remain alive through execution and decode,
+  and are context-managed on every exit. Preview output substitutes a transport label for the
+  temporary filename. Native dialect validation belongs to the agent, with adapter-owned root
+  restrictions only where verified. No full schema validator or network `$ref` access is added.
+  `Adapter.for_schema()` binds optional schema decoder/consumer implementations once, retaining the
+  same direct, convenience and incremental seams and leaving the runner schema-neutral.
 - [`run`](../src/pratfall/runner.py) owns POSIX process lifecycle and passes bytes to a
   schema-neutral consumer. Adapters own native protocol transitions; they do not manage processes.
   Its result carries either a `RawCapture` of complete stdout or a `ConsumedCapture` of the
@@ -146,6 +155,15 @@ Preserve `ConsumerFailure.decoded` when changing consumer error handling: it car
 partial answer and accounting. Whole-document adapters clear an unencodable answer so the result
 can still be emitted; a surrogate in an ignored field can leave a valid answer intact.
 
+Schema input is limited to `SCHEMA_BYTES` (1 MiB); input and retained answers are checked at
+`JSON_DEPTH` (64 containers) before serialization or dataclass copying. Strict input parsing
+rejects duplicates, nonfinite/over-wide numbers and invalid Unicode. `retain_answer` charges the
+encoded structured representation and independently retained output string in one replaceable
+retention slot; replacing a value refunds both. Claude also charges usage, models, cost and errors.
+`JsonValue` represents recursive JSON in decoded and normalized results. An internal presence flag
+separates missing output from JSON null and is removed before JSON emission. All run/error
+envelopes gain nullable `structured_output`, while `output` stays a string and schema version is 1.
+
 ## Completion and accounting
 
 Structured adapters require their own native completion contract and recognize verified semantic
@@ -184,6 +202,10 @@ after successful installation. The runner, prompt input, editor and version prob
 Cleanup covers the owned POSIX process group. Deliberately detached descendants and externally
 managed server processes are outside that boundary. Ordinary successful completion preserves
 native background-process behavior.
+
+Schema decoder failures also clean the group after parent exit, including consumed captures. They
+remain decoded errors so native exit precedence stays intact; cleanup failures are reported on
+stderr even when a higher-priority native status wins.
 
 Encoding and presentation errors discovered after parent exit still invoke group cleanup through
 [`_after_run_failure`](../src/pratfall/cli/dispatch.py): descendants can survive after closing the

@@ -4,7 +4,10 @@ import pytest
 
 from adapter_helpers import resolved
 from pratfall.adapters import claude
-from pratfall.models import Options, ResultError, Usage
+from pratfall.adapters.registry import ADAPTERS
+from pratfall.consumer import ConsumerLimits
+from pratfall.limits import JSON_DEPTH, RECORD_COUNT, RETAINED_STATE_BYTES
+from pratfall.models import JsonValue, Options, ResultError, Usage
 
 
 def test_claude_builds_verified_stdin_invocation() -> None:
@@ -218,3 +221,157 @@ def test_reported_model_rejects_unpaired_surrogate_before_json_emission() -> Non
     assert decoded.error is not None
     assert decoded.error.code == "protocol_error"
     json.dumps(decoded.reported_models, ensure_ascii=False).encode("utf-8")
+
+
+def _schema_result(answer: object) -> dict[str, object]:
+    return {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "structured_output": answer,
+        "usage": {"input_tokens": 7, "output_tokens": 9},
+        "modelUsage": {"schema-model": {}},
+        "total_cost_usd": 0.125,
+    }
+
+
+@pytest.mark.parametrize("answer", [None, False, 0, "", "🦊", [], {}, [1, None], {"ok": True}])
+@pytest.mark.parametrize("result", [None, "native prose"])
+def test_claude_schema_answer_is_authoritative_without_string_result(
+    answer: object, result: str | None
+) -> None:
+    value = _schema_result(answer)
+    if result is not None:
+        value["result"] = result
+    text = json.dumps(value)
+    decoded = claude.decode(text, schema=True)
+    assert decoded == claude.decode_schema(text)
+    assert decoded == ADAPTERS["claude"].for_schema(True).decode(text)
+    assert decoded.error is None
+    assert decoded.structured_output_present
+    assert decoded.structured_output == answer
+    assert decoded.output == json.dumps(answer, ensure_ascii=False, separators=(",", ":"))
+    assert decoded.usage == Usage(input_tokens=7, output_tokens=9)
+    assert decoded.reported_models == ("schema-model",)
+    assert decoded.cost_usd == 0.125
+
+
+def test_claude_schema_missing_answer_preserves_partial_text_and_accounting() -> None:
+    value = _schema_result(None)
+    value.pop("structured_output")
+    value["result"] = "partial explanation"
+    decoded = claude.decode_schema(json.dumps(value))
+    assert decoded.output == "partial explanation"
+    assert not decoded.structured_output_present
+    assert decoded.usage == Usage(input_tokens=7, output_tokens=9)
+    assert decoded.error == ResultError(
+        "protocol_error", "Claude success is missing structured_output."
+    )
+
+
+@pytest.mark.parametrize(
+    "answer, code", [(float("nan"), "protocol_error"), ("\ud800", "output_encoding")]
+)
+def test_claude_schema_rejects_malformed_answer(answer: object, code: str) -> None:
+    value = _schema_result(answer)
+    value["result"] = "safe partial text"
+    decoded = claude.decode_schema(json.dumps(value))
+    assert decoded.output == "safe partial text"
+    assert decoded.error is not None and decoded.error.code == code
+    assert not decoded.structured_output_present
+    assert decoded.cost_usd == 0.125
+
+
+def test_claude_schema_provider_retry_failure_preserves_error_and_accounting() -> None:
+    value = _schema_result({"irrelevant": True})
+    value.update(
+        subtype="error_max_structured_output_retries", is_error=True, errors=["retries exhausted"]
+    )
+    decoded = claude.decode_schema(json.dumps(value))
+    assert decoded.error == ResultError("provider_error", "retries exhausted")
+    assert decoded.cost_usd == 0.125
+    assert decoded.usage == Usage(input_tokens=7, output_tokens=9)
+    assert not decoded.structured_output_present
+
+
+def test_claude_schema_counts_encoded_answer_twice() -> None:
+    value = _schema_result("a" * (RETAINED_STATE_BYTES // 2))
+    decoded = claude.decode_schema(json.dumps(value))
+    assert decoded.error is not None
+    assert decoded.error.code == "stdout_limit_exceeded"
+    assert decoded.output == ""
+    assert decoded.cost_usd == 0.125
+
+
+def test_claude_schema_retains_only_models_within_record_limit() -> None:
+    value = _schema_result(None)
+    models = tuple(f"model-{index}" for index in range(RECORD_COUNT + 1))
+    value["modelUsage"] = {model: {} for model in models}
+    decoded = claude.decode_schema(json.dumps(value))
+    assert decoded.error == ResultError(
+        "stdout_limit_exceeded", f"Agent retained output records exceeded {RECORD_COUNT}."
+    )
+    assert decoded.reported_models == models[:RECORD_COUNT]
+    assert decoded.usage == Usage(input_tokens=7, output_tokens=9)
+    assert decoded.cost_usd == 0.125
+    assert not decoded.structured_output_present
+
+
+@pytest.mark.parametrize(
+    "state_bytes, expected_usage, expected_cost",
+    [
+        (1, None, None),
+        (2, Usage(input_tokens=7, output_tokens=9), None),
+        (7, Usage(input_tokens=7, output_tokens=9), 0.125),
+    ],
+)
+def test_claude_schema_retains_only_accepted_accounting(
+    monkeypatch: pytest.MonkeyPatch,
+    state_bytes: int,
+    expected_usage: Usage | None,
+    expected_cost: float | None,
+) -> None:
+    monkeypatch.setattr(claude, "ConsumerLimits", lambda: ConsumerLimits(state_bytes=state_bytes))
+    decoded = claude.decode_schema(json.dumps(_schema_result(None)))
+    assert decoded.error == ResultError(
+        "stdout_limit_exceeded", f"Agent retained output state exceeded {state_bytes} bytes."
+    )
+    assert decoded.usage == expected_usage
+    assert decoded.cost_usd == expected_cost
+    assert decoded.reported_models is None
+    assert not decoded.structured_output_present
+
+
+def test_claude_schema_drops_rejected_protocol_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(claude, "ConsumerLimits", lambda: ConsumerLimits(state_bytes=17))
+    value = _schema_result(None)
+    value["usage"] = None
+    decoded = claude.decode_schema(json.dumps(value))
+    assert decoded.error == ResultError(
+        "stdout_limit_exceeded", "Agent retained output state exceeded 17 bytes."
+    )
+    assert decoded.usage is None
+    assert decoded.cost_usd == 0.125
+    assert decoded.reported_models == ("schema-model",)
+    assert not decoded.structured_output_present
+
+
+def test_claude_schema_bounds_nesting_before_emission() -> None:
+    answer: JsonValue = None
+    for _ in range(JSON_DEPTH + 1):
+        answer = [answer]
+    decoded = claude.decode_schema(json.dumps(_schema_result(answer)))
+    assert decoded.error is not None
+    assert decoded.error.code == "protocol_error"
+    assert "nesting" in decoded.error.message
+    assert not decoded.structured_output_present
+
+
+def test_claude_ordinary_output_ignores_structured_payload() -> None:
+    value = _schema_result({"ok": True})
+    value["result"] = "ordinary text"
+    decoded = claude.decode(json.dumps(value))
+    assert decoded.output == "ordinary text"
+    assert decoded.error is None
+    assert decoded.structured_output is None
+    assert not decoded.structured_output_present

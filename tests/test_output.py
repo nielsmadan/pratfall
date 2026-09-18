@@ -159,6 +159,7 @@ def test_native_signal_and_success_json_shape() -> None:
         "model": "model",
         "reported_models": None,
         "cost_usd": None,
+        "structured_output": None,
         "status": "success",
         "output": "answer",
         "exit_code": 0,

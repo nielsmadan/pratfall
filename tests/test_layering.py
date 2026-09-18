@@ -12,7 +12,7 @@ LAYERS: tuple[tuple[str, ...], ...] = (
     ("__init__", "codes", "limits", "interruption"),
     ("errors", "models"),
     ("catalog", "consumer", "prompt_input", "option_paths"),
-    ("prompt_templates", "prompt_editor", "instructions"),
+    ("prompt_templates", "prompt_editor", "instructions", "schema"),
     ("adapters", "config"),
     ("runner",),
     ("output",),
@@ -36,14 +36,15 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "consumer": frozenset({"limits", "models"}),
     "prompt_input": frozenset({"errors", "interruption"}),
     "prompt_editor": frozenset({"errors", "interruption", "limits", "prompt_input"}),
+    "schema": frozenset({"consumer", "errors", "limits", "models", "prompt_input"}),
     "instructions": frozenset({"errors", "models", "prompt_input"}),
     "prompt_templates": frozenset({"errors", "prompt_input"}),
-    "adapters": frozenset({"consumer", "errors", "limits", "models"}),
+    "adapters": frozenset({"consumer", "errors", "limits", "models", "schema"}),
     "config": frozenset(
         {"catalog", "errors", "models", "prompt_templates", "option_paths", "instructions"}
     ),
     "runner": frozenset({"codes", "consumer", "interruption", "limits", "models"}),
-    "output": frozenset({"codes", "models", "runner"}),
+    "output": frozenset({"codes", "models", "runner", "schema"}),
     "cli": frozenset(
         {
             "adapters",
@@ -54,6 +55,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
             "errors",
             "interruption",
             "instructions",
+            "schema",
             "models",
             "output",
             "option_paths",

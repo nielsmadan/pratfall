@@ -4,6 +4,7 @@ from dataclasses import asdict
 from pratfall.codes import FAILURE_EXIT, SIGNAL_EXIT_BASE, TIMEOUT_EXIT, Code, exit_code_for
 from pratfall.models import DecodedOutput, NormalizedResult, ResolvedProfile, ResultError
 from pratfall.runner import ProcessResult
+from pratfall.schema import validate_json
 
 _LINES = re.compile(r"[^\r\n]*(?:\r\n?|\n|$)")
 _FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)")
@@ -92,6 +93,8 @@ def _result(
         cost_usd=decoded.cost_usd,
         status=status,
         output=decoded.output,
+        structured_output=decoded.structured_output,
+        structured_output_present=decoded.structured_output_present,
         exit_code=exit_code,
         native_exit_code=process.native_exit_code,
         duration_ms=process.duration_ms,
@@ -101,7 +104,10 @@ def _result(
 
 
 def result_dict(result: NormalizedResult) -> dict[str, object]:
-    return {"schema_version": 1, **asdict(result)}
+    validate_json(result.structured_output)
+    payload = asdict(result)
+    payload.pop("structured_output_present")
+    return {"schema_version": 1, **payload}
 
 
 def validation_error(

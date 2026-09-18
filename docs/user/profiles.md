@@ -46,7 +46,7 @@ prat simple --effort high "investigate this failure"
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
 `model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `attachments`, `instructions`,
-`instructions_file`, `tools`, `disabled_tools`, `native_agent`, and the agent's supported budget fields.
+`instructions_file`, `schema`, `tools`, `disabled_tools`, `native_agent`, and the agent's supported budget fields.
 Use `[defaults]` for shared settings.
 
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
@@ -104,6 +104,7 @@ Settings resolve from highest to lowest priority:
 | `[profiles.NAME]` | A local profile replaces the entire global profile with that name. |
 | `[templates.NAME]` | A local template replaces the entire global template with that name. |
 | `[agents.NAME].command` | A local command array replaces the global array for that agent. |
+| `schema` | The higher-priority source path replaces the lower-priority path. |
 | `native_agent` | The higher-priority string replaces the lower-priority selection. |
 | `instructions`, `instructions_file` | One override group: either higher-priority form clears the lower-priority form. |
 | `native_args`, `add_dirs`, `attachments`, `tools`, `disabled_tools` | The higher-priority array replaces the lower-priority array, even when empty. |
@@ -328,3 +329,19 @@ symlink/`..` traversal. Each must be regular and readable. Prat checks a single 
 conversion and passes the path to the native agent. Files can change after validation; there is no
 snapshot. Native image/document formats, model support and size limits remain native-authoritative.
 See [running with attachments](running.md#native-attachments) for restrictions and task input.
+
+## Configure schema output
+
+```toml
+[profiles.structured]
+agent = "claude"
+schema = "schemas/answer.json"
+```
+
+`schema` is a nonempty path string relative to its defining config file. CLI `--schema PATH`
+overrides it relative to the invocation directory. Prat preserves symlink/`..` traversal and reads
+only the winning selected file, before prompt acquisition. `prat profiles` shows source paths;
+`prat config validate` checks structure and capabilities without opening schema files.
+Schema defaults inherited by an unsupported profile invalidate the configuration even when that
+profile is not selected. Use agent-specific profiles for backend-specific defaults.
+See [schema output](running.md#request-schema-output) for input limits and native validation.

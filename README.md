@@ -69,12 +69,13 @@ printf 'summarize this checkout\n' | prat gm
 | `-e` / `--edit` | Edit the complete prompt in `VISUAL`, `EDITOR`, or `vi`. |
 | `--context PATH` | Prepend a context file; repeat to include several. |
 | `-x` / `--extract` | Return the body of the first fenced code block. |
+| `--schema PATH` | Request native JSON Schema output from a UTF-8 file (Claude). |
 | `--json` | Return one JSON result with output, status, and available usage. |
 | `--progress` | Show live activity on stderr. |
 | `--trace` | Copy captured native stdout to stderr. |
 | `--dry-run` | Preview the resolved invocation without launching the agent. |
 
-Model, effort, fast mode, extra directories, instructions, tool availability, native agent selection, and budget support depend on the agent; unsupported settings are
+Model, effort, fast mode, extra directories, instructions, tool availability, native agent selection, schemas, and budget support depend on the agent; unsupported settings are
 rejected. Native budgets are available through `--max-budget-usd`, `--max-turns`, and
 `--max-ai-credits` where supported.
 
@@ -119,6 +120,11 @@ flags. See [native agent selection](docs/user/running.md#select-a-native-agent).
 Prat preserves native authentication and the selected native agent's permission behavior. See
 [running prompts](docs/user/running.md) for input rules and run behavior, and
 [JSON output](docs/user/json.md) for result fields and errors.
+
+Use `prat cc --schema answer.schema.json --json "summarize this project"` for structured output.
+`output` remains a string containing compact JSON; `structured_output` also contains the parsed
+answer. Schema files have a 1 MiB limit and cannot be combined with `--extract`.
+See [schema output](docs/user/running.md#request-schema-output) for validation and native limits.
 
 Use `prat cc -x "Write a Python function"` to extract the first fenced block from an answer.
 Missing or unclosed fences leave the answer unchanged; an empty block produces empty output.

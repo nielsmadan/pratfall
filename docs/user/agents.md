@@ -52,6 +52,14 @@ of the official 2.21.2 package and its Clap 4.5.60 parser. Kiro was not live-tes
 Its text mode can include banners or progress on stdout. Hermes is also text-only in the selected
 quiet one-shot path.
 
+### Schema output
+
+Claude supports `--schema PATH` / `schema`, mapped to native `--json-schema JSON`.
+Prat selects the terminal `structured_output` field and emits its compact JSON serialization as
+`output`, with the parsed value in the JSON envelope's `structured_output` field. Native validation
+remains authoritative. See [schema output rules](running.md#request-schema-output) and
+[Claude's verified contract](../reference/claude.md#schema-output-verified-2026-09-18).
+
 ### Budgets
 
 There is no verified hard token cap shared by all agents. Claude and Vibe expose native USD and

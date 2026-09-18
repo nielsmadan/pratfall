@@ -28,7 +28,8 @@ For example, `prat cx --model gpt-5.6-luna --json "review this change"` returns 
   "usage": null,
   "error": null,
   "reported_models": null,
-  "cost_usd": null
+  "cost_usd": null,
+  "structured_output": null
 }
 ```
 
@@ -42,6 +43,20 @@ unclosed first fence leaves the entire answer unchanged. This also applies to pa
 on failure, preserving all other fields, exit codes, and raw trace output. See
 [code extraction](running.md#extract-code) for the fence grammar. Unlike ordinary text emission,
 the JSON string does not receive a final newline. Dry-run previews are unaffected.
+
+## Schema answers
+
+`--schema PATH` requests structured output from supported agents. `output` remains a string,
+containing the compact JSON answer; `structured_output` carries the same parsed JSON value.
+For example, an answer can have `"output": "{\"count\":2}"` and
+`"structured_output": {"count":2}`. The envelope remains `schema_version: 1`.
+Ordinary and validation-error envelopes include `structured_output: null`.
+
+JSON null is a present answer when `output` is `"null"`; false, zero, empty strings, arrays and
+objects also remain distinct from missing output. Missing or malformed required output fails with
+`protocol_error` (invalid Unicode uses `output_encoding`). Safe partial answers and accounting
+survive errors, native nonzero exits, timeouts and interruption. No internal presence flag is emitted.
+`--extract` and schema output cannot be combined. See [schema output](running.md#request-schema-output).
 
 ## Models, usage, and cost
 
@@ -116,7 +131,8 @@ result was already written, Prat reports the failure only on stderr to keep stdo
 ## Previews and management commands
 
 `--dry-run --json` returns a preview containing `dry_run`, resolved identity, argv, cwd, timeout,
-and stdin byte count, rather than a run status. Prompts passed through argv appear in the preview.
+and stdin byte count, rather than a run status. Active schemas add the original `schema` path and
+`schema_transport`; prepared temporary paths are labeled placeholders, not reusable filenames. Prompts passed through argv appear in the preview.
 
 Management commands return separate versioned inventory or config objects. Their errors still
 contain `status`, `exit_code`, and `error`. Agent capability records include `fast`.

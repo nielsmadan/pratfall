@@ -128,6 +128,7 @@ _ATTACHMENT_TYPES = {
     "copilot": ["image", "native document"],
     "opencode": ["file"],
 }
+_SCHEMA = frozenset({"claude"})
 _INSTRUCTIONS = frozenset({"claude", "codex", "qwen", "droid"})
 _NATIVE_AGENTS = frozenset({"claude", "copilot", "vibe"})
 _TOOLS_EMPTY = frozenset({"claude", "copilot"})
@@ -1616,6 +1617,7 @@ def _assert_result(
     assert result["schema_version"] == 1
     assert "reported_models" in result
     assert "cost_usd" in result
+    assert result["structured_output"] is None
     assert result["status"] == status
     assert result["exit_code"] == returncode
     assert result["native_exit_code"] == native_exit_code
@@ -2265,6 +2267,7 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
             "attachment_max_count": 1 if name == "hermes" else None,
             "native_agent": name in _NATIVE_AGENTS,
             "instructions": name in _INSTRUCTIONS,
+            "schema": name in _SCHEMA,
             "tools": name in _TOOLS_SCOPES,
             "disabled_tools": name in _DISABLED_TOOLS_SCOPES,
             "tools_empty": name in _TOOLS_EMPTY,
@@ -2366,6 +2369,7 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "attachments": None,
                     "instructions": None,
                     "instructions_file": None,
+                    "schema": None,
                     "tools": None,
                     "disabled_tools": None,
                     "timeout": 7.0,
@@ -3273,6 +3277,7 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "attachments": None,
                     "instructions": None,
                     "instructions_file": None,
+                    "schema": None,
                     "tools": None,
                     "disabled_tools": None,
                     "native_agent": None,

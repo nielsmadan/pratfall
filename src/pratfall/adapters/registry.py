@@ -1,6 +1,7 @@
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
+from typing import Literal, Self
 
 from pratfall.adapters import (
     amp,
@@ -28,7 +29,7 @@ from pratfall.adapters import (
     warp,
 )
 from pratfall.consumer import ConsumerFactory, decode_with
-from pratfall.models import DecodedOutput, Invocation, ResolvedProfile
+from pratfall.models import DecodedOutput, Invocation, PreparedSchema, ResolvedProfile
 
 
 def _whole_document(factory: ConsumerFactory) -> Callable[[str], DecodedOutput]:
@@ -44,7 +45,20 @@ class Adapter:
     validate: Callable[[ResolvedProfile], None]
     whole_document: Callable[[str], DecodedOutput] | None = None
     consumer: ConsumerFactory | None = None
+    schema_transport: Literal["inline", "file"] | None = None
+    schema_whole_document: Callable[[str], DecodedOutput] | None = None
+    schema_consumer: ConsumerFactory | None = None
+    validate_schema: Callable[[PreparedSchema], None] | None = None
     decode: Callable[[str], DecodedOutput] = field(init=False)
+
+    def for_schema(self, enabled: bool) -> Self:
+        if not enabled:
+            return self
+        if self.schema_transport is None:
+            raise ValueError("Adapter does not support schema output.")
+        return replace(
+            self, whole_document=self.schema_whole_document, consumer=self.schema_consumer
+        )
 
     def __post_init__(self) -> None:
         if self.whole_document is not None and self.consumer is None:
@@ -61,6 +75,8 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
             build=claude.build,
             validate=claude.validate,
             whole_document=claude.decode,
+            schema_transport="inline",
+            schema_whole_document=claude.decode_schema,
         ),
         "codex": Adapter(
             build=codex.build,

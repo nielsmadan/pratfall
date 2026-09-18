@@ -11,6 +11,7 @@ prat cx "review this change"
 - [Include context files](#include-context-files)
 - [Edit the prompt](#edit-the-prompt)
 - [Extract code](#extract-code)
+- [Request schema output](#request-schema-output)
 - [Set options and limits](#set-options-and-limits)
 - [Pass native arguments](#pass-native-arguments)
 - [Preview a run](#preview-a-run)
@@ -440,3 +441,34 @@ not establish valid content. `--dry-run` performs these same local checks withou
 
 Native equivalents after `--` remain accepted when the public attachment array is absent or empty.
 An active public list rejects equivalent native options, including Codex `-i` and OpenCode `-f`.
+
+## Request schema output
+
+```sh
+prat cc --schema answer.schema.json "Summarize the project's public APIs"
+prat cc --schema answer.schema.json --json "Summarize the project's public APIs"
+```
+
+Claude supports `--schema PATH` and the `schema` profile/default setting. The native agent
+receives the validated schema and enforces its own JSON Schema dialect and keyword support.
+Prat does not validate answers against the schema, fetch `$ref` URLs, or retry failed output.
+Claude uses draft-07 validation; `format` is an annotation. Native versions before 2.1.205 could
+silently ignore invalid schemas; Prat still rejects a claimed success without structured output.
+
+The selected schema must be a regular UTF-8 JSON file, at most 1 MiB, with an object or boolean
+root. Prat rejects duplicate keys, nonfinite numbers, numeric literals wider than 128 bytes,
+unpaired Unicode surrogates and nesting beyond 64 containers. These checks validate safe JSON
+transport, not the native dialect. Paths resolve from the invocation directory, independently of
+`--cwd`; config paths resolve from the defining file. Only the selected winning file is read,
+before prompt acquisition. Config listing and validation never open schema files.
+
+The final `output` string contains compact JSON, including for scalar answers. With `--json`,
+`structured_output` contains the parsed answer too. JSON null, false, zero, empty strings, arrays
+and objects are valid present answers. Missing or malformed required output is a protocol error;
+native errors, timeouts and interruption retain their precedence and safe partial output.
+The encoded structured value and output string both count toward the 8 MiB retained-state budget.
+
+`--extract` cannot be combined with schema output, including an inherited schema. An active public
+schema conflicts with native `--json-schema`; native-only passthrough remains accepted without
+activating Prat's schema decoder. Dry runs show the original schema source and transport. Claude
+passes inline JSON, so the operating system's argv-size limit may be lower than the file limit.

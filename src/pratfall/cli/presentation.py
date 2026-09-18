@@ -201,6 +201,10 @@ def _preview(
     *,
     json_mode: bool,
 ) -> None:
+    argv = list(invocation.argv)
+    schema = resolved.prepared_schema
+    if schema is not None and schema.path is not None:
+        argv = [arg.replace(schema.path, "<temporary prepared schema>") for arg in argv]
     payload = {
         "schema_version": 1,
         "dry_run": True,
@@ -208,11 +212,14 @@ def _preview(
         "profile": resolved.profile,
         "model": resolved.options.model,
         "fast": resolved.options.fast,
-        "argv": list(invocation.argv),
+        "argv": argv,
         "cwd": str(cwd),
         "timeout": resolved.options.timeout,
         "stdin_bytes": len(invocation.stdin),
     }
+    if schema is not None:
+        payload["schema"] = resolved.options.schema
+        payload["schema_transport"] = "temporary prepared file" if schema.path else "inline JSON"
     if json_mode:
         _emit_stdout(json.dumps(payload, ensure_ascii=False), latch)
         return
@@ -220,7 +227,12 @@ def _preview(
     _emit_stdout(
         "\n".join(
             (
-                f"command: {shlex.join(invocation.argv)}",
+                f"command: {shlex.join(argv)}",
+                *(
+                    [f"schema: {resolved.options.schema} ({payload['schema_transport']})"]
+                    if schema is not None
+                    else []
+                ),
                 f"cwd: {cwd}",
                 f"timeout: {resolved.options.timeout:g}s",
                 f"fast: {fast}",
