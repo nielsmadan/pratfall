@@ -118,7 +118,7 @@ def _arguments(value: object, label: str) -> tuple[str, ...]:
     return tuple(value)
 
 
-def _directories(value: object, label: str, base: Path | None) -> tuple[str, ...]:
+def _paths(value: object, label: str, base: Path | None) -> tuple[str, ...]:
     paths = tuple(_string(item, label) for item in _arguments(value, label))
     if base is None:
         return paths
@@ -162,8 +162,11 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
             else None
         ),
         fast=_boolean(table["fast"], f"{label}.fast") if "fast" in table else None,
-        add_dirs=_directories(table["add_dirs"], f"{label}.add_dirs", base)
+        add_dirs=_paths(table["add_dirs"], f"{label}.add_dirs", base)
         if "add_dirs" in table
+        else None,
+        attachments=_paths(table["attachments"], f"{label}.attachments", base)
+        if "attachments" in table
         else None,
         tools=tuple(
             _string(item, f"{label}.tools") for item in _arguments(table["tools"], f"{label}.tools")
@@ -237,6 +240,7 @@ def validate_capabilities(
             raise _rejected(fields[field], f"{agent.label} does not support this budget.")
     if options.add_dirs and not caps.add_dirs:
         raise _rejected(fields["add_dirs"], f"{agent.label} does not support extra directories.")
+    _validate_attachments(agent, options, fields["attachments"])
     for name in ("instructions", "instructions_file"):
         if getattr(options, name) is not None and not caps.instructions:
             raise _rejected(fields[name], f"{agent.label} does not support appended instructions.")
@@ -251,6 +255,21 @@ def validate_capabilities(
         raise _rejected(
             fields["disabled_tools"], f"{agent.label} does not support disabling tools."
         )
+
+
+def _validate_attachments(agent: AgentSpec, options: Options, origin: OptionOrigin) -> None:
+    caps = agent.capabilities
+    if options.attachments:
+        if not caps.attachments:
+            raise _rejected(origin, f"{agent.label} does not support attachments.")
+        if (
+            caps.attachment_max_count is not None
+            and len(options.attachments) > caps.attachment_max_count
+        ):
+            raise _rejected(
+                origin,
+                f"{agent.label} accepts at most {caps.attachment_max_count} attachment(s).",
+            )
 
 
 def option_origins(

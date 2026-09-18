@@ -71,12 +71,17 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--reasoning", options.effort))
     if options.max_turns is not None:
         argv.extend(("--max-turns", str(options.max_turns)))
+    for attachment in resolved.options.attachments or ():
+        argv.append(f"--image={attachment}")
     argv.extend(arguments)
     return Invocation(tuple(argv), prompt)
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("Hermes", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    reserved = _RESERVED | (
+        {name: _ALLOWED[name] for name in ("--image",)} if resolved.options.attachments else {}
+    )
+    validate_flags("Hermes", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
 def decode(stdout: str) -> DecodedOutput:

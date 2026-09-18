@@ -309,3 +309,18 @@ This is a native persona within the selected backend, separate from Prat profile
 Prat preserves literal names and leaves discovery, definitions and resolution to the native CLI.
 Personas can change native permission behavior; Vibe's `auto-approve` persona can approve tool
 calls automatically. Prat adds no approval flags. See [selection rules](running.md#select-a-native-agent).
+
+## Native attachments
+
+| Agent | Native mapping | Supported input |
+| --- | --- | --- |
+| Codex | Repeated `--image=PATH`, followed by `-- -` for the stdin task | Images; comma-free paths. |
+| Hermes | `--image=PATH` | One image per query. |
+| Copilot | Repeated `--attachment=PATH` | Images and native documents. |
+| OpenCode | Repeated `--file=PATH` | Files; public attachments reject directories. |
+
+Other agents reject nonempty `attachments`. `prat agents --json` exposes `attachments`,
+`attachment_types` and `attachment_max_count` (one for Hermes; null means no Prat count cap).
+Native formats, model support and limits still apply. Prat only checks regular-file readability;
+it does not decode images or turn attachments into prompt text. Native agents read the canonical
+file paths after validation, without a snapshot. See [attachment input](running.md#native-attachments).

@@ -1197,3 +1197,16 @@ def test_harness_native_agent_capabilities_match_the_catalog() -> None:
         frozenset(agent.name for agent in catalog.AGENTS if agent.capabilities.native_agent)
         == qa._NATIVE_AGENTS
     )
+
+
+def test_harness_attachment_capabilities_match_the_catalog() -> None:
+    assert {
+        agent.name: list(agent.capabilities.attachment_types)
+        for agent in catalog.AGENTS
+        if agent.capabilities.attachments
+    } == qa._ATTACHMENT_TYPES
+    assert {
+        agent.name: agent.capabilities.attachment_max_count
+        for agent in catalog.AGENTS
+        if agent.capabilities.attachment_max_count is not None
+    } == {"hermes": 1}

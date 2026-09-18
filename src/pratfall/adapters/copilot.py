@@ -129,6 +129,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append("--excluded-tools=" + ",".join(options.disabled_tools))
     if options.native_agent is not None:
         argv.append(f"--agent={options.native_agent}")
+    for attachment in resolved.options.attachments or ():
+        argv.append(f"--attachment={attachment}")
     argv.extend(arguments)
     argv.append(f"--prompt={prompt.decode('utf-8')}")
     return Invocation(tuple(argv), b"")
@@ -138,6 +140,8 @@ def validate(resolved: ResolvedProfile) -> None:
     reserved = _RESERVED | (
         {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
     )
+    if resolved.options.attachments:
+        reserved |= {"--attachment": _ALLOWED["--attachment"]}
     if resolved.options.native_agent is not None:
         reserved |= {"--agent": _ALLOWED["--agent"]}
     validate_tool_values(resolved.options.tools, "tools", comma=True, trim=True)

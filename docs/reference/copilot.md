@@ -80,3 +80,15 @@ selects an existing `code-review` custom agent. Prat maps `native_agent` to `--a
 adds no permission approval. Names are literal and native configuration remains authoritative.
 Native-only `--agent` stays accepted; an active public selection conflicts with it.
 Verification used primary documentation and fake executable argv tests, not authenticated execution.
+
+## Native attachments (verified 2026-09-18)
+
+The published [1.0.83 package](https://www.npmjs.com/package/@github/copilot/v/1.0.83) declares
+`--attachment <path>` with an array accumulator and describes “image or native document” inputs.
+Its `NCn` preparation function checks `isFile()`, calls the native attachable-path helper and
+constructs `{type:"file",path:o,displayName:...}`. Prat emits repeated `--attachment=PATH`,
+preserves order and passes canonical readable regular-file paths. Active public attachments
+conflict with native `--attachment`; native-only use stays accepted. Native document/image types,
+content validity, model support and limits remain authoritative.
+
+Evidence is static primary package inspection plus fake argv tests, not authenticated execution.

@@ -410,3 +410,33 @@ Previously supported native-only selection remains accepted for Claude, Copilot 
 Vibe's native `--agent` remains reserved, so use the public flag. OpenCode has no public support
 because its CLI falls back to the default agent for unknown or subagent-only names.
 Unsupported public selection and native collisions fail before prompt input or editor startup.
+
+## Native attachments
+
+```sh
+prat cx --attach screenshot.png --attach detail.png "compare these screenshots"
+prat hm --attach photo.jpg "describe this image"
+prat cp --attach report.pdf "summarize this document"
+prat oc --attach source.py "review this file"
+```
+
+`--attach PATH` is repeatable before or after the selector and replaces inherited `attachments`.
+Order and duplicates are preserved. CLI paths use the invocation directory, independently of
+`--cwd`; config paths use their defining file's directory. Home expansion is supported. Spaces,
+Unicode and leading dashes are literal (`--attach=-image.png`); Codex rejects commas because its
+native image flag splits them. Restrictions also apply to the canonical target of a symlink.
+Hermes accepts one image; multiple attachments fail before prompt acquisition.
+
+Attachments supplement a task supplied through normal prompt input, a template or the editor.
+They do not supply a task themselves, prepend text or consume stdin. Redirected stdin still follows
+the usual prompt composition rules. `--attach -` names a local file called `-`.
+
+The selected files must be local, regular and readable. Prat resolves symlinks through the filesystem,
+opens each nonblocking, checks its descriptor type, and reads at most one byte to check readability.
+Binary data is not decoded and Prat imposes no attachment payload-size cap. Native agents read the
+original canonical paths later: files may change between validation and use. Native format,
+image-capable model and payload limits remain authoritative; a recognized filename extension does
+not establish valid content. `--dry-run` performs these same local checks without launching an agent.
+
+Native equivalents after `--` remain accepted when the public attachment array is absent or empty.
+An active public list rejects equivalent native options, including Codex `-i` and OpenCode `-f`.

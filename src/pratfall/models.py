@@ -17,6 +17,9 @@ class Capabilities:
     budgets: frozenset[str] = frozenset()
     fast: bool = False
     add_dirs: bool = False
+    attachments: bool = False
+    attachment_types: tuple[str, ...] = ()
+    attachment_max_count: int | None = None
     instructions: bool = False
     native_agent: bool = False
     tools: bool = False
@@ -49,6 +52,7 @@ class Options:
     max_ai_credits: float | None = None
     fast: bool | None = None
     add_dirs: tuple[str, ...] | None = None
+    attachments: tuple[str, ...] | None = None
     instructions: str | None = None
     instructions_file: str | None = None
     tools: tuple[str, ...] | None = None

@@ -45,7 +45,7 @@ prat simple --effort high "investigate this failure"
 ```
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
-`model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `instructions`,
+`model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `attachments`, `instructions`,
 `instructions_file`, `tools`, `disabled_tools`, `native_agent`, and the agent's supported budget fields.
 Use `[defaults]` for shared settings.
 
@@ -106,7 +106,7 @@ Settings resolve from highest to lowest priority:
 | `[agents.NAME].command` | A local command array replaces the global array for that agent. |
 | `native_agent` | The higher-priority string replaces the lower-priority selection. |
 | `instructions`, `instructions_file` | One override group: either higher-priority form clears the lower-priority form. |
-| `native_args`, `add_dirs`, `tools`, `disabled_tools` | The higher-priority array replaces the lower-priority array, even when empty. |
+| `native_args`, `add_dirs`, `attachments`, `tools`, `disabled_tools` | The higher-priority array replaces the lower-priority array, even when empty. |
 
 Profiles from both files remain available. Profiles do not inherit from each other; omitted fields
 use the merged defaults.
@@ -305,3 +305,26 @@ an unsupported profile invalid even if it is not selected. Config validation and
 discover native names or read/write agent definitions. The selected persona can change native
 permissions, including automatic approval with Vibe's `auto-approve` agent. See
 [native agent selection](running.md#select-a-native-agent) for native collisions and limitations.
+
+## Attachments
+
+```toml
+[profiles.visual]
+agent = "codex"
+attachments = ["images/screenshot.png", "images/detail.png"]
+```
+
+`attachments` is an ordered array of nonempty path strings. Paths resolve relative to the defining
+configuration file, independently for global defaults, local defaults and profiles. CLI `--attach`
+paths use the invocation directory, even with `--cwd`. A higher-priority array replaces the whole
+inherited list; `attachments = []` clears it and is neutral on every backend. Defaults affect every
+profile, so unsupported profiles must clear backend-specific attachments or config validation fails.
+Hermes accepts at most one attachment, including when validating an unused profile.
+
+Loading, listing and validating configuration do not open attachment files. Only the selected
+invocation validates its winning files before prompt acquisition; missing files in unused profiles
+or overridden arrays are not read. Selected paths become canonical filesystem targets to preserve
+symlink/`..` traversal. Each must be regular and readable. Prat checks a single byte without text
+conversion and passes the path to the native agent. Files can change after validation; there is no
+snapshot. Native image/document formats, model support and size limits remain native-authoritative.
+See [running with attachments](running.md#native-attachments) for restrictions and task input.

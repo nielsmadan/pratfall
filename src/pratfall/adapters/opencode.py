@@ -62,12 +62,17 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--model", resolved.options.model))
     if resolved.options.effort is not None:
         argv.extend(("--variant", resolved.options.effort))
+    for attachment in resolved.options.attachments or ():
+        argv.append(f"--file={attachment}")
     argv.extend(arguments)
     return Invocation(tuple(argv), prompt)
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("OpenCode", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    reserved = _RESERVED | (
+        {name: _ALLOWED[name] for name in ("--file", "-f")} if resolved.options.attachments else {}
+    )
+    validate_flags("OpenCode", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
 @dataclass

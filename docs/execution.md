@@ -61,6 +61,11 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   Cleanup removes the entire temporary directory, including atomic-save sidecars, and terminates
   owned descendants even after a successful edit. Keeping the editor in the current session lets
   it use the controlling terminal; the native runner's new-session strategy cannot be reused here.
+- [option_paths.py](../src/pratfall/option_paths.py) resolves declarative path origins without
+  filesystem reads, then prepares selected directories and attachments as canonical targets.
+  Attachments use a regular-file stat, nonblocking open, descriptor type check and a one-byte read.
+  Binary payloads remain native-read files, without copying or applying the UTF-8 prompt limit.
+  They may change after preparation; only instruction files are read into immutable prompt data.
 - [catalog.py](../src/pratfall/catalog.py) holds immutable capabilities, not provider model lists.
   [`Adapter`](../src/pratfall/adapters/registry.py) is the adapter assembly point: command
   builder, one validator over the resolved profile, and exactly one of a whole-document decoder or

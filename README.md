@@ -60,6 +60,7 @@ printf 'summarize this checkout\n' | prat gm
 | `--fast` / `--no-fast` | Override fast mode for Claude or Codex. |
 | `--timeout SECONDS` | Set the execution deadline; default: 600 seconds. |
 | `--cwd PATH` | Choose the agent's working directory. |
+| `--attach PATH` | Attach a native image/file; repeat where supported. |
 | `--add-dir PATH` | Add a native workspace directory; repeat for several. |
 | `--instructions TEXT` / `--instructions-file PATH` | Append native instructions from text or a UTF-8 file. |
 | `--tools NAME` / `--disable-tools NAME` | Restrict native tool availability or disable names/patterns; repeat for several. |
@@ -90,6 +91,10 @@ Supported native arguments go after `--`, for example:
 ```sh
 prat cx "inspect this change" -- --sandbox read-only
 ```
+
+Use `prat cx --attach screenshot.png "explain this screenshot"` for native image input.
+Codex and Hermes support images (Hermes accepts one), Copilot supports images/native documents,
+and OpenCode supports files. Native model and format requirements still apply.
 
 Use `prat cx --add-dir ../shared "review both projects"` to include an extra directory.
 Claude, Codex, Gemini, Qwen and Copilot support this setting with their native access semantics.

@@ -1,3 +1,5 @@
+import os
+import stat
 from pathlib import Path
 
 from pratfall.errors import PratError
@@ -30,5 +32,31 @@ def prepare_directories(paths: tuple[str, ...], origin: OptionOrigin) -> tuple[s
             ) from error
         if not is_directory:
             raise PratError(f"{origin.label}: not a directory: {value}", code=origin.code)
+        prepared.append(str(path))
+    return tuple(prepared)
+
+
+def prepare_attachments(paths: tuple[str, ...], origin: OptionOrigin) -> tuple[str, ...]:
+    prepared: list[str] = []
+    for value in paths:
+        try:
+            path = Path(value).resolve(strict=True)
+            if not stat.S_ISREG(path.stat().st_mode):
+                raise PratError(
+                    f"{origin.label}: not a regular attachment file: {value}", code=origin.code
+                )
+            descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+            try:
+                if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                    raise PratError(
+                        f"{origin.label}: not a regular attachment file: {value}", code=origin.code
+                    )
+                os.read(descriptor, 1)
+            finally:
+                os.close(descriptor)
+        except (OSError, RuntimeError, ValueError) as error:
+            raise PratError(
+                f"{origin.label}: cannot read attachment {value!r}: {error}.", code=origin.code
+            ) from error
         prepared.append(str(path))
     return tuple(prepared)

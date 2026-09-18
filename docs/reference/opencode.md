@@ -49,3 +49,17 @@ default-agent fallback. For an unknown name the warning says “not found. Falli
 agent”. Prat cannot promise explicit selection using this contract. Existing native-only
 `--agent` passthrough remains accepted with OpenCode's behavior. No discovery or fallback is
 added by Prat. Evidence is static primary-source inspection, not authenticated execution.
+
+## Native attachments (verified 2026-09-18)
+
+The [run source at revision 5f9d9187](https://github.com/anomalyco/opencode/blob/5f9d9187c01708b4e700c9c81c1045ab482bf31d/packages/opencode/src/cli/cmd/run.ts)
+defines `.option("file", { alias: ["f"], type: "string", array: true, ... })` and builds file parts
+from each path using `path.resolve`. Prat emits repeated `--file=PATH`, with canonical regular
+readable paths so native lexical normalization cannot change symlink/`..` targets. Public
+attachments reject directories even though some native modes can construct directory parts.
+Native `--attach` connects to a server and is unrelated to public `--attach`.
+
+The task continues through stdin; files do not replace it. Active public attachments conflict
+with native `--file` and `-f`; native-only use remains accepted. File content interpretation,
+formats and model limits belong to OpenCode. Evidence is primary source inspection and fake argv
+tests, without native inference.

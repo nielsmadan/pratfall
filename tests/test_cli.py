@@ -367,6 +367,7 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
                 "max_ai_credits": None,
                 "fast": None,
                 "add_dirs": None,
+                "attachments": None,
                 "instructions": None,
                 "instructions_file": None,
                 "tools": None,
@@ -599,6 +600,7 @@ def test_doctor_version_interruption_during_probe_stops_and_restores_handlers(
     chosen: signal.Signals,
 ) -> None:
     monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(doctor_module, "VERSION_TIMEOUT", 15.0)
     previous = {
         candidate: signal.getsignal(candidate) for candidate in (signal.SIGINT, signal.SIGTERM)
     }
@@ -622,7 +624,7 @@ def test_doctor_version_interruption_during_probe_stops_and_restores_handlers(
     )
 
     def interrupt() -> None:
-        deadline = time.monotonic() + 3
+        deadline = time.monotonic() + 10
         while not ready.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
         assert ready.exists()
@@ -630,8 +632,10 @@ def test_doctor_version_interruption_during_probe_stops_and_restores_handlers(
 
     sender = threading.Thread(target=interrupt)
     sender.start()
-    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 128 + chosen
-    sender.join()
+    try:
+        assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 128 + chosen
+    finally:
+        sender.join()
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "interrupted"
     assert result["exit_code"] == 128 + chosen

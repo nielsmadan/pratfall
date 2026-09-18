@@ -36,7 +36,7 @@ from pratfall.models import (
     ResolvedProfile,
     ResultError,
 )
-from pratfall.option_paths import prepare_directories, resolve_path
+from pratfall.option_paths import prepare_attachments, prepare_directories, resolve_path
 from pratfall.output import extract_code, normalize, result_dict, validation_error
 from pratfall.prompt_editor import edit_prompt
 from pratfall.prompt_input import InputInterrupted, acquire_prompt, prepend_contexts
@@ -56,6 +56,9 @@ def _agents(json_mode: bool) -> None:
             "budgets": sorted(caps.budgets),
             "fast": caps.fast,
             "add_dirs": caps.add_dirs,
+            "attachments": caps.attachments,
+            "attachment_types": list(caps.attachment_types) or None,
+            "attachment_max_count": caps.attachment_max_count,
             "instructions": caps.instructions,
             "native_agent": caps.native_agent,
             "tools": caps.tools,
@@ -80,6 +83,7 @@ def _agents(json_mode: bool) -> None:
                 "effort",
                 "fast",
                 "add_dirs",
+                "attachments",
                 "instructions",
                 "tools",
                 "disabled_tools",
@@ -88,6 +92,10 @@ def _agents(json_mode: bool) -> None:
             if getattr(caps, field)
         ]
         supported.extend(sorted(caps.budgets))
+        if caps.attachments:
+            supported.append("attachment_types=" + "/".join(caps.attachment_types))
+            if caps.attachment_max_count is not None:
+                supported.append(f"attachment_max_count={caps.attachment_max_count}")
         selectors = agent.name
         if agent.aliases:
             selectors += f" ({', '.join(agent.aliases)})"
@@ -112,6 +120,7 @@ def _profiles(config: Config, json_mode: bool) -> None:
                 in {
                     "native_args",
                     "add_dirs",
+                    "attachments",
                     "instructions",
                     "instructions_file",
                     "tools",
@@ -396,18 +405,15 @@ def _resolve_run_paths(parsed: RunArguments, invocation_cwd: Path) -> RunArgumen
         origin = OptionOrigin("command line: --add-dir", "invalid_arguments")
         paths = tuple(resolve_path(value, invocation_cwd, origin) for value in options.add_dirs)
         options = replace(options, add_dirs=paths)
+    if options.attachments is not None:
+        origin = OptionOrigin("command line: --attach", "invalid_arguments")
+        paths = tuple(resolve_path(value, invocation_cwd, origin) for value in options.attachments)
+        options = replace(options, attachments=paths)
     if options.instructions_file is not None:
         origin = OptionOrigin("command line: --instructions-file", "invalid_arguments")
         path = resolve_path(options.instructions_file, invocation_cwd, origin)
         options = replace(options, instructions_file=path)
     return replace(parsed, options=options)
-
-
-def _prepare_run_directories(resolved: ResolvedProfile, origin: OptionOrigin) -> ResolvedProfile:
-    if not resolved.options.add_dirs:
-        return resolved
-    paths = prepare_directories(resolved.options.add_dirs, origin)
-    return replace(resolved, options=replace(resolved.options, add_dirs=paths))
 
 
 def _prepare_run_instructions(
@@ -422,6 +428,27 @@ def _prepare_run_instructions(
     return replace(
         resolved, options=replace(resolved.options, instructions=text, instructions_file=None)
     )
+
+
+def _prepare_run_paths(
+    resolved: ResolvedProfile, origins: Mapping[str, OptionOrigin], label: str
+) -> ResolvedProfile:
+    if resolved.options.add_dirs:
+        paths = prepare_directories(
+            resolved.options.add_dirs,
+            origins.get("add_dirs", OptionOrigin("add_dirs", "invalid_arguments")),
+        )
+        resolved = replace(resolved, options=replace(resolved.options, add_dirs=paths))
+    _validate_native_arguments(resolved, label, origins)
+    if not resolved.options.attachments:
+        return resolved
+    paths = prepare_attachments(
+        resolved.options.attachments,
+        origins.get("attachments", OptionOrigin("attachments", "invalid_arguments")),
+    )
+    resolved = replace(resolved, options=replace(resolved.options, attachments=paths))
+    _validate_native_arguments(resolved, label, origins)
+    return resolved
 
 
 def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) -> int:
@@ -440,10 +467,7 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             fallback = OptionOrigin(f"selector {parsed.selector!r}.native_args")
             origins = option_origins(config, parsed.selector, parsed.options)
             label = origins.get("native_args", fallback).label
-            resolved = _prepare_run_directories(
-                resolved, origins.get("add_dirs", OptionOrigin("add_dirs", "invalid_arguments"))
-            )
-            _validate_native_arguments(resolved, label, origins)
+            resolved = _prepare_run_paths(resolved, origins, label)
             cwd = _run_cwd(parsed.cwd, invocation_cwd)
             template = (
                 config.templates.get(parsed.template) if parsed.template is not None else None

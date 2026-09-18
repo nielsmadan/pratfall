@@ -10,6 +10,7 @@ from pratfall.consumer import (
     JsonlConsumer,
     decode_with,
 )
+from pratfall.errors import PratError
 from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
 _TURN_SLOTS = ("answer", "join", "answer_id", "turn")
@@ -76,7 +77,11 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("-c", f"service_tier={json.dumps(service_tier)}"))
     for directory in resolved.options.add_dirs or ():
         argv.extend(("--add-dir", directory))
+    for attachment in resolved.options.attachments or ():
+        argv.append(f"--image={attachment}")
     argv.extend(arguments)
+    if options.attachments:
+        argv.append("--")
     argv.append("-")
     return Invocation(tuple(argv), prompt)
 
@@ -85,6 +90,15 @@ def validate(resolved: ResolvedProfile) -> None:
     reserved = _RESERVED | (
         {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
     )
+    if resolved.options.attachments:
+        reserved |= {name: _ALLOWED[name] for name in ("--image", "-i")}
+        for path in resolved.options.attachments:
+            if "," in path:
+                raise PratError(
+                    f"Codex attachment path {path!r} cannot contain commas.",
+                    code="invalid_arguments",
+                    option="attachments",
+                )
     validate_flags("Codex", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

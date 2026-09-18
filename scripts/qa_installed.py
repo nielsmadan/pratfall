@@ -122,6 +122,12 @@ _BUDGETS = {
 _NO_MODEL = frozenset({"openhands", "amp", "vibe"})
 _FAST = frozenset({"claude", "codex"})
 _ADD_DIRS = frozenset({"claude", "codex", "gemini", "qwen", "copilot"})
+_ATTACHMENT_TYPES = {
+    "codex": ["image"],
+    "hermes": ["image"],
+    "copilot": ["image", "native document"],
+    "opencode": ["file"],
+}
 _INSTRUCTIONS = frozenset({"claude", "codex", "qwen", "droid"})
 _NATIVE_AGENTS = frozenset({"claude", "copilot", "vibe"})
 _TOOLS_EMPTY = frozenset({"claude", "copilot"})
@@ -2254,6 +2260,9 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
             "budgets": _BUDGETS.get(name, []),
             "fast": name in _FAST,
             "add_dirs": name in _ADD_DIRS,
+            "attachments": name in _ATTACHMENT_TYPES,
+            "attachment_types": _ATTACHMENT_TYPES.get(name),
+            "attachment_max_count": 1 if name == "hermes" else None,
             "native_agent": name in _NATIVE_AGENTS,
             "instructions": name in _INSTRUCTIONS,
             "tools": name in _TOOLS_SCOPES,
@@ -2354,6 +2363,7 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "effort": None,
                     "fast": None,
                     "add_dirs": None,
+                    "attachments": None,
                     "instructions": None,
                     "instructions_file": None,
                     "tools": None,
@@ -3260,6 +3270,7 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "max_ai_credits": None,
                     "fast": None,
                     "add_dirs": None,
+                    "attachments": None,
                     "instructions": None,
                     "instructions_file": None,
                     "tools": None,

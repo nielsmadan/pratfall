@@ -27,6 +27,7 @@ _RUN_VALUE_FLAGS = {
     "-f": "file",
     "--context": "context",
     "--add-dir": "add_dirs",
+    "--attach": "attachments",
     "--tools": "tools",
     "--disable-tools": "disabled_tools",
     "--instructions": "instructions",
@@ -114,6 +115,7 @@ run options:
   --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
   --cwd PATH              Set the agent working directory.
   --add-dir PATH          Add a native workspace directory; repeat to include several.
+  --attach PATH           Attach a native image/file; repeat where supported.
   --tools NAME            Restrict native tool availability; repeat for several.
   --disable-tools NAME    Disable native tools or patterns; repeat for several.
   --instructions TEXT     Append instructions while preserving native built-in guidance.
@@ -175,7 +177,12 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     scan = _scan_run(arguments)
     values: dict[str, str] = {}
     contexts: list[str] = []
-    repeated: dict[str, list[str]] = {"add_dirs": [], "tools": [], "disabled_tools": []}
+    repeated: dict[str, list[str]] = {
+        "add_dirs": [],
+        "attachments": [],
+        "tools": [],
+        "disabled_tools": [],
+    }
     selector: str | None = None
     prompt_source: PromptSource | None = None
     json_mode = False
@@ -290,6 +297,7 @@ def _run_options(
         max_ai_credits=_number_option(values.get("max_ai_credits"), "--max-ai-credits"),
         fast=fast,
         add_dirs=tuple(repeated["add_dirs"]) or None,
+        attachments=tuple(repeated["attachments"]) or None,
         tools=tuple(repeated["tools"]) or None,
         disabled_tools=tuple(repeated["disabled_tools"]) or None,
         native_agent=(
