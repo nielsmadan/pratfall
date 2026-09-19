@@ -81,7 +81,7 @@ def verify_remote_tag(tag: str, target: str) -> None:
         )
 
 
-def project_metadata(tag: str, path: Path) -> tuple[str, bool]:
+def project_metadata(tag: str, path: Path) -> str:
     if version(tag) is None:
         raise WorkflowError(f"Invalid release tag: {tag!r}")
     project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
@@ -91,15 +91,7 @@ def project_metadata(tag: str, path: Path) -> tuple[str, bool]:
             f"Tag version {expected_version!r} does not match project version "
             f"{project['version']!r}."
         )
-    prerelease = any(
-        classifier in project.get("classifiers", [])
-        for classifier in (
-            "Development Status :: 2 - Pre-Alpha",
-            "Development Status :: 3 - Alpha",
-            "Development Status :: 4 - Beta",
-        )
-    )
-    return expected_version, prerelease
+    return expected_version
 
 
 def _sha256(path: Path) -> str:
@@ -119,7 +111,7 @@ def _expected_assets(assets: Sequence[str]) -> dict[str, tuple[Path, int, str]]:
 
 
 def _release(tag: str) -> dict[str, object] | None:
-    fields = "tagName,name,body,isDraft,isPrerelease,isImmutable,assets"
+    fields = "tagName,name,body,isDraft,isImmutable,assets"
     result = command("gh", "release", "view", tag, "--json", fields, check=False)
     if result.returncode == 0:
         try:
@@ -167,17 +159,11 @@ def _missing_assets(
     return [str(expected[name][0]) for name in expected if name not in existing]
 
 
-def _verify_metadata(
-    release: dict[str, object], tag: str, title: str, body: str, prerelease: bool
-) -> None:
+def _verify_metadata(release: dict[str, object], tag: str, title: str, body: str) -> None:
     if not isinstance(release.get("isDraft"), bool) or not isinstance(
         release.get("isImmutable"), bool
     ):
         raise WorkflowError("GitHub release mutability state is unavailable.")
-    if release.get("isPrerelease") is not prerelease:
-        raise WorkflowError(
-            "GitHub release prerelease state differs from the expected publication."
-        )
     expected = {
         "tagName": tag,
         "name": title,
@@ -190,15 +176,7 @@ def _verify_metadata(
             )
 
 
-def publish(
-    tag: str,
-    title: str,
-    notes: Path,
-    target: str,
-    assets: Sequence[str],
-    *,
-    prerelease: bool = False,
-) -> None:
+def publish(tag: str, title: str, notes: Path, target: str, assets: Sequence[str]) -> None:
     if re.fullmatch(r"[0-9a-f]{40}", target) is None:
         raise WorkflowError(f"Release target must be a full commit SHA, got {target!r}.")
     body = notes.read_text(encoding="utf-8")
@@ -217,10 +195,9 @@ def publish(
             title,
             "--notes-file",
             str(notes),
-            *(["--prerelease", "--latest=false"] if prerelease else []),
         )
         return
-    _verify_metadata(release, tag, title, body, prerelease)
+    _verify_metadata(release, tag, title, body)
     missing = _missing_assets(release, expected)
     if missing:
         if release.get("isImmutable") is True:
@@ -247,7 +224,6 @@ def main() -> None:
     publication.add_argument("notes", type=Path)
     publication.add_argument("target")
     publication.add_argument("assets", nargs="+")
-    publication.add_argument("--prerelease", action="store_true")
     args = parser.parse_args()
     if args.operation == "previous-tag":
         tags = command("git", "tag", "--list").stdout.splitlines()
@@ -258,11 +234,9 @@ def main() -> None:
         print(validate_tag(args.tag, args.event_sha))
         return
     if args.operation == "project-metadata":
-        project_version, prerelease = project_metadata(args.tag, args.project)
-        print(f"version={project_version}")
-        print(f"prerelease={str(prerelease).lower()}")
+        print(f"version={project_metadata(args.tag, args.project)}")
         return
-    publish(args.tag, args.title, args.notes, args.target, args.assets, prerelease=args.prerelease)
+    publish(args.tag, args.title, args.notes, args.target, args.assets)
 
 
 if __name__ == "__main__":

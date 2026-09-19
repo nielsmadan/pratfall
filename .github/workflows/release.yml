@@ -25,7 +25,6 @@ jobs:
     outputs:
       release-commit: ${{ steps.identity.outputs.release-commit }}
       version: ${{ steps.project.outputs.version }}
-      prerelease: ${{ steps.project.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -68,7 +67,7 @@ jobs:
           python-version: "3.13"
           working-directory: release-source
 
-      - name: Validate project version and determine prerelease status
+      - name: Validate project version
         id: project
         run: |
           python ../scripts/release_workflow.py project-metadata \
@@ -168,18 +167,13 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
         run: |
-          args=()
-          if [ "$PRERELEASE" = "true" ]; then
-            args+=(--prerelease)
-          fi
           python scripts/release_workflow.py publish \
             "$RELEASE_TAG" \
             "pratfall ${{ needs.verify.outputs.version }}" \
             release-bundle/release-notes.md \
             "${{ needs.verify.outputs.release-commit }}" \
-            release-bundle/dist/* "${args[@]}"
+            release-bundle/dist/*
 
       - name: Render, validate, and commit Homebrew formula
         id: formula

@@ -154,22 +154,10 @@ def test_validate_tag_rejects_commit_outside_origin_main(
         )
 
 
-@pytest.mark.parametrize(
-    ("classifiers", "prerelease"),
-    [
-        (["Development Status :: 2 - Pre-Alpha"], True),
-        (["Development Status :: 3 - Alpha"], True),
-        (["Development Status :: 4 - Beta"], True),
-        (["Development Status :: 5 - Production/Stable"], False),
-        ([], False),
-    ],
-)
-def test_project_metadata_cli_reports_version_and_release_status(
-    tmp_path: Path, classifiers: list[str], prerelease: bool
-) -> None:
+def test_project_metadata_cli_reports_version(tmp_path: Path) -> None:
     project = tmp_path / "pyproject.toml"
     project.write_text(
-        f'[project]\nversion = "0.9.0"\nclassifiers = {json.dumps(classifiers)}\n',
+        '[project]\nversion = "0.9.0"\nclassifiers = ["Environment :: Console"]\n',
         encoding="utf-8",
     )
     completed = subprocess.run(
@@ -179,7 +167,7 @@ def test_project_metadata_cli_reports_version_and_release_status(
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout == f"version=0.9.0\nprerelease={str(prerelease).lower()}\n"
+    assert completed.stdout == "version=0.9.0\n"
 
 
 @pytest.mark.parametrize(
@@ -262,7 +250,6 @@ def metadata(
     target: str,
     *,
     draft: bool = False,
-    prerelease: bool = False,
 ) -> dict[str, object]:
     return {
         "tagName": "v1.2.3",
@@ -270,16 +257,12 @@ def metadata(
         "body": notes.read_text(encoding="utf-8"),
         "targetCommitish": target,
         "isDraft": draft,
-        "isPrerelease": prerelease,
         "isImmutable": False,
         "assets": [asset(path) for path in assets],
     }
 
 
-@pytest.mark.parametrize("prerelease", [False, True])
-def test_first_publication_verifies_existing_tag_and_creates_release(
-    tmp_path: Path, prerelease: bool
-) -> None:
+def test_first_publication_verifies_existing_tag_and_creates_release(tmp_path: Path) -> None:
     notes, assets, target = publication_files(tmp_path)
     responses = [remote_tag(target), result(1, stderr="release not found\n"), result()]
     with (
@@ -295,7 +278,6 @@ def test_first_publication_verifies_existing_tag_and_creates_release(
                 str(notes),
                 target,
                 *assets,
-                *(["--prerelease"] if prerelease else []),
             ],
         ),
     ):
@@ -323,27 +305,22 @@ def test_first_publication_verifies_existing_tag_and_creates_release(
             "pratfall 1.2.3",
             "--notes-file",
             str(notes),
-            *(["--prerelease", "--latest=false"] if prerelease else []),
         ),
     )
 
 
-@pytest.mark.parametrize("prerelease", [False, True])
 @pytest.mark.parametrize("target_commitish", ["main", "a" * 40])
 def test_retry_accepts_identical_release_without_mutation(
-    tmp_path: Path, prerelease: bool, target_commitish: str
+    tmp_path: Path, target_commitish: str
 ) -> None:
     notes, assets, target = publication_files(tmp_path)
     responses = [
         remote_tag(target),
-        result(stdout=json.dumps(metadata(notes, assets, target_commitish, prerelease=prerelease))),
+        result(stdout=json.dumps(metadata(notes, assets, target_commitish))),
     ]
     with patch.object(release_workflow.subprocess, "run", side_effect=responses) as runner:
-        release_workflow.publish(
-            "v1.2.3", "pratfall 1.2.3", notes, target, assets, prerelease=prerelease
-        )
+        release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
     assert runner.call_count == 2
-    assert "isPrerelease" in runner.call_args.args[0][-1].split(",")
 
 
 def test_partial_publication_uploads_only_missing_asset_without_clobber(tmp_path: Path) -> None:
@@ -358,25 +335,16 @@ def test_partial_publication_uploads_only_missing_asset_without_clobber(tmp_path
     assert runner.call_args_list[2].args == (("gh", "release", "upload", "v1.2.3", assets[1]),)
 
 
-@pytest.mark.parametrize("prerelease", [False, True])
-def test_matching_draft_is_published_after_missing_assets_upload(
-    tmp_path: Path, prerelease: bool
-) -> None:
+def test_matching_draft_is_published_after_missing_assets_upload(tmp_path: Path) -> None:
     notes, assets, target = publication_files(tmp_path)
     responses = [
         remote_tag(target),
-        result(
-            stdout=json.dumps(
-                metadata(notes, assets[:1], target, draft=True, prerelease=prerelease)
-            )
-        ),
+        result(stdout=json.dumps(metadata(notes, assets[:1], target, draft=True))),
         result(),
         result(),
     ]
     with patch.object(release_workflow.subprocess, "run", side_effect=responses) as runner:
-        release_workflow.publish(
-            "v1.2.3", "pratfall 1.2.3", notes, target, assets, prerelease=prerelease
-        )
+        release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
     assert runner.call_args_list[3].args == (("gh", "release", "edit", "v1.2.3", "--draft=false"),)
 
 
@@ -394,34 +362,6 @@ def test_retry_rejects_divergent_release_metadata(tmp_path: Path, field: str) ->
         pytest.raises(release_workflow.WorkflowError, match=field),
     ):
         release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
-    assert runner.call_count == 2
-
-
-@pytest.mark.parametrize(
-    ("prerelease", "value"),
-    [(False, True), (True, False), (False, None), (False, "false"), (False, 0), (True, 1)],
-)
-@pytest.mark.parametrize("draft", [False, True])
-def test_retry_rejects_mismatched_or_unavailable_prerelease_state(
-    tmp_path: Path, draft: bool, prerelease: bool, value: object
-) -> None:
-    notes, assets, target = publication_files(tmp_path)
-    release = metadata(notes, assets, target, draft=draft)
-    if value is None:
-        del release["isPrerelease"]
-    else:
-        release["isPrerelease"] = value
-    with (
-        patch.object(
-            release_workflow.subprocess,
-            "run",
-            side_effect=[remote_tag(target), result(stdout=json.dumps(release))],
-        ) as runner,
-        pytest.raises(release_workflow.WorkflowError, match="prerelease state differs"),
-    ):
-        release_workflow.publish(
-            "v1.2.3", "pratfall 1.2.3", notes, target, assets, prerelease=prerelease
-        )
     assert runner.call_count == 2
 
 

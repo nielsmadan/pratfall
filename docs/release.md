@@ -51,10 +51,7 @@ both atomically with `--no-follow-tags`. Failures preserve local state for inspe
 replace a published tag. Check the linked workflow for publication success or failure. A failed
 workflow leaves the remote tag in place for a retry after fixing its cause.
 
-The tagged `pyproject.toml` determines GitHub prerelease status: Pre-Alpha, Alpha and Beta development
-classifiers produce prereleases, with `Latest` disabled. Other development statuses produce regular
-releases. Both kinds publish the wheel, sdist and Homebrew formula. Update the classifier before
-tagging a stable release.
+Every publication is a regular GitHub release carrying the wheel, sdist and Homebrew formula.
 
 `CHANGELOG.md` is generated output. `just changelog` refreshes its unreleased view; do not edit a
 generated release section by hand. Release, tagging, publication, tap changes and global command
@@ -161,7 +158,7 @@ gh workflow run release.yml --ref main -f tag=v0.9.0
 
 In GitHub's Actions tab, the equivalent is **Release → Run workflow**, branch **main**, and tag
 **v0.9.0**. The retry uses the workflow and publication helpers from the triggering `main` commit,
-while tests, builds, installed-package QA, version, prerelease status and release notes use the
+while tests, builds, installed-package QA, version and release notes use the
 original tagged source. Manual retries from other branches are rejected. Never move or recreate
 the tag to repair publication.
 
@@ -173,7 +170,7 @@ credentials, revalidates the tag, and consumes the verified artifact. It uses `g
 `scripts/release_workflow.py` to manage GitHub release records, draft state, and uploaded assets,
 which Git cannot do.
 [Publication checks](../scripts/release_workflow.py) require existing title, notes, target
-commit, prerelease status and attached asset hashes to match. Identical assets stay in place;
+commit and attached asset hashes to match. Identical assets stay in place;
 missing assets are uploaded without clobbering. A matching partial draft is published only after
 its assets are complete. Divergent or unverifiable state stops the workflow.
 
