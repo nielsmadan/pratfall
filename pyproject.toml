@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pratfall"
-version = "0.9.0"
+version = "0.9.1"
 description = "One-shot invocations of installed coding agents with named profiles."
 readme = "README.md"
 requires-python = ">=3.13"
