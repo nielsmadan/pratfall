@@ -44,7 +44,6 @@ fail_under = 80
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "scripts"]
-addopts = "--basetemp=.cache/pytest"
 
 [tool.ruff]
 target-version = "py313"

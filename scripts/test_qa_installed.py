@@ -1350,9 +1350,11 @@ def test_schema_workflow_oracle_rejects_config_bytes_for_cli_override(
         return calls
 
     monkeypatch.setattr(qa, "_calls", substituted_calls)
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError) as raised:
         qa._exercise_w_schemas(prat, tmp_path)
-    assert substitutions == [qa._SCHEMA_BYTES.decode()]
+    assert substitutions == [qa._SCHEMA_BYTES.decode()], (
+        f"the exerciser failed before the schema substitution: {raised.value}"
+    )
     root = tmp_path / "schemas"
     assert (root / "schema.json").read_bytes() == qa._SCHEMA_BYTES
     assert (root / "consumer" / "cli-schema.json").read_bytes() == qa._CLI_SCHEMA_BYTES
