@@ -11,11 +11,10 @@ pre-commit:
 pre-push:
   commands:
     check:
-      run: just check
+      run: just check-static
       priority: 1
     coverage:
-      # just check runs the tests; this re-runs them under --cov, which enforces
-      # fail_under (see [tool.coverage.report]).
+      # The only suite run; --cov enforces fail_under (see [tool.coverage.report]).
       run: uv run pytest tests/ scripts/ -q --cov
       priority: 2
 

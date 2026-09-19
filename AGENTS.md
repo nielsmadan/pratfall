@@ -23,7 +23,9 @@ just test
 `tests` and `scripts`, and all tests, including the release helper tests under `scripts/` and the
 layering contract in `tests/test_layering.py`. That test machine-enforces the module dependency
 contract: layer order, per-module import allowances, absolute internal imports, and a stdlib-only
-runtime. `just check` does not measure coverage; `just coverage` is the gate for that. `just setup`
+runtime. `just check` does not measure coverage; `just coverage` is the gate for that. `just
+check-static` is the same lint, cycle and type pass without the suite, so automation that also runs
+`just coverage` executes the tests once rather than twice. `just setup`
 installs project dependencies and repository hooks; it does not install `prat` globally. Local tool
 installation is an explicit `just install` action.
 

@@ -53,11 +53,13 @@ format:
 typecheck:
     @uv run mypy
 
-check:
+check-static:
     @uv run ruff check
     @uv run ruff format --check
     @uv run pylint src/pratfall
     @uv run mypy
+
+check: check-static
     @uv run pytest tests/ scripts/ -q
 
 build:
