@@ -134,6 +134,8 @@ _ATTACHMENT_TYPES = {
 _SCHEMA = frozenset({"claude", "codex", "qwen"})
 _INSTRUCTIONS = frozenset({"claude", "codex", "qwen", "droid"})
 _NATIVE_AGENTS = frozenset({"claude", "copilot", "vibe"})
+_SESSION_IDS = frozenset({"claude", "copilot", "grok"})
+_REPORTS_SESSION_IDS = frozenset({"claude", "codex", "copilot", "cursor", "grok"})
 _TOOLS_EMPTY = frozenset({"claude", "copilot", "pi"})
 _TOOLS_SCOPES = {
     "pi": "built-in, extension and custom tools",
@@ -218,6 +220,7 @@ _NATIVE_OPTIONS = {
         "--disabled-tools": 1,
     },
     "grok": {
+        "--session-id": 1,
         "--model": 1,
         "--reasoning-effort": 1,
         "--max-turns": 1,
@@ -276,6 +279,7 @@ _NATIVE_OPTIONS = {
 _NATIVE_OPTIONS.update(
     {
         "claude": {
+            "--session-id": 1,
             "--append-system-prompt": 1,
             "--add-dir": 1,
             "--tools": 1,
@@ -286,6 +290,7 @@ _NATIVE_OPTIONS.update(
         "codex": {"-c": 1, "--add-dir": 1, "--image": 1, "--output-schema": 1},
         "gemini": {"--include-directories": 1},
         "copilot": {
+            "--session-id": 1,
             "--add-dir": 1,
             "--available-tools": 1,
             "--excluded-tools": 1,
@@ -2443,6 +2448,43 @@ def _exercise_a_protocols(prat: Path, root: Path, config: Path) -> dict[str, obj
     return results
 
 
+def _exercise_a_session(prat: Path, root: Path, config: Path) -> dict[str, object]:
+    requested = "4ebf82be-4b4b-4642-9e5a-654c4cd58642"
+    log = root / "native.jsonl"
+
+    before = len(_calls(log))
+    completed = _run(
+        prat, root, ["claude", "QA_session", f"--session-id={requested}", "--json"], config=config
+    )
+    result = _assert_result(
+        completed, returncode=0, status="success", native_exit_code=0, error_code=None
+    )
+    assert result["native_session_id"] == requested
+    argv = _calls(log)[before:][-1]["argv"]
+    assert isinstance(argv, list)
+    assert f"--session-id={requested}" in argv
+
+    reported = _run(
+        prat, root, ["grok", "QA_session", f"--session-id={requested}", "--json"], config=config
+    )
+    reported_result = _assert_result(
+        reported, returncode=0, status="success", native_exit_code=0, error_code=None
+    )
+    assert reported_result["native_session_id"] == "qa-session"
+
+    unrequested = _run(prat, root, ["grok", "QA_session", "--json"], config=config)
+    unrequested_result = _assert_result(
+        unrequested, returncode=0, status="success", native_exit_code=0, error_code=None
+    )
+    assert unrequested_result["native_session_id"] == "qa-session"
+
+    return {
+        "status": "Pass",
+        "requested": _compact_result(completed),
+        "reported": _compact_result(reported),
+    }
+
+
 def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, object]:
     before = len(_calls(root / "native.jsonl"))
     completed = _run(prat, root, ["agents", "--json"], config=config)
@@ -2465,6 +2507,8 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
             "attachment_types": _ATTACHMENT_TYPES.get(name),
             "attachment_max_count": 1 if name == "hermes" else None,
             "native_agent": name in _NATIVE_AGENTS,
+            "session_id": name in _SESSION_IDS,
+            "reports_session_id": name in _REPORTS_SESSION_IDS,
             "instructions": name in _INSTRUCTIONS,
             "schema": name in _SCHEMA,
             "tools": name in _TOOLS_SCOPES,
@@ -2576,6 +2620,7 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "max_budget_usd": None,
                     "max_ai_credits": None,
                     "native_agent": None,
+                    "session_id": None,
                     "native_args": ["--debug"],
                 },
             }
@@ -3480,6 +3525,7 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "tools": None,
                     "disabled_tools": None,
                     "native_agent": None,
+                    "session_id": None,
                     "native_args": [],
                 },
             }
@@ -4829,6 +4875,7 @@ def _exercise_artifacts(context: _ExerciseContext, results: dict[str, object]) -
             else _exercise_routes(entry_point, context.root, context.config),
             "A03.profile": _exercise_a_profile(entry_point, context.root),
             "A04.sources": _exercise_a_sources(entry_point, context.root, context.config),
+            "A05.session": _exercise_a_session(entry_point, context.root, context.config),
             "A08.versions": results["E06"]
             if artifact == "wheel"
             else _exercise_versions(entry_point, context.root, context.config),

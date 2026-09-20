@@ -21,6 +21,7 @@ prat cx "review this change"
 - [Include extra directories](#include-extra-directories)
 - [Append instructions](#append-instructions)
 - [Select a native agent](#select-a-native-agent)
+- [Name the session](#name-the-session)
 
 ## Supply a prompt
 
@@ -416,6 +417,36 @@ Previously supported native-only selection remains accepted for Claude, Copilot 
 Vibe's native `--agent` remains reserved, so use the public flag. OpenCode has no public support
 because its CLI falls back to the default agent for unknown or subagent-only names.
 Unsupported public selection and native collisions fail before prompt input or editor startup.
+
+## Name the session
+
+```sh
+prat cc --session-id "$(uuidgen)" "review this change"
+```
+
+`--session-id ID` sets the native session id before the run starts. Claude Code, Copilot and
+Grok support it, each mapped to its own native flag; Prat requires only a nonblank, NUL-free
+UTF-8 string and leaves format rules to the native CLI. Other agents reject the setting.
+
+Use a freshly generated UUID. Claude and Grok both document the value as naming a *new* session
+and require a UUID, so reuse fails natively. Copilot differs: an id matching an existing session
+or task **resumes** it, and only a valid UUID that matches nothing creates. Pinning a static
+`session_id` in a profile or `[defaults]` therefore accumulates one growing Copilot session.
+
+Supply one when the caller needs the native transcript. An agent that reports its session in the
+result is read back into `native_session_id`, but a run that is killed, times out, or dies before
+emitting a result reports nothing — and that is exactly when a transcript is worth reading. A
+requested id is echoed in `native_session_id` on those runs, so the path stays derivable. When
+both exist the reported value wins, since it is what the agent actually used.
+
+Claude, Copilot and Grok accept a requested id; Codex and Cursor report one without accepting
+any. Both sides are declared per agent by `prat agents --json` as `session_id` and
+`reports_session_id`. Which agents support which, and why some similarly named native flags are
+excluded, is in [session ids](agents.md#session-ids). Claude's native `--name`, accepted as a
+passthrough, is a separate thing: a human label for the resume picker, not the id.
+
+Native `--session-id` stays reserved and conflicts with the public flag. Unsupported public
+selection fails before prompt input or editor startup.
 
 ## Native attachments
 

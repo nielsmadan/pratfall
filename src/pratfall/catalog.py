@@ -10,6 +10,7 @@ AGENTS = (
         ("cc",),
         ("claude",),
         Capabilities(
+            reports_session_id=True,
             schema=True,
             effort=True,
             effort_values=("low", "medium", "high", "xhigh", "max"),
@@ -20,6 +21,7 @@ AGENTS = (
             tools=True,
             disabled_tools=True,
             native_agent=True,
+            session_id=True,
             tools_empty=True,
             tools_scope="built-ins; MCP unaffected; EndConversation may remain",
             disabled_tools_scope="native deny rules; EndConversation exception",
@@ -31,6 +33,7 @@ AGENTS = (
         ("cx",),
         ("codex",),
         Capabilities(
+            reports_session_id=True,
             schema=True,
             effort=True,
             fast=True,
@@ -54,6 +57,8 @@ AGENTS = (
         ("cp",),
         ("copilot",),
         Capabilities(
+            reports_session_id=True,
+            session_id=True,
             effort=True,
             effort_values=("low", "medium", "high", "xhigh", "max"),
             budgets=frozenset({"max_ai_credits"}),
@@ -78,7 +83,13 @@ AGENTS = (
             effort_values=("low", "medium", "high", "xhigh", "max"),
         ),
     ),
-    AgentSpec("cursor", "Cursor", ("cu",), ("agent",)),
+    AgentSpec(
+        "cursor",
+        "Cursor",
+        ("cu",),
+        ("agent",),
+        Capabilities(reports_session_id=True),
+    ),
     AgentSpec("openclaw", "OpenClaw", ("claw",), ("openclaw",), Capabilities(effort=True)),
     AgentSpec(
         "hermes",
@@ -191,6 +202,8 @@ AGENTS = (
         (),
         ("grok",),
         Capabilities(
+            reports_session_id=True,
+            session_id=True,
             effort=True,
             effort_values=("none", "minimal", "low", "medium", "high", "xhigh", "max"),
             budgets=frozenset({"max_turns"}),

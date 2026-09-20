@@ -375,3 +375,40 @@ def test_claude_ordinary_output_ignores_structured_payload() -> None:
     assert decoded.error is None
     assert decoded.structured_output is None
     assert not decoded.structured_output_present
+
+
+def test_claude_passes_the_session_label_through() -> None:
+    invocation = claude.build(
+        resolved("claude", Options(native_args=("--name", "feed/daily:2026-09-19T07-00"))),
+        b"prompt",
+    )
+    assert invocation.argv[-2:] == ("--name", "feed/daily:2026-09-19T07-00")
+    claude.validate(resolved("claude", Options(native_args=("--name", "label"))))
+
+
+def test_claude_reports_the_native_session_id() -> None:
+    value = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "final answer",
+        "session_id": "4ebf82be-4b4b-4642-9e5a-654c4cd58642",
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    }
+    assert claude.decode(json.dumps(value)).session_id == "4ebf82be-4b4b-4642-9e5a-654c4cd58642"
+
+
+@pytest.mark.parametrize("session", [None, 7, "", "a\0b"])
+def test_claude_ignores_a_malformed_session_id(session: object) -> None:
+    value = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "final answer",
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    }
+    if session is not None:
+        value["session_id"] = session
+    decoded = claude.decode(json.dumps(value))
+    assert decoded.session_id is None
+    assert decoded.output == "final answer"

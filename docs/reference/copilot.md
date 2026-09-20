@@ -35,6 +35,20 @@ list accept zero or more values per occurrence. A bare `--available-tools` disab
 tools. `--bash-env` and `--no-bash-env` persist native configuration, so Prat does not pass them
 through; a trusted executable wrapper remains the escape hatch for intentionally persistent setup.
 
+## Session id (verified 2026-09-19)
+
+The terminal `result` event carries `sessionId`, which Prat already required to be a string.
+It is now retained in the `session` slot and reported as `native_session_id`, charged against
+the retained-state budget like the message identifiers.
+
+The [CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference)
+documents `--session-id ID` as an exact session or task id: "If the ID matches an existing
+session or task, that session or task is resumed. If nothing matches, a new session is created
+only when the value is a valid UUID." A freshly generated UUID therefore names a new session,
+so Prat grants the `session_id` capability and forwards `--session-id=ID`. The dual mode is
+real and the caller owns it: reusing an id resumes. The same reference warns against combining
+it with `--resume`, `--continue` or `--connect`; all three stay reserved.
+
 ## Sources
 
 - [CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference)

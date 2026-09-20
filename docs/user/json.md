@@ -29,6 +29,7 @@ For example, `prat cx --model gpt-5.6-luna --json "review this change"` returns 
   "error": null,
   "reported_models": null,
   "cost_usd": null,
+  "native_session_id": null,
   "structured_output": null
 }
 ```
@@ -69,6 +70,7 @@ intermediate tool arguments and child messages do not supply a final answer.
 | `reported_models` | List of distinct native model identifiers in observed order, or null if unknown. May include supporting calls, not just models that generated final text. |
 | `cost_usd` | Native run cost in US dollars: a finite, nonnegative number, or null if unknown. This is not a subscription-billing guarantee. |
 | `usage` | Native token counters, or null if unknown. Individual counters can also be null. |
+| `native_session_id` | The session this run used: what the agent reported, else the id requested with `--session-id`, else null. Agents with the `reports_session_id` capability report one; the rest leave it null. A reported id that is blank or cannot be encoded is dropped rather than emitted. |
 
 Unknown model and cost data stay null; Prat does not substitute the requested model or zero.
 Copilot credits are not converted to USD.

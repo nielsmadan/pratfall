@@ -76,14 +76,22 @@ def _string(value: object, label: str) -> str:
     return value
 
 
-def validate_native_agent(value: object, origin: OptionOrigin) -> str:
+def _validated_text(value: object, origin: OptionOrigin, noun: str) -> str:
     if not isinstance(value, str) or not value.strip() or "\0" in value:
-        raise _rejected(origin, "expected a nonempty native agent name without NUL bytes.")
+        raise _rejected(origin, f"expected a nonempty {noun} without NUL bytes.")
     try:
         value.encode("utf-8")
     except UnicodeEncodeError as error:
-        raise _rejected(origin, "native agent name must be valid UTF-8.") from error
+        raise _rejected(origin, f"{noun} must be valid UTF-8.") from error
     return value
+
+
+def validate_native_agent(value: object, origin: OptionOrigin) -> str:
+    return _validated_text(value, origin, "native agent name")
+
+
+def validate_session_id(value: object, origin: OptionOrigin) -> str:
+    return _validated_text(value, origin, "session id")
 
 
 def _number(value: object, label: str) -> float:
@@ -188,6 +196,11 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
             if "native_agent" in table
             else None
         ),
+        session_id=(
+            validate_session_id(table["session_id"], OptionOrigin(f"{label}.session_id"))
+            if "session_id" in table
+            else None
+        ),
         native_args=(
             _arguments(table["native_args"], f"{label}.native_args")
             if "native_args" in table
@@ -230,6 +243,7 @@ def validate_capabilities(
         ("model", "a model override"),
         ("schema", "schema output"),
         ("native_agent", "native agent selection"),
+        ("session_id", "a session id"),
         ("fast", "a fast-mode override"),
     ):
         if getattr(options, name) is not None and not getattr(caps, name):

@@ -37,6 +37,19 @@ Whole-document parsing is bounded and rejects duplicate keys, excessive numeric 
 nonfinite numbers, and invalid Unicode anywhere in a successful document. These contracts were
 frozen before fake-native fixtures were written.
 
+## Session id (verified 2026-09-19)
+
+The success object contains `sessionId` alongside `text`, `stopReason` and `requestId`; Prat
+already required it to be a string. It is now reported as `native_session_id`, on the
+`end_turn` path and on the non-`end_turn` provider-error path alike.
+
+The [CLI reference](https://docs.x.ai/build/cli/reference) documents `-s, --session-id <UUID>`
+as "Use a specific UUID for a new session", distinct from `--resume [<ID>]` ("Resume a session
+by ID") and `--fork-session` ("When resuming, fork into a new session ID"). Prat therefore
+grants the `session_id` capability and forwards it as `--session-id ID`, matching the
+two-token form this adapter uses for `--model`. Native `--session-id`, its `-s` alias and
+`--fork-session` stay reserved against an active public value.
+
 ## Sources
 
 - [Headless mode and scripting](https://docs.x.ai/build/cli/headless-scripting)

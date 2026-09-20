@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from pratfall.catalog import MANAGEMENT_COMMANDS
-from pratfall.config import validate_native_agent
+from pratfall.config import validate_native_agent, validate_session_id
 from pratfall.errors import PratError
 from pratfall.instructions import validate_instructions
 from pratfall.models import MAX_TURNS, OptionOrigin, Options
@@ -23,6 +23,7 @@ _RUN_VALUE_FLAGS = {
     "--model": "model",
     "--schema": "schema",
     "--native-agent": "native_agent",
+    "--session-id": "session_id",
     "--timeout": "timeout",
     "--file": "file",
     "-f": "file",
@@ -108,6 +109,8 @@ run options:
   -e, --edit              Edit the complete prompt in VISUAL, EDITOR, or vi.
   --model MODEL           Override the profile model.
   --native-agent NAME     Select a native agent/persona for Claude, Copilot, or Vibe.
+  --session-id ID         Set the native session id so its transcript can be located.
+                          A value matching an existing Copilot session resumes it.
   --effort EFFORT         Override the native effort setting.
   --fast / --no-fast      Enable or disable supported native fast mode for this run.
   --timeout SECONDS       Set the wall-clock deadline.
@@ -308,6 +311,13 @@ def _run_options(
                 values["native_agent"], OptionOrigin("--native-agent", "invalid_arguments")
             )
             if "native_agent" in values
+            else None
+        ),
+        session_id=(
+            validate_session_id(
+                values["session_id"], OptionOrigin("--session-id", "invalid_arguments")
+            )
+            if "session_id" in values
             else None
         ),
         native_args=native_arguments,

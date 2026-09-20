@@ -1,5 +1,5 @@
 from pratfall.adapters.native_args import Flag, validate_flags
-from pratfall.adapters.whole_json import document_error, encodable_text, parse
+from pratfall.adapters.whole_json import document_error, encodable_text, parse, session_text
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
 
 _ALLOWED = {
@@ -68,7 +68,11 @@ def decode(stdout: str) -> DecodedOutput:
         or not isinstance(output, str)
     ):
         return _protocol("Cursor success result envelope is malformed.")
-    return DecodedOutput(output=encodable_text(output), error=document_error(value, "Cursor"))
+    return DecodedOutput(
+        output=encodable_text(output),
+        session_id=session_text(value.get("session_id")),
+        error=document_error(value, "Cursor"),
+    )
 
 
 def _protocol(message: str) -> DecodedOutput:

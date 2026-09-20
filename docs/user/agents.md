@@ -336,6 +336,38 @@ whole-document JSON and disables the invocation's auto-update check.
 
 The version diagnostic is `--version`; normal doctor does not execute it.
 
+## Session ids
+
+Requesting a session and reporting one are separate things, and the sets differ.
+
+**Requesting.** Claude Code, Copilot and Grok support `--session-id ID` / `session_id`, each
+mapped to its own native flag. `prat agents --json` exposes the boolean `session_id` capability;
+other agents reject the setting.
+
+The capability is granted per agent against that CLI's documented behavior, because a
+similarly named flag does not always mean the same thing. It is granted where the flag names a
+new session — Claude "Use a specific session ID for the conversation", Grok "Use a specific
+UUID for a new session", Copilot "a new session is created only when the value is a valid
+UUID". It is withheld where the flag resumes one instead — Droid "Continue an existing
+session", Antigravity "Resume a previous conversation by ID", Kimi "Resumes a session" — since
+Prat runs one shot per invocation. `amp --thread`, `cortex`/`crush`/`iflow --session`, `warp --conversation` and the reserved
+`--session-id` on `qwen` and `pi` are simply unverified, and stay reserved until someone
+checks.
+
+Copilot is the one dual-mode case: an id that matches an existing session resumes it instead of
+creating one. A freshly generated UUID always creates.
+
+**Reporting.** `--json` reports `native_session_id` for every agent whose result protocol
+carries one: Claude Code (`session_id`), Codex (`thread.started.thread_id`), Copilot
+(`sessionId`), Cursor (`session_id`) and Grok (`sessionId`). `prat agents --json` declares this
+as the boolean `reports_session_id` capability, separately from `session_id`, because the two
+sets differ. It prefers what the agent reported and falls back to what was requested, so a run
+that dies before reporting still names its session. A reported id that is blank or cannot be
+encoded as UTF-8 is dropped rather than emitted, since it would otherwise break the JSON
+result. Agents without a session in their protocol report null.
+
+See [naming a session](running.md#name-the-session).
+
 ## Native agent selection
 
 Claude Code, Copilot and Vibe support `--native-agent NAME` / `native_agent`, mapped to

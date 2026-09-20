@@ -118,6 +118,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append(f"--effort={options.effort}")
     if options.max_ai_credits is not None:
         argv.append(f"--max-ai-credits={options.max_ai_credits}")
+    if options.session_id is not None:
+        argv.append(f"--session-id={options.session_id}")
     for directory in options.add_dirs or ():
         argv.append(f"--add-dir={directory}")
     if options.tools is not None:
@@ -173,6 +175,7 @@ class _State:
     recognized: bool = False
     reported_models: list[str] = field(default_factory=list)
     reported_model_set: set[str] = field(default_factory=set)
+    session_id: str | None = None
 
 
 def decode(stdout: str) -> DecodedOutput:
@@ -197,21 +200,33 @@ class _Consumer(JsonlConsumer):
         models = tuple(state.reported_models) or None
         failure = state.provider_error or self.protocol_error
         if failure is not None:
-            return DecodedOutput(output=output, reported_models=models, error=failure)
+            return DecodedOutput(
+                output=output, session_id=state.session_id, reported_models=models, error=failure
+            )
         if not state.completed:
             if self.failed:
-                return DecodedOutput(output=output, reported_models=models)
+                return DecodedOutput(
+                    output=output, session_id=state.session_id, reported_models=models
+                )
             suffix = "" if state.recognized else " (only unknown events were received)"
             message = f"Copilot stream ended without a successful result event{suffix}."
             try:
                 self.malformed(message)
             except ConsumerFailure as budget_failure:
                 decoded = DecodedOutput(
-                    output=output, reported_models=models, error=budget_failure.error
+                    output=output,
+                    session_id=state.session_id,
+                    reported_models=models,
+                    error=budget_failure.error,
                 )
                 raise ConsumerFailure(budget_failure.error, decoded) from budget_failure
-            return DecodedOutput(output=output, reported_models=models, error=self.protocol_error)
-        return DecodedOutput(output=output, reported_models=models)
+            return DecodedOutput(
+                output=output,
+                session_id=state.session_id,
+                reported_models=models,
+                error=self.protocol_error,
+            )
+        return DecodedOutput(output=output, session_id=state.session_id, reported_models=models)
 
 
 def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | None:
@@ -322,11 +337,12 @@ def _session_warning(consumer: _Consumer, event: dict[str, object]) -> None:
 
 def _result(consumer: _Consumer, event: dict[str, object]) -> None:
     state = consumer.state
+    session = event.get("sessionId")
     exit_code = event.get("exitCode")
     usage = event.get("usage")
     if (
         not isinstance(event.get("timestamp"), str)
-        or not isinstance(event.get("sessionId"), str)
+        or not isinstance(session, str)
         or not isinstance(exit_code, int)
         or isinstance(exit_code, bool)
         or exit_code not in {0, 1}
@@ -340,6 +356,9 @@ def _result(consumer: _Consumer, event: dict[str, object]) -> None:
     else:
         consumer.retain.record("result")
         state.terminal_seen = True
+        if session.strip():
+            consumer.retain.text("session", session)
+            state.session_id = session
     if exit_code == 0:
         state.completed = True
     else:

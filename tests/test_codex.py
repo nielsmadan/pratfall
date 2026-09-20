@@ -435,3 +435,38 @@ def test_codex_config_override_reports_the_native_argument() -> None:
                 Options(effort="high", native_args=("-c", 'model_reasoning_effort="low"')),
             )
         )
+
+
+def test_codex_reports_the_native_thread_id() -> None:
+    decoded = codex.decode(
+        codex_stream(
+            {"type": "thread.started", "thread_id": "codex-thread"},
+            {"type": "turn.started"},
+            {
+                "type": "item.completed",
+                "item": {"id": "i1", "type": "agent_message", "text": "answer"},
+            },
+            {"type": "turn.completed", "usage": codex_usage()},
+        )
+    )
+    assert decoded.session_id == "codex-thread"
+    assert decoded.output == "answer"
+
+
+def test_codex_reports_the_thread_on_its_failure_paths() -> None:
+    """The session is worth most on a run that went wrong: a successful run already
+    printed its answer."""
+    started = {"type": "thread.started", "thread_id": "codex-thread"}
+    truncated = codex.decode(codex_stream(started, {"type": "turn.started"}))
+    assert truncated.error is not None
+    assert truncated.session_id == "codex-thread"
+
+    failed = codex.decode(
+        codex_stream(
+            started,
+            {"type": "turn.started"},
+            {"type": "turn.failed", "error": {"message": "upstream exploded"}},
+        )
+    )
+    assert failed.error is not None
+    assert failed.session_id == "codex-thread"

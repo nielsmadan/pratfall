@@ -958,7 +958,13 @@ def test_protocol_oracle_rejects_incorrect_retained_fields(field: str, wrong: ob
 
 @pytest.mark.parametrize(
     "exercise",
-    ["_exercise_a_inventory", "_exercise_routes", "_exercise_versions", "_exercise_a_sources"],
+    [
+        "_exercise_a_inventory",
+        "_exercise_a_session",
+        "_exercise_routes",
+        "_exercise_versions",
+        "_exercise_a_sources",
+    ],
 )
 def test_a_tier_contracts_through_source_entry_point(
     tmp_path: Path, source_entry_point: tuple[Path, Path], exercise: str

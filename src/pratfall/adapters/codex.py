@@ -155,6 +155,7 @@ class _State:
     completed: bool = False
     provider_error: ResultError | None = None
     current_answer_id: str | None = None
+    session_id: str | None = None
 
 
 def decode(stdout: str) -> DecodedOutput:
@@ -181,32 +182,42 @@ class _Consumer(JsonlConsumer):
         output = b"\n".join(output_parts).decode("utf-8")
         failure = state.provider_error or self.protocol_error
         if failure is not None:
-            return DecodedOutput(output=output, usage=state.usage, error=failure)
+            return DecodedOutput(
+                output=output, session_id=state.session_id, usage=state.usage, error=failure
+            )
         if not state.completed:
             if self.failed:
-                return DecodedOutput(output=output, usage=state.usage)
+                return DecodedOutput(output=output, session_id=state.session_id, usage=state.usage)
             message = "Codex stream ended without turn.completed."
             try:
                 self.malformed(message)
             except ConsumerFailure as budget_failure:
                 decoded = DecodedOutput(
-                    output=output, usage=state.usage, error=budget_failure.error
+                    output=output,
+                    session_id=state.session_id,
+                    usage=state.usage,
+                    error=budget_failure.error,
                 )
                 raise ConsumerFailure(budget_failure.error, decoded) from budget_failure
             return DecodedOutput(
                 output=output,
+                session_id=state.session_id,
                 usage=state.usage,
                 error=self.protocol_error,
             )
-        return DecodedOutput(output=output, usage=state.usage)
+        return DecodedOutput(output=output, session_id=state.session_id, usage=state.usage)
 
 
 def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | None:
     state = consumer.state
     event_type = event["type"]
     if event_type == "thread.started":
-        if not isinstance(event.get("thread_id"), str):
+        thread_id = event.get("thread_id")
+        if not isinstance(thread_id, str):
             consumer.malformed("Codex thread.started event is malformed.")
+        elif thread_id.strip():
+            consumer.retain.text("session", thread_id)
+            state.session_id = thread_id
         return "starting"
     elif event_type == "turn.started":
         consumer.retain.release(*_TURN_SLOTS)
@@ -377,6 +388,7 @@ class _SchemaConsumer(_Consumer):
                 )
         return DecodedOutput(
             output=self.answer.output if self.answer is not None else "",
+            session_id=self.state.session_id,
             structured_output=self.answer.value if self.answer is not None else None,
             structured_output_present=self.answer is not None,
             usage=self.state.usage,

@@ -193,3 +193,32 @@ def test_copilot_answer_join_separator_respects_state_byte_limit() -> None:
     assert failure.value.error == ResultError(
         "stdout_limit_exceeded", "Agent retained output state exceeded 5 bytes."
     )
+
+
+def test_copilot_reports_the_native_session_id() -> None:
+    decoded = copilot.decode(
+        codex_stream(
+            {"type": "assistant.message", "data": {"messageId": "one", "content": "answer"}},
+            copilot_result(),
+        )
+    )
+    assert decoded.session_id == "session"
+    assert decoded.output == "answer"
+    assert decoded.error is None
+
+
+def test_copilot_reports_the_session_on_its_failure_paths() -> None:
+    unsuccessful = copilot.decode(
+        codex_stream(
+            {"type": "assistant.message", "data": {"messageId": "1", "content": "answer"}},
+            copilot_result(exit_code=1),
+        )
+    )
+    assert unsuccessful.error is not None
+    assert unsuccessful.session_id == "session"
+
+    truncated = copilot.decode(
+        codex_stream({"type": "assistant.message", "data": {"messageId": "1", "content": "a"}})
+    )
+    assert truncated.error is not None
+    assert truncated.session_id is None

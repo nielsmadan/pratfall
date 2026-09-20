@@ -16,6 +16,12 @@ as `--force` remain data. No token usage is documented, and the argv prompt inhe
 Whole-document parsing is bounded and rejects duplicate keys, excessive numeric width/nesting,
 nonfinite numbers and invalid Unicode anywhere in the document.
 
+## Session id (verified 2026-09-19)
+
+The documented single-JSON success object carries `session_id` beside `result` and
+`duration_ms`. Prat reports it as `native_session_id` when it is a string and ignores any other
+shape, matching how the rest of that envelope is read. Cursor accepts no requested session id.
+
 ## Sources
 
 - [Parameters](https://cursor.com/docs/cli/reference/parameters)

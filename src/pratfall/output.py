@@ -97,6 +97,9 @@ def _result(
         structured_output_present=decoded.structured_output_present,
         exit_code=exit_code,
         native_exit_code=process.native_exit_code,
+        native_session_id=(
+            decoded.session_id if decoded.session_id is not None else resolved.options.session_id
+        ),
         duration_ms=process.duration_ms,
         usage=decoded.usage,
         error=error,

@@ -33,6 +33,14 @@ verification; these observations do not establish compatibility of the current p
 native versions. Repeat live checks only when authorized, recording native version, artifact hash,
 argv/input, working directory, stdout/stderr, exit status and file results.
 
+## Session id (verified 2026-09-19)
+
+The `thread.started` event carries `thread_id`, which Prat already required to be a string.
+That value is now retained in the `session` slot and reported as `native_session_id`. The slot
+is not a turn slot, so it survives `turn.started` and describes the whole run. Retention is
+charged like any other identifier, so a thread id counts against the retained-state budget.
+Codex accepts no requested session id: `--thread-source` selects a source, not an id.
+
 ## Sources
 
 - [noninteractive docs](https://developers.openai.com/codex/noninteractive)

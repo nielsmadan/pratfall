@@ -119,7 +119,7 @@ def test_agents_text(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["agents"]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert (
-        "claude (cc): model, effort, fast, add_dirs, instructions, schema, tools, disabled_tools, native_agent, max_budget_usd, max_turns"
+        "claude (cc): model, effort, fast, add_dirs, instructions, schema, tools, disabled_tools, native_agent, session_id, max_budget_usd, max_turns"
         in lines
     )
     assert "kiro: model, effort" in lines
@@ -374,6 +374,7 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
                 "tools": None,
                 "disabled_tools": None,
                 "native_agent": None,
+                "session_id": None,
                 "native_args": [],
             },
         }

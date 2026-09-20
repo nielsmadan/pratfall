@@ -2,7 +2,7 @@ import math
 
 from pratfall.adapters.accounting import cost, model_map
 from pratfall.adapters.native_args import Flag, validate_flags
-from pratfall.adapters.whole_json import document_error, encoding_error, parse
+from pratfall.adapters.whole_json import document_error, encoding_error, parse, session_text
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
 _ALLOWED = {
@@ -98,6 +98,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--reasoning-effort", options.effort))
     if options.max_turns is not None:
         argv.extend(("--max-turns", str(options.max_turns)))
+    if options.session_id is not None:
+        argv.extend(("--session-id", options.session_id))
     argv.extend(options.native_args or ())
     argv.append(f"--single={prompt.decode('utf-8')}")
     return Invocation(tuple(argv), b"")
@@ -133,11 +135,12 @@ def decode(stdout: str) -> DecodedOutput:
     else:
         output_error = None
     stop_reason = value.get("stopReason")
+    session = value.get("sessionId")
     if (
         "type" in value
         or not isinstance(stop_reason, str)
         or stop_reason not in _STOP_REASONS
-        or not isinstance(value.get("sessionId"), str)
+        or not isinstance(session, str)
         or not isinstance(value.get("requestId"), str)
     ):
         return DecodedOutput(
@@ -148,9 +151,11 @@ def decode(stdout: str) -> DecodedOutput:
             error=output_error or _protocol("Grok result envelope is malformed."),
         )
 
+    session_id = session_text(session)
     if stop_reason != "end_turn":
         return DecodedOutput(
             output=output,
+            session_id=session_id,
             usage=usage,
             reported_models=reported_models,
             cost_usd=cost_usd,
@@ -158,6 +163,7 @@ def decode(stdout: str) -> DecodedOutput:
         )
     return DecodedOutput(
         output=output,
+        session_id=session_id,
         usage=usage,
         reported_models=reported_models,
         cost_usd=cost_usd,

@@ -47,7 +47,7 @@ def test_cursor_decodes_documented_single_json_success() -> None:
             }
         )
     )
-    assert decoded == DecodedOutput(output="final answer")
+    assert decoded == DecodedOutput(output="final answer", session_id="id")
 
 
 @pytest.mark.parametrize(

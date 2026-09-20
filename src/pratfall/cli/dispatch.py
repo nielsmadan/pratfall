@@ -63,6 +63,8 @@ def _agents(json_mode: bool) -> None:
             "instructions": caps.instructions,
             "schema": caps.schema,
             "native_agent": caps.native_agent,
+            "session_id": caps.session_id,
+            "reports_session_id": caps.reports_session_id,
             "tools": caps.tools,
             "disabled_tools": caps.disabled_tools,
             "tools_empty": caps.tools_empty,
@@ -91,6 +93,7 @@ def _agents(json_mode: bool) -> None:
                 "tools",
                 "disabled_tools",
                 "native_agent",
+                "session_id",
             )
             if getattr(caps, field)
         ]
@@ -130,6 +133,7 @@ def _profiles(config: Config, json_mode: bool) -> None:
                     "tools",
                     "disabled_tools",
                     "native_agent",
+                    "session_id",
                 }
                 else value
             )

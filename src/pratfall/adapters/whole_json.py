@@ -24,6 +24,16 @@ def parse(stdout: str, agent: str) -> object:
         return _invalid(agent, "document nesting is too deep")
 
 
+def session_text(value: object) -> str | None:
+    if not isinstance(value, str) or not value.strip() or "\0" in value:
+        return None
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    return value
+
+
 def document_error(value: object, agent: str) -> ResultError | None:
     pending = [value]
     while pending:

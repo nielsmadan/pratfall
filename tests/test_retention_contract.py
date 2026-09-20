@@ -201,43 +201,48 @@ def _kimi_message(content: object, role: str = "assistant") -> dict[str, object]
 def test_codex_retains_identifier_answer_and_usage_for_each_transition() -> None:
     incremental = codex.consumer(_state_limits(1024))
 
+    # The thread id is retained for native_session_id, so it is charged like any other
+    # identifier. Its slot is not a turn slot: it spans the run and survives turn.started.
+    session = len(b"t")
+
     _feed(incremental, {"type": "thread.started", "thread_id": "t"})
-    assert _retained(incremental) == (0, 0)
+    assert _retained(incremental) == (session, 0)
 
     _feed(incremental, _codex_item("a1", "hello"))
-    assert _retained(incremental) == (len(b"a1") + len(b"hello"), 1)
+    assert _retained(incremental) == (session + len(b"a1") + len(b"hello"), 1)
 
     _feed(incremental, _codex_item("a1", "hey"))
-    assert _retained(incremental) == (len(b"a1") + len(b"hey"), 1)
+    assert _retained(incremental) == (session + len(b"a1") + len(b"hey"), 1)
 
     usage_one = len(b"1") + len(b"2") + len(b"3")
     _feed(incremental, _codex_turn(input_tokens=1, cached_input_tokens=2, output_tokens=3))
-    assert _retained(incremental) == (len(b"hey") + usage_one, 1)
+    assert _retained(incremental) == (session + len(b"hey") + usage_one, 1)
 
     _feed(incremental, {"type": "turn.started"})
-    assert _retained(incremental) == (len(b"hey") + usage_one, 1)
+    assert _retained(incremental) == (session + len(b"hey") + usage_one, 1)
 
-    answered = len(b"hey") + usage_one + len(b"b2") + _SEPARATOR + len(b"world")
+    answered = session + len(b"hey") + usage_one + len(b"b2") + _SEPARATOR + len(b"world")
     _feed(incremental, _codex_item("b2", "world"))
     assert _retained(incremental) == (answered, 2)
 
-    replaced = len(b"hey") + usage_one + len(b"b2") + _SEPARATOR + len(b"worldly")
+    replaced = session + len(b"hey") + usage_one + len(b"b2") + _SEPARATOR + len(b"worldly")
     _feed(incremental, _codex_item("b2", "worldly"))
     assert _retained(incremental) == (replaced, 2)
 
     _feed(incremental, {"type": "turn.started"})
-    assert _retained(incremental) == (len(b"hey") + usage_one, 1)
+    assert _retained(incremental) == (session + len(b"hey") + usage_one, 1)
 
     _feed(incremental, _codex_item("c", "again"))
-    carried = len(b"hey") + usage_one + len(b"c") + _SEPARATOR + len(b"again")
+    carried = session + len(b"hey") + usage_one + len(b"c") + _SEPARATOR + len(b"again")
     assert _retained(incremental) == (carried, 2)
 
     usage_two = len(b"100") + len(b"20") + len(b"3")
     _feed(incremental, _codex_turn(input_tokens=100, cached_input_tokens=20, output_tokens=3))
-    joined = len(b"hey") + _SEPARATOR + len(b"again")
+    joined = session + len(b"hey") + _SEPARATOR + len(b"again")
     assert _retained(incremental) == (joined + usage_two, 2)
 
     decoded = incremental.finish()
+    assert decoded.session_id == "t"
     assert decoded.output == "hey\nagain"
     assert decoded.usage == Usage(100, 20, None, 3, None)
     assert decoded.error is None
@@ -619,7 +624,7 @@ def test_copilot_charges_identifier_delta_growth_model_and_terminal_record() -> 
     assert _retained(incremental) == (second, 3)
 
     _feed(incremental, copilot_result())
-    assert _retained(incremental) == (second, 4)
+    assert _retained(incremental) == (second + len(b"session"), 4)
 
     decoded = incremental.finish()
     assert decoded.output == "Hello!\nsecond"
@@ -677,9 +682,9 @@ _COPILOT = _Canonical(
     "copilot",
     copilot.consumer,
     _stream(_copilot_message("m", "hi", model="g"), copilot_result()),
-    len(b"m") + len(b"hi") + len(b"g"),
+    len(b"m") + len(b"hi") + len(b"g") + len(b"session"),
     3,
-    DecodedOutput(output="hi", reported_models=("g",)),
+    DecodedOutput(output="hi", session_id="session", reported_models=("g",)),
 )
 _KIMI = _Canonical(
     "kimi",
@@ -822,8 +827,20 @@ _PEAKS = (
             _copilot_message("m2", "world", model="gpt-x"),
             copilot_result(),
         ),
-        len(b"m1") + len(b"hello") + len(b"gpt-x") + len(b"m2") + _SEPARATOR + len(b"world"),
-        len(b"m1") + len(b"hello") + len(b"gpt-x") + len(b"m2") + _SEPARATOR + len(b"world"),
+        len(b"m1")
+        + len(b"hello")
+        + len(b"gpt-x")
+        + len(b"m2")
+        + _SEPARATOR
+        + len(b"world")
+        + len(b"session"),
+        len(b"m1")
+        + len(b"hello")
+        + len(b"gpt-x")
+        + len(b"m2")
+        + _SEPARATOR
+        + len(b"world")
+        + len(b"session"),
         4,
     ),
     _Peak(

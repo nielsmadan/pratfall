@@ -3,7 +3,12 @@ from dataclasses import replace
 
 from pratfall.adapters.accounting import cost, model_map
 from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
-from pratfall.adapters.whole_json import document_error, encodable_text, parse
+from pratfall.adapters.whole_json import (
+    document_error,
+    encodable_text,
+    parse,
+    session_text,
+)
 from pratfall.consumer import ConsumerFailure, ConsumerLimits, Retention, StateBudget
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 from pratfall.schema import retain_answer
@@ -40,6 +45,7 @@ _ALLOWED = {
         "--file",
         "--json-schema",
         "--mcp-config",
+        "--name",
         "--permission-mode",
         "--permission-prompts",
         "--plugin-dir",
@@ -108,6 +114,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append("--disallowedTools=" + ",".join(options.disabled_tools))
     if options.native_agent is not None:
         argv.append(f"--agent={options.native_agent}")
+    if options.session_id is not None:
+        argv.append(f"--session-id={options.session_id}")
     if resolved.prepared_schema is not None:
         argv.extend(("--json-schema", resolved.prepared_schema.text))
     argv.extend(arguments)
@@ -146,6 +154,11 @@ def decode(stdout: str, *, schema: bool = False) -> DecodedOutput:
         return DecodedOutput(error=value)
     if not isinstance(value, dict):
         return _protocol("Claude result must be a JSON object.")
+    decoded = _decode_document(value, schema=schema)
+    return replace(decoded, session_id=session_text(value.get("session_id")))
+
+
+def _decode_document(value: dict[str, object], *, schema: bool) -> DecodedOutput:
     reported_models, model_error = model_map(value.get("modelUsage"), "Claude modelUsage")
     cost_usd, cost_error = cost(value.get("total_cost_usd"), "Claude total_cost_usd")
     accounting_error = model_error or cost_error or document_error(value, "Claude")

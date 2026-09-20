@@ -85,6 +85,23 @@ definitions remain a distinct accepted passthrough option. Prat discovers no nam
 no definitions. Native persona configuration, including permission behavior, remains authoritative.
 Verification used documentation and fake executable argv tests, not authenticated execution.
 
+## Session id (verified 2026-09-19)
+
+The [CLI reference](https://code.claude.com/docs/en/cli-reference) documents `--session-id` as
+"Use a specific session ID for the conversation (must be a valid UUID)". Prat forwards
+`session_id` as `--session-id=ID` and applies no UUID rule of its own, leaving format errors to
+the native CLI. Native-only `--session-id` stays reserved, so an active public value cannot be
+shadowed.
+
+The `--output-format json` result envelope carries `session_id`, which Prat reads into
+`native_session_id`. A blank, non-string or NUL-bearing value is ignored rather than reported.
+When the envelope never arrives - a native nonzero exit, a timeout, a signal - the requested id
+is reported instead, because that is the only remaining way to locate the native transcript.
+The [CLI reference](https://code.claude.com/docs/en/cli-reference) lists `--name` separately
+from `--session-id`; it is accepted as a native passthrough for labelling a session in the
+resume picker, and is a human label rather than the id. Prat neither sets nor reads it.
+Verification used documentation and fake executable argv tests, not authenticated execution.
+
 ## Schema output (verified 2026-09-18)
 
 The [headless guide](https://code.claude.com/docs/en/headless#get-structured-output) states that

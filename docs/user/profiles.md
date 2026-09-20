@@ -47,7 +47,8 @@ prat simple --effort high "investigate this failure"
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
 `model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `attachments`, `instructions`,
-`instructions_file`, `schema`, `tools`, `disabled_tools`, `native_agent`, and the agent's supported budget fields.
+`instructions_file`, `schema`, `tools`, `disabled_tools`, `native_agent`, `session_id`, and the
+agent's supported budget fields.
 Use `[defaults]` for shared settings.
 
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;

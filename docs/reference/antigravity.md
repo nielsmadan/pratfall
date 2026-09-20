@@ -24,6 +24,13 @@ single-turn usage maps input, cache-read, output, and thinking counts directly. 
 completes; failure states remain provider failures and `WAITING` or `RUNNING` cannot serve as
 terminal evidence. Native stdin-stream timeout semantics remain unverified.
 
+## Session id (verified 2026-09-20)
+
+`agy --help` documents `--conversation` as "Resume a previous conversation by ID" and
+`--continue` as "Continue the most recent conversation". Both are resume semantics, so Prat
+does not grant the `session_id` capability. The `init` event carries `conversation_id`, which
+is not yet read into `native_session_id`.
+
 ## Sources
 
 - [1.1.15 changelog](https://github.com/google-antigravity/antigravity-cli/blob/main/CHANGELOG.md)

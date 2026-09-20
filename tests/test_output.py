@@ -164,6 +164,7 @@ def test_native_signal_and_success_json_shape() -> None:
         "output": "answer",
         "exit_code": 0,
         "native_exit_code": 0,
+        "native_session_id": None,
         "duration_ms": 42,
         "usage": {
             "input_tokens": None,
@@ -174,3 +175,8 @@ def test_native_signal_and_success_json_shape() -> None:
         },
         "error": None,
     }
+
+
+def test_envelope_reports_the_session_the_agent_named() -> None:
+    result = normalize(RESOLVED, process(), DecodedOutput(output="answer", session_id="abc123"))
+    assert result_dict(result)["native_session_id"] == "abc123"

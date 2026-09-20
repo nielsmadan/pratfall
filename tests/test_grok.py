@@ -342,3 +342,15 @@ def test_grok_runner_preserves_structured_failure(
     assert status == value["exit_code"] == (native_exit or 1)
     assert value["native_exit_code"] == native_exit and value["output"] == ""
     assert value["error"]["code"] == ("native_exit" if native_exit else "provider_error")
+
+
+def test_grok_reports_the_native_session_id() -> None:
+    decoded = grok.decode(json.dumps(result(sessionId="grok-session")))
+    assert decoded.session_id == "grok-session"
+    assert decoded.output == "answer"
+
+
+def test_grok_reports_the_session_when_the_run_did_not_end_cleanly() -> None:
+    decoded = grok.decode(json.dumps(result(stopReason="refusal", sessionId="grok-session")))
+    assert decoded.error is not None
+    assert decoded.session_id == "grok-session"

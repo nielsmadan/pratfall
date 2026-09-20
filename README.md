@@ -60,6 +60,7 @@ printf 'summarize this checkout\n' | prat gm
 | --- | --- |
 | `--model MODEL` | Select a native model. |
 | `--native-agent NAME` | Select a native agent/persona for Claude, Copilot, or Vibe. |
+| `--session-id ID` | Set the native session id so its transcript can be found afterwards. |
 | `--effort EFFORT` | Set reasoning effort. |
 | `--fast` / `--no-fast` | Override fast mode for Claude or Codex. |
 | `--timeout SECONDS` | Set the execution deadline; default: 600 seconds. |
@@ -115,6 +116,9 @@ Use `prat cc --instructions "Cite file paths" "review this change"` or
 `prat cx --instructions-file rules.md "review this change"` for additional native guidance.
 Claude, Codex, Qwen and Droid support instructions. Codex replaces any native configured
 `developer_instructions` value for this invocation. See [instruction rules and limits](docs/user/running.md#append-instructions).
+
+Use `prat cc --session-id "$(uuidgen)" "review this change"` to set the native session id up front. Claude, Copilot and Grok support this; a fresh UUID always creates a new session, while a value matching an existing Copilot session resumes it. `--json` reports the session as `native_session_id` for those plus Codex and Cursor, falling back to the requested value when a run ends before the agent reports one. See
+[session ids](docs/user/running.md#name-the-session).
 
 Use `prat cc --native-agent reviewer "review this change"` to select an existing native agent.
 This differs from a Prat profile or backend selector. The selected persona may change native

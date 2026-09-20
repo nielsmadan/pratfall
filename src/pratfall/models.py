@@ -25,6 +25,8 @@ class Capabilities:
     instructions: bool = False
     schema: bool = False
     native_agent: bool = False
+    session_id: bool = False
+    reports_session_id: bool = False
     tools: bool = False
     disabled_tools: bool = False
     tools_empty: bool = False
@@ -62,6 +64,7 @@ class Options:
     disabled_tools: tuple[str, ...] | None = None
     schema: str | None = None
     native_agent: str | None = None
+    session_id: str | None = None
     native_args: tuple[str, ...] | None = None
 
 
@@ -137,6 +140,7 @@ class ResultError:
 @dataclass(frozen=True)
 class DecodedOutput:
     output: str = ""
+    session_id: str | None = None
     usage: Usage | None = None
     error: ResultError | None = None
     timed_out: bool = False
@@ -173,5 +177,6 @@ class NormalizedResult:
     error: ResultError | None
     reported_models: tuple[str, ...] | None
     cost_usd: int | float | None
+    native_session_id: str | None = None
     structured_output: JsonValue = None
     structured_output_present: bool = False

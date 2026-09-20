@@ -172,6 +172,7 @@ def test_codex_dispatch_normalizes_output_and_supports_flags_around_selector(
         "output": result["output"],
         "exit_code": 0,
         "native_exit_code": 0,
+        "native_session_id": "fixture",
         "duration_ms": result["duration_ms"],
         "usage": {
             "input_tokens": 3,
@@ -2018,6 +2019,7 @@ def test_run_argument_errors_use_full_json_contract_when_requested(
         "structured_output",
         "exit_code",
         "native_exit_code",
+        "native_session_id",
         "duration_ms",
         "usage",
         "error",
@@ -2673,6 +2675,7 @@ def test_extract_cli_preserves_metadata_trace_and_exit(
         "usage": {"input_tokens": 2, "output_tokens": 3},
         "modelUsage": {"native-model": {}},
         "total_cost_usd": 0.02,
+        "session_id": "cli-session",
     }
     native_stdout = json.dumps(envelope) + "\n"
     config = write_agent(
@@ -2716,6 +2719,7 @@ def test_extract_cli_preserves_metadata_trace_and_exit(
             "structured_output": None,
             "exit_code": expected_exit,
             "native_exit_code": native_exit,
+            "native_session_id": "cli-session",
             "duration_ms": result["duration_ms"],
             "usage": {
                 "input_tokens": 2,

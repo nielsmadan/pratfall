@@ -53,3 +53,11 @@ established, so `tools=[]` is rejected. Equivalent native flags and `--additiona
 with the corresponding active public controls. The native-only acceptance set remains unchanged.
 Existing native permission denials remain authoritative. Verification used primary documentation
 and fake argv tests; no authenticated native run was performed.
+
+## Session id (verified 2026-09-20)
+
+The [CLI reference](https://docs.factory.ai/droid-cli/cli-reference) documents `-s,
+--session-id <id>` as "Continue an existing session" and `--fork` as "Fork and resume a session
+in a new copy". Both are resume semantics, so Prat does not grant the `session_id` capability
+to Droid; a one-shot run has no earlier session to continue. Both stay reserved. Droid reports
+no session in its result protocol, so `native_session_id` is null.
