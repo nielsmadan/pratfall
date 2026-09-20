@@ -3,6 +3,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 
 from pratfall.adapters.native_args import Flag, fail_native_argument, validate_flags
+from pratfall.adapters.whole_json import session_text
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
     ConsumerFailure,
@@ -215,9 +216,11 @@ def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | No
         thread_id = event.get("thread_id")
         if not isinstance(thread_id, str):
             consumer.malformed("Codex thread.started event is malformed.")
-        elif thread_id.strip():
-            consumer.retain.text("session", thread_id)
-            state.session_id = thread_id
+        else:
+            session_id = session_text(thread_id)
+            if session_id is not None:
+                consumer.retain.text("session", session_id)
+                state.session_id = session_id
         return "starting"
     elif event_type == "turn.started":
         consumer.retain.release(*_TURN_SLOTS)

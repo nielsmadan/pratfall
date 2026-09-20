@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 
 from pratfall.adapters.accounting import model
 from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
+from pratfall.adapters.whole_json import session_text
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
     ConsumerFailure,
@@ -356,9 +357,10 @@ def _result(consumer: _Consumer, event: dict[str, object]) -> None:
     else:
         consumer.retain.record("result")
         state.terminal_seen = True
-        if session.strip():
-            consumer.retain.text("session", session)
-            state.session_id = session
+        session_id = session_text(session)
+        if session_id is not None:
+            consumer.retain.text("session", session_id)
+            state.session_id = session_id
     if exit_code == 0:
         state.completed = True
     else:

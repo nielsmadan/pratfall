@@ -349,6 +349,32 @@ def test_an_unusable_reported_session_is_dropped_not_emitted(
     json.dumps(decoded.session_id, ensure_ascii=False).encode("utf-8")
 
 
+@pytest.mark.parametrize("agent", ["codex", "copilot"])
+@pytest.mark.parametrize("reported", [SURROGATE, "a\0b"])
+def test_streaming_reported_session_is_dropped_when_unusable(agent: str, reported: str) -> None:
+    if agent == "codex":
+        events: tuple[dict[str, object], ...] = (
+            {"type": "thread.started", "thread_id": reported},
+            {"type": "turn.started"},
+            {
+                "type": "item.completed",
+                "item": {"id": "i1", "type": "agent_message", "text": "answer"},
+            },
+            {"type": "turn.completed", "usage": codex_usage()},
+        )
+    else:
+        events = (
+            {"type": "assistant.message", "data": {"messageId": "1", "content": "answer"}},
+            copilot_result() | {"sessionId": reported},
+        )
+    stream = "\n".join(json.dumps(event) for event in events) + "\n"
+    decoder = {"codex": codex, "copilot": copilot}[agent]
+    decoded = decoder.decode(stream)
+    assert decoded.error is None
+    assert decoded.output == "answer"
+    assert decoded.session_id is None
+
+
 def test_codex_schema_reports_the_thread_like_ordinary_decoding() -> None:
     stream = codex_stream(
         {"type": "thread.started", "thread_id": "native-session"},
