@@ -75,10 +75,20 @@ class OptionOrigin:
 
 
 @dataclass(frozen=True)
+class ProfileLayer:
+    name: str
+    agent: str | None
+    options: Options
+    source: Path
+    extends: str | None = None
+
+
+@dataclass(frozen=True)
 class Profile:
     agent: str
     options: Options = Options()
     source: Path | None = None
+    layers: tuple[ProfileLayer, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -94,6 +104,7 @@ class Config:
     defaults: Options = Options()
     commands: Mapping[str, tuple[str, ...]] = field(default_factory=lambda: MappingProxyType({}))
     profiles: Mapping[str, Profile] = field(default_factory=lambda: MappingProxyType({}))
+    profile_layers: Mapping[str, ProfileLayer] = field(default_factory=lambda: MappingProxyType({}))
     sources: tuple[Path, ...] = ()
     warnings: tuple[str, ...] = ()
     default_sources: Mapping[str, Path] = field(default_factory=lambda: MappingProxyType({}))

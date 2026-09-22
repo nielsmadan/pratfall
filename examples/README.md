@@ -1,7 +1,7 @@
 # Configuration examples
 
-[config.toml](config.toml) demonstrates defaults, named profiles, and custom commands, including a
-trusted wrapper with fixed arguments.
+[config.toml](config.toml) demonstrates defaults, named profiles, profile inheritance with
+`extends`, and custom commands, including a trusted wrapper with fixed arguments.
 
 ## Try the example
 

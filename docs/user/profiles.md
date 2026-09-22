@@ -7,6 +7,7 @@ across projects, or locally in a project's `.pratfile`.
 - [Define prompt templates](#define-prompt-templates)
 - [Choose a config file](#choose-a-config-file)
 - [Merge global and local settings](#merge-global-and-local-settings)
+- [Extend a profile](#extend-a-profile)
 - [Configure commands and wrappers](#configure-commands-and-wrappers)
 - [Inspect and validate](#inspect-and-validate)
 - [Extra directories](#extra-directories)
@@ -98,7 +99,7 @@ write configuration.
 
 Settings resolve from highest to lowest priority:
 
-**Invocation flags → selected profile → local defaults → global defaults.**
+**Invocation flags → selected profile → its `extends` chain → local defaults → global defaults.**
 
 | Setting | Merge rule |
 | --- | --- |
@@ -111,8 +112,8 @@ Settings resolve from highest to lowest priority:
 | `instructions`, `instructions_file` | One override group: either higher-priority form clears the lower-priority form. |
 | `native_args`, `add_dirs`, `attachments`, `tools`, `disabled_tools` | The higher-priority array replaces the lower-priority array, even when empty. |
 
-Profiles from both files remain available. Profiles do not inherit from each other; omitted fields
-use the merged defaults.
+Profiles from every file remain available. A profile inherits only through an explicit
+`extends`; omitted fields then fall back to the merged defaults.
 
 For example, this `.pratfile` replaces the global `simple` profile above. It changes the model and
 drops `effort = "low"`:
@@ -135,6 +136,61 @@ dropped.
 Templates follow the same replacement and warning rules, naming the template and both source
 files. Definitions in both files are validated before replacement, so an invalid global template
 cannot be hidden by a local override.
+
+## Extend a profile
+
+`extends` names a parent profile. The child inherits its fields and overrides what it sets:
+
+```toml
+# the global config: bases shared across projects
+[profiles.claude-base]
+agent   = "claude"
+model   = "claude-sonnet-5"
+tools   = ["Read", "Edit", "Bash"]
+timeout = 1800
+
+[profiles.codex-base]
+agent  = "codex"
+effort = "medium"
+```
+
+```toml
+# a project's .pratfile
+[profiles.weekly]
+extends = "claude-base"
+model   = "claude-opus-5"
+```
+
+`weekly` runs Claude Code with `claude-opus-5`, the base's tools, and a 1800 second timeout.
+
+This is how backend-specific settings are shared. `[defaults]` cannot do it: defaults apply to
+every profile in the file and are validated against each one's agent, so a single `tools` entry
+beside any Codex profile fails the whole file. A base profile is validated only against its own
+agent and only reaches the children that ask for it.
+
+Rules:
+
+- `extends` takes one profile name. Chains are allowed (`weekly` → `claude-slow` → `claude-base`)
+  and give composition without a precedence rule to memorise: the nearest ancestor wins.
+- The parent is looked up in the merged namespace of both loaded files, so a `.pratfile` child
+  can extend a base defined in the global config.
+- A profile with `extends` may omit `agent` and takes its nearest ancestor's. A profile without
+  `extends` must declare one. A child may override `agent`; an inherited option the new agent
+  does not support is then rejected, naming the parent field that supplied it.
+- Arrays replace rather than merge, exactly as they do between files. A child setting
+  `tools = ["Skill"]` gets only `Skill`.
+- Inherited values beat `[defaults]`, including the defaults of a nearer file: the chain is part
+  of the profile, and profiles outrank defaults.
+
+Errors name the file and the field:
+
+```
+.pratfile: profiles.weekly.extends: unknown profile 'claude-basee'.
+.pratfile: profiles.b.extends: inheritance cycle: a -> b -> a.
+```
+
+A profile cannot extend itself, and naming an agent (`extends = "claude"`) reports an unknown
+profile because agent names cannot be profile names — inherit the agent from a base instead.
 
 ## Configure commands and wrappers
 

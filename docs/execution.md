@@ -21,9 +21,11 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   options, and the child working directory before acquiring the prompt.
   [config.py](../src/pratfall/config.py) merges
   the global file with the invocation directory's `.pratfile`, or the local file selected by
-  `--config`. Local profiles replace global profiles by name. Invocation options override profile
-  options, local defaults, global defaults, and built-in defaults; all effective profiles are
-  validated. Command paths, profile fields, and inherited defaults retain their defining file's
+  `--config`. Local profiles replace global profiles by name. A profile naming a parent with
+  `extends` is flattened once after that merge, so a `.pratfile` child can extend a base defined
+  in the global config; chains resolve nearest-ancestor-first and a cycle is an error. Invocation
+  options override profile options, the profile's inherited options, local defaults, global
+  defaults, and built-in defaults; all effective profiles are validated. Command paths, profile fields, and inherited defaults retain their defining file's
   location. Aliases of the global file load once through the selected local path, preserving that
   path's command base. The CLI selects one diagnostics writer per invocation and sends
   duplicate-profile warnings through it, before reading the prompt or launching an agent.

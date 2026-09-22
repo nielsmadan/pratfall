@@ -170,9 +170,20 @@ configuration; a local profile with the same name replaces the entire global pro
 Prat reads `.pratfile` only in the invocation directory, without searching parent directories.
 `--cwd` does not change config discovery; `--config PATH` selects a different local file.
 
-Settings resolve in this order: **command-line flags → profile → local defaults → global defaults**.
-Use `[defaults]` for shared settings, `prat profiles` to inspect resolved profiles, and
-`prat config validate` to check configuration.
+Settings resolve in this order: **command-line flags → profile → its `extends` chain → local
+defaults → global defaults**. Use `extends` to share backend-specific settings through a base
+profile, `[defaults]` for settings every agent accepts, `prat profiles` to inspect resolved
+profiles, and `prat config validate` to check configuration.
+
+```toml
+[profiles.claude-base]
+agent = "claude"
+tools = ["Read", "Edit", "Bash"]
+
+[profiles.weekly]
+extends = "claude-base"
+model   = "claude-opus-5"
+```
 
 See [profiles and configuration](docs/user/profiles.md) for defaults, command wrappers, and
 merging rules.

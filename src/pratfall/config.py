@@ -3,7 +3,7 @@ import os
 import re
 import tomllib
 from collections.abc import Mapping
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import MappingProxyType
 
@@ -17,6 +17,7 @@ from pratfall.models import (
     OptionOrigin,
     Options,
     Profile,
+    ProfileLayer,
     PromptTemplate,
     ResolvedProfile,
 )
@@ -300,14 +301,15 @@ def option_origins(
     }
     profile = config.profiles.get(selector)
     if profile is not None:
-        _clear_instruction_peer(origins, profile.options)
-        origins.update(
-            {
-                name: OptionOrigin(f"{profile.source or config.path}: profiles.{selector}.{name}")
-                for name, value in asdict(profile.options).items()
-                if value is not None
-            }
-        )
+        for layer in profile.layers:
+            _clear_instruction_peer(origins, layer.options)
+            origins.update(
+                {
+                    name: _layer_origin(layer, selector, name)
+                    for name, value in asdict(layer.options).items()
+                    if value is not None
+                }
+            )
     if overrides is not None:
         _clear_instruction_peer(origins, overrides)
         origins.update(
@@ -342,8 +344,18 @@ def _commands(table: dict[str, object], path: Path) -> dict[str, tuple[str, ...]
     return commands
 
 
-def _profiles(table: dict[str, object], path: Path) -> dict[str, Profile]:
-    profiles: dict[str, Profile] = {}
+def _declared_agent(value: object, label: str, *, required: bool) -> str | None:
+    if value is None and not required:
+        return None
+    name = _string(value, f"{label}.agent")
+    try:
+        return get_agent(name).name
+    except PratError as error:
+        raise PratError(f"{label}.agent: {error}", code=error.code) from error
+
+
+def _profiles(table: dict[str, object], path: Path) -> dict[str, ProfileLayer]:
+    layers: dict[str, ProfileLayer] = {}
     for name, value in table.items():
         label = f"{path}: profiles.{name}"
         if name in RESERVED_NAMES:
@@ -353,17 +365,62 @@ def _profiles(table: dict[str, object], path: Path) -> dict[str, Profile]:
                 f"{label}: use letters, digits, underscores or hyphens in profile names."
             )
         settings = _table(value, label)
-        _known_keys(settings, OPTION_FIELDS | {"agent"}, label)
-        agent_name = _string(settings.get("agent"), f"{label}.agent")
-        try:
-            agent = get_agent(agent_name)
-        except PratError as error:
-            raise PratError(f"{label}.agent: {error}") from error
-        options = parse_options(
-            {key: val for key, val in settings.items() if key != "agent"}, label, base=path.parent
+        _known_keys(settings, OPTION_FIELDS | {"agent", "extends"}, label)
+        extends = (
+            _string(settings["extends"], f"{label}.extends") if "extends" in settings else None
         )
-        profiles[name] = Profile(agent=agent.name, options=options, source=path)
-    return profiles
+        agent = _declared_agent(settings.get("agent"), label, required=extends is None)
+        options = parse_options(
+            {key: val for key, val in settings.items() if key not in ("agent", "extends")},
+            label,
+            base=path.parent,
+        )
+        layers[name] = ProfileLayer(
+            name=name, agent=agent, options=options, source=path, extends=extends
+        )
+    return layers
+
+
+def _chain(layers: Mapping[str, ProfileLayer], name: str) -> tuple[ProfileLayer, ...]:
+    chain: list[ProfileLayer] = []
+    visited: list[str] = []
+    seen: set[str] = set()
+    current = name
+    while True:
+        layer = layers[current]
+        chain.append(layer)
+        visited.append(current)
+        seen.add(current)
+        if layer.extends is None:
+            return tuple(reversed(chain))
+        label = f"{layer.source}: profiles.{layer.name}.extends"
+        if layer.extends not in layers:
+            raise PratError(f"{label}: unknown profile {layer.extends!r}.")
+        if layer.extends in seen:
+            raise PratError(
+                f"{label}: inheritance cycle: {' -> '.join((*visited, layer.extends))}."
+            )
+        current = layer.extends
+
+
+def _resolve_layer(layers: Mapping[str, ProfileLayer], name: str) -> Profile:
+    chain = _chain(layers, name)
+    agent = next(declared for layer in reversed(chain) if (declared := layer.agent) is not None)
+    return Profile(
+        agent=agent,
+        options=merge_options(*(layer.options for layer in chain)),
+        source=chain[-1].source,
+        layers=chain,
+    )
+
+
+def _resolve_layers(layers: Mapping[str, ProfileLayer]) -> dict[str, Profile]:
+    return {name: _resolve_layer(layers, name) for name in layers}
+
+
+def _layer_origin(layer: ProfileLayer, selector: str, field: str) -> OptionOrigin:
+    label = f"{layer.source}: profiles.{layer.name}.{field}"
+    return OptionOrigin(label if layer.name == selector else f"{label} (selector {selector!r})")
 
 
 def _templates(table: dict[str, object], path: Path) -> dict[str, PromptTemplate]:
@@ -406,14 +463,14 @@ def _load_file(path: Path, *, required: bool) -> Config:
         base=path.parent,
     )
     commands = _commands(_table(table.get("agents", {}), f"{path}: agents"), path)
-    profiles = _profiles(_table(table.get("profiles", {}), f"{path}: profiles"), path)
+    layers = _profiles(_table(table.get("profiles", {}), f"{path}: profiles"), path)
     templates = _templates(_table(table.get("templates", {}), f"{path}: templates"), path)
     return Config(
         path=path,
         exists=True,
         defaults=defaults,
         commands=MappingProxyType(commands),
-        profiles=MappingProxyType(profiles),
+        profile_layers=MappingProxyType(layers),
         templates=MappingProxyType(templates),
         sources=(path,),
         default_sources=MappingProxyType(
@@ -425,7 +482,7 @@ def _load_file(path: Path, *, required: bool) -> Config:
 def _merge_configs(global_config: Config, local_config: Config) -> Config:
     if not local_config.exists:
         return global_config
-    collisions = sorted(global_config.profiles.keys() & local_config.profiles.keys())
+    collisions = sorted(global_config.profile_layers.keys() & local_config.profile_layers.keys())
     warnings = tuple(
         f"{local_config.path}: profile {name!r} replaces the profile from {global_config.path}."
         for name in collisions
@@ -443,7 +500,9 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
         exists=True,
         defaults=merge_options(global_config.defaults, local_config.defaults),
         commands=MappingProxyType(dict(global_config.commands) | dict(local_config.commands)),
-        profiles=MappingProxyType(dict(global_config.profiles) | dict(local_config.profiles)),
+        profile_layers=MappingProxyType(
+            dict(global_config.profile_layers) | dict(local_config.profile_layers)
+        ),
         templates=MappingProxyType(dict(global_config.templates) | dict(local_config.templates)),
         sources=global_config.sources + local_config.sources,
         warnings=warnings,
@@ -470,6 +529,7 @@ def load_config(explicit: str | Path | None = None, *, cwd: Path | None = None) 
             _load_file(global_path, required=False),
             _load_file(local_path, required=explicit is not None),
         )
+    config = replace(config, profiles=MappingProxyType(_resolve_layers(config.profile_layers)))
     for name, profile in config.profiles.items():
         validate_capabilities(
             BY_NAME[profile.agent],

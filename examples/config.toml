@@ -19,3 +19,7 @@ agent = "cc"
 model = "claude-sonnet-4"
 max_turns = 4
 native_args = ["--permission-mode", "plan"]
+
+[profiles.review-fast]
+extends = "review"
+fast = true
