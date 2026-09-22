@@ -44,6 +44,8 @@ fail_under = 80
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "scripts"]
+addopts = "--strict-config --strict-markers"
+filterwarnings = ["error"]
 
 [tool.ruff]
 target-version = "py313"
@@ -51,7 +53,7 @@ line-length = 100
 src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "PL", "BLE", "S", "SLF", "RUF"]
+extend-select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "PL", "BLE", "S", "SLF", "RUF"]
 ignore = ["E501", "S603", "S607"]
 
 [tool.ruff.lint.pylint]
@@ -64,6 +66,16 @@ max-args = 6
 "tests/*" = ["S101", "SLF001", "PLR2004"]
 "scripts/test_*" = ["S101", "SLF001", "PLR2004"]
 "scripts/qa_installed.py" = ["S101", "PLR2004"]
+# `int | float` is the codebase-wide money/usage-type idiom; `numeric_size` relies
+# on `str()` formatting, so collapsing to `float` would be a semantic change.
+"src/pratfall/adapters/*.py" = ["PYI041"]
+"src/pratfall/consumer.py" = ["PYI041"]
+"src/pratfall/models.py" = ["PYI041"]
+# Type-check failures in JSON validation must surface as ValueError so the CLI's
+# protocol_error/invalid_config conversion keeps its designed exception contract.
+"src/pratfall/schema.py" = ["TRY004"]
+# Multi-line JSON payloads joined by newline; f-strings would not be expressions.
+"tests/test_attachments.py" = ["FLY002"]
 
 [tool.pylint."messages control"]
 disable = ["all"]

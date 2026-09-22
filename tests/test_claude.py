@@ -128,11 +128,15 @@ def test_claude_rejects_malformed_recognized_error_fields(errors: object) -> Non
         "{",
         "[]",
         '{"type":"result","subtype":"success","is_error":false,"result":4,"usage":{}}',
-        '{"type":"result","subtype":"future","is_error":true,"usage":'
-        '{"input_tokens":1,"output_tokens":1}}',
+        (
+            '{"type":"result","subtype":"future","is_error":true,"usage":'
+            '{"input_tokens":1,"output_tokens":1}}'
+        ),
         '{"type":"result","subtype":"success","is_error":false,"result":"ok"}',
-        '{"type":"result","subtype":"success","is_error":false,"result":"ok",'
-        '"usage":{"input_tokens":true,"output_tokens":1}}',
+        (
+            '{"type":"result","subtype":"success","is_error":false,"result":"ok",'
+            '"usage":{"input_tokens":true,"output_tokens":1}}'
+        ),
         "{}\n{}",
     ],
 )

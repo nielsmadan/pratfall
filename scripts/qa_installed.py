@@ -1743,7 +1743,7 @@ def _signal_owned(invocation: _Invocation, signum: signal.Signals) -> None:
 
 
 def _close_pipes(process: subprocess.Popen[bytes]) -> None:
-    for stream in (process.stdout, process.stderr):
+    for stream in (process.stdin, process.stdout, process.stderr):
         if stream is not None:
             stream.close()
 
@@ -1967,6 +1967,7 @@ def _stdin_pending_run(  # noqa: PLR0913
             calls_before,
         )
     finally:
+        _close_pipes(process)
         if invocation.owner_path.exists() or process.poll() is None:
             _cleanup(invocation)
 

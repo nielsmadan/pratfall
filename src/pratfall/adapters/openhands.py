@@ -65,8 +65,10 @@ _IGNORED = frozenset(
 )
 _PROSE = frozenset(
     {
-        "OpenHands CLI terminal UI may not work correctly in this environment: "
-        "Rich detected a non-interactive or unsupported terminal; interactive UI may not render correctly",
+        (
+            "OpenHands CLI terminal UI may not work correctly in this environment: "
+            "Rich detected a non-interactive or unsupported terminal; interactive UI may not render correctly"
+        ),
         "To override Rich's detection, you can set TTY_INTERACTIVE=1 (and optionally TTY_COMPATIBLE=1).",
         "Initializing agent...",
         "✓ Hooks loaded",

@@ -948,8 +948,10 @@ _WHOLE_JSON_DECODERS: dict[str, tuple[AdapterModule, str, str]] = {
     "claude": (
         claude,
         "Claude",
-        '{"type":"result","subtype":"success","is_error":false,"result":"answer",'
-        '"usage":{"input_tokens":1,"output_tokens":1},"unused":null}',
+        (
+            '{"type":"result","subtype":"success","is_error":false,"result":"answer",'
+            '"usage":{"input_tokens":1,"output_tokens":1},"unused":null}'
+        ),
     ),
     "cursor": (
         cursor,
@@ -975,8 +977,10 @@ _WHOLE_JSON_DECODERS: dict[str, tuple[AdapterModule, str, str]] = {
     "vibe": (
         vibe,
         "Vibe",
-        '[{"type":"message","role":"assistant",'
-        '"content":[{"type":"text","text":"answer"}],"unused":null}]',
+        (
+            '[{"type":"message","role":"assistant",'
+            '"content":[{"type":"text","text":"answer"}],"unused":null}]'
+        ),
     ),
 }
 _WHOLE_JSON_DOCUMENT_GUARDS: tuple[tuple[str, Callable[[], str], Code, str], ...] = (

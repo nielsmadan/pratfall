@@ -9,7 +9,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import ClassVar, Literal, Protocol
+from typing import ClassVar, Literal, Protocol, TextIO
 
 from pratfall.errors import PratError
 from pratfall.models import Activity, Config, Invocation, ResolvedProfile, ResultError
@@ -32,6 +32,12 @@ def _emit(payload: dict[str, object], lines: list[str], *, json_mode: bool) -> N
     else:
         for line in lines:
             print(line)
+
+
+# devnull replacements assigned to sys.stdout/stderr stay referenced for the
+# process lifetime, so a broken-stream recovery is not garbage-collected and
+# closed under the test harness (pytest hooks ResourceWarning on the GC close).
+_DEVNULL_STREAMS: dict[str, TextIO] = {}
 
 
 class _Diagnostics(Protocol):
@@ -271,7 +277,13 @@ def _silence_broken_stream(name: Literal["stdout", "stderr"]) -> None:
             target = getattr(sys, name).fileno()
             os.dup2(descriptor, target)
         except (AttributeError, OSError, ValueError):
-            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))  # noqa: SIM115
+            previous = _DEVNULL_STREAMS.get(name)
+            if previous is not None:
+                with suppress(OSError):
+                    previous.close()
+            replacement = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+            _DEVNULL_STREAMS[name] = replacement
+            setattr(sys, name, replacement)
         with suppress(OSError, ValueError):
             getattr(sys, name).flush()
     finally:
