@@ -107,6 +107,8 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   function, writing the encoded payload to `/dev/tty` under scoped `SIGTTOU` suppression; it never
   writes stdout or stderr and swallows `OSError`. Dispatch calls it after the normalized result has
   already reached stdout, so a notification failure cannot change output or the exit code.
+  [ADR 0005](decisions/0005-completion-notifications-through-terminal-sequences.md) records why
+  terminal sequences were chosen over OS notification commands.
 
 The dependency boundary is acyclic, and runtime code uses only the standard library.
 [test_layering.py](../tests/test_layering.py) machine-enforces that contract: the layer order, each
