@@ -23,6 +23,27 @@ from pratfall.models import ConsumedCapture, DecodedOutput, RawCapture, ResultEr
 from pratfall.prompt_input import PROMPT_LIMIT
 from pratfall.runner import ProcessResult
 
+NOTIFY_ENV_KEYS = (
+    "TMUX",
+    "STY",
+    "ZELLIJ",
+    "TERM_PROGRAM",
+    "TERM",
+    "LC_TERMINAL",
+    "ITERM_SESSION_ID",
+    "KITTY_WINDOW_ID",
+    "GHOSTTY_RESOURCES_DIR",
+    "WEZTERM_PANE",
+    "WEZTERM_EXECUTABLE",
+    "KONSOLE_VERSION",
+)
+
+
+def isolate_notify_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    for key in NOTIFY_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
 
 class BrokenOutput:
     def write(self, _value: str) -> int:
@@ -1167,6 +1188,162 @@ def test_runtime_failures_are_one_normalized_json_result(
     assert result["exit_code"] == expected_exit
     assert result["error"]["code"] == expected_error
     assert captured.out.count("\n") == 1
+
+
+def test_notify_fires_after_a_successful_run_with_expected_osc9_bytes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write("\n[defaults]\nnotify_after=0\n")
+    isolate_notify_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("TERM_PROGRAM", "iTerm.app")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+    calls: list[bytes] = []
+    monkeypatch.setattr(dispatch_module, "send", calls.append)
+    assert main(["cx", "prompt", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "success"
+    assert len(calls) == 1
+    assert re.fullmatch(rb"\x1b\]9;prat: Codex done in (?:\d+h \d+m|\d+m \d+s|\d+s)\x07", calls[0])
+
+
+def test_configured_notify_method_overrides_detection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write('\n[defaults]\nnotify_after=0\nnotify_method="osc777"\n')
+    isolate_notify_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("TERM_PROGRAM", "iTerm.app")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+    calls: list[bytes] = []
+    monkeypatch.setattr(dispatch_module, "send", calls.append)
+    assert main(["cx", "prompt", "--config", str(config)]) == 0
+    assert len(calls) == 1
+    assert re.fullmatch(
+        rb"\x1b\]777;notify;prat;Codex done in (?:\d+h \d+m|\d+m \d+s|\d+s)\x07", calls[0]
+    )
+
+
+def test_no_notify_flag_suppresses_notification_and_leaves_output_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write("\n[defaults]\nnotify_after=0\n")
+    isolate_notify_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("TERM_PROGRAM", "iTerm.app")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+    calls: list[bytes] = []
+    monkeypatch.setattr(dispatch_module, "send", calls.append)
+    assert main(["cx", "prompt", "--config", str(config), "--json", "--no-notify"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "success"
+    assert calls == []
+
+
+def test_config_notify_false_suppresses_notification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write("\n[defaults]\nnotify=false\nnotify_after=0\n")
+    isolate_notify_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("TERM_PROGRAM", "iTerm.app")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+    calls: list[bytes] = []
+    monkeypatch.setattr(dispatch_module, "send", calls.append)
+    assert main(["cx", "prompt", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "success"
+    assert calls == []
+
+
+def test_failing_native_exit_still_notifies_with_failed_wording(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", "import sys;print('not json');sys.exit(7)")
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write("\n[defaults]\nnotify_after=0\n")
+    isolate_notify_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("TERM_PROGRAM", "iTerm.app")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+    calls: list[bytes] = []
+    monkeypatch.setattr(dispatch_module, "send", calls.append)
+    assert main(["cx", "prompt", "--config", str(config), "--json"]) == 7
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "error"
+    assert len(calls) == 1
+    assert re.fullmatch(
+        rb"\x1b\]9;prat: Codex failed after (?:\d+h \d+m|\d+m \d+s|\d+s)\x07", calls[0]
+    )
+
+
+def test_dry_run_does_not_notify(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write("\n[defaults]\nnotify_after=0\n")
+    isolate_notify_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("TERM_PROGRAM", "iTerm.app")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+    calls: list[bytes] = []
+    monkeypatch.setattr(dispatch_module, "send", calls.append)
+    assert main(["cx", "prompt", "--config", str(config), "--dry-run", "--json"]) == 0
+    capsys.readouterr()
+    assert calls == []
+
+
+def test_notify_skipped_when_stderr_is_not_a_tty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write("\n[defaults]\nnotify_after=0\n")
+    isolate_notify_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("TERM_PROGRAM", "iTerm.app")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: False)
+    calls: list[bytes] = []
+    monkeypatch.setattr(dispatch_module, "send", calls.append)
+    assert main(["cx", "prompt", "--config", str(config), "--json"]) == 0
+    capsys.readouterr()
+    assert calls == []
+
+
+def test_default_threshold_suppresses_a_fast_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    isolate_notify_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("TERM_PROGRAM", "iTerm.app")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+    calls: list[bytes] = []
+    monkeypatch.setattr(dispatch_module, "send", calls.append)
+    assert main(["cx", "prompt", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["duration_ms"] < 10000
+    assert calls == []
+
+
+def test_send_raising_preserves_exit_code_and_stdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write("\n[defaults]\nnotify_after=0\n")
+    isolate_notify_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("TERM_PROGRAM", "iTerm.app")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+
+    def boom(_payload: bytes) -> None:
+        raise OSError("no tty")
+
+    monkeypatch.setattr(dispatch_module, "send", boom)
+    assert main(["cx", "prompt", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "success"
 
 
 def test_progress_is_live_bounded_and_preserves_one_final_json_object(tmp_path: Path) -> None:

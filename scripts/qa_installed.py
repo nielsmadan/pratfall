@@ -2623,6 +2623,9 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "native_agent": None,
                     "session_id": None,
                     "native_args": ["--debug"],
+                    "notify": None,
+                    "notify_method": None,
+                    "notify_after": None,
                 },
             }
         ],
@@ -3528,6 +3531,9 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "native_agent": None,
                     "session_id": None,
                     "native_args": [],
+                    "notify": None,
+                    "notify_method": None,
+                    "notify_after": None,
                 },
             }
         ],

@@ -78,11 +78,14 @@ printf 'summarize this checkout\n' | prat gm
 | `--json` | Return one JSON result with output, status, and available usage. |
 | `--progress` | Show live activity on stderr. |
 | `--trace` | Copy captured native stdout to stderr. |
+| `--notify` / `--no-notify` | Show or suppress the completion notification for this run. |
 | `--dry-run` | Preview the resolved invocation without launching the agent. |
 
 Model, effort, fast mode, extra directories, instructions, tool availability, native agent selection, schemas, and budget support depend on the agent; unsupported settings are
 rejected. Native budgets are available through `--max-budget-usd`, `--max-turns`, and
 `--max-ai-credits` where supported.
+See [completion notifications](docs/user/running.md#get-a-completion-notification) for when it
+fires and how to configure it.
 
 Pass one prompt as text, a file, or redirected stdin. Use `--prompt=TEXT` for text starting with
 a dash. When stdin is redirected alongside text or `--file PATH`, Prat combines stdin first,

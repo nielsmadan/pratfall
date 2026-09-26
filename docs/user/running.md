@@ -16,6 +16,7 @@ prat cx "review this change"
 - [Pass native arguments](#pass-native-arguments)
 - [Preview a run](#preview-a-run)
 - [Watch progress and diagnostics](#watch-progress-and-diagnostics)
+- [Get a completion notification](#get-a-completion-notification)
 - [Handle timeouts and failures](#handle-timeouts-and-failures)
 - [Output limits](#output-limits)
 - [Include extra directories](#include-extra-directories)
@@ -248,6 +249,50 @@ Progress updates contain category labels only, with at most one update per secon
 at least every five seconds. `--progress` applies to one run and cannot be saved in a profile.
 A slow stderr reader can cause progress, trace, and diagnostic writes to be dropped in this mode,
 so they do not delay the agent deadline. Trace can show only what the native CLI emits.
+
+## Get a completion notification
+
+Prat asks the terminal emulator for a desktop notification after a run, on by default.
+
+A notification fires only when all of these hold: `notify` is not disabled, the agent was
+launched (not `--dry-run`, and not a validation or config error before launch), the final status
+is not `interrupted`, stderr is a terminal, and the run took at least `notify_after` seconds
+(10 by default). It is written to `/dev/tty` after the result has already reached stdout; any
+failure to write it is silent and never changes output or the exit code.
+
+Disable it with `--no-notify` for one run, or `notify = false` in `[defaults]` of the global
+config, a `.pratfile`, or a profile. `--notify` and `--no-notify` cannot be combined.
+
+`notify_method` and `notify_after` are config-only settings, resolved with the same
+CLI → profile → local defaults → global defaults precedence as other options:
+
+```toml
+[defaults]
+notify_after = 30
+
+[profiles.simple]
+notify_method = "osc777"
+```
+
+`notify_method` is `"auto"` (default), `"osc9"`, `"osc777"`, `"osc99"`, or `"bel"`. `notify_after`
+is a non-negative number of seconds; `0` notifies on every run.
+
+Under `"auto"`, the terminal emulator decides which escape sequence Prat sends:
+
+| Terminal | Sequence |
+| --- | --- |
+| iTerm2 | OSC 9 |
+| Ghostty, WezTerm, Warp, foot, Konsole 23.04+ | OSC 777 |
+| kitty, VS Code 1.110+ (in-app terminal), Zellij | OSC 99 |
+| Terminal.app, GNOME Terminal and other VTE terminals, Ptyxis, Alacritty, Windows Terminal, JetBrains terminals, and unrecognized terminals | BEL |
+
+iTerm2 and WezTerm show the notification while focused by default; kitty shows it only while
+unfocused.
+
+Inside tmux, set `set -g allow-passthrough on` or the notification is dropped silently. Inside
+GNU screen, Prat wraps the sequence automatically and no configuration is needed. Over SSH,
+detection sees only the variables the session forwards: usually `TERM`, plus iTerm2's
+`LC_TERMINAL` where `LC_*` is forwarded. Set `notify_method` explicitly when those are not enough.
 
 ## Handle timeouts and failures
 

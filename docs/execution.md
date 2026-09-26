@@ -102,6 +102,11 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   failed runs retain their status, exit code, accounting and raw trace. Success and validation
   payload constructors keep separate field lists to preserve their emitted key order; update both
   when adding result fields.
+- [notify.py](../src/pratfall/notify.py) is pure: terminal detection, sequence encoding and gating
+  take `Options` and an `env`/status snapshot and return data, with no I/O. `send` is the one edge
+  function, writing the encoded payload to `/dev/tty` under scoped `SIGTTOU` suppression; it never
+  writes stdout or stderr and swallows `OSError`. Dispatch calls it after the normalized result has
+  already reached stdout, so a notification failure cannot change output or the exit code.
 
 The dependency boundary is acyclic, and runtime code uses only the standard library.
 [test_layering.py](../tests/test_layering.py) machine-enforces that contract: the layer order, each

@@ -340,6 +340,12 @@ native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", 
         ('version=1\n[defaults]\neffort=""', "defaults.effort"),
         ('version=1\n[defaults]\nfast="true"', "defaults.fast"),
         ("version=1\n[defaults]\nfast=1", "defaults.fast"),
+        ('version=1\n[defaults]\nnotify="yes"', "defaults.notify"),
+        ('version=1\n[defaults]\nnotify_method="osc8"', "defaults.notify_method"),
+        ("version=1\n[defaults]\nnotify_after=-1", "defaults.notify_after"),
+        ("version=1\n[defaults]\nnotify_after=true", "defaults.notify_after"),
+        ("version=1\n[defaults]\nnotify_after=nan", "defaults.notify_after"),
+        ("version=1\n[defaults]\nnotify_after=inf", "defaults.notify_after"),
         ('version=1\n[defaults]\nnative_args="--flag"', "defaults.native_args"),
         ('version=1\n[defaults]\nnative_args=["--flag", 1]', "defaults.native_args"),
         ("version=1\n[defaults]\nmax_turns=1.5", "defaults.max_turns"),
@@ -453,6 +459,44 @@ def test_global_fast_is_checked_only_when_a_builtin_is_resolved(tmp_path: Path) 
     assert resolve_profile(config, "cc").options.fast is True
     with pytest.raises(PratError, match="Gemini does not support"):
         resolve_profile(config, "gm")
+
+
+def test_notify_settings_parse_from_defaults_and_profile(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path,
+        'version=1\n[defaults]\nnotify=true\nnotify_method="osc9"\nnotify_after=5\n'
+        '[profiles.work]\nagent="codex"\nnotify=false\nnotify_method="bel"\nnotify_after=0\n',
+    )
+    config = load_config(path)
+    defaults_only = resolve_profile(config, "cx")
+    assert defaults_only.options.notify is True
+    assert defaults_only.options.notify_method == "osc9"
+    assert defaults_only.options.notify_after == 5
+    profile = resolve_profile(config, "work")
+    assert profile.options.notify is False
+    assert profile.options.notify_method == "bel"
+    assert profile.options.notify_after == 0
+
+
+def test_local_notify_false_overrides_global_true(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text("version=1\n[defaults]\nnotify=true\n")
+    local = tmp_path / ".pratfile"
+    local.write_text("version=1\n[defaults]\nnotify=false\n")
+    config = load_config()
+    assert resolve_profile(config, "cx").options.notify is False
+
+
+def test_notify_cli_override_wins_through_resolve_profile(tmp_path: Path) -> None:
+    path = write_config(tmp_path, 'version=1\n[profiles.work]\nagent="codex"\nnotify=false\n')
+    config = load_config(path)
+    assert resolve_profile(config, "work").options.notify is False
+    assert resolve_profile(config, "work", Options(notify=True)).options.notify is True
+
+
+def test_notify_after_zero_is_accepted(tmp_path: Path) -> None:
+    path = write_config(tmp_path, "version=1\n[defaults]\nnotify_after=0\n")
+    assert resolve_profile(load_config(path), "cx").options.notify_after == 0
 
 
 @pytest.mark.parametrize(

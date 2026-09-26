@@ -12,8 +12,10 @@ from pratfall.errors import PratError
 from pratfall.instructions import validate_instructions
 from pratfall.models import (
     MAX_TURNS,
+    NOTIFY_METHODS,
     AgentSpec,
     Config,
+    NotifyMethod,
     OptionOrigin,
     Options,
     Profile,
@@ -119,6 +121,25 @@ def _boolean(value: object, label: str) -> bool:
     return value
 
 
+def _nonnegative_number(value: object, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise PratError(f"{label}: expected a finite non-negative number.")
+    try:
+        number = float(value)
+    except OverflowError:
+        raise PratError(f"{label}: expected a finite non-negative number.") from None
+    if not math.isfinite(number) or number < 0:
+        raise PratError(f"{label}: expected a finite non-negative number.")
+    return number
+
+
+def _notify_method(value: object, label: str) -> NotifyMethod:
+    if not isinstance(value, str) or value not in NOTIFY_METHODS:
+        allowed = ", ".join(NOTIFY_METHODS)
+        raise PratError(f"{label}: expected one of {allowed}.")
+    return value
+
+
 def _arguments(value: object, label: str) -> tuple[str, ...]:
     if not isinstance(value, list | tuple):
         raise PratError(f"{label}: expected an array of strings.")
@@ -205,6 +226,17 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
         native_args=(
             _arguments(table["native_args"], f"{label}.native_args")
             if "native_args" in table
+            else None
+        ),
+        notify=_boolean(table["notify"], f"{label}.notify") if "notify" in table else None,
+        notify_method=(
+            _notify_method(table["notify_method"], f"{label}.notify_method")
+            if "notify_method" in table
+            else None
+        ),
+        notify_after=(
+            _nonnegative_number(table["notify_after"], f"{label}.notify_after")
+            if "notify_after" in table
             else None
         ),
     )

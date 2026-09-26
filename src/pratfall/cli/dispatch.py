@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import sys
 from collections.abc import Callable, Mapping
 from contextlib import ExitStack, closing, suppress
@@ -31,11 +32,13 @@ from pratfall.models import (
     ConsumedCapture,
     DecodedOutput,
     Invocation,
+    NormalizedResult,
     OptionOrigin,
     RawCapture,
     ResolvedProfile,
     ResultError,
 )
+from pratfall.notify import encode, notification_for, send, should_notify
 from pratfall.option_paths import prepare_attachments, prepare_directories, resolve_path
 from pratfall.output import extract_code, normalize, result_dict, validation_error
 from pratfall.prompt_editor import edit_prompt
@@ -504,6 +507,29 @@ def _prepare_run_schema(
     return replace(resolved, prepared_schema=prepared)
 
 
+def _stderr_is_tty() -> bool:
+    try:
+        return sys.stderr.isatty()
+    except (ValueError, OSError):
+        return False
+
+
+def _notify_after_run(resolved: ResolvedProfile, result: NormalizedResult) -> None:
+    if not should_notify(
+        resolved.options, result.status, result.duration_ms, stderr_is_tty=_stderr_is_tty()
+    ):
+        return
+    notification = notification_for(resolved.agent.label, result.status, result.duration_ms)
+    method = resolved.options.notify_method or "auto"
+    send(encode(notification, method, os.environ))
+
+
+def _finish_run(resolved: ResolvedProfile, result: NormalizedResult, state: _RunState) -> None:
+    payload = result_dict(result)
+    _emit_result(payload, state.stdout, json_mode=state.json_mode)
+    _guard(lambda: _notify_after_run(resolved, result), lambda _: None)
+
+
 def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) -> int:
     resolved: ResolvedProfile | None = None
     try:
@@ -571,8 +597,7 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
         result = normalize(resolved, process, decoded)
         if parsed.extract:
             result = replace(result, output=extract_code(result.output))
-        payload = result_dict(result)
-        _emit_result(payload, state.stdout, json_mode=state.json_mode)
+        _finish_run(resolved, result, state)
         return result.exit_code
     except InputInterrupted as error:
         exit_code = SIGNAL_EXIT_BASE + error.signum

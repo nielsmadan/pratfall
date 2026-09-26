@@ -18,7 +18,9 @@ from pratfall.catalog import AGENTS
 from pratfall.cli import doctor as doctor_module
 from pratfall.cli import main
 from pratfall.cli.doctor import _doctor, _doctor_inventory, _doctor_line, _version_result
+from pratfall.cli.parsing import _parse_run
 from pratfall.config import init_config, load_config
+from pratfall.errors import PratError
 from pratfall.interruption import InterruptionState
 from pratfall.models import Config, Invocation, RawCapture
 from pratfall.runner import OutputLimits, ProcessResult
@@ -74,6 +76,7 @@ def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str])
         "--timeout SECONDS",
         "--cwd PATH",
         "--trace",
+        "--notify / --no-notify",
         "-x, --extract",
         "--dry-run",
     ):
@@ -376,6 +379,9 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
                 "native_agent": None,
                 "session_id": None,
                 "native_args": [],
+                "notify": None,
+                "notify_method": None,
+                "notify_after": None,
             },
         }
     ]
@@ -402,6 +408,21 @@ native_args=["--permission-mode", "two words"]
     assert capsys.readouterr().out == (
         "inspect: claude model=model-id effort=high timeout=42.0 "
         'max_budget_usd=2.5 max_turns=3 native_args=["--permission-mode", "two words"]\n'
+    )
+
+
+def test_profiles_text_shows_notify_settings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'version=1\n[profiles.quiet]\nagent="claude"\nnotify=false\nnotify_method="bel"\n'
+        "notify_after=0\n",
+        encoding="utf-8",
+    )
+    assert main(["profiles", "--config", str(path)]) == 0
+    assert capsys.readouterr().out == (
+        "quiet: claude timeout=600.0 notify=False notify_method=bel notify_after=0.0\n"
     )
 
 
@@ -592,6 +613,25 @@ def test_run_rejects_fast_override_for_unsupported_agent(
     result = json.loads(capsys.readouterr().out)
     assert result["error"]["code"] == "invalid_arguments"
     assert "does not support a fast-mode override" in result["error"]["message"]
+
+
+def test_run_notify_flags_are_tri_state_and_conflicts_are_rejected() -> None:
+    assert _parse_run(["cx", "prompt", "--notify"]).options.notify is True
+    assert _parse_run(["cx", "prompt", "--no-notify"]).options.notify is False
+    with pytest.raises(PratError, match="--notify and --no-notify cannot be used together"):
+        _parse_run(["cx", "prompt", "--notify", "--no-notify"])
+
+
+@pytest.mark.parametrize("flag", ["--notify", "--no-notify"])
+def test_notify_flags_are_treated_as_run_options_like_fast(
+    capsys: pytest.CaptureFixture[str], flag: str
+) -> None:
+    assert main([flag, "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"] == {
+        "code": "invalid_arguments",
+        "message": "A selector is required.",
+    }
 
 
 @pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])

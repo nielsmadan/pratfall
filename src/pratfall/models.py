@@ -10,6 +10,9 @@ type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValu
 
 Activity = Literal["starting", "working", "reasoning", "tool", "answering", "finishing"]
 
+NotifyMethod = Literal["auto", "osc9", "osc777", "osc99", "bel"]
+NOTIFY_METHODS: tuple[NotifyMethod, ...] = ("auto", "osc9", "osc777", "osc99", "bel")
+
 
 @dataclass(frozen=True)
 class Capabilities:
@@ -66,6 +69,9 @@ class Options:
     native_agent: str | None = None
     session_id: str | None = None
     native_args: tuple[str, ...] | None = None
+    notify: bool | None = None
+    notify_method: NotifyMethod | None = None
+    notify_after: float | None = None
 
 
 @dataclass(frozen=True)

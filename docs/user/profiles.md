@@ -15,6 +15,7 @@ across projects, or locally in a project's `.pratfile`.
 - [Pi profiles](#pi-profiles)
 - [Tool availability](#tool-availability)
 - [Upgrade existing profiles](#upgrade-existing-profiles)
+- [Notifications](#notifications)
 
 ## Create a profile
 
@@ -48,8 +49,8 @@ prat simple --effort high "investigate this failure"
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
 `model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `attachments`, `instructions`,
-`instructions_file`, `schema`, `tools`, `disabled_tools`, `native_agent`, `session_id`, and the
-agent's supported budget fields.
+`instructions_file`, `schema`, `tools`, `disabled_tools`, `native_agent`, `session_id`, `notify`,
+`notify_method`, `notify_after`, and the agent's supported budget fields.
 Use `[defaults]` for shared settings.
 
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
@@ -422,3 +423,11 @@ attachments = ["notes/context.txt"]
 
 Use a model available in your native Pi configuration. All normal option precedence and
 config-relative attachment path rules apply. See [Pi behavior](agents.md#pi).
+
+## Notifications
+
+`notify`, `notify_method`, and `notify_after` follow the same precedence as other options:
+CLI → profile → local defaults → global defaults. Only `notify` has CLI flags
+(`--notify` / `--no-notify`); the other two are set in config only. See
+[get a completion notification](running.md#get-a-completion-notification) for the gate
+conditions, the `notify_method` values, and what each terminal emulator receives.

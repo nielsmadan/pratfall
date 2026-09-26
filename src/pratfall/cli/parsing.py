@@ -13,6 +13,13 @@ from pratfall.instructions import validate_instructions
 from pratfall.models import MAX_TURNS, OptionOrigin, Options
 from pratfall.prompt_input import PromptSource
 
+_TRI_STATE_FLAGS = {
+    "--fast": ("fast", True, "--fast and --no-fast"),
+    "--no-fast": ("fast", False, "--fast and --no-fast"),
+    "--notify": ("notify", True, "--notify and --no-notify"),
+    "--no-notify": ("notify", False, "--notify and --no-notify"),
+}
+
 _RUN_VALUE_FLAGS = {
     "--config": "config",
     "--cwd": "cwd",
@@ -129,6 +136,7 @@ run options:
   --json                  Print one normalized JSON result.
   --progress              Print bounded live activity updates on stderr.
   --trace                 Print captured native stdout on stderr.
+  --notify / --no-notify  Show or suppress the completion notification for this run.
   --dry-run               Resolve and print the invocation without launching it.
 
 examples:
@@ -196,7 +204,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     trace = False
     extract = False
     edit = False
-    fast: bool | None = None
+    tri_state: dict[str, bool | None] = {"fast": None, "notify": None}
     for token in scan.tokens:
         argument = token.argument
         if argument in {
@@ -216,14 +224,13 @@ def _parse_run(arguments: list[str]) -> RunArguments:
             extract = extract or argument in {"-x", "--extract"}
             edit = edit or argument in {"-e", "--edit"}
             continue
-        if argument in {"--fast", "--no-fast"}:
-            fast_value = argument == "--fast"
-            if fast is not None and fast != fast_value:
-                raise PratError(
-                    "--fast and --no-fast cannot be used together.",
-                    code="invalid_arguments",
-                )
-            fast = fast_value
+        tri_state_flag = _TRI_STATE_FLAGS.get(argument)
+        if tri_state_flag is not None:
+            key, flag_value, label = tri_state_flag
+            current = tri_state[key]
+            if current is not None and current != flag_value:
+                raise PratError(f"{label} cannot be used together.", code="invalid_arguments")
+            tri_state[key] = flag_value
             continue
         if argument == "--prompt":
             raise PratError("--prompt requires the --prompt=TEXT form.", code="invalid_arguments")
@@ -256,7 +263,9 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         raise PratError("A selector is required.", code="invalid_arguments")
     if edit and dry_run:
         raise PratError("--edit cannot be combined with --dry-run.", code="invalid_arguments")
-    options = _run_options(values, fast, repeated, scan.native_arguments)
+    options = _run_options(
+        values, tri_state["fast"], tri_state["notify"], repeated, scan.native_arguments
+    )
     return RunArguments(
         selector,
         prompt_source,
@@ -277,6 +286,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
 def _run_options(
     values: dict[str, str],
     fast: bool | None,
+    notify: bool | None,
     repeated: dict[str, list[str]],
     native_arguments: tuple[str, ...] | None,
 ) -> Options:
@@ -321,6 +331,7 @@ def _run_options(
             else None
         ),
         native_args=native_arguments,
+        notify=notify,
     )
 
 
@@ -436,6 +447,8 @@ def _management_mode(arguments: list[str]) -> bool:
             "--edit",
             "--fast",
             "--no-fast",
+            "--notify",
+            "--no-notify",
         } or argument.startswith("--prompt="):
             run_option = run_option or argument != "--json"
             continue
