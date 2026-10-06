@@ -3333,3 +3333,33 @@ def test_canonical_directory_target_must_be_natively_representable(
     assert error["code"] == "invalid_arguments"
     assert repr(str(target)) in error["message"]
     assert "commas or surrounding whitespace" in error["message"]
+
+
+def test_command_prefix_launches_the_agent_through_the_prefix(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    evidence = tmp_path / "prefix.json"
+    wrapper = tmp_path / "wrapper.py"
+    wrapper.write_text(
+        "import json,os,pathlib,sys\n"
+        f"pathlib.Path({str(evidence)!r}).write_text(json.dumps(sys.argv[1:4]))\n"
+        "os.execv(sys.argv[2], sys.argv[2:])\n",
+        encoding="utf-8",
+    )
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write(
+            f"\n[defaults]\ncommand_prefix={json.dumps([sys.executable, str(wrapper), 'MARK'])}\n"
+        )
+    assert main(["cx", "prompt", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "success"
+    assert json.loads(result["output"])["argv"][:2] == ["exec", "--json"]
+    assert json.loads(evidence.read_text(encoding="utf-8")) == [
+        "MARK",
+        sys.executable,
+        str(tmp_path / "codex_fake.py"),
+    ]
+    assert main(["cx", "prompt", "--config", str(config), "--dry-run", "--json"]) == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert preview["argv"][:4] == [sys.executable, str(wrapper), "MARK", sys.executable]

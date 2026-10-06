@@ -761,3 +761,67 @@ def test_directory_defaults_validate_every_effective_profile(tmp_path: Path) -> 
     )
     with pytest.raises(PratError, match=r"defaults.add_dirs.*does not support extra directories"):
         load_config(path)
+
+
+def test_command_prefix_precedence_runs_profile_then_agent_then_defaults(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text(
+        'version=1\n[defaults]\ncommand_prefix=["global-prefix"]\n'
+        '[agents.codex]\ncommand=["./bin/codex"]\n'
+        '[agents.claude]\ncommand_prefix=["claude-prefix", "--flag"]\n'
+    )
+    local_path = tmp_path / ".pratfile"
+    local_path.write_text(
+        'version=1\n[defaults]\ncommand_prefix=["sops-exec"]\n'
+        "[agents.droid]\ncommand_prefix=[]\n"
+        '[profiles.direct]\nagent="claude"\ncommand_prefix=[]\n'
+        '[profiles.traced]\nagent="codex"\ncommand_prefix=["env", "TRACE=1"]\n'
+    )
+    config = load_config()
+    codex = str(global_path.parent / "bin/codex")
+    assert resolve_profile(config, "cx").command == ("sops-exec", codex)
+    assert resolve_profile(config, "cc").command == ("claude-prefix", "--flag", "claude")
+    assert resolve_profile(config, "droid").command == ("droid",)
+    assert resolve_profile(config, "direct").command == ("claude",)
+    assert resolve_profile(config, "traced").command == ("env", "TRACE=1", codex)
+    assert resolve_profile(config, "traced").options.command_prefix == ("env", "TRACE=1")
+
+
+def test_local_agent_command_prefix_keeps_the_global_agent_command(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text('version=1\n[agents.codex]\ncommand=["/opt/codex"]\n')
+    (tmp_path / ".pratfile").write_text('version=1\n[agents.codex]\ncommand_prefix=["sops-exec"]\n')
+    assert resolve_profile(load_config(), "cx").command == ("sops-exec", "/opt/codex")
+
+
+def test_command_prefix_executable_resolves_from_its_defining_file(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path,
+        'version=1\n[defaults]\ncommand_prefix=["./bin/wrap", "./literal", "$TOKEN"]\n'
+        '[agents.gemini]\ncommand_prefix=["./bin/gemini-wrap"]\n'
+        '[profiles.work]\nagent="pi"\ncommand_prefix=["tools/wrap"]\n',
+    )
+    config = load_config(path)
+    assert resolve_profile(config, "cx").command == (
+        str(tmp_path / "bin/wrap"),
+        "./literal",
+        "$TOKEN",
+        "codex",
+    )
+    assert resolve_profile(config, "gm").command == (str(tmp_path / "bin/gemini-wrap"), "gemini")
+    assert resolve_profile(config, "work").command == (str(tmp_path / "tools/wrap"), "pi")
+
+
+@pytest.mark.parametrize(
+    ("table", "label"),
+    [
+        ('[defaults]\ncommand_prefix="sops-exec"', "defaults.command_prefix"),
+        ('[defaults]\ncommand_prefix=[" ", "x"]', "defaults.command_prefix"),
+        ("[agents.codex]\ncommand_prefix=[1]", "agents.codex.command_prefix"),
+        ('[profiles.p]\nagent="cx"\ncommand_prefix=[""]', "profiles.p.command_prefix"),
+    ],
+)
+def test_invalid_command_prefix_names_its_field(tmp_path: Path, table: str, label: str) -> None:
+    path = write_config(tmp_path, f"version=1\n{table}\n")
+    with pytest.raises(PratError, match=label):
+        load_config(path)

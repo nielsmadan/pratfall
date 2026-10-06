@@ -382,6 +382,7 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
                 "notify": None,
                 "notify_method": None,
                 "notify_after": None,
+                "command_prefix": None,
             },
         }
     ]
@@ -511,6 +512,40 @@ def test_doctor_versions_uses_literal_prefix_empty_stdin_and_stream_precedence(
     assert json.loads(evidence.read_text(encoding="utf-8")) == [
         ["two words", "$TOKEN", "--version"],
         0,
+    ]
+
+
+def test_doctor_versions_run_through_the_command_prefix(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("PATH", "")
+    evidence = tmp_path / "evidence.json"
+    prefix = tmp_path / "prefix.py"
+    prefix.write_text(
+        "import json,pathlib,sys\n"
+        f"pathlib.Path({str(evidence)!r}).write_text(json.dumps(sys.argv[1:]))\n"
+        "sys.stdout.write('wrapped 4.5.6\\n')\n",
+        encoding="utf-8",
+    )
+    config = tmp_path / "versions.toml"
+    config.write_text(
+        "version=1\n[defaults]\n"
+        f"command_prefix={json.dumps([sys.executable, str(prefix), '--inject'])}\n"
+        f"[agents.codex]\ncommand={json.dumps([sys.executable, 'agent-arg'])}\n",
+        encoding="utf-8",
+    )
+    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    codex = next(agent for agent in result["agents"] if agent["agent"] == "codex")
+    assert codex["executable"] == sys.executable
+    assert codex["version"] == "wrapped 4.5.6"
+    assert json.loads(evidence.read_text(encoding="utf-8")) == [
+        "--inject",
+        sys.executable,
+        "agent-arg",
+        "--version",
     ]
 
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from pratfall.catalog import AGENTS
 from pratfall.cli.presentation import _emit
 from pratfall.codes import SIGNAL_EXIT_BASE
+from pratfall.config import agent_command
 from pratfall.interruption import InterruptionState, handler_for, handling
 from pratfall.models import Config, Invocation
 from pratfall.runner import OutputLimits, ProcessResult, raw_stdout, run
@@ -86,9 +87,8 @@ def _doctor(config: Config, json_mode: bool, *, versions: bool) -> int:
                         break
                     if not record["available"]:
                         continue
-                    command = config.commands.get(agent.name, agent.command)
                     process = run(
-                        Invocation((*command, *agent.version_args), b""),
+                        Invocation((*agent_command(config, agent), *agent.version_args), b""),
                         Path.cwd(),
                         VERSION_TIMEOUT,
                         output_limits=VERSION_LIMITS,

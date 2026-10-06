@@ -2626,6 +2626,7 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "notify": None,
                     "notify_method": None,
                     "notify_after": None,
+                    "command_prefix": None,
                 },
             }
         ],
@@ -3534,6 +3535,7 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "notify": None,
                     "notify_method": None,
                     "notify_after": None,
+                    "command_prefix": None,
                 },
             }
         ],

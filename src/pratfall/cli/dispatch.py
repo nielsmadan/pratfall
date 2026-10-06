@@ -128,6 +128,7 @@ def _profiles(config: Config, json_mode: bool) -> None:
                 if key
                 in {
                     "native_args",
+                    "command_prefix",
                     "add_dirs",
                     "attachments",
                     "instructions",

@@ -72,6 +72,7 @@ class Options:
     notify: bool | None = None
     notify_method: NotifyMethod | None = None
     notify_after: float | None = None
+    command_prefix: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,9 @@ class Config:
     exists: bool = False
     defaults: Options = Options()
     commands: Mapping[str, tuple[str, ...]] = field(default_factory=lambda: MappingProxyType({}))
+    command_prefixes: Mapping[str, tuple[str, ...]] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
     profiles: Mapping[str, Profile] = field(default_factory=lambda: MappingProxyType({}))
     profile_layers: Mapping[str, ProfileLayer] = field(default_factory=lambda: MappingProxyType({}))
     sources: tuple[Path, ...] = ()

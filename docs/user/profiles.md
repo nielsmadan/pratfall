@@ -50,7 +50,7 @@ prat simple --effort high "investigate this failure"
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
 `model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `attachments`, `instructions`,
 `instructions_file`, `schema`, `tools`, `disabled_tools`, `native_agent`, `session_id`, `notify`,
-`notify_method`, `notify_after`, and the agent's supported budget fields.
+`notify_method`, `notify_after`, `command_prefix`, and the agent's supported budget fields.
 Use `[defaults]` for shared settings.
 
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
@@ -108,10 +108,11 @@ Settings resolve from highest to lowest priority:
 | `[profiles.NAME]` | A local profile replaces the entire global profile with that name. |
 | `[templates.NAME]` | A local template replaces the entire global template with that name. |
 | `[agents.NAME].command` | A local command array replaces the global array for that agent. |
+| `[agents.NAME].command_prefix` | A local prefix replaces the global prefix for that agent, independently of `command`. |
 | `schema` | The higher-priority source path replaces the lower-priority path. |
 | `native_agent` | The higher-priority string replaces the lower-priority selection. |
 | `instructions`, `instructions_file` | One override group: either higher-priority form clears the lower-priority form. |
-| `native_args`, `add_dirs`, `attachments`, `tools`, `disabled_tools` | The higher-priority array replaces the lower-priority array, even when empty. |
+| `native_args`, `add_dirs`, `attachments`, `tools`, `disabled_tools`, `command_prefix` | The higher-priority array replaces the lower-priority array, even when empty. |
 
 Profiles from every file remain available. A profile inherits only through an explicit
 `extends`; omitted fields then fall back to the merged defaults.
@@ -208,6 +209,26 @@ expansion.
 
 To use a shell function, expose it through a trusted executable wrapper and configure that command.
 See [configuration examples](../../examples/README.md).
+
+Use `command_prefix` to run every agent through the same launcher, such as a secrets injector,
+instead of repeating it in each agent's `command`:
+
+```toml
+[defaults]
+command_prefix = ["sops-exec"]
+
+[agents.droid]
+command_prefix = []
+```
+
+Prat prepends the prefix to the agent's resolved command, whether built in or set through
+`[agents.NAME].command`, so `prat cx` above runs `sops-exec codex`. The prefix resolves in this
+order: selected profile and its `extends` chain, then `[agents.NAME].command_prefix`, then local
+and global `[defaults]`. An empty array removes an inherited prefix, as for `droid` above. There is
+no command-line flag. The prefix follows the same path rules as `command`: a relative first
+element containing `/` resolves from the defining config file's directory, and later elements are
+literal. `--dry-run` shows the prefixed argv, and `prat doctor --versions` probes through the
+prefix while availability still checks the agent's own executable.
 
 If the selected local path is a symlink to the global file, Prat loads it once and reports only the
 selected path. Relative commands still resolve from that path's directory.

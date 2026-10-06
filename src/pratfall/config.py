@@ -239,6 +239,11 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
             if "notify_after" in table
             else None
         ),
+        command_prefix=(
+            _command_prefix(table["command_prefix"], f"{label}.command_prefix", base)
+            if "command_prefix" in table
+            else None
+        ),
     )
 
 
@@ -356,24 +361,44 @@ def option_origins(
     return origins
 
 
-def _commands(table: dict[str, object], path: Path) -> dict[str, tuple[str, ...]]:
+def _with_executable(argv: tuple[str, ...], base: Path | None) -> tuple[str, ...]:
+    executable = argv[0]
+    if base is not None and "/" in executable and not Path(executable).is_absolute():
+        executable = str(Path(os.path.abspath(base / executable)))
+    return (executable, *argv[1:])
+
+
+def _command_prefix(value: object, label: str, base: Path | None) -> tuple[str, ...]:
+    prefix = _arguments(value, label)
+    if not prefix:
+        return prefix
+    if not prefix[0].strip():
+        raise PratError(f"{label}: expected an empty array or an executable argv prefix.")
+    return _with_executable(prefix, base)
+
+
+def _agent_settings(
+    table: dict[str, object], path: Path
+) -> tuple[dict[str, tuple[str, ...]], dict[str, tuple[str, ...]]]:
     commands: dict[str, tuple[str, ...]] = {}
+    prefixes: dict[str, tuple[str, ...]] = {}
     for name, value in table.items():
         label = f"{path}: agents.{name}"
         if name not in BY_NAME:
             raise PratError(f"{label}: use a canonical name from 'prat agents'.")
         settings = _table(value, label)
-        _known_keys(settings, frozenset({"command"}), label)
+        _known_keys(settings, frozenset({"command", "command_prefix"}), label)
+        if "command_prefix" in settings:
+            prefixes[name] = _command_prefix(
+                settings["command_prefix"], f"{label}.command_prefix", path.parent
+            )
         if "command" not in settings:
             continue
         command = _arguments(settings["command"], f"{label}.command")
         if not command or not command[0].strip():
             raise PratError(f"{label}.command: expected a nonempty executable argv prefix.")
-        executable = command[0]
-        if "/" in executable and not Path(executable).is_absolute():
-            executable = str(Path(os.path.abspath(path.parent / executable)))
-        commands[name] = (executable, *command[1:])
-    return commands
+        commands[name] = _with_executable(command, path.parent)
+    return commands, prefixes
 
 
 def _declared_agent(value: object, label: str, *, required: bool) -> str | None:
@@ -494,7 +519,7 @@ def _load_file(path: Path, *, required: bool) -> Config:
         f"{path}: defaults",
         base=path.parent,
     )
-    commands = _commands(_table(table.get("agents", {}), f"{path}: agents"), path)
+    commands, prefixes = _agent_settings(_table(table.get("agents", {}), f"{path}: agents"), path)
     layers = _profiles(_table(table.get("profiles", {}), f"{path}: profiles"), path)
     templates = _templates(_table(table.get("templates", {}), f"{path}: templates"), path)
     return Config(
@@ -502,6 +527,7 @@ def _load_file(path: Path, *, required: bool) -> Config:
         exists=True,
         defaults=defaults,
         commands=MappingProxyType(commands),
+        command_prefixes=MappingProxyType(prefixes),
         profile_layers=MappingProxyType(layers),
         templates=MappingProxyType(templates),
         sources=(path,),
@@ -532,6 +558,9 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
         exists=True,
         defaults=merge_options(global_config.defaults, local_config.defaults),
         commands=MappingProxyType(dict(global_config.commands) | dict(local_config.commands)),
+        command_prefixes=MappingProxyType(
+            dict(global_config.command_prefixes) | dict(local_config.command_prefixes)
+        ),
         profile_layers=MappingProxyType(
             dict(global_config.profile_layers) | dict(local_config.profile_layers)
         ),
@@ -594,6 +623,7 @@ def resolve_profile(
     options = merge_options(
         Options(timeout=DEFAULT_TIMEOUT, native_args=()),
         config.defaults,
+        Options(command_prefix=config.command_prefixes.get(agent.name)),
         profile_options,
         overrides if overrides is not None else Options(),
     )
@@ -606,9 +636,14 @@ def resolve_profile(
     return ResolvedProfile(
         agent,
         profile_name,
-        config.commands.get(agent.name, agent.command),
+        (*(options.command_prefix or ()), *config.commands.get(agent.name, agent.command)),
         options,
     )
+
+
+def agent_command(config: Config, agent: AgentSpec) -> tuple[str, ...]:
+    prefix = config.command_prefixes.get(agent.name, config.defaults.command_prefix)
+    return (*(prefix or ()), *config.commands.get(agent.name, agent.command))
 
 
 def init_config(explicit: str | Path | None = None, *, cwd: Path | None = None) -> Path:
