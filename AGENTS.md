@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file is the canonical coding-agent guidance for Pratfall. `CLAUDE.md` imports it.
+This file is the canonical coding-agent guidance for Pratfall.
 
 ## Project
 
