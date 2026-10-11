@@ -9,7 +9,9 @@ its own idea of what belongs on stdout. `prat` puts 24 of them behind one set of
 output contract: the answer on stdout, diagnostics on stderr, and an optional JSON result with
 status and usage. So agents compose like any other Unix tool.
 
-<img src="assets/demo.gif" alt="A whodunit in a terminal: Claude commits a bug and hides a confession, Codex finds the culprit through git, Pi sentences it, and a fresh Claude reads the confession, shreds it, and pleads." width="880">
+<p align="center">
+  <img src="assets/demo.gif" alt="A whodunit in a terminal: Claude commits a bug and hides a confession, Codex finds the culprit through git, Pi sentences it, and a fresh Claude reads the confession, shreds it, and pleads." width="1000">
+</p>
 
 ```sh
 prat cc "how many Rs are in strawberry" | prat cx "times 5"
