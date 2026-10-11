@@ -4,6 +4,14 @@
   <img src="assets/logo.svg" alt="Pratfall logo" width="320" height="320">
 </p>
 
+<p align="center">
+  <a href="https://github.com/nielsmadan/pratfall/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/nielsmadan/pratfall/ci.yml?branch=main&label=CI" alt="CI"></a>
+  <a href="https://codecov.io/gh/nielsmadan/pratfall"><img src="https://img.shields.io/codecov/c/github/nielsmadan/pratfall?label=coverage" alt="Coverage"></a>
+  <a href="https://github.com/nielsmadan/pratfall/releases/latest"><img src="https://img.shields.io/github/v/release/nielsmadan/pratfall" alt="Latest release"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/python-3.13%2B-blue" alt="Python 3.13+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/nielsmadan/pratfall" alt="MIT license"></a>
+</p>
+
 One command for all your coding agents.
 
 Every agent CLI has a headless mode with its own flags, its own way of taking a prompt and its
