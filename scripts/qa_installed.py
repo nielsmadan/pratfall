@@ -1862,7 +1862,7 @@ def _available(lock_path: Path) -> bool:
 
 
 def _observe_pending_and_release(fixture: _AsyncFixture) -> bool:
-    deadline = time.monotonic() + 2
+    deadline = time.monotonic() + INPUT_READINESS_TIMEOUT
     while time.monotonic() < deadline and not fixture.ready_path.exists():
         time.sleep(0.01)
     try:
@@ -2106,7 +2106,7 @@ def _version_cleanup_run(
     invocation = _start(command, root, env)
     process = invocation.process
     try:
-        deadline = time.monotonic() + 2
+        deadline = time.monotonic() + INPUT_READINESS_TIMEOUT
         while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
             time.sleep(0.01)
         pending = process.poll() is None and ready.exists() and not _available(lock)
