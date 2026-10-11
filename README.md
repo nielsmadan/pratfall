@@ -4,8 +4,8 @@
 
 One command for all your coding agents.
 
-Every agent CLI has its own headless mode, with its own flags, its own way of taking a prompt and
-its own idea of what belongs on stdout. `prat` puts 24 of them behind one set of flags and one
+Every agent CLI has a headless mode with its own flags, its own way of taking a prompt and its
+own idea of what belongs on stdout. `prat` puts 24 of them behind one set of flags and one
 output contract: the answer on stdout, diagnostics on stderr, and an optional JSON result with
 status and usage. So agents compose like any other Unix tool.
 
@@ -20,7 +20,7 @@ prat cc --json "summarize this repository" | jq .cost_usd
 ```
 
 Pratfall runs the agent CLIs you already have installed and logged in. It installs nothing,
-authenticates nothing, and keeps each agent's own permission behavior.
+authenticates nothing, and leaves each agent's permission behavior as it is.
 
 ## Installation
 
@@ -49,6 +49,7 @@ Choose an agent by name or short alias:
 | Cursor | `cursor` | `cu` |
 | OpenCode | `opencode` | `oc` |
 | Pi | `pi` | none |
+| [17 more](docs/user/agents.md#selectors) | | |
 
 Names of four letters or fewer, such as `kiro`, `qwen` and `amp`, need no alias. `prat agents`
 lists all 24 with the settings each supports; [agents and limitations](docs/user/agents.md) has
