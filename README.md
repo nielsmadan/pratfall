@@ -1,6 +1,8 @@
-# Pratfall
+<h1 align="center">Pratfall</h1>
 
-<img src="assets/logo.svg" alt="Pratfall logo" width="128" height="128">
+<p align="center">
+  <img src="assets/logo.svg" alt="Pratfall logo" width="320" height="320">
+</p>
 
 One command for all your coding agents.
 
@@ -12,12 +14,6 @@ status and usage. So agents compose like any other Unix tool.
 <p align="center">
   <img src="assets/demo.gif" alt="A whodunit in a terminal: Claude commits a bug and hides a confession, Codex finds the culprit through git, Pi sentences it, and a fresh Claude reads the confession, shreds it, and pleads." width="1000">
 </p>
-
-```sh
-prat cc "how many Rs are in strawberry" | prat cx "times 5"
-git diff | prat cc -t review
-prat cc --json "summarize this repository" | jq .cost_usd
-```
 
 Pratfall runs the agent CLIs you already have installed and logged in. It installs nothing,
 authenticates nothing, and leaves each agent's permission behavior as it is.
