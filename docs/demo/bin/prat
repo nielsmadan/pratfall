@@ -1,0 +1,59 @@
+#!/bin/bash
+# Replay shim for the demo tape: prints the recorded output of the prat run with these exact
+# arguments, one line at a time with a reading pause. Never runs an agent.
+set -u
+
+dir=${PRAT_DEMO_DIR:?PRAT_DEMO_DIR is not set}
+key=$(printf '%s\0' "$@" | /usr/bin/shasum -a 256 | /usr/bin/cut -c1-16)
+take=$dir/takes/$key.out
+if [ ! -f "$take" ]; then
+    printf 'prat replay: no recorded take for: prat %s\nRun just demo-record.\n' "$*" >&2
+    [ -n "${PRAT_DEMO_MARKER:-}" ] && printf 'prat %s\n' "$*" >>"$PRAT_DEMO_MARKER.missing"
+    exit 1
+fi
+[ -n "${PRAT_DEMO_MARKER:-}" ] && : >"$PRAT_DEMO_MARKER"
+[ -t 0 ] || cat >/dev/null
+
+case $1 in
+    claude) colour='250;179;135' ;;
+    codex) colour='166;227;161' ;;
+    pi) colour='245;194;231' ;;
+    *) colour='205;214;244' ;;
+esac
+on=$(printf '\033[38;2;%sm' "$colour")
+off=$(printf '\033[0m')
+cols=$(stty size </dev/tty 2>/dev/null)
+cols=${cols#* }
+[ -n "$cols" ] || cols=80
+
+ms=$(cat "${take%.out}.ms" 2>/dev/null)
+spinner=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+for step in $(seq 24); do
+    if [ -n "$ms" ]; then
+        s=$(( ms * step / 24 / 1000 ))
+        printf '\r\033[38;2;127;132;156m%s %s %d:%02d\033[0m' "${spinner[step % 10]}" "$1" $(( s / 60 )) $(( s % 60 )) >&2
+    fi
+    sleep 0.08
+done
+[ -n "$ms" ] && printf '\r\033[K' >&2
+json=0
+for arg in "$@"; do [ "$arg" = --json ] && json=1; done
+if [ "$json" = 1 ]; then
+    text=$(/usr/bin/jq -r .output "$take" | /usr/bin/fold -s -w "$cols")
+    /usr/bin/jq -c --arg on "$on" --arg off "$off" --arg text "$text" '.output = $on + $text + $off' "$take"
+    exit 0
+fi
+if [ /dev/stdout -ef /dev/null ]; then
+    exit 0
+fi
+chars=0
+while IFS= read -r line || [ -n "$line" ]; do
+    chars=$(( chars + ${#line} ))
+    printf '%s%s%s\n' "$on" "$line" "$off"
+    tenths=$(( 5 + ${#line} * 4 / 10 ))
+    [ "$tenths" -gt 40 ] && tenths=40
+    sleep "$(( tenths / 10 )).$(( tenths % 10 ))"
+done < <(/usr/bin/fold -s -w "$cols" "$take")
+hold=$(( chars * 3 / 10 ))
+[ "$hold" -gt 15 ] && hold=15
+sleep "$(( hold / 10 )).$(( hold % 10 ))"

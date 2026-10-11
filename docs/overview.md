@@ -9,6 +9,7 @@ profile: a few builder guides, plus separate user guides, external references, a
 | Change execution, decoding, or process cleanup | [Execution and adapter boundaries](execution.md) |
 | Check a native agent's protocol, version baseline, or source evidence | [Native agent interfaces](reference/overview.md) |
 | Prepare a release or maintain Homebrew distribution | [Release and distribution](release.md) |
+| Re-record or re-render the README demo GIF | [README demo](demo/README.md) |
 | Repeat installed-package checks | [Local package verification](release.md#check-installed-packages-locally) |
 | Understand an accepted documentation or architecture choice | [Decisions](decisions/) |
 
