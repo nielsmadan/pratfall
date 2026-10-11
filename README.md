@@ -2,19 +2,28 @@
 
 <img src="assets/logo.svg" alt="Pratfall logo" width="128" height="128">
 
-One command to run your coding agents. Pratfall wraps installed agent CLIs with
-[short aliases](#aliases), [common parameters](#common-parameters), and reusable
-[local and global profiles](#profiles).
+One command for all your coding agents.
+
+Every agent CLI has its own headless mode, with its own flags, its own way of taking a prompt and
+its own idea of what belongs on stdout. `prat` puts 24 of them behind one set of flags and one
+output contract: the answer on stdout, diagnostics on stderr, and an optional JSON result with
+status and usage. So agents compose like any other Unix tool.
+
+<img src="assets/demo.gif" alt="A whodunit in a terminal: Claude commits a bug and hides a confession, Codex finds the culprit through git, Pi sentences it, and a fresh Claude reads the confession, shreds it, and pleads." width="880">
 
 ```sh
-prat cx "review this change"
-prat cc --effort high "investigate this failure"
+prat cc "how many Rs are in strawberry" | prat cx "times 5"
+git diff | prat cc -t review
+prat cc --json "summarize this repository" | jq .cost_usd
 ```
+
+Pratfall runs the agent CLIs you already have installed and logged in. It installs nothing,
+authenticates nothing, and keeps each agent's own permission behavior.
 
 ## Installation
 
-Requires Python 3.13+ and an installed, authenticated native agent CLI. Until the first release,
-run from a source checkout with [uv](https://docs.astral.sh/uv/):
+Requires Python 3.13+ and at least one installed, authenticated agent CLI. Until the first
+release, run from a source checkout with [uv](https://docs.astral.sh/uv/):
 
 ```sh
 uv sync
@@ -25,7 +34,7 @@ uv run prat doctor
 Prefix the examples below with `uv run`, or use `just install` to install the checkout as a
 user-level `prat` command. See [getting started](docs/user/getting-started.md) for setup details.
 
-## Aliases
+## Agents
 
 Choose an agent by name or short alias:
 
@@ -39,16 +48,13 @@ Choose an agent by name or short alias:
 | OpenCode | `opencode` | `oc` |
 | Pi | `pi` | none |
 
-Use `prat pi "review this change"` with Pi v0.85.1 or newer; model, effort, tool filters and
-file/image attachments are supported. Pi trims prompt-edge whitespace.
+Names of four letters or fewer, such as `kiro`, `qwen` and `amp`, need no alias. `prat agents`
+lists all 24 with the settings each supports; [agents and limitations](docs/user/agents.md) has
+the details.
 
-These are a few of the supported agents. Run `prat agents` for the full list and supported
-settings, or see [all selectors and agent limitations](docs/user/agents.md).
-Names of four letters or fewer, such as `kiro`, `qwen`, and `amp`, use the name itself.
+## Same flags everywhere
 
-## Common parameters
-
-Use the same flags across agents, before or after the selector:
+Flags go before or after the selector:
 
 ```sh
 prat cx --model gpt-5.6-luna --effort low "review this change"
@@ -59,93 +65,75 @@ printf 'summarize this checkout\n' | prat gm
 | Parameter | Purpose |
 | --- | --- |
 | `--model MODEL` | Select a native model. |
-| `--native-agent NAME` | Select a native agent/persona for Claude, Copilot, or Vibe. |
-| `--session-id ID` | Set the native session id so its transcript can be found afterwards. |
 | `--effort EFFORT` | Set reasoning effort. |
 | `--fast` / `--no-fast` | Override fast mode for Claude or Codex. |
 | `--timeout SECONDS` | Set the execution deadline; default: 600 seconds. |
 | `--cwd PATH` | Choose the agent's working directory. |
-| `--attach PATH` | Attach a native image/file; repeat where supported. |
-| `--add-dir PATH` | Add a native workspace directory; repeat for several. |
-| `--instructions TEXT` / `--instructions-file PATH` | Append native instructions from text or a UTF-8 file. |
-| `--tools NAME` / `--disable-tools NAME` | Restrict native tool availability or disable names/patterns; repeat for several. |
 | `-f PATH` / `--file PATH` | Read a prompt from a UTF-8 file; `-` reads stdin. |
 | `-t NAME` / `--template NAME` | Apply a named prompt template. |
 | `-e` / `--edit` | Edit the complete prompt in `VISUAL`, `EDITOR`, or `vi`. |
 | `--context PATH` | Prepend a context file; repeat to include several. |
 | `-x` / `--extract` | Return the body of the first fenced code block. |
-| `--schema PATH` | Request native JSON Schema output from a UTF-8 file (Claude, Codex, Qwen 0.24+). |
+| `--schema PATH` | Request native JSON Schema output. |
 | `--json` | Return one JSON result with output, status, and available usage. |
+| `--attach PATH` | Attach a native image or file. |
+| `--add-dir PATH` | Add a native workspace directory. |
+| `--instructions TEXT` / `--instructions-file PATH` | Append native instructions. |
+| `--tools NAME` / `--disable-tools NAME` | Restrict or disable native tools. |
+| `--native-agent NAME` | Select a native agent or persona. |
+| `--session-id ID` | Set the native session id. |
 | `--progress` | Show live activity on stderr. |
 | `--trace` | Copy captured native stdout to stderr. |
 | `--notify` / `--no-notify` | Show or suppress the completion notification for this run. |
 | `--dry-run` | Preview the resolved invocation without launching the agent. |
 
-Model, effort, fast mode, extra directories, instructions, tool availability, native agent selection, schemas, and budget support depend on the agent; unsupported settings are
-rejected. Native budgets are available through `--max-budget-usd`, `--max-turns`, and
-`--max-ai-credits` where supported.
-See [completion notifications](docs/user/running.md#get-a-completion-notification) for when it
-fires and how to configure it.
-
-Pass one prompt as text, a file, or redirected stdin. Use `--prompt=TEXT` for text starting with
-a dash. When stdin is redirected alongside text or `--file PATH`, Prat combines stdin first,
-then two newlines, then the explicit prompt:
-
-```sh
-prat cx "how many Rs in strawberry" | prat cx "times 5"
-```
-
-Supported native arguments go after `--`, for example:
+Budgets are available through `--max-budget-usd`, `--max-turns` and `--max-ai-credits` where the
+agent supports them. Support for each setting varies by agent, and unsupported settings are
+rejected rather than ignored. Native arguments go after `--`:
 
 ```sh
 prat cx "inspect this change" -- --sandbox read-only
 ```
 
-Use `prat cx --attach screenshot.png "explain this screenshot"` for native image input.
-Codex and Hermes support images (Hermes accepts one), Copilot supports images/native documents,
-and OpenCode supports files. Native model and format requirements still apply.
+Tool filters restrict what an agent can call; they add no permission approvals and are not an
+OS sandbox. [Running prompts](docs/user/running.md) covers every flag's rules and per-agent
+limits, and [JSON output](docs/user/json.md) documents the result fields.
+See [completion notifications](docs/user/running.md#get-a-completion-notification) for when it
+fires and how to configure it.
 
-Use `prat cx --add-dir ../shared "review both projects"` to include an extra directory.
-Claude, Codex, Gemini, Qwen and Copilot support this setting with their native access semantics.
-Paths resolve from the invocation directory, independently of `--cwd`.
+## Composing prompts
 
-Use `prat cc --tools Read --disable-tools 'mcp__*' "review this file"` to select native tools.
-Claude, Qwen, Copilot, Droid and Vibe support tool controls with different
-[scopes and native names](docs/user/running.md#control-tool-availability). These flags do not
-add permission approvals or provide an OS sandbox. Claude's allowlist affects built-ins only;
-Qwen's schema tool bypasses its allowlist but obeys native denials.
+A prompt comes from text, a file, or redirected stdin. When stdin is piped in alongside text or
+`--file`, Prat combines them: stdin first, two newlines, then the explicit prompt. That is what
+makes pipelines work:
 
-Use `prat cc --instructions "Cite file paths" "review this change"` or
-`prat cx --instructions-file rules.md "review this change"` for additional native guidance.
-Claude, Codex, Qwen and Droid support instructions. Codex replaces any native configured
-`developer_instructions` value for this invocation. See [instruction rules and limits](docs/user/running.md#append-instructions).
+```sh
+prat cc "how many Rs are in strawberry" | prat cx "times 5"
+prat cc -x "write a Python function that parses ISO dates" > parse.py
+prat cc --schema answer.schema.json --json "summarize this project"
+prat cc "review this" --context notes.md --context design.md
+```
 
-Use `prat cc --session-id "$(uuidgen)" "review this change"` to set the native session id up front. Claude, Copilot and Grok support this; a fresh UUID always creates a new session, while a value matching an existing Copilot session resumes it. `--json` reports the session as `native_session_id` for those plus Codex and Cursor, falling back to the requested value when a run ends before the agent reports one. See
-[session ids](docs/user/running.md#name-the-session).
+Use `--prompt=TEXT` for text starting with a dash. Save reusable prompts as templates, where
+`$input` marks where piped input goes:
 
-Use `prat cc --native-agent reviewer "review this change"` to select an existing native agent.
-This differs from a Prat profile or backend selector. The selected persona may change native
-permissions; Vibe's `auto-approve` agent permits automatic tool approval. Prat adds no approval
-flags. See [native agent selection](docs/user/running.md#select-a-native-agent).
+```toml
+[templates.review]
+prompt = "Review the following for bugs:\n\n$input"
+```
 
-Prat preserves native authentication and the selected native agent's permission behavior. See
-[running prompts](docs/user/running.md) for input rules and run behavior, and
-[JSON output](docs/user/json.md) for result fields and errors.
+```sh
+git diff | prat cc -t review
+prat templates
+```
 
-Use `prat cc --schema answer.schema.json --json "summarize this project"` for structured output.
-`output` remains a string containing compact JSON; `structured_output` also contains the parsed
-answer. Schema files have a 1 MiB limit and cannot be combined with `--extract`.
-See [schema output](docs/user/running.md#request-schema-output) for validation and native limits.
-
-Use `prat cc -x "Write a Python function"` to extract the first fenced block from an answer.
-Missing or unclosed fences leave the answer unchanged; an empty block produces empty output.
-Extraction also applies to JSON `output` and partial failed answers. See
-[code extraction](docs/user/running.md#extract-code) for fence and newline rules.
+See [templates](docs/user/running.md#apply-a-template), [context files](docs/user/running.md#include-context-files),
+[editor prompts](docs/user/running.md#edit-the-prompt), [code extraction](docs/user/running.md#extract-code)
+and [schema output](docs/user/running.md#request-schema-output).
 
 ## Profiles
 
-Save an agent and its settings under a name, then use that name like an alias.
-Both global and local configuration use the same TOML format:
+Save an agent and its settings under a name, then use that name like an alias:
 
 ```toml
 version = 1
@@ -168,15 +156,10 @@ prat simple --effort high "investigate this failure"
 
 ¹ Uses `$XDG_CONFIG_HOME/pratfall/config.toml` when `XDG_CONFIG_HOME` is set and nonempty.
 
-Global profiles are available across projects. Local configuration merges over global
-configuration; a local profile with the same name replaces the entire global profile.
-Prat reads `.pratfile` only in the invocation directory, without searching parent directories.
-`--cwd` does not change config discovery; `--config PATH` selects a different local file.
-
-Settings resolve in this order: **command-line flags → profile → its `extends` chain → local
+Local configuration merges over global, and a local profile replaces a global one of the same
+name. Settings resolve in this order: **command-line flags → profile → its `extends` chain → local
 defaults → global defaults**. Use `extends` to share backend-specific settings through a base
-profile, `[defaults]` for settings every agent accepts, `prat profiles` to inspect resolved
-profiles, and `prat config validate` to check configuration.
+profile:
 
 ```toml
 [profiles.claude-base]
@@ -188,32 +171,9 @@ extends = "claude-base"
 model   = "claude-opus-5"
 ```
 
-See [profiles and configuration](docs/user/profiles.md) for defaults, command wrappers, and
-merging rules.
-
-Save reusable prompts separately from agent profiles:
-
-```toml
-[templates.review]
-prompt = "Review the following for bugs:\n\n$input"
-```
-
-```sh
-git diff | prat simple -t review
-prat templates
-```
-
-Templates support `$input`, `${input}`, and `$$` for a literal dollar sign. A template without an
-input placeholder appends supplied input after two newlines and can run on its own. See
-[prompt templates](docs/user/running.md#apply-a-template) for composition and validation rules.
-
-Add local files with `prat cc "review this" --context notes.md --context design.md`.
-[Context files](docs/user/running.md#include-context-files) precede the templated task in the order
-supplied, with quoted path labels. The complete prompt must fit within 1 MiB.
-
-Use `prat cx --edit` to write a prompt in your editor, or add `--edit` to revise the complete
-stdin, template and context draft before execution. Editing needs a controlling terminal and
-cannot be combined with `--dry-run`. See [editor prompts](docs/user/running.md#edit-the-prompt).
+`prat profiles` shows resolved profiles and `prat config validate` checks them. See
+[profiles and configuration](docs/user/profiles.md) for defaults, command wrappers and merging
+rules.
 
 ## More
 
