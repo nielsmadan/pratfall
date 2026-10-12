@@ -2777,6 +2777,45 @@ def _exercise_versions(prat: Path, root: Path, config: Path) -> dict[str, object
     }
 
 
+def _completion_words(completed: subprocess.CompletedProcess[bytes]) -> set[str]:
+    assert completed.returncode == 0 and completed.stderr == b""
+    mode, *candidates = completed.stdout.decode().splitlines()
+    assert mode == "words"
+    return {candidate.split("\t")[0] for candidate in candidates}
+
+
+def _exercise_completion(prat: Path, root: Path, config: Path) -> dict[str, object]:
+    log = root / "native.jsonl"
+    calls_before = len(_calls(log))
+    bash = _run(prat, root, ["completion", "bash"])
+    assert bash.returncode == 0 and b"complete -o default -F _prat prat" in bash.stdout
+    script = root / "prat-completion.bash"
+    script.write_bytes(bash.stdout)
+    syntax = subprocess.run(
+        ["/bin/bash", "-n", str(script)], capture_output=True, timeout=HARNESS_TIMEOUT, check=False
+    )
+    assert syntax.returncode == 0, syntax.stderr
+    zsh = _run(prat, root, ["completion", "zsh"])
+    assert zsh.returncode == 0 and zsh.stdout.startswith(b"#compdef prat\n")
+    fish = _run(prat, root, ["completion", "fish"])
+    assert fish.returncode == 2 and fish.stdout == b""
+    selectors = _completion_words(_run(prat, root, ["__complete", "--config", str(config), ""]))
+    management = {"agents", "profiles", "templates", "doctor", "config", "completion"}
+    assert {*AGENTS, *ALIASES, *management, "simple", "override"} <= selectors
+    missing = _run(prat, root, ["__complete", "--config", str(root / "missing.toml"), ""])
+    assert "simple" not in _completion_words(missing)
+    directories = _run(prat, root, ["__complete", "cc", "--cwd", ""])
+    assert directories.returncode == 0 and directories.stdout == b"dirs\n"
+    assert len(_calls(log)) == calls_before
+    return {
+        "status": "Pass",
+        "bash_syntax_exit": syntax.returncode,
+        "fish_exit": fish.returncode,
+        "selector_candidates": len(selectors),
+        "native_launches": 0,
+    }
+
+
 @dataclass(frozen=True)
 class _EnhancementContext:
     prat: Path
@@ -3387,8 +3426,8 @@ def _exercise_q01_q02(context: _ExerciseContext) -> dict[str, object]:
     assert version_text == expected_version_text
     assert help_text.startswith("usage: prat ")
     for expected in (
-        "Run installed coding agents through named profiles.",
-        "{agents,profiles,templates,doctor,config}",
+        "One-shot coding agents for scripts and pipes.",
+        "{agents,profiles,templates,doctor,config,completion}",
         "prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]",
         "--progress              Print bounded live activity updates on stderr.",
         "--dry-run               Resolve and print the invocation without launching it.",
@@ -4013,6 +4052,10 @@ def _exercise_q17(context: _ExerciseContext) -> dict[str, object]:
     }
 
 
+def _exercise_q18(context: _ExerciseContext) -> dict[str, object]:
+    return {"Q18": _exercise_completion(context.prat, context.root, context.config)}
+
+
 _CORE_SCENARIOS: tuple[_CoreScenario, ...] = (
     _exercise_q01_q02,
     _exercise_q03,
@@ -4030,6 +4073,7 @@ _CORE_SCENARIOS: tuple[_CoreScenario, ...] = (
     _exercise_q15,
     _exercise_q16,
     _exercise_q17,
+    _exercise_q18,
 )
 
 

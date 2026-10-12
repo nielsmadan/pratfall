@@ -12,7 +12,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/nielsmadan/pratfall" alt="MIT license"></a>
 </p>
 
-One command for all your coding agents.
+One-shot coding agents for scripts and pipes.
 
 Every agent CLI has a headless mode with its own flags, its own way of taking a prompt and its
 own idea of what belongs on stdout. `prat` puts 24 of them behind one set of flags and one

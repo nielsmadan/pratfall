@@ -99,7 +99,7 @@ def _common_flags(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> Parser:
     parser = Parser(
         prog="prat",
-        description="Run installed coding agents through named profiles.",
+        description="One-shot coding agents for scripts and pipes.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""run syntax:
   prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]
