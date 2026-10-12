@@ -28,17 +28,21 @@ authenticates nothing, and leaves each agent's permission behavior as it is.
 
 ## Installation
 
-Requires Python 3.13+ and at least one installed, authenticated agent CLI. Until the first
-release, run from a source checkout with [uv](https://docs.astral.sh/uv/):
+Install with [Homebrew](https://brew.sh), then check which agent CLIs Pratfall finds:
 
 ```sh
-uv sync
-uv run prat --help
-uv run prat doctor
+brew install nielsmadan/tap/pratfall
+prat doctor
 ```
 
-Prefix the examples below with `uv run`, or use `just install` to install the checkout as a
-user-level `prat` command. See [getting started](docs/user/getting-started.md) for setup details.
+Without Homebrew, install with [uv](https://docs.astral.sh/uv/) and Python 3.13+:
+
+```sh
+uv tool install git+https://github.com/nielsmadan/pratfall
+```
+
+You need at least one installed, authenticated agent CLI. See
+[getting started](docs/user/getting-started.md) for pinning a release or running from a checkout.
 
 ## Agents
 

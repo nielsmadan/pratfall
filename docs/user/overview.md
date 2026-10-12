@@ -1,6 +1,6 @@
 # User guides
 
-The [README](../../README.md) introduces aliases, common parameters, and profiles.
+The [README](../../README.md) introduces agents, shared flags, prompt composition, and profiles.
 Choose a guide for the details:
 
 | I want to… | Guide |

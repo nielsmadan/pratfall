@@ -1,30 +1,48 @@
 # Getting started
 
-Pratfall requires Python 3.13+ and an installed, authenticated CLI for each agent you want to use.
-Set up each agent through its native instructions first; Pratfall inherits that setup.
+Pratfall needs an installed, authenticated CLI for each agent you want to use. Set up each agent
+through its native instructions first; Pratfall inherits that setup.
 
-## Run from a checkout
+## Install
 
-Until a release is published, run from a source checkout with [uv](https://docs.astral.sh/uv/):
+Install with [Homebrew](https://brew.sh), which also provides Python:
 
 ```sh
-uv sync
-uv run prat --help
-uv run prat doctor
+brew install nielsmadan/tap/pratfall
+```
+
+Without Homebrew, install with [uv](https://docs.astral.sh/uv/) and Python 3.13+. This installs
+the latest `main`; append a release tag such as `@v1.0.0` to pin a release:
+
+```sh
+uv tool install git+https://github.com/nielsmadan/pratfall
+```
+
+Then check which agent commands are available:
+
+```sh
+prat doctor
 ```
 
 `doctor` checks which agent commands are available on `PATH`. It does not launch them or check
 credentials. Once your agent is ready, run a prompt:
 
 ```sh
-uv run prat cx "summarize this checkout"
+prat cx "summarize this checkout"
 ```
 
-Here, `cx` is the alias for Codex. Run `uv run prat agents` to see all supported agents.
+Here, `cx` is the alias for Codex. Run `prat agents` to see all supported agents.
 
-## Install the command
+## Run from a checkout
 
-To use `prat` without the `uv run` prefix, run one of these recipes from the checkout:
+To try unreleased changes, run from a source checkout with uv and prefix commands with `uv run`:
+
+```sh
+uv sync
+uv run prat --help
+```
+
+To use the checkout as the `prat` command, run one of these recipes from it:
 
 | Command | Effect |
 | --- | --- |

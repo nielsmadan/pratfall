@@ -25,10 +25,10 @@ Check that origin's actual host is `github.com`: the repository check in the hel
 [`inspect`](../scripts/release.py) matches a URL substring rather than parsing its host.
 This validation limitation was deferred in the 2026-09-09 review.
 
-Before the first release, configure `HOMEBREW_TAP_TOKEN` as a repository Actions secret using a
-fine-grained PAT restricted to write access on `nielsmadan/homebrew-tap`. The workflow can create an
-absent `Formula/pratfall.rb` from the [template](../packaging/homebrew/pratfall.rb.tmpl). It renders
-the placeholders only after downloading tagged GitHub source and computing its real SHA256.
+The workflow needs `HOMEBREW_TAP_TOKEN` as a repository Actions secret: a fine-grained PAT
+restricted to write access on `nielsmadan/homebrew-tap`. The workflow can create an absent
+`Formula/pratfall.rb` from the [template](../packaging/homebrew/pratfall.rb.tmpl). It renders the
+placeholders only after downloading tagged GitHub source and computing its real SHA256.
 
 ## Prepare and publish
 
