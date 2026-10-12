@@ -27,7 +27,9 @@ from pratfall.runner import OutputLimits, ProcessResult
 from pratfall.runner import run as run_process
 
 
-@pytest.mark.parametrize("arguments", [["--help"], ["config", "--help"], ["agents", "--help"]])
+@pytest.mark.parametrize(
+    "arguments", [["--help"], ["config", "--help"], ["agents", "--help"], ["completion", "--help"]]
+)
 def test_help_is_available(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as caught:
         main(arguments)

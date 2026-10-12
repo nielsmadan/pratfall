@@ -964,6 +964,7 @@ def test_protocol_oracle_rejects_incorrect_retained_fields(field: str, wrong: ob
         "_exercise_routes",
         "_exercise_versions",
         "_exercise_a_sources",
+        "_exercise_completion",
     ],
 )
 def test_a_tier_contracts_through_source_entry_point(

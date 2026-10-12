@@ -113,9 +113,10 @@ SIBLING_IMPORTS_ALLOWED: Mapping[str, Mapping[str, frozenset[str]]] = {
     "cli": {
         "parsing": frozenset(),
         "presentation": frozenset(),
+        "shell_completion": frozenset({"parsing"}),
         "doctor": frozenset({"presentation"}),
-        "dispatch": frozenset({"doctor", "parsing", "presentation"}),
-        "__init__": frozenset({"dispatch", "parsing", "presentation"}),
+        "dispatch": frozenset({"doctor", "parsing", "presentation", "shell_completion"}),
+        "__init__": frozenset({"dispatch", "parsing", "presentation", "shell_completion"}),
     },
 }
 

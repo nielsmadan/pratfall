@@ -21,6 +21,11 @@ def test_formula_renders_release_source_with_pinned_build_resources(tmp_path: Pa
     assert "hatchling-1.32.0-py3-none-any.whl" in formula
     assert "venv.pip_install resources" in formula
     assert "venv.pip_install_and_link buildpath, build_isolation: false" in formula
+    assert (
+        'generate_completions_from_executable(bin/"prat", "completion", shells: [:bash, :zsh])'
+        in formula
+    )
+    assert 'shell_output("#{bin}/prat completion zsh")' in formula
 
 
 @pytest.mark.parametrize("version", ["v1.2.3", "1.2", "01.2.3", "1.2.3;bad"])

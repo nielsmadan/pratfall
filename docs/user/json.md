@@ -141,6 +141,7 @@ and stdin byte count, rather than a run status. Active schemas add the original 
 
 Management commands return separate versioned inventory or config objects. Their errors still
 contain `status`, `exit_code`, and `error`. Agent capability records include `fast`.
+`prat completion` prints shell code and rejects `--json` with `invalid_arguments`.
 
 `prat templates --json` returns `schema_version: 1` and a `templates` array sorted by name. Each
 record contains `name`, the unexpanded `prompt`, and the defining file's absolute `source` path.

@@ -5,11 +5,14 @@ from pathlib import Path
 from pratfall.cli.dispatch import _dispatch, _run_command
 from pratfall.cli.parsing import _json_requested, _management_mode, build_parser
 from pratfall.cli.presentation import _emit, _silence_broken_stream
+from pratfall.cli.shell_completion import _complete_command
 from pratfall.errors import PratError
 
 
 def _main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] == ["__complete"]:
+        return _complete_command(arguments[1:])
     if not _management_mode(arguments):
         return _run_command(arguments, Path.cwd())
     try:

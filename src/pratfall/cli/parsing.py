@@ -20,6 +20,26 @@ _TRI_STATE_FLAGS = {
     "--no-notify": ("notify", False, "--notify and --no-notify"),
 }
 
+_RUN_SWITCHES = frozenset(
+    {"--json", "--dry-run", "--progress", "--trace", "-x", "--extract", "-e", "--edit"}
+)
+_RUN_FLAGS_WITHOUT_VALUE = _RUN_SWITCHES | frozenset(_TRI_STATE_FLAGS)
+
+_MANAGEMENT_HELP = {
+    "agents": "List built-in agent selectors and supported settings.",
+    "profiles": "List configured profiles and their resolved settings.",
+    "templates": "List configured prompt templates.",
+    "doctor": "Locate agent executables without running them or checking credentials.",
+    "config": "Manage TOML configuration.",
+    "completion": "Print bash or zsh completion code to eval from a shell rc file.",
+}
+
+_CONFIG_COMMAND_HELP = {
+    "path": "Print the global config path, or --config PATH.",
+    "init": "Create an example config; fail if the path already exists.",
+    "validate": "Validate every configured profile and template without launching an agent.",
+}
+
 _RUN_VALUE_FLAGS = {
     "--config": "config",
     "--cwd": "cwd",
@@ -44,6 +64,54 @@ _RUN_VALUE_FLAGS = {
     "--template": "template",
     "-t": "template",
 }
+
+
+_EPILOG = """run syntax:
+  prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]
+
+SELECTOR is an agent name (codex, kiro), alias (cx), or profile. See prat agents.
+Redirected stdin precedes prompt text or file contents, separated by two newlines.
+
+run options:
+  --prompt=TEXT           Pass prompt text, including text beginning with a dash.
+  -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.
+  -t, --template NAME     Apply a named prompt template; additional input is optional.
+  --context PATH         Prepend a UTF-8 context file; repeat to include several.
+  -x, --extract           Return the first fenced code block from the answer.
+  -e, --edit              Edit the complete prompt in VISUAL, EDITOR, or vi.
+  --model MODEL           Override the profile model.
+  --native-agent NAME     Select a native agent/persona for Claude, Copilot, or Vibe.
+  --session-id ID         Set the native session id so its transcript can be located.
+                          A value matching an existing Copilot session resumes it.
+  --effort EFFORT         Override the native effort setting.
+  --fast / --no-fast      Enable or disable supported native fast mode for this run.
+  --timeout SECONDS       Set the wall-clock deadline.
+  --max-budget-usd USD    Set a supported native USD budget.
+  --max-turns COUNT       Set a supported native turn limit.
+  --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
+  --cwd PATH              Set the agent working directory.
+  --add-dir PATH          Add a native workspace directory; repeat to include several.
+  --attach PATH           Attach a native image/file; repeat where supported.
+  --tools NAME            Restrict native tool availability; repeat for several.
+  --disable-tools NAME    Disable native tools or patterns; repeat for several.
+  --instructions TEXT     Append instructions while preserving native built-in guidance.
+  --instructions-file PATH  Read appended instructions from a UTF-8 file.
+  --config PATH           Merge PATH over global config instead of .pratfile.
+  --schema PATH           Request native JSON Schema output from a UTF-8 file.
+  --json                  Print one normalized JSON result.
+  --progress              Print bounded live activity updates on stderr.
+  --trace                 Print captured native stdout on stderr.
+  --notify / --no-notify  Show or suppress the completion notification for this run.
+  --dry-run               Resolve and print the invocation without launching it.
+
+examples:
+  prat codex "review this change"
+  prat simple "review this change" --effort low
+  printf 'multiline prompt\\n' | prat cc -
+  prat cc --file prompt.md
+  prat cc --prompt=-leading-dash
+  prat cx "how many Rs in strawberry" | prat cx "times 5"
+"""
 
 
 @dataclass(frozen=True)
@@ -101,65 +169,15 @@ def build_parser() -> Parser:
         prog="prat",
         description="One-shot coding agents for scripts and pipes.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""run syntax:
-  prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]
-
-SELECTOR is an agent name (codex, kiro), alias (cx), or profile. See prat agents.
-Redirected stdin precedes prompt text or file contents, separated by two newlines.
-
-run options:
-  --prompt=TEXT           Pass prompt text, including text beginning with a dash.
-  -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.
-  -t, --template NAME     Apply a named prompt template; additional input is optional.
-  --context PATH         Prepend a UTF-8 context file; repeat to include several.
-  -x, --extract           Return the first fenced code block from the answer.
-  -e, --edit              Edit the complete prompt in VISUAL, EDITOR, or vi.
-  --model MODEL           Override the profile model.
-  --native-agent NAME     Select a native agent/persona for Claude, Copilot, or Vibe.
-  --session-id ID         Set the native session id so its transcript can be located.
-                          A value matching an existing Copilot session resumes it.
-  --effort EFFORT         Override the native effort setting.
-  --fast / --no-fast      Enable or disable supported native fast mode for this run.
-  --timeout SECONDS       Set the wall-clock deadline.
-  --max-budget-usd USD    Set a supported native USD budget.
-  --max-turns COUNT       Set a supported native turn limit.
-  --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
-  --cwd PATH              Set the agent working directory.
-  --add-dir PATH          Add a native workspace directory; repeat to include several.
-  --attach PATH           Attach a native image/file; repeat where supported.
-  --tools NAME            Restrict native tool availability; repeat for several.
-  --disable-tools NAME    Disable native tools or patterns; repeat for several.
-  --instructions TEXT     Append instructions while preserving native built-in guidance.
-  --instructions-file PATH  Read appended instructions from a UTF-8 file.
-  --config PATH           Merge PATH over global config instead of .pratfile.
-  --schema PATH           Request native JSON Schema output from a UTF-8 file.
-  --json                  Print one normalized JSON result.
-  --progress              Print bounded live activity updates on stderr.
-  --trace                 Print captured native stdout on stderr.
-  --notify / --no-notify  Show or suppress the completion notification for this run.
-  --dry-run               Resolve and print the invocation without launching it.
-
-examples:
-  prat codex "review this change"
-  prat simple "review this change" --effort low
-  printf 'multiline prompt\\n' | prat cc -
-  prat cc --file prompt.md
-  prat cc --prompt=-leading-dash
-  prat cx "how many Rs in strawberry" | prat cx "times 5"
-""",
+        epilog=_EPILOG,
         allow_abbrev=False,
     )
     parser.set_defaults(config=None, json=False)
     _common_flags(parser)
     parser.add_argument("--version", action="version", version=f"prat {version('pratfall')}")
     subparsers = parser.add_subparsers(dest="command", parser_class=Parser)
-    for command, help_text in (
-        ("agents", "List built-in agent selectors and supported settings."),
-        ("profiles", "List configured profiles and their resolved settings."),
-        ("templates", "List configured prompt templates."),
-        ("doctor", "Locate agent executables without running them or checking credentials."),
-    ):
-        child = subparsers.add_parser(command, help=help_text, allow_abbrev=False)
+    for command in ("agents", "profiles", "templates", "doctor"):
+        child = subparsers.add_parser(command, help=_MANAGEMENT_HELP[command], allow_abbrev=False)
         _common_flags(child)
         if command == "doctor":
             child.add_argument(
@@ -171,18 +189,23 @@ examples:
                     "configured wrappers may have side effects."
                 ),
             )
-    config = subparsers.add_parser("config", help="Manage TOML configuration.", allow_abbrev=False)
+    config = subparsers.add_parser("config", help=_MANAGEMENT_HELP["config"], allow_abbrev=False)
     _common_flags(config)
     config_commands = config.add_subparsers(
         dest="config_command", required=True, parser_class=Parser
     )
-    for name, help_text in (
-        ("path", "Print the global config path, or --config PATH."),
-        ("init", "Create an example config; fail if the path already exists."),
-        ("validate", "Validate every configured profile and template without launching an agent."),
-    ):
+    for name, help_text in _CONFIG_COMMAND_HELP.items():
         child = config_commands.add_parser(name, help=help_text, allow_abbrev=False)
         _common_flags(child)
+    completion = subparsers.add_parser(
+        "completion", help=_MANAGEMENT_HELP["completion"], allow_abbrev=False
+    )
+    completion.add_argument(
+        "shell",
+        nargs="?",
+        metavar="SHELL",
+        help="bash or zsh; default: the basename of $SHELL, else bash.",
+    )
     return parser
 
 
@@ -207,16 +230,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     tri_state: dict[str, bool | None] = {"fast": None, "notify": None}
     for token in scan.tokens:
         argument = token.argument
-        if argument in {
-            "--json",
-            "--dry-run",
-            "--progress",
-            "--trace",
-            "-x",
-            "--extract",
-            "-e",
-            "--edit",
-        }:
+        if argument in _RUN_SWITCHES:
             json_mode = json_mode or argument == "--json"
             dry_run = dry_run or argument == "--dry-run"
             progress = progress or argument == "--progress"
@@ -436,20 +450,7 @@ def _management_mode(arguments: list[str]) -> bool:
         if token.name in _RUN_VALUE_FLAGS:
             run_option = run_option or token.name != "--config"
             continue
-        if argument in {
-            "--json",
-            "--dry-run",
-            "--progress",
-            "--trace",
-            "-x",
-            "--extract",
-            "-e",
-            "--edit",
-            "--fast",
-            "--no-fast",
-            "--notify",
-            "--no-notify",
-        } or argument.startswith("--prompt="):
+        if argument in _RUN_FLAGS_WITHOUT_VALUE or argument.startswith("--prompt="):
             run_option = run_option or argument != "--json"
             continue
         if argument.startswith("-"):

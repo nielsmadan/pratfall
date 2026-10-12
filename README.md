@@ -44,6 +44,10 @@ uv tool install git+https://github.com/nielsmadan/pratfall
 You need at least one installed, authenticated agent CLI. See
 [getting started](docs/user/getting-started.md) for pinning a release or running from a checkout.
 
+Homebrew installs tab completion for bash and zsh. With uv, add
+`eval "$(prat completion zsh)"` or `eval "$(prat completion bash)"` to your shell rc file; see
+[shell completion](docs/user/getting-started.md#enable-shell-completion).
+
 ## Agents
 
 Choose an agent by name or short alias:

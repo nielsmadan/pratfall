@@ -44,10 +44,13 @@ class Pratfall < Formula
     venv = virtualenv_create(libexec, "python3.13")
     venv.pip_install resources
     venv.pip_install_and_link buildpath, build_isolation: false
+    generate_completions_from_executable(bin/"prat", "completion", shells: [:bash, :zsh])
   end
 
   test do
     assert_match "One-shot coding agents for scripts and pipes", shell_output("#{bin}/prat --help")
     assert_match "codex", shell_output("#{bin}/prat agents")
+    assert_match "#compdef prat", shell_output("#{bin}/prat completion zsh")
+    assert_match "codex", shell_output("#{bin}/prat __complete cod")
   end
 end

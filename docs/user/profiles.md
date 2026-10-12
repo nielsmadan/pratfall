@@ -319,7 +319,8 @@ This release reserves `openhands`, `oh`, `warp`, `iflow`, `if`, `qwen`, `amp`, `
 For example, rename `[profiles.oh]` to `[profiles.my-openhands]`, keeping its agent and settings.
 
 `templates` is also reserved. Rename an existing `[profiles.templates]` and update invocations
-that select it before upgrading.
+that select it before upgrading. The same applies to `completion`, reserved for the shell
+completion command.
 
 A collision reports `profiles.NAME: name is reserved; choose a different profile name.`
 

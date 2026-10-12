@@ -22,6 +22,7 @@ from pratfall.cli.presentation import (
     _StdoutLatch,
     _StreamDiagnostics,
 )
+from pratfall.cli.shell_completion import _completion_script
 from pratfall.codes import INTERNAL_ERROR, SIGNAL_EXIT_BASE, exit_code_for
 from pratfall.config import config_path, init_config, load_config, option_origins, resolve_profile
 from pratfall.consumer import ByteConsumer, CapturingConsumer
@@ -181,7 +182,13 @@ def _validate_config_native_arguments(config: Config) -> None:
 
 
 def _dispatch(args: argparse.Namespace) -> int:
-    if args.command == "config" and args.config_command == "path":
+    if args.command == "completion":
+        if args.json:
+            raise PratError(
+                "completion prints shell code; --json is not supported.", code="invalid_arguments"
+            )
+        sys.stdout.write(_completion_script(args.shell, os.environ))
+    elif args.command == "config" and args.config_command == "path":
         path = config_path(args.config)
         _emit({"path": str(path)}, [str(path)], json_mode=args.json)
     elif args.command == "config" and args.config_command == "init":

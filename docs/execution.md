@@ -17,7 +17,11 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   management command, [dispatch.py](../src/pratfall/cli/dispatch.py) owns run and management
   dispatch, [doctor.py](../src/pratfall/cli/doctor.py) owns the inventory and version probes, and
   [presentation.py](../src/pratfall/cli/presentation.py) owns diagnostics writers and stdout
-  emission. [dispatch.py](../src/pratfall/cli/dispatch.py) validates configuration, selected native
+  emission. [shell_completion.py](../src/pratfall/cli/shell_completion.py) owns the bash and zsh
+  scripts and the hidden `prat __complete WORD…` callback they run on every Tab. The callback is
+  intercepted before management or run parsing, reads config only for profile and template names,
+  never reaches adapters or the runner, and always exits 0 with a mode line (`words`, `files` or
+  `dirs`) followed by `word<TAB>description` candidates. [dispatch.py](../src/pratfall/cli/dispatch.py) validates configuration, selected native
   options, and the child working directory before acquiring the prompt.
   [config.py](../src/pratfall/config.py) merges
   the global file with the invocation directory's `.pratfile`, or the local file selected by

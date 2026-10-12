@@ -76,7 +76,9 @@ and disposable XDG configuration. Workflow scenarios run against both wheel and 
 covering template listings, composed prompt previews, extraction with native failure metadata and raw
 traces, and a fake editor on a controlling terminal. Editor scenarios verify terminal reads/writes,
 foreground ownership and attribute restoration, and temporary-file cleanup after accepted and rejected
-edits. W04–W07 also run both installations through all six public control families: exact native
+edits. Q18 checks both completion scripts, the rejected fish shell, and that the hidden completion
+callback offers agents, aliases and configured profiles without launching an agent. W04–W07
+also run both installations through all six public control families: exact native
 argv and composed prompts across nine agents, CLI/config path origins under a different `--cwd`,
 layer precedence and empty-array clearing, binary attachments, native agent and tool selection,
 and Claude/Codex/Qwen schema text/JSON output. Schema checks retain raw trace and accounting on
@@ -184,7 +186,10 @@ from `main`, which the built-in Actions token cannot have. See GitHub's
 ## Update Homebrew
 
 The formula uses Homebrew `python@3.13` and checksummed pure-Python wheels for Hatchling and its
-runtime requirements. It installs those resources first, then Pratfall with build isolation disabled.
+runtime requirements. It installs those resources first, then Pratfall with build isolation
+disabled, and generates the bash and zsh completion files by running `prat completion bash` and
+`prat completion zsh`. That command reads no configuration, so it works inside Homebrew's build
+environment.
 
 [`installed_version`](../scripts/render_formula.py) parses the trusted tap formula version:
 an older tag cannot replace a newer formula; a same-version repair or normal upgrade can proceed.
