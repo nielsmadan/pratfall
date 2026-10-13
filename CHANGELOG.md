@@ -3,6 +3,12 @@
 All notable user-facing changes to Pratfall. While the project is on `0.x`, breaking changes may
 land in a minor release and are called out explicitly.
 
+## [1.1.0] - 2026-10-13
+
+### Features
+
+- Add bash and zsh shell completion
+
 ## [1.0.0] - 2026-10-11
 
 ### Features
@@ -72,6 +78,7 @@ land in a minor release and are called out explicitly.
 - Create pytest basetemp parent so a fresh checkout can run the suite (#1)
 - Harden cli failure handling
 
+[1.1.0]: https://github.com/nielsmadan/pratfall/compare/v1.0.0..v1.1.0
 [1.0.0]: https://github.com/nielsmadan/pratfall/compare/v0.9.1..v1.0.0
 [0.9.1]: https://github.com/nielsmadan/pratfall/compare/v0.9.0..v0.9.1
 [0.9.0]: https://github.com/nielsmadan/pratfall/tree/v0.9.0
