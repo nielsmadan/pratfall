@@ -1,19 +1,51 @@
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, fields
-from typing import assert_never, cast
+from typing import Any, assert_never
 
 from pratfall.codes import INTERNAL_ERROR, INTERRUPTED, SIGNAL_EXIT_BASE, Code, exit_code_for
 from pratfall.config import step_prompt
-from pratfall.models import Config, Usage, Workflow, WorkflowStep
+from pratfall.models import Config, JsonValue, ResultError, Usage, Workflow, WorkflowStep
 from pratfall.prompt_templates import template_parameters
 
 _USAGE_FIELDS = tuple(field.name for field in fields(Usage))
 
 
 @dataclass(frozen=True)
+class StepResult:
+    status: str
+    exit_code: int
+    output: str
+    duration_ms: int
+    usage: Mapping[str, int | None] | None
+    cost_usd: int | float | None
+    error: ResultError | None
+    structured_output_present: bool
+    structured_output: JsonValue
+    payload: Mapping[str, object]
+
+
+@dataclass(frozen=True)
 class StepOutcome:
     step: str
-    result: Mapping[str, object]
+    result: StepResult
+    item: int | None = None
+
+
+def step_result(payload: Mapping[str, Any]) -> StepResult:
+    error = payload["error"]
+    duration_ms = payload.get("duration_ms")
+    return StepResult(
+        status=payload["status"],
+        exit_code=payload["exit_code"],
+        output=payload["output"],
+        duration_ms=duration_ms if type(duration_ms) is int else 0,
+        usage=payload["usage"],
+        cost_usd=payload["cost_usd"],
+        error=None if error is None else ResultError(error["code"], error["message"]),
+        structured_output_present=payload.get("structured_output") is not None,
+        structured_output=payload.get("structured_output"),
+        payload=payload,
+    )
 
 
 def workflow_prompts(config: Config, workflow: Workflow) -> dict[str, str | None]:
@@ -112,7 +144,7 @@ def workflow_result(
 ) -> dict[str, object]:
     results = {outcome.step: outcome.result for outcome in outcomes}
     declared = tuple(results[step.name] for step in workflow.steps if step.name in results)
-    failure = next((outcome for outcome in outcomes if outcome.result["status"] != "success"), None)
+    failure = next((outcome for outcome in outcomes if outcome.result.status != "success"), None)
     status, exit_code, output, error = _summary(workflow, results, failure, interrupted_by)
     return {
         "schema_version": 1,
@@ -122,10 +154,10 @@ def workflow_result(
         "output": output,
         "duration_ms": duration_ms,
         "usage": _summed_usage(declared),
-        "cost_usd": _sum_present(cast(float | None, result["cost_usd"]) for result in declared),
+        "cost_usd": _sum_present(result.cost_usd for result in declared),
         "error": error,
         "steps": [
-            {"step": step.name, **results[step.name]}
+            {"step": step.name, **results[step.name].payload}
             if step.name in results
             else {"step": step.name, "status": "skipped"}
             for step in workflow.steps
@@ -135,6 +167,12 @@ def workflow_result(
 
 def synthesized_result(
     status: str, code: Code, message: str, exit_code: int | None = None
+) -> StepResult:
+    return step_result(_synthesized_payload(status, code, message, exit_code))
+
+
+def _synthesized_payload(
+    status: str, code: Code, message: str, exit_code: int | None
 ) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -151,7 +189,7 @@ def synthesized_result(
 def early_result(
     name: str, status: str, code: Code, exit_code: int, message: str
 ) -> dict[str, object]:
-    failure = synthesized_result(status, code, message, exit_code)
+    failure = _synthesized_payload(status, code, message, exit_code)
     return {"schema_version": 1, "workflow": name} | failure | {"steps": []}
 
 
@@ -168,7 +206,7 @@ def _parameter_value(
 
 def _summary(
     workflow: Workflow,
-    results: Mapping[str, Mapping[str, object]],
+    results: Mapping[str, StepResult],
     failure: StepOutcome | None,
     interrupted_by: int | None,
 ) -> tuple[str, int, str, dict[str, str] | None]:
@@ -178,29 +216,23 @@ def _summary(
         return "interrupted", SIGNAL_EXIT_BASE + interrupted_by, "", error
     if failure is not None:
         result = failure.result
-        code, message = _error_fields(result["error"])
+        code, message = _error_fields(result.error)
         error = {"code": code, "message": f"step '{failure.step}': {message}"}
-        return cast(str, result["status"]), cast(int, result["exit_code"]), "", error
+        return result.status, result.exit_code, "", error
     blocks = tuple(
-        (step, cast(str, results[step]["output"]))
-        for step in final_steps(workflow)
-        if step in results
+        (step, results[step].output) for step in final_steps(workflow) if step in results
     )
     return "success", 0, join_outputs(blocks) or "", None
 
 
-def _error_fields(error: object) -> tuple[str, str]:
-    if not isinstance(error, Mapping):
+def _error_fields(error: ResultError | None) -> tuple[str, str]:
+    if error is None:
         return INTERNAL_ERROR, "failed without an error report."
-    return str(error["code"]), str(error["message"])
+    return error.code, error.message
 
 
-def _summed_usage(results: tuple[Mapping[str, object], ...]) -> dict[str, int | None] | None:
-    reports = tuple(
-        cast(Mapping[str, int | None], usage)
-        for usage in (result["usage"] for result in results)
-        if usage is not None
-    )
+def _summed_usage(results: tuple[StepResult, ...]) -> dict[str, int | None] | None:
+    reports = tuple(result.usage for result in results if result.usage is not None)
     if not reports:
         return None
     return {name: _sum_present(report.get(name) for report in reports) for name in _USAGE_FIELDS}

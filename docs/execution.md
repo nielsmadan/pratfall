@@ -20,7 +20,7 @@ the [agent references](reference/overview.md).
   dispatch, [doctor.py](../src/pratfall/cli/doctor.py) owns the inventory and version probes, and
   [presentation.py](../src/pratfall/cli/presentation.py) owns diagnostics writers, stdout
   emission and the shared error-guard helpers.
-  [workflow_run.py](../src/pratfall/cli/workflow_run.py) supervises workflow runs, and the
+  [workflow_run.py](../src/pratfall/cli/workflow_run.py) prepares and reports workflow runs, and the
   internal `__step` entry in [cli/__init__.py](../src/pratfall/cli/__init__.py) runs one workflow
   step, intercepted beside the completion callback.
   [shell_completion.py](../src/pratfall/cli/shell_completion.py) owns the bash and zsh scripts and
@@ -141,9 +141,12 @@ inherits the terminal.
 
 [workflow_plan.py](../src/pratfall/workflow_plan.py) holds the pure part: a workflow's parameters,
 ready-step selection, output joining, per-step arguments and the aggregate result, all over data
-passed in. [workflow_run.py](../src/pratfall/cli/workflow_run.py) is the edge. Dispatch hands a
-selector that names a workflow to `run_workflow` after configuration loads, before profile
-resolution, so a workflow never reaches an adapter or the runner itself.
+passed in. [workflow_supervisor.py](../src/pratfall/workflow_supervisor.py) owns child processes:
+spawning, the selector loop, signal forwarding, teardown, stderr relay and result validation.
+[workflow_run.py](../src/pratfall/cli/workflow_run.py) is the edge: flag rejection, preparation,
+dry run, emission and notification. Dispatch hands a selector that names a workflow to
+`run_workflow` after configuration loads, before profile resolution, so a workflow never reaches an
+adapter or the runner itself.
 
 - **Parent and child.** The parent validates flags, binds parameters, resolves each step's
   timeout and the working directory, and reads the base input before launching anything. It then

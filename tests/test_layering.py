@@ -9,13 +9,14 @@ PACKAGE_ROOT = SOURCE_ROOT / "pratfall"
 PACKAGE = "pratfall"
 
 LAYERS: tuple[tuple[str, ...], ...] = (
-    ("__init__", "codes", "limits", "interruption"),
+    ("__init__", "codes", "limits", "interruption", "nonblocking"),
     ("errors", "models"),
     ("catalog", "consumer", "notify", "prompt_input", "option_paths"),
-    ("prompt_templates", "prompt_editor", "instructions", "schema"),
+    ("prompt_templates", "prompt_editor", "instructions", "schema", "fences"),
     ("adapters", "config"),
     ("workflow_plan",),
     ("runner",),
+    ("workflow_supervisor",),
     ("output",),
     ("cli",),
     ("__main__",),
@@ -30,6 +31,8 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "codes": frozenset(),
     "limits": frozenset(),
     "interruption": frozenset(),
+    "nonblocking": frozenset(),
+    "fences": frozenset(),
     "errors": frozenset({"codes"}),
     "models": frozenset({"codes"}),
     "option_paths": frozenset({"errors", "models"}),
@@ -47,7 +50,18 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     ),
     "workflow_plan": frozenset({"codes", "config", "errors", "models", "prompt_templates"}),
     "runner": frozenset({"codes", "consumer", "interruption", "limits", "models"}),
-    "output": frozenset({"codes", "models", "runner", "schema"}),
+    "workflow_supervisor": frozenset(
+        {
+            "codes",
+            "interruption",
+            "limits",
+            "models",
+            "nonblocking",
+            "prompt_input",
+            "workflow_plan",
+        }
+    ),
+    "output": frozenset({"codes", "fences", "models", "runner", "schema"}),
     "cli": frozenset(
         {
             "adapters",
@@ -61,6 +75,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
             "limits",
             "schema",
             "models",
+            "nonblocking",
             "notify",
             "output",
             "option_paths",
@@ -69,6 +84,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
             "prompt_templates",
             "runner",
             "workflow_plan",
+            "workflow_supervisor",
         }
     ),
     "__main__": frozenset({"cli"}),

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from pratfall import workflow_supervisor as supervisor_module
 from pratfall.cli import dispatch as dispatch_module
 from pratfall.cli import main
 from pratfall.cli import workflow_run as workflow_module
@@ -399,7 +400,7 @@ def test_sequential_workflow_runs_one_step_at_a_time(
     )
     spawned: list[subprocess.Popen[bytes]] = []
     live_at_spawn: list[int] = []
-    real_spawn = workflow_module._spawn
+    real_spawn = supervisor_module._spawn
 
     def spy(
         launcher: tuple[str, ...], spec: Mapping[str, object], cwd: Path
@@ -409,7 +410,7 @@ def test_sequential_workflow_runs_one_step_at_a_time(
         spawned.append(process)
         return process
 
-    monkeypatch.setattr(workflow_module, "_spawn", spy)
+    monkeypatch.setattr(supervisor_module, "_spawn", spy)
     assert main(["pair", "--config", str(config)]) == 0
     assert capsys.readouterr().out == "## x\n\nX\n\n## y\n\nY\n"
     assert live_at_spawn == [0, 0]
@@ -472,7 +473,7 @@ def test_child_stderr_is_relayed_with_step_prefix(
 def test_long_stderr_lines_are_split_at_the_relay_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(workflow_module, "RELAY_LINE_BYTES", 8)
+    monkeypatch.setattr(supervisor_module, "RELAY_LINE_BYTES", 8)
     config = chain_config(tmp_path, first="@stderr 0123456789abcdefXY\nfirst")
     assert main(["chain", "--config", str(config)]) == 0
     err = capfd.readouterr().err
@@ -597,7 +598,7 @@ def test_bad_child_results_are_internal_errors(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(workflow_module, "WORKFLOW_RESULT_BYTES", 1024)
+    monkeypatch.setattr(supervisor_module, "WORKFLOW_RESULT_BYTES", 1024)
     config = chain_config(tmp_path)
     with_launcher(monkeypatch, tmp_path, mode)
     assert main(["chain", "--prompt=x", "--json", "--config", str(config)]) == 1
@@ -615,13 +616,13 @@ def test_child_without_a_result_reports_its_exit_status() -> None:
     )
     expected = failed_step("a", "error", 1, "internal_error", message)
     del expected["step"]
-    assert workflow_module._child_result(False, b"", -9, None) == expected
+    assert supervisor_module._child_result(False, b"", -9, None).payload == expected
 
 
 def test_signalled_child_without_a_result_is_interrupted() -> None:
     expected = failed_step("a", "interrupted", 130, "interrupted", "Interrupted by signal 2.")
     del expected["step"]
-    assert workflow_module._child_result(False, b"", -2, signal.SIGINT) == expected
+    assert supervisor_module._child_result(False, b"", -2, signal.SIGINT).payload == expected
 
 
 def test_launcher_that_cannot_start_fails_the_step(
@@ -661,14 +662,14 @@ def test_spawn_errors_map_to_launch_codes(error: OSError, code: str, message: st
         "x", "error", 126 if code == "executable_not_executable" else 1, code, message
     )
     del expected["step"]
-    assert workflow_module._spawn_failure(error, "launcher") == expected
+    assert supervisor_module._spawn_failure(error, "launcher").payload == expected
 
 
 def test_backstop_tears_down_a_hung_child(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(workflow_module, "BACKSTOP_SLACK", 0.0)
-    monkeypatch.setattr(workflow_module, "TERMINATE_GRACE", 0.1)
+    monkeypatch.setattr(supervisor_module, "BACKSTOP_SLACK", 0.0)
+    monkeypatch.setattr(supervisor_module, "TERMINATE_GRACE", 0.1)
     config = chain_config(tmp_path)
     with_launcher(monkeypatch, tmp_path, "hang")
     exit_code = main(["chain", "--prompt=x", "--timeout", "0.2", "--json", "--config", str(config)])
@@ -681,7 +682,7 @@ def test_backstop_tears_down_a_hung_child(
 
 def spy_spawn(monkeypatch: pytest.MonkeyPatch) -> list[subprocess.Popen[bytes]]:
     spawned: list[subprocess.Popen[bytes]] = []
-    real_spawn = workflow_module._spawn
+    real_spawn = supervisor_module._spawn
 
     def spy(
         launcher: tuple[str, ...], spec: Mapping[str, object], cwd: Path
@@ -690,25 +691,25 @@ def spy_spawn(monkeypatch: pytest.MonkeyPatch) -> list[subprocess.Popen[bytes]]:
         spawned.append(process)
         return process
 
-    monkeypatch.setattr(workflow_module, "_spawn", spy)
+    monkeypatch.setattr(supervisor_module, "_spawn", spy)
     return spawned
 
 
 def fail_tick_once(monkeypatch: pytest.MonkeyPatch, ready: Path) -> None:
-    real_tick = workflow_module._tick
+    real_tick = supervisor_module._tick
 
     def tick(state: object) -> None:
         if ready.exists():
             raise RuntimeError("kaboom")
         real_tick(state)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(workflow_module, "_tick", tick)
+    monkeypatch.setattr(supervisor_module, "_tick", tick)
 
 
 def test_teardown_kills_a_child_that_ignores_terminate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(workflow_module, "TERMINATE_GRACE", 0.1)
+    monkeypatch.setattr(supervisor_module, "TERMINATE_GRACE", 0.1)
     ready = tmp_path / "ready"
     config = chain_config(tmp_path)
     with_launcher(monkeypatch, tmp_path, "stubborn", str(ready))
@@ -842,7 +843,7 @@ def test_unexpected_failure_is_a_workflow_internal_error(
     def boom(*_args: object) -> object:
         raise RuntimeError("kaboom")
 
-    monkeypatch.setattr(workflow_module, "_supervise", boom)
+    monkeypatch.setattr(workflow_module, "supervise", boom)
     config = chain_config(tmp_path)
     assert main(["chain", "--prompt=x", "--json", "--config", str(config)]) == 1
     result = json_result(capsys)
@@ -859,7 +860,7 @@ def test_unexpected_failure_in_text_mode_prints_one_stderr_line(
     def boom(*_args: object) -> object:
         raise RuntimeError("kaboom")
 
-    monkeypatch.setattr(workflow_module, "_supervise", boom)
+    monkeypatch.setattr(workflow_module, "supervise", boom)
     config = chain_config(tmp_path)
     assert main(["chain", "--prompt=x", "--config", str(config)]) == 1
     captured = capsys.readouterr()
@@ -874,7 +875,7 @@ def test_signal_to_a_vanished_child_group_is_not_counted(monkeypatch: pytest.Mon
     try:
         with monkeypatch.context() as patch:
             patch.setattr(os, "killpg", vanished)
-            assert workflow_module._signal_child(process, signal.SIGTERM) is False
+            assert supervisor_module._signal_child(process, signal.SIGTERM) is False
     finally:
         process.kill()
         process.wait()
@@ -1034,7 +1035,7 @@ def test_relay_drops_output_under_backpressure(monkeypatch: pytest.MonkeyPatch) 
     os.set_blocking(write_end, True)
     with os.fdopen(write_end, "w") as stream, os.fdopen(read_end, "rb") as reader:
         monkeypatch.setattr(sys, "stderr", stream)
-        relay = workflow_module._Relay()
+        relay = supervisor_module._Relay()
         relay.write(b"dropped\n")
         assert relay.failed is False
         assert os.get_blocking(write_end) is True
@@ -1048,7 +1049,7 @@ def test_relay_marks_failure_on_broken_stderr(monkeypatch: pytest.MonkeyPatch) -
     os.close(read_end)
     with os.fdopen(write_end, "w") as stream:
         monkeypatch.setattr(sys, "stderr", stream)
-        relay = workflow_module._Relay()
+        relay = supervisor_module._Relay()
         relay.write(b"lost\n")
         relay.write(b"ignored\n")
         monkeypatch.undo()
@@ -1139,7 +1140,7 @@ def test_relay_writes_the_lines_of_one_read_together(
 
     config = chain_config(tmp_path)
     with_launcher(monkeypatch, tmp_path, "lines")
-    monkeypatch.setattr(workflow_module._Relay, "write", record)
+    monkeypatch.setattr(supervisor_module._Relay, "write", record)
     assert main(["chain", "--prompt=x", "--json", "--config", str(config)]) == 0
     assert json_result(capsys)["status"] == "success"
     assert writes == [b"[a] one\n[a] two\n", b"[b] one\n[b] two\n"]
@@ -1192,7 +1193,7 @@ def test_relay_ends_a_partially_written_line(monkeypatch: pytest.MonkeyPatch) ->
 
     with monkeypatch.context() as patch:
         patch.setattr(os, "write", short_write)
-        workflow_module._write_available(2, b"abcdef\n")
+        supervisor_module._write_available(2, b"abcdef\n")
     assert calls == [b"abcdef\n", b"def\n", b"\n"]
 
 
@@ -1209,7 +1210,7 @@ def test_relay_adds_no_newline_when_a_short_write_ends_on_a_line(
 
     with monkeypatch.context() as patch:
         patch.setattr(os, "write", short_write)
-        workflow_module._write_available(2, b"abc\ndef\n")
+        supervisor_module._write_available(2, b"abc\ndef\n")
     assert calls == [b"abc\ndef\n", b"def\n"]
 
 
@@ -1236,14 +1237,14 @@ def test_teardown_reaps_running_children_when_supervision_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     config, ready = hanging_chain(tmp_path)
-    real_tick = workflow_module._tick
+    real_tick = supervisor_module._tick
 
     def tick(state: object) -> None:
         if ready.exists():
             raise RuntimeError("kaboom")
         real_tick(state)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(workflow_module, "_tick", tick)
+    monkeypatch.setattr(supervisor_module, "_tick", tick)
     assert main(["chain", "--json", "--config", str(config)]) == 1
     assert json_result(capsys)["error"] == {
         "code": "internal_error",

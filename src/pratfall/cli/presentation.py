@@ -1,4 +1,3 @@
-import errno
 import fcntl
 import json
 import os
@@ -13,6 +12,7 @@ from typing import ClassVar, Literal, Protocol, TextIO
 
 from pratfall.errors import PratError
 from pratfall.models import Activity, Config, Invocation, ResolvedProfile, ResultError
+from pratfall.nonblocking import write_nonblocking
 
 ACTIVITY_LABELS: Mapping[Activity, str] = MappingProxyType(
     {
@@ -148,7 +148,7 @@ class _ProgressDiagnostics:
         if self.failed or descriptor is None:
             return
         try:
-            _write_nonblocking(descriptor, value)
+            write_nonblocking(descriptor, value)
         except OSError:
             self.failed = True
             raise
@@ -158,23 +158,6 @@ class _ProgressDiagnostics:
 
     def progress(self, elapsed_ms: int, category: Activity) -> None:
         self.line(f"prat: {elapsed_ms / 1000:.1f}s {ACTIVITY_LABELS[category]}")
-
-
-def _write_nonblocking(descriptor: int, data: bytes) -> int:
-    offset = 0
-    while offset < len(data):
-        try:
-            written = os.write(descriptor, data[offset : offset + 4096])
-        except BlockingIOError:
-            return offset
-        except OSError as error:
-            if error.errno in {errno.EAGAIN, errno.EWOULDBLOCK}:
-                return offset
-            raise
-        if written == 0:
-            raise OSError(errno.EIO, "stderr write returned zero bytes")
-        offset += written
-    return offset
 
 
 def _diagnostics_for(*, progress: bool) -> _Diagnostics:

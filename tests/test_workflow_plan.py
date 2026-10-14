@@ -8,6 +8,7 @@ from pratfall.config import load_config
 from pratfall.models import Workflow, WorkflowStep
 from pratfall.workflow_plan import (
     StepOutcome,
+    StepResult,
     early_result,
     final_steps,
     join_outputs,
@@ -15,6 +16,7 @@ from pratfall.workflow_plan import (
     step_arguments,
     step_input,
     step_parameters,
+    step_result,
     synthesized_result,
     workflow_parameters,
     workflow_result,
@@ -241,8 +243,9 @@ def child(
     }
 
 
-def outcome(step: str, result: Mapping[str, object]) -> StepOutcome:
-    return StepOutcome(step=step, result=result)
+def outcome(step: str, result: Mapping[str, object] | StepResult) -> StepOutcome:
+    built = result if isinstance(result, StepResult) else step_result(result)
+    return StepOutcome(step=step, result=built)
 
 
 def test_success_with_one_final_step() -> None:
@@ -313,7 +316,7 @@ def test_synthesized_failure_is_reported_like_a_child_failure() -> None:
     assert result["usage"] is None
     assert result["cost_usd"] is None
     assert result["steps"] == [
-        {"step": "a", **failure},
+        {"step": "a", **failure.payload},
         {"step": "b", "status": "skipped"},
         {"step": "c", "status": "skipped"},
     ]
@@ -389,3 +392,10 @@ def test_usage_and_cost_are_null_when_no_step_reports_them() -> None:
     result = workflow_result("chain", CHAIN, tuple(outcome(n, child()) for n in "abc"), 1, None)
     assert result["usage"] is None
     assert result["cost_usd"] is None
+
+
+def test_step_result_reports_structured_output_only_when_present() -> None:
+    absent = step_result({**child(output="plain"), "structured_output": None})
+    present = step_result({**child(output="[]"), "structured_output": ["a", "b"]})
+    assert (absent.structured_output_present, absent.structured_output) == (False, None)
+    assert (present.structured_output_present, present.structured_output) == (True, ["a", "b"])
