@@ -35,10 +35,11 @@ Here, `cx` is the alias for Codex. Run `prat agents` to see all supported agents
 
 ## Enable shell completion
 
-`prat` completes subcommands, agent names and aliases, profiles, template names after `-t`, effort
-levels for the selected agent, flags, and file or directory paths for options that take one. In
-zsh, each name shows a short description. Profiles and templates come from the global config and
-the current directory's `.pratfile`, or from a `--config` typed earlier on the line.
+`prat` completes subcommands, agent names and aliases, profiles, workflows, template names after
+`-t`, `--param` names for the selected profile, template or workflow, effort levels for the
+selected agent, flags, and file or directory paths for options that take one. In zsh, each name
+shows a short description. Profiles, workflows and templates come from the global config and the
+current directory's `.pratfile`, or from a `--config` typed earlier on the line.
 
 The Homebrew formula installs the completion files. Zsh loads them when Homebrew's
 `share/zsh/site-functions` is on `FPATH` before `compinit` runs; bash needs the `bash-completion@2`

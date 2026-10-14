@@ -345,6 +345,10 @@ For example, rename `[profiles.oh]` to `[profiles.my-openhands]`, keeping its ag
 that select it before upgrading. The same applies to `completion`, reserved for the shell
 completion command.
 
+`workflows` is also reserved, for the command that lists [workflows](workflows.md). Rename an
+existing `[profiles.workflows]` and update invocations that select it. A profile and a workflow
+cannot share a name.
+
 A collision reports `profiles.NAME: name is reserved; choose a different profile name.`
 
 Agents with names of four letters or fewer now use their full names. Update commands and profile

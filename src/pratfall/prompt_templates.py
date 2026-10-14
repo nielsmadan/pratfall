@@ -45,8 +45,20 @@ def bind_run_input(
     explicit: PromptSource | None,
 ) -> BoundInput:
     names = () if prompt is None else template_parameters(prompt)
+    return bind_input(names, label, words, named, explicit, active=prompt is not None)
+
+
+def bind_input(
+    names: tuple[str, ...],
+    label: str,
+    words: tuple[str, ...],
+    named: tuple[str, ...],
+    explicit: PromptSource | None,
+    *,
+    active: bool,
+) -> BoundInput:
     if named and not names:
-        target = "no template is active" if prompt is None else f"{label} has no parameters"
+        target = f"{label} has no parameters" if active else "no template is active"
         raise _argument_error(f"--param needs a prompt with parameters, but {target}.")
     if not names:
         return BoundInput(_plain_source(words, explicit), MappingProxyType({}))

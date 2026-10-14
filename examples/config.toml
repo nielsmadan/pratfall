@@ -27,3 +27,22 @@ prompt = "Delete empty files under $folder."
 [profiles.review-fast]
 extends = "review"
 fast = true
+
+[profiles.summarize]
+agent = "cc"
+prompt = "Summarize the following in five bullet points."
+
+[profiles.risks]
+agent = "codex"
+prompt = "List the risks in the following."
+
+[profiles.brief]
+agent = "cc"
+prompt = "Merge the summary and risks below into one short brief."
+
+[workflows.assess]
+steps = [
+  { name = "read", profile = "summarize" },
+  { name = "risks", profile = "risks", after = [] },
+  { name = "brief", profile = "brief", after = ["read", "risks"] },
+]

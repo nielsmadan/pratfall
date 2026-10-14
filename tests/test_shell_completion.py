@@ -569,3 +569,32 @@ def test_bash_glue_completes_params(
         env={"PATH": f"{shim}:/usr/bin:/bin", "XDG_CONFIG_HOME": str(tmp_path / "config-home")},
     )
     assert sorted(result.stdout.split()) == expected
+
+
+WORKFLOW_PRATFILE = (
+    PRATFILE
+    + """[workflows.tidy]
+steps = [
+  { name = "first", profile = "simple" },
+  { name = "second", profile = "cleaner", after = ["first"], bind = { keep = "first" } },
+  { name = "third", profile = "simple" },
+]
+"""
+)
+
+
+def test_workflow_names_complete_as_selectors(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(WORKFLOW_PRATFILE, encoding="utf-8")
+    assert candidates(["ti"], tmp_path) == [("tidy", "workflow")]
+
+
+def test_param_offers_workflow_parameters(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(WORKFLOW_PRATFILE, encoding="utf-8")
+    assert candidates(["tidy", "--param", ""], tmp_path) == [("folder=", "parameter")]
+    assert words(["tidy", "--param", "folder=src", "--param", ""], tmp_path) == []
+
+
+def test_workflow_positional_slots_complete_files_while_unbound(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(WORKFLOW_PRATFILE, encoding="utf-8")
+    assert _complete(["tidy", "sr"], tmp_path).mode == "files"
+    assert _complete(["tidy", "x", "sr"], tmp_path).mode == "words"

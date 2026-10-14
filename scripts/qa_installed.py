@@ -2803,7 +2803,7 @@ def _exercise_completion(prat: Path, root: Path, config: Path) -> dict[str, obje
     fish = _run(prat, root, ["completion", "fish"])
     assert fish.returncode == 2 and fish.stdout == b""
     selectors = _completion_words(_run(prat, root, ["__complete", "--config", str(config), ""]))
-    management = {"agents", "profiles", "templates", "doctor", "config", "completion"}
+    management = {"agents", "profiles", "templates", "workflows", "doctor", "config", "completion"}
     assert {*AGENTS, *ALIASES, *management, "simple", "override"} <= selectors
     missing = _run(prat, root, ["__complete", "--config", str(root / "missing.toml"), ""])
     assert "simple" not in _completion_words(missing)
@@ -3430,7 +3430,7 @@ def _exercise_q01_q02(context: _ExerciseContext) -> dict[str, object]:
     assert help_text.startswith("usage: prat ")
     for expected in (
         "One-shot coding agents for scripts and pipes.",
-        "{agents,profiles,templates,doctor,config,completion}",
+        "{agents,profiles,templates,workflows,doctor,config,completion}",
         "prat [RUN_OPTIONS] SELECTOR [PROMPT | VALUE...] [-- NATIVE_ARGS]",
         "--progress              Print bounded live activity updates on stderr.",
         "--dry-run               Resolve and print the invocation without launching it.",
@@ -4921,6 +4921,62 @@ def _exercise_w_control_rejections(prat: Path, root: Path) -> dict[str, object]:
     return observations
 
 
+_FAN_OUT_CONFIG = """
+[profiles.f-draft]
+agent = "claude"
+prompt = "QA_FANOUT draft $topic"
+[profiles.f-left]
+agent = "claude"
+prompt = "QA_FANOUT left"
+[profiles.f-right]
+agent = "claude"
+prompt = "QA_FANOUT right"
+[profiles.f-merge]
+agent = "claude"
+prompt = "QA_FANOUT merge"
+[workflows.fan]
+steps = [
+  { name = "draft", profile = "f-draft" },
+  { name = "left", profile = "f-left" },
+  { name = "right", profile = "f-right", after = ["draft"] },
+  { name = "merge", profile = "f-merge", after = ["left", "right"] },
+]
+"""
+
+
+def _exercise_f_fan_out(prat: Path, root: Path) -> dict[str, object]:
+    root, config = _workflow_root(root, "fan-out", prat)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write(_FAN_OUT_CONFIG)
+    preview = _run(prat, root, ["fan", "cats", "--dry-run", "--json"], config=config)
+    assert preview.returncode == 0
+    assert _json_result(preview)["dry_run"] is True
+    assert _calls(root / "native.jsonl") == []
+    completed = _run(prat, root, ["fan", "cats", "--json"], config=config)
+    result = _json_result(completed)
+    assert completed.returncode == 0 and len(completed.stdout.splitlines()) == 1
+    assert result["schema_version"] == 1 and result["workflow"] == "fan"
+    assert result["status"] == "success" and result["exit_code"] == 0 and result["error"] is None
+    steps = _records(result["steps"])
+    assert [step["step"] for step in steps] == ["draft", "left", "right", "merge"]
+    assert [step["status"] for step in steps] == ["success"] * 4
+    prompts = {
+        _text(step["step"]): _text(json.loads(_text(step["output"]))["prompt"]) for step in steps
+    }
+    assert prompts["draft"] == "QA_FANOUT draft cats"
+    draft_output = _text(steps[0]["output"]).removesuffix("\n")
+    for branch in ("left", "right"):
+        assert prompts[branch] == f"QA_FANOUT {branch}\n\n{draft_output}"
+    left_output = _text(steps[1]["output"]).removesuffix("\n")
+    right_output = _text(steps[2]["output"]).removesuffix("\n")
+    assert prompts["merge"] == (
+        f"QA_FANOUT merge\n\n## left\n\n{left_output}\n\n## right\n\n{right_output}"
+    )
+    assert result["output"] == steps[3]["output"]
+    assert len(_calls(root / "native.jsonl")) == 4
+    return {"status": "Pass", "result": result, "native_launches": 4}
+
+
 def _exercise_workflows(prat: Path, root: Path, artifact: str) -> dict[str, object]:
     root = root / f"workflows-{artifact}"
     root.mkdir(exist_ok=True)
@@ -4932,6 +4988,7 @@ def _exercise_workflows(prat: Path, root: Path, artifact: str) -> dict[str, obje
         "W05.control-layers": _exercise_w_control_layers(prat, root),
         "W06.schemas": _exercise_w_schemas(prat, root),
         "W07.control-rejections": _exercise_w_control_rejections(prat, root),
+        "F01.workflow-fan-out": _exercise_f_fan_out(prat, root),
     }
 
 

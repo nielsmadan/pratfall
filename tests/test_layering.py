@@ -14,6 +14,7 @@ LAYERS: tuple[tuple[str, ...], ...] = (
     ("catalog", "consumer", "notify", "prompt_input", "option_paths"),
     ("prompt_templates", "prompt_editor", "instructions", "schema"),
     ("adapters", "config"),
+    ("workflow_plan",),
     ("runner",),
     ("output",),
     ("cli",),
@@ -44,6 +45,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "config": frozenset(
         {"catalog", "errors", "models", "prompt_templates", "option_paths", "instructions"}
     ),
+    "workflow_plan": frozenset({"codes", "config", "errors", "models", "prompt_templates"}),
     "runner": frozenset({"codes", "consumer", "interruption", "limits", "models"}),
     "output": frozenset({"codes", "models", "runner", "schema"}),
     "cli": frozenset(
@@ -56,6 +58,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
             "errors",
             "interruption",
             "instructions",
+            "limits",
             "schema",
             "models",
             "notify",
@@ -65,6 +68,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
             "prompt_input",
             "prompt_templates",
             "runner",
+            "workflow_plan",
         }
     ),
     "__main__": frozenset({"cli"}),
@@ -115,7 +119,10 @@ SIBLING_IMPORTS_ALLOWED: Mapping[str, Mapping[str, frozenset[str]]] = {
         "presentation": frozenset(),
         "shell_completion": frozenset({"parsing"}),
         "doctor": frozenset({"presentation"}),
-        "dispatch": frozenset({"doctor", "parsing", "presentation", "shell_completion"}),
+        "workflow_run": frozenset({"parsing", "presentation"}),
+        "dispatch": frozenset(
+            {"doctor", "parsing", "presentation", "shell_completion", "workflow_run"}
+        ),
         "__init__": frozenset({"dispatch", "parsing", "presentation", "shell_completion"}),
     },
 }

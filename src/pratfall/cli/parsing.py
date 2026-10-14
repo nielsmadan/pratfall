@@ -29,6 +29,7 @@ _MANAGEMENT_HELP = {
     "agents": "List built-in agent selectors and supported settings.",
     "profiles": "List configured profiles and their resolved settings.",
     "templates": "List configured prompt templates.",
+    "workflows": "List configured workflows and their steps.",
     "doctor": "Locate agent executables without running them or checking credentials.",
     "config": "Manage TOML configuration.",
     "completion": "Print bash or zsh completion code to eval from a shell rc file.",
@@ -37,7 +38,9 @@ _MANAGEMENT_HELP = {
 _CONFIG_COMMAND_HELP = {
     "path": "Print the global config path, or --config PATH.",
     "init": "Create an example config; fail if the path already exists.",
-    "validate": "Validate every configured profile and template without launching an agent.",
+    "validate": (
+        "Validate every configured profile, template and workflow without launching an agent."
+    ),
 }
 
 _RUN_VALUE_FLAGS = {
@@ -65,6 +68,24 @@ _RUN_VALUE_FLAGS = {
     "-t": "template",
     "--param": "parameters",
 }
+
+_WORKFLOW_FLAGS = frozenset(
+    {
+        "--param",
+        "--file",
+        "-f",
+        "--prompt",
+        "--config",
+        "--cwd",
+        "--timeout",
+        "--json",
+        "--dry-run",
+        "--progress",
+        "--trace",
+        "--notify",
+        "--no-notify",
+    }
+)
 
 
 _EPILOG = """run syntax:
@@ -180,7 +201,7 @@ def build_parser() -> Parser:
     _common_flags(parser)
     parser.add_argument("--version", action="version", version=f"prat {version('pratfall')}")
     subparsers = parser.add_subparsers(dest="command", parser_class=Parser)
-    for command in ("agents", "profiles", "templates", "doctor"):
+    for command in ("agents", "profiles", "templates", "workflows", "doctor"):
         child = subparsers.add_parser(command, help=_MANAGEMENT_HELP[command], allow_abbrev=False)
         _common_flags(child)
         if command == "doctor":

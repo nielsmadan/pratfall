@@ -7,6 +7,7 @@ same fields when `--json` is unambiguous.
 
 - [Run results](#run-results)
 - [Models, usage, and cost](#models-usage-and-cost)
+- [Workflow results](#workflow-results)
 - [Errors and partial results](#errors-and-partial-results)
 - [Previews and management commands](#previews-and-management-commands)
 
@@ -90,6 +91,75 @@ Agent-specific accounting rules:
 
 Amp, OpenHands, and Vibe have no generic model override.
 
+## Workflow results
+
+`prat WORKFLOW --json` returns one object for the whole [workflow](workflows.md):
+
+```json
+{
+  "schema_version": 1,
+  "workflow": "write",
+  "status": "success",
+  "exit_code": 0,
+  "output": "Final text",
+  "duration_ms": 5120,
+  "usage": {
+    "input_tokens": 1200,
+    "cached_input_tokens": null,
+    "cache_write_input_tokens": null,
+    "output_tokens": 800,
+    "reasoning_output_tokens": null
+  },
+  "cost_usd": 0.12,
+  "error": null,
+  "steps": [
+    {"step": "draft", "schema_version": 1, "agent": "claude", "status": "success", "...": "..."},
+    {"step": "polish", "status": "skipped"}
+  ]
+}
+```
+
+`output` is the joined output of the final steps, and `""` on failure or interruption. `usage` sums
+each counter over the steps that report it, with a counter null when none does, and is null when
+no step reports usage. `cost_usd` is likewise summed. `duration_ms` is the workflow's wall time.
+
+Every declared step appears in `steps`, in declared order. A step that ran carries its
+[run result](#run-results) fields after `step`; a step that never started is
+`{"step": NAME, "status": "skipped"}`. A step Prat could not launch or whose child returned an
+unusable result carries a synthesized result with `output: ""`, null `usage` and `cost_usd`, and
+an `error`. A workflow `status` and `exit_code` are the first failed step's; on interruption they
+are `interrupted` and `128 + signal`, with error code `interrupted`. An error that stops the
+workflow before any step launches, such as a bad parameter, reports `steps: []` and
+`duration_ms: 0`. `error.message` names the failing step as `step 'NAME': MESSAGE`.
+
+With `--dry-run --json` the preview is:
+
+```json
+{
+  "schema_version": 1,
+  "workflow": "write",
+  "dry_run": true,
+  "parameters": {"topic": "tide pools"},
+  "steps": [
+    {
+      "step": "draft",
+      "profile": "draft",
+      "after": [],
+      "input": "upstream",
+      "bind": {},
+      "parameters": {"topic": "tide pools"}
+    }
+  ]
+}
+```
+
+A flag value that fails to parse, such as `--timeout abc`, is rejected before the selector is
+known to be a workflow, so that error uses the plain run shape.
+
+`prat workflows --json` returns `schema_version: 1` and a `workflows` array sorted by name. Each
+record has `name`, `parallel`, `parameters`, the defining file's absolute `source`, and `steps`,
+each with `name`, `profile`, `after`, `input` and `bind`.
+
 ## Errors and partial results
 
 On failure, `error` contains a stable `code` and a human-readable `message`. These are all the
@@ -102,7 +172,7 @@ stable error codes and their exit codes:
 | `executable_not_found` | 127 | Configured command does not exist. |
 | `executable_not_executable` | 126 | Configured command exists but cannot be executed. |
 | `timeout` | 124 | Run deadline elapsed, or the native CLI reported its own timeout. |
-| `interrupted` | `128 + signal` | Prat received SIGINT or SIGTERM. |
+| `interrupted` | `128 + signal` | Prat received SIGINT or SIGTERM, or a SIGHUP it does not ignore while running a workflow. |
 | `native_signal` | `128 + signal` | The native CLI died from a signal. |
 | `native_exit` | the native status | The native CLI exited nonzero without another failure. |
 | `protocol_error` | 1 | Native output violated the agent's documented protocol. |

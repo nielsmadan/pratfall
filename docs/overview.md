@@ -7,6 +7,7 @@ profile: a few builder guides, plus separate user guides, external references, a
 | --- | --- |
 | Install Pratfall, configure a profile, or run a prompt | [User guides](user/overview.md) |
 | Change execution, decoding, or process cleanup | [Execution and adapter boundaries](execution.md) |
+| Change workflow orchestration or the `__step` protocol | [Workflow orchestration](execution.md#workflow-orchestration) |
 | Check a native agent's protocol, version baseline, or source evidence | [Native agent interfaces](reference/overview.md) |
 | Prepare a release or maintain Homebrew distribution | [Release and distribution](release.md) |
 | Re-record or re-render the README demo GIF | [README demo](demo/README.md) |

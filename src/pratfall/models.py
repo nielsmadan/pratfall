@@ -107,6 +107,22 @@ class Profile:
 
 
 @dataclass(frozen=True)
+class WorkflowStep:
+    name: str
+    selector: str
+    after: tuple[str, ...]
+    input: Literal["upstream", "none"] = "upstream"
+    bind: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+
+
+@dataclass(frozen=True)
+class Workflow:
+    steps: tuple[WorkflowStep, ...]
+    source: Path
+    parallel: bool = True
+
+
+@dataclass(frozen=True)
 class Config:
     path: Path
     exists: bool = False
@@ -121,6 +137,7 @@ class Config:
     warnings: tuple[str, ...] = ()
     default_sources: Mapping[str, Path] = field(default_factory=lambda: MappingProxyType({}))
     templates: Mapping[str, PromptTemplate] = field(default_factory=lambda: MappingProxyType({}))
+    workflows: Mapping[str, Workflow] = field(default_factory=lambda: MappingProxyType({}))
 
 
 @dataclass(frozen=True)

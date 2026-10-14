@@ -22,9 +22,11 @@ from pratfall.models import (
     ProfileLayer,
     PromptTemplate,
     ResolvedProfile,
+    Workflow,
+    WorkflowStep,
 )
 from pratfall.option_paths import resolve_path
-from pratfall.prompt_templates import validate_template
+from pratfall.prompt_templates import template_parameters, validate_template
 
 DEFAULT_TIMEOUT = 600.0
 OPTION_FIELDS = frozenset(Options.__dataclass_fields__)
@@ -517,6 +519,140 @@ def _templates(table: dict[str, object], path: Path) -> dict[str, PromptTemplate
     return templates
 
 
+def _workflow_step(
+    value: object, label: str, index: int, previous: tuple[WorkflowStep, ...]
+) -> WorkflowStep:
+    settings = _table(value, f"{label}.steps[{index}]")
+    name = _string(settings.get("name"), f"{label}.steps[{index}].name")
+    step_label = f"{label} step {name!r}"
+    _known_keys(settings, frozenset({"name", "profile", "after", "input", "bind"}), step_label)
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", name) is None:
+        raise PratError(f"{step_label}: use letters, digits, underscores or hyphens in step names.")
+    if any(step.name == name for step in previous):
+        raise PratError(f"{step_label}: duplicate step name.")
+    selector = _string(settings.get("profile"), f"{step_label}.profile")
+    declared = {step.name for step in previous}
+    if "after" in settings:
+        after = tuple(
+            _string(item, f"{step_label}.after")
+            for item in _arguments(settings["after"], f"{step_label}.after")
+        )
+        if len(set(after)) != len(after):
+            raise PratError(f"{step_label}.after: duplicate step names.")
+        for item in after:
+            if item not in declared:
+                raise PratError(
+                    f"{step_label}.after: {item!r} is not a step declared earlier in this workflow."
+                )
+    else:
+        after = (previous[-1].name,) if previous else ()
+    no_input = settings.get("input") == "none"
+    if "input" in settings and not no_input:
+        raise PratError(f'{step_label}.input: expected "none".')
+    bind_table = _table(settings.get("bind", {}), f"{step_label}.bind")
+    bind = {
+        _string(key, f"{step_label}.bind"): _string(source, f"{step_label}.bind.{key}")
+        for key, source in bind_table.items()
+    }
+    return WorkflowStep(
+        name=name,
+        selector=selector,
+        after=after,
+        input="none" if no_input else "upstream",
+        bind=MappingProxyType(bind),
+    )
+
+
+def _workflows(table: dict[str, object], path: Path) -> dict[str, Workflow]:
+    workflows: dict[str, Workflow] = {}
+    for name, value in table.items():
+        label = f"{path}: workflows.{name}"
+        if name in RESERVED_NAMES:
+            raise PratError(f"{label}: name is reserved; choose a different workflow name.")
+        if re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", name) is None:
+            raise PratError(
+                f"{label}: use letters, digits, underscores or hyphens in workflow names."
+            )
+        settings = _table(value, label)
+        _known_keys(settings, frozenset({"steps", "parallel"}), label)
+        raw_steps = settings.get("steps")
+        if not isinstance(raw_steps, list) or not raw_steps:
+            raise PratError(f"{label}.steps: expected a nonempty array of step tables.")
+        steps: tuple[WorkflowStep, ...] = ()
+        for index, raw in enumerate(raw_steps):
+            steps = (*steps, _workflow_step(raw, f"{path}: workflow {name!r}", index, steps))
+        workflows[name] = Workflow(
+            steps=steps,
+            source=path,
+            parallel=_boolean(settings["parallel"], f"{label}.parallel")
+            if "parallel" in settings
+            else True,
+        )
+    return workflows
+
+
+def _ancestors(workflow: Workflow, step: WorkflowStep) -> frozenset[str]:
+    by_name = {item.name: item for item in workflow.steps}
+    found: set[str] = set()
+    pending = list(step.after)
+    while pending:
+        current = pending.pop()
+        if current not in found:
+            found.add(current)
+            pending.extend(by_name[current].after)
+    return frozenset(found)
+
+
+def step_prompt(config: Config, step: WorkflowStep) -> str | None:
+    profile = config.profiles.get(step.selector)
+    template = None if profile is None else profile.prompt
+    return None if template is None else template.prompt
+
+
+def _validate_workflow_step(
+    config: Config, workflow: Workflow, step: WorkflowStep, label: str
+) -> None:
+    if step.selector in config.workflows:
+        raise PratError(
+            f"{label}.profile: {step.selector!r} is a workflow, not a profile or agent."
+        )
+    if step.selector not in config.profiles and step.selector not in BY_SELECTOR:
+        raise PratError(
+            f"{label}.profile: unknown selector {step.selector!r}; "
+            "run 'prat agents' or 'prat profiles' to list choices."
+        )
+    prompt = step_prompt(config, step)
+    parameters = () if prompt is None else template_parameters(prompt)
+    ancestors = _ancestors(workflow, step)
+    for parameter, source in step.bind.items():
+        if source not in ancestors:
+            raise PratError(
+                f"{label}.bind.{parameter}: {source!r} is not an ancestor of this step."
+            )
+        if parameter not in parameters:
+            raise PratError(
+                f"{label}.bind.{parameter}: {step.selector!r} has no parameter {parameter!r}."
+            )
+    if prompt is None and step.input == "none" and not step.bind:
+        raise PratError(
+            f'{label}: {step.selector!r} has no prompt and input is "none", '
+            "so the step can never receive input."
+        )
+
+
+def _validate_workflows(config: Config) -> None:
+    for name, workflow in config.workflows.items():
+        if name in config.profiles:
+            raise PratError(
+                f"{workflow.source}: workflows.{name}: name is also a profile; "
+                "choose a different workflow name."
+            )
+    for name, workflow in config.workflows.items():
+        for step in workflow.steps:
+            label = f"{workflow.source}: workflow {name!r} step {step.name!r}"
+            _validate_workflow_step(config, workflow, step, label)
+
+
 def _load_file(path: Path, *, required: bool) -> Config:
     try:
         contents = path.read_text(encoding="utf-8")
@@ -531,7 +667,9 @@ def _load_file(path: Path, *, required: bool) -> Config:
     except (tomllib.TOMLDecodeError, ValueError) as error:
         raise PratError(f"{path}: invalid TOML: {error}.") from error
     _known_keys(
-        table, frozenset({"version", "defaults", "agents", "profiles", "templates"}), str(path)
+        table,
+        frozenset({"version", "defaults", "agents", "profiles", "templates", "workflows"}),
+        str(path),
     )
     if type(table.get("version")) is not int or table["version"] != 1:
         raise PratError(f"{path}: version must be the integer 1.")
@@ -543,6 +681,7 @@ def _load_file(path: Path, *, required: bool) -> Config:
     commands, prefixes = _agent_settings(_table(table.get("agents", {}), f"{path}: agents"), path)
     layers = _profiles(_table(table.get("profiles", {}), f"{path}: profiles"), path)
     templates = _templates(_table(table.get("templates", {}), f"{path}: templates"), path)
+    workflows = _workflows(_table(table.get("workflows", {}), f"{path}: workflows"), path)
     return Config(
         path=path,
         exists=True,
@@ -551,6 +690,7 @@ def _load_file(path: Path, *, required: bool) -> Config:
         command_prefixes=MappingProxyType(prefixes),
         profile_layers=MappingProxyType(layers),
         templates=MappingProxyType(templates),
+        workflows=MappingProxyType(workflows),
         sources=(path,),
         default_sources=MappingProxyType(
             {name: path for name, value in asdict(defaults).items() if value is not None}
@@ -571,6 +711,11 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
         f"{local_config.path}: template {name!r} replaces the template from {global_config.path}."
         for name in template_collisions
     )
+    workflow_collisions = sorted(global_config.workflows.keys() & local_config.workflows.keys())
+    warnings += tuple(
+        f"{local_config.path}: workflow {name!r} replaces the workflow from {global_config.path}."
+        for name in workflow_collisions
+    )
     default_sources = dict(global_config.default_sources)
     _clear_instruction_peer(default_sources, local_config.defaults)
     default_sources.update(local_config.default_sources)
@@ -586,6 +731,7 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
             dict(global_config.profile_layers) | dict(local_config.profile_layers)
         ),
         templates=MappingProxyType(dict(global_config.templates) | dict(local_config.templates)),
+        workflows=MappingProxyType(dict(global_config.workflows) | dict(local_config.workflows)),
         sources=global_config.sources + local_config.sources,
         warnings=warnings,
         default_sources=MappingProxyType(default_sources),
@@ -619,6 +765,7 @@ def load_config(explicit: str | Path | None = None, *, cwd: Path | None = None) 
             f"{profile.source}: profiles.{name}",
             origins=option_origins(config, name),
         )
+    _validate_workflows(config)
     return config
 
 

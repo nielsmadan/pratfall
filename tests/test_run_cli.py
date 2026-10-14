@@ -9,12 +9,14 @@ import stat
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from contextlib import suppress
 from itertools import pairwise
 from pathlib import Path
 
 import pytest
 
+from pratfall import cli as cli_module
 from pratfall import runner as runner_module
 from pratfall.cli import dispatch as dispatch_module
 from pratfall.cli import main
@@ -3576,3 +3578,325 @@ def test_unknown_selector_wins_over_extra_prompt_words(
             "Unknown selector 'missing'; run 'prat agents' or 'prat profiles' to list choices."
         ),
     }
+
+
+def step_spec(
+    arguments: list[str], text: str | None, *, version: object = 1, parent: object = 4242
+) -> io.BytesIO:
+    spec = {"version": version, "arguments": arguments, "input": text, "parent": parent}
+    return io.BytesIO(json.dumps(spec, ensure_ascii=False).encode("utf-8"))
+
+
+def step_result(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    return result
+
+
+def run_step(
+    stdin: io.BytesIO, tmp_path: Path, watch: Callable[[int], None] = lambda _: None
+) -> int:
+    return dispatch_module._step_command(stdin, tmp_path, watch)
+
+
+def step_prompt(capsys: pytest.CaptureFixture[str]) -> str:
+    result = step_result(capsys)
+    assert result["status"] == "success"
+    return str(json.loads(str(result["output"]))["prompt"])
+
+
+def test_step_renders_input_and_parameters(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = parameter_config(tmp_path)
+    stdin = sys.stdin
+    spec = step_spec(
+        ["move", "--param", "source=a.py", "--param", "target=lib", "--config", str(config)],
+        "upstream café",
+    )
+    assert run_step(spec, tmp_path) == 0
+    prompt = step_prompt(capsys)
+    assert prompt == "Move a.py to lib: upstream café"
+    assert sys.stdin is stdin
+
+
+def test_step_never_reads_process_stdin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = parameter_config(tmp_path)
+    seen: list[object] = []
+    real = dispatch_module._run_command
+
+    def spy(arguments: list[str], cwd: Path, step: object) -> int:
+        seen.append(sys.stdin)
+        return real(arguments, cwd, step)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(dispatch_module, "_run_command", spy)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("SENTINEL"))
+    spec = step_spec(["move", "a", "b", "--config", str(config)], "upstream")
+    assert run_step(spec, tmp_path) == 0
+    assert step_prompt(capsys) == "Move a to b: upstream"
+    assert seen == [None]
+
+
+def test_step_null_input_with_self_contained_template(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = parameter_config(tmp_path)
+    assert run_step(step_spec(["plain", "--config", str(config)], None), tmp_path) == 0
+    assert step_prompt(capsys) == "Review this project"
+
+
+def test_step_null_input_without_template_is_an_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    assert run_step(step_spec(["codex", "--config", str(config)], None), tmp_path) == 2
+    result = step_result(capsys)
+    assert result["status"] == "error"
+    assert result["exit_code"] == 2
+    assert result["error"] == {
+        "code": "invalid_arguments",
+        "message": "Cannot read standard input; provide exactly one prompt another way.",
+    }
+
+
+def spec_bytes(**fields: object) -> bytes:
+    return json.dumps(fields).encode()
+
+
+NOT_JSON = "Workflow step spec is not valid JSON: "
+NOT_OBJECT = "Workflow step spec must be a JSON object."
+BAD_VERSION = "Workflow step spec version must be 1."
+BAD_ARGUMENTS = "Workflow step spec arguments must be a list of strings."
+BAD_PARENT = "Workflow step spec parent must be an integer."
+
+
+@pytest.mark.parametrize(
+    ("raw", "message"),
+    [
+        (b"not json", NOT_JSON + "Expecting value: line 1 column 1 (char 0)."),
+        (
+            b"\xff\xfe",
+            NOT_JSON + "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte.",
+        ),
+        (b"[]", NOT_OBJECT),
+        (spec_bytes(version=2, arguments=[], input=None, parent=1), BAD_VERSION),
+        (spec_bytes(version=True, arguments=[], input=None, parent=1), BAD_VERSION),
+        (spec_bytes(version=1, arguments="cx", input=None, parent=1), BAD_ARGUMENTS),
+        (spec_bytes(version=1, arguments=["cx", 3], input=None, parent=1), BAD_ARGUMENTS),
+        (
+            spec_bytes(version=1, arguments=["cx"], input=3, parent=1),
+            "Workflow step spec input must be a string or null.",
+        ),
+        (
+            spec_bytes(version=1, arguments=["cx"])[:-1] + b",",
+            NOT_JSON
+            + "Expecting property name enclosed in double quotes: line 1 column 36 (char 35).",
+        ),
+        (
+            b" " * (8 * PROMPT_LIMIT + 1),
+            f"Workflow step spec exceeds the {8 * PROMPT_LIMIT} byte limit.",
+        ),
+        (
+            b"[" * 200000,
+            NOT_JSON
+            + "maximum recursion depth exceeded while decoding a JSON array from a unicode string.",
+        ),
+        (
+            spec_bytes(version=1, arguments=["cx"], parent=1),
+            "Workflow step spec must include input.",
+        ),
+        (spec_bytes(version=1, arguments=["cx"], input=None), BAD_PARENT),
+        (spec_bytes(version=1, arguments=["cx"], input=None, parent=True), BAD_PARENT),
+        (spec_bytes(version=1, arguments=["cx"], input=None, parent="1"), BAD_PARENT),
+        (spec_bytes(version=1, arguments=["cx"], input=None, parent=1.0), BAD_PARENT),
+        (spec_bytes(version=1, arguments=["cx"], input=None, parent=None), BAD_PARENT),
+    ],
+)
+def test_step_malformed_spec_gives_one_json_error(
+    raw: bytes, message: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run_step(io.BytesIO(raw), tmp_path) == 2
+    result = step_result(capsys)
+    assert result["status"] == "error"
+    assert result["exit_code"] == 2
+    assert result["error"] == {"code": "invalid_arguments", "message": message}
+
+
+def test_step_mode_never_notifies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write("\n[defaults]\nnotify_after=0\n")
+    isolate_notify_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("TERM_PROGRAM", "iTerm.app")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+    calls: list[bytes] = []
+    monkeypatch.setattr(dispatch_module, "send", calls.append)
+    spec = step_spec(["cx", "--notify", "--config", str(config)], "prompt")
+    assert run_step(spec, tmp_path) == 0
+    assert step_result(capsys)["status"] == "success"
+    assert calls == []
+
+
+def test_step_input_with_prompt_argument_is_rejected(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = parameter_config(tmp_path)
+    spec = step_spec(["plain", "--prompt=extra", "--config", str(config)], "upstream")
+    assert run_step(spec, tmp_path) == 2
+    assert step_result(capsys)["error"] == {
+        "code": "invalid_arguments",
+        "message": "Provide exactly one prompt source.",
+    }
+
+
+def test_step_suppresses_config_warnings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    global_path = init_config()
+    global_path.write_text(
+        write_agent(tmp_path, "codex", CODEX_SUCCESS, profile="work").read_text()
+    )
+    local = tmp_path / "local.toml"
+    local.write_text('version=1\n[profiles.work]\nagent="cx"\nmodel="local-model"\n')
+    assert run_step(step_spec(["work", "--config", str(local)], "x"), tmp_path) == 0
+    captured = capfd.readouterr()
+    assert json.loads(captured.out)["status"] == "success"
+    assert "warning" not in captured.err
+
+
+def test_watch_parent_terminates_after_parent_changes() -> None:
+    parents = iter([10, 10, 1])
+    sleeps: list[float] = []
+    terminated: list[bool] = []
+    cli_module._watch_parent(
+        10,
+        0.5,
+        lambda: terminated.append(True),
+        getppid=lambda: next(parents),
+        sleep=sleeps.append,
+    )
+    assert sleeps == [0.5, 0.5]
+    assert terminated == [True]
+
+
+def test_watch_parent_terminates_on_mismatch_at_first_poll() -> None:
+    sleeps: list[float] = []
+    terminated: list[bool] = []
+    cli_module._watch_parent(
+        10, 0.5, lambda: terminated.append(True), getppid=lambda: 1, sleep=sleeps.append
+    )
+    assert sleeps == []
+    assert terminated == [True]
+
+
+def test_watch_parent_waits_while_pid_one_parent_is_expected() -> None:
+    parents = iter([1, 1, 1, 77])
+    sleeps: list[float] = []
+    terminated: list[bool] = []
+    cli_module._watch_parent(
+        1,
+        0.5,
+        lambda: terminated.append(True),
+        getppid=lambda: next(parents),
+        sleep=sleeps.append,
+    )
+    assert sleeps == [0.5, 0.5, 0.5]
+    assert terminated == [True]
+
+
+def test_step_entry_starts_watchdog_with_spec_parent_and_detaches_stdin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    watched: list[int] = []
+    seen: list[object] = []
+
+    def step(spec: object, cwd: object, watch: Callable[[int], None]) -> int:
+        seen.append(spec)
+        watch(4242)
+        return 0
+
+    monkeypatch.setattr(cli_module, "_start_parent_watchdog", watched.append)
+    monkeypatch.setattr(cli_module, "_detach_stdin", lambda: io.BytesIO(b"{}"))
+    monkeypatch.setattr(cli_module, "_step_command", step)
+    assert cli_module._step_entry() == 0
+    assert watched == [4242]
+    assert len(seen) == 1
+
+
+def test_step_command_starts_watchdog_with_validated_parent(tmp_path: Path) -> None:
+    config = parameter_config(tmp_path)
+    watched: list[int] = []
+    spec = step_spec(["plain", "--config", str(config)], None, parent=1)
+    assert run_step(spec, tmp_path, watched.append) == 0
+    assert watched == [1]
+
+
+def test_step_command_does_not_start_watchdog_for_invalid_spec(tmp_path: Path) -> None:
+    watched: list[int] = []
+    assert run_step(step_spec(["cx"], None, parent="x"), tmp_path, watched.append) == 2
+    assert watched == []
+
+
+def test_step_entry_reports_unusable_stdin_as_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def broken() -> io.BytesIO:
+        raise OSError(9, "Bad file descriptor")
+
+    monkeypatch.setattr(cli_module, "_detach_stdin", broken)
+    assert cli_module._step_entry() == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "error"
+    assert result["error"]["code"] == "invalid_arguments"
+
+
+def test_step_entry_reports_unreadable_spec_stream_as_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class Unreadable(io.BytesIO):
+        def read(self, size: int | None = -1) -> bytes:
+            raise OSError(5, "Input/output error")
+
+    monkeypatch.setattr(cli_module, "_detach_stdin", Unreadable)
+    assert cli_module._step_entry() == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["error"]["code"] == "invalid_arguments"
+    assert result["error"]["message"].startswith("Cannot read workflow step spec:")
+
+
+def test_step_entry_end_to_end_with_non_ascii(tmp_path: Path) -> None:
+    raw_answer = CODEX_SUCCESS.replace(
+        '"cwd": os.getcwd()})', '"cwd": os.getcwd()}, ensure_ascii=False)'
+    )
+    assert raw_answer != CODEX_SUCCESS
+    config = parameter_config(tmp_path, code=raw_answer)
+    spec = {
+        "version": 1,
+        "arguments": ["move", "ä", "ö", "--config", str(config)],
+        "input": "ü",
+        "parent": os.getpid(),
+    }
+    completed = subprocess.run(
+        [sys.executable, "-P", "-m", "pratfall", "__step"],
+        input=json.dumps(spec, ensure_ascii=False).encode("utf-8"),
+        capture_output=True,
+        cwd=tmp_path,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+            "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+            "LC_ALL": "C",
+            "PYTHONUTF8": "0",
+            "PYTHONIOENCODING": "ascii",
+        },
+        timeout=20,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout.decode("utf-8"))
+    assert result["status"] == "success"
+    assert json.loads(result["output"])["prompt"] == "Move ä to ö: ü"

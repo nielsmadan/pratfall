@@ -1145,3 +1145,120 @@ def test_profiles_json_shows_inherited_prompt(
         str(path),
         ["folder"],
     )
+
+
+FAN_OUT_CONFIG = (
+    "version=1\n"
+    '[profiles.clean]\nagent="codex"\nprompt="Clean $folder $input"\n'
+    '[profiles.pack]\nagent="codex"\nprompt="Pack $level"\n'
+    '[profiles.verify]\nagent="codex"\nprompt="Verify $report $folder"\n'
+    '[workflows.tidy]\nsteps=[{name="clean",profile="clean"},'
+    '{name="pack",profile="pack",after=[]},'
+    '{name="check",profile="verify",after=["clean","pack"],input="none",bind={report="pack"}}]\n'
+    '[workflows.alpha]\nparallel=false\nsteps=[{name="s",profile="cx"}]\n'
+)
+
+
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_workflows_listing_is_sorted_and_versioned(
+    json_mode: bool, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / ".pratfile"
+    config.write_text(FAN_OUT_CONFIG, encoding="utf-8")
+    assert main(["workflows", *(["--json"] if json_mode else [])]) == 0
+    output = capsys.readouterr().out
+    if json_mode:
+        assert json.loads(output) == {
+            "schema_version": 1,
+            "workflows": [
+                {
+                    "name": "alpha",
+                    "parallel": False,
+                    "parameters": [],
+                    "source": str(config),
+                    "steps": [
+                        {"name": "s", "profile": "cx", "after": [], "input": "upstream", "bind": {}}
+                    ],
+                },
+                {
+                    "name": "tidy",
+                    "parallel": True,
+                    "parameters": ["folder", "level"],
+                    "source": str(config),
+                    "steps": [
+                        {
+                            "name": "clean",
+                            "profile": "clean",
+                            "after": [],
+                            "input": "upstream",
+                            "bind": {},
+                        },
+                        {
+                            "name": "pack",
+                            "profile": "pack",
+                            "after": [],
+                            "input": "upstream",
+                            "bind": {},
+                        },
+                        {
+                            "name": "check",
+                            "profile": "verify",
+                            "after": ["clean", "pack"],
+                            "input": "none",
+                            "bind": {"report": "pack"},
+                        },
+                    ],
+                },
+            ],
+        }
+    else:
+        assert output == (
+            f"alpha: s=cx parallel=false source={config}\n"
+            "tidy: clean=clean; pack=pack after=none; "
+            "check=verify after=clean,pack input=none bind=report:pack "
+            f"parameters=folder,level source={config}\n"
+        )
+
+
+def test_empty_workflows_listing(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["workflows"]) == 0
+    assert capsys.readouterr().out == "No workflows configured.\n"
+
+
+def test_empty_workflows_listing_as_json(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["workflows", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"schema_version": 1, "workflows": []}
+
+
+def test_workflows_listing_reports_the_defining_layer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    global_path = tmp_path / "config-home/pratfall/config.toml"
+    global_path.parent.mkdir(parents=True)
+    global_path.write_text(
+        'version=1\n[workflows.shared]\nsteps=[{name="g",profile="cx"}]\n', encoding="utf-8"
+    )
+    local_path = tmp_path / ".pratfile"
+    local_path.write_text(
+        'version=1\n[workflows.mine]\nsteps=[{name="l",profile="cx"}]\n', encoding="utf-8"
+    )
+    assert main(["workflows"]) == 0
+    assert capsys.readouterr().out == (
+        f"mine: l=cx source={local_path}\nshared: g=cx source={global_path}\n"
+    )
+
+
+def test_workflows_listing_rejects_extra_arguments(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["workflows", "extra"]) == 2
+    assert "unrecognized arguments: extra" in capsys.readouterr().err
+
+
+def test_config_validate_reports_workflow_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "bad.toml"
+    path.write_text(
+        'version=1\n[workflows.w]\nsteps=[{name="x",profile="nope"}]\n', encoding="utf-8"
+    )
+    assert main(["config", "validate", "--config", str(path)]) != 0
+    assert "workflow 'w' step 'x'.profile: unknown selector 'nope'" in capsys.readouterr().err

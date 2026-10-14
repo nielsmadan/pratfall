@@ -29,3 +29,4 @@ table maps a code to an exit status, so a caller's own script owns any retry pol
 - The exit contract has to be stable and complete, since the caller is the retry loop; `codes.py` owns the fixed part while interruption, native signal and native exit stay computed in `normalize`.
 - Transient provider failures are the user's to rerun by hand, from whatever state the failed run left — the cost the constraint deliberately accepts.
 - The rule binds Pratfall, not the native agent: OpenClaw's own `--fallback` remains available as a native argument, and Pratfall still does not retry.
+- A [workflow](0006-run-workflows-as-one-prat-process-per-step.md) runs one agent, once, for each step, and still adds no retry or fallback: a failed step skips its dependents.

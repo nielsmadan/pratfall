@@ -6,6 +6,7 @@ from pratfall.errors import PratError
 from pratfall.prompt_input import PROMPT_LIMIT, PromptSource
 from pratfall.prompt_templates import (
     BoundInput,
+    bind_input,
     bind_run_input,
     render_template,
     template_parameters,
@@ -326,3 +327,31 @@ def test_parameter_values_count_utf8_bytes_toward_limit(
     else:
         rendered = render_template("$a$a", b"", parameters={"a": value})
         assert len(rendered) == PROMPT_LIMIT
+
+
+@pytest.mark.parametrize(
+    ("active", "message"),
+    [
+        (False, "--param needs a prompt with parameters, but no template is active."),
+        (True, "--param needs a prompt with parameters, but workflow 'tidy' has no parameters."),
+    ],
+)
+def test_bind_input_rejects_named_values_without_parameters(active: bool, message: str) -> None:
+    with pytest.raises(PratError) as caught:
+        bind_input((), "workflow 'tidy'", (), ("src=a",), None, active=active)
+    assert caught.value.code == "invalid_arguments"
+    assert str(caught.value) == message
+
+
+def test_bind_input_binds_the_given_names_without_a_prompt() -> None:
+    bound = bind_input(
+        ("folder", "level"), "workflow 'tidy'", ("src",), ("level=3",), None, active=True
+    )
+    assert bound.source is None
+    assert list(bound.parameters.items()) == [("folder", "src"), ("level", "3")]
+
+
+def test_bind_input_without_names_uses_one_word_as_the_prompt() -> None:
+    bound = bind_input((), "workflow 'tidy'", ("fix it",), (), None, active=True)
+    assert bound.source == PromptSource("inline", "fix it")
+    assert dict(bound.parameters) == {}

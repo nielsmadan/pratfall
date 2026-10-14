@@ -1,9 +1,11 @@
 # Execution and adapters
 
-Pratfall resolves one prompt, runs one native agent, and produces one normalized result. Native
-protocol evidence and version-specific quirks live in the [agent references](reference/overview.md).
+Pratfall resolves one prompt, runs one native agent or a workflow of agent steps, and produces
+one normalized result per agent run. Native protocol evidence and version-specific quirks live in
+the [agent references](reference/overview.md).
 
 - [Dispatch boundary](#dispatch-boundary)
+- [Workflow orchestration](#workflow-orchestration)
 - [Bounded output](#bounded-output)
 - [Completion and accounting](#completion-and-accounting)
 - [Deadline, cleanup and diagnostics](#deadline-cleanup-and-diagnostics)
@@ -16,13 +18,18 @@ protocol evidence and version-specific quirks live in the [agent references](ref
 - The CLI is a package: [parsing.py](../src/pratfall/cli/parsing.py) turns argv into a run or a
   management command, [dispatch.py](../src/pratfall/cli/dispatch.py) owns run and management
   dispatch, [doctor.py](../src/pratfall/cli/doctor.py) owns the inventory and version probes, and
-  [presentation.py](../src/pratfall/cli/presentation.py) owns diagnostics writers and stdout
-  emission. [shell_completion.py](../src/pratfall/cli/shell_completion.py) owns the bash and zsh
-  scripts and the hidden `prat __complete WORD…` callback they run on every Tab. The callback is
-  intercepted before management or run parsing, reads config only for profile and template names,
-  never reaches adapters or the runner, and always exits 0 with a mode line (`words`, `files` or
-  `dirs`) followed by `word<TAB>description` candidates. [dispatch.py](../src/pratfall/cli/dispatch.py) validates configuration, selected native
-  options, and the child working directory before acquiring the prompt.
+  [presentation.py](../src/pratfall/cli/presentation.py) owns diagnostics writers, stdout
+  emission and the shared error-guard helpers.
+  [workflow_run.py](../src/pratfall/cli/workflow_run.py) supervises workflow runs, and the
+  internal `__step` entry in [cli/__init__.py](../src/pratfall/cli/__init__.py) runs one workflow
+  step, intercepted beside the completion callback.
+  [shell_completion.py](../src/pratfall/cli/shell_completion.py) owns the bash and zsh scripts and
+  the hidden `prat __complete WORD…` callback they run on every Tab. The callback is intercepted
+  before management or run parsing, reads config only for profile, template and workflow names and
+  a workflow's parameters, never reaches adapters or the runner, and always exits 0 with a mode line
+  (`words`, `files` or `dirs`) followed by `word<TAB>description` candidates.
+  [dispatch.py](../src/pratfall/cli/dispatch.py) validates configuration, selected
+  native options, and the child working directory before acquiring the prompt.
   [config.py](../src/pratfall/config.py) merges
   the global file with the invocation directory's `.pratfile`, or the local file selected by
   `--config`. Local profiles replace global profiles by name. A profile naming a parent with
@@ -130,6 +137,49 @@ Invocation builders preserve argv execution and inherited native authentication 
 Native-agent stdin contains explicit bytes, including an empty input when appropriate; it never
 inherits the terminal.
 
+### Workflow orchestration
+
+[workflow_plan.py](../src/pratfall/workflow_plan.py) holds the pure part: a workflow's parameters,
+ready-step selection, output joining, per-step arguments and the aggregate result, all over data
+passed in. [workflow_run.py](../src/pratfall/cli/workflow_run.py) is the edge. Dispatch hands a
+selector that names a workflow to `run_workflow` after configuration loads, before profile
+resolution, so a workflow never reaches an adapter or the runner itself.
+
+- **Parent and child.** The parent validates flags, binds parameters, resolves each step's
+  timeout and the working directory, and reads the base input before launching anything. It then
+  supervises children from one selector loop: it starts every ready step (one at a time when
+  `parallel` is false), reads their pipes without blocking, and records each result as steps
+  finish. After the first failure it starts nothing new and lets running steps finish. A child is
+  one `python -P -m pratfall __step` process in its own session.
+- **The `__step` protocol.** The hidden `__step` command is intercepted like `__complete`. The
+  parent writes a JSON spec to an unlinked temporary file that becomes the child's stdin: `version`
+  (1), `parent` (the workflow process's pid), `arguments` (a list of strings) and `input` (a string
+  or null). The spec is bounded by `WORKFLOW_SPEC_BYTES`. The child moves the spec off fd 0, points
+  fd 0 and `sys.stdin` at nothing, runs the ordinary run path with the step's input as its base
+  prompt, and writes its usual `--json` result to stdout. Arguments start with the selector,
+  then `--json` and `--no-notify`, then the parent's `--config`, `--cwd`, `--timeout`, `--progress`
+  and `--trace` when set, then one `--param NAME=VALUE` per parameter.
+- **`-P`.** The launcher runs the interpreter with `-P` so the invocation directory, which is also
+  the child's working directory, cannot shadow standard-library modules the child imports.
+- **Results.** The parent accepts a child's stdout only as one JSON object with the documented
+  run-result fields and a matching exit code. Anything else, an oversized result, or a failed
+  spawn becomes a synthesized step result with the full key set, null usage and cost, and the
+  matching error code. A hung child is torn down after its timeout plus two termination graces and
+  a fixed slack, as `timeout`. The parent relays child stderr line by line with a `[STEP] ` prefix
+  through a nonblocking sink, capping each line at 64 KiB.
+- **Signals and teardown.** The parent handles SIGINT, SIGTERM and SIGHUP, forwards each to every
+  running child's process group once (SIGHUP as SIGTERM), starts no further step, and reports
+  `interrupted` with `128 + signal`. An inherited ignored SIGHUP stays ignored, so `nohup` keeps
+  working. Teardown signals children directly: TERM, a grace period,
+  TERM again, then KILL while any is alive. It does not use `runner.cleanup_process_group`, which
+  probes a group after reaping. A child terminates itself with SIGTERM when its parent pid no
+  longer matches the spec's `parent`.
+- **Bounds.** Spec size, result size (`WORKFLOW_RESULT_BYTES`), relayed line length and bound-output
+  size are bounded; the prompt limit applies to each step's input plus bound values before launch.
+
+[ADR 0006](decisions/0006-run-workflows-as-one-prat-process-per-step.md) records why steps are
+separate processes, and how it relates to [ADR 0004](decisions/0004-no-retries-fallback-or-implicit-install.md).
+
 ## Bounded output
 
 [`JsonlConsumer`](../src/pratfall/consumer.py) owns strict UTF-8 and physical JSONL framing;
@@ -222,8 +272,10 @@ Repeated interruptions accelerate termination. Timeout/interruption cleanup feed
 before finalizing the consumer once; after a hard local output failure, stdout drains without
 reparsing. [interruption.py](../src/pratfall/interruption.py) is the one signal seam: `handler_for`
 builds a first/repeat handler over shared `InterruptionState`, and `install`, `restore` and the
-`handling` context manager swap SIGINT and SIGTERM dispositions and restore the previous ones
-after successful installation. The runner, prompt input, editor and version probes share this seam.
+`handling` context manager swap SIGINT and SIGTERM dispositions, or an optional `signals` tuple
+passed to `install` and `handling`, and restore the previous ones after successful installation.
+The workflow parent passes SIGHUP as well unless it was inherited as ignored. The runner, prompt
+input, editor and version probes share this seam.
 
 Cleanup covers the owned POSIX process group. Deliberately detached descendants and externally
 managed server processes are outside that boundary. Ordinary successful completion preserves

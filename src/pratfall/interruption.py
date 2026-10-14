@@ -35,8 +35,12 @@ def handler_for(
     return receive
 
 
-def install(handler: Handler, previous: Previous) -> None:
-    for chosen in HANDLED_SIGNALS:
+def install(
+    handler: Handler,
+    previous: Previous,
+    signals: tuple[signal.Signals, ...] = HANDLED_SIGNALS,
+) -> None:
+    for chosen in signals:
         previous[chosen] = signal.getsignal(chosen)
         signal.signal(chosen, handler)
 
@@ -47,10 +51,12 @@ def restore(previous: Previous) -> None:
 
 
 @contextmanager
-def handling(handler: Handler) -> Iterator[None]:
+def handling(
+    handler: Handler, signals: tuple[signal.Signals, ...] = HANDLED_SIGNALS
+) -> Iterator[None]:
     previous: Previous = {}
     try:
-        install(handler, previous)
+        install(handler, previous, signals)
         yield
     finally:
         restore(previous)

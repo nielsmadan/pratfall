@@ -1,7 +1,8 @@
 # Configuration examples
 
 [config.toml](config.toml) demonstrates defaults, named profiles, profile inheritance with
-`extends`, a profile with its own parameterized `prompt` (`prat remove-empty src`), and custom
+`extends`, a profile with its own parameterized `prompt` (`prat remove-empty src`), a workflow
+that fans out to two profiles and merges their outputs (`prat assess --file notes.md`), and custom
 commands, including a trusted wrapper with fixed arguments.
 
 ## Try the example
@@ -17,6 +18,17 @@ prat --config examples/config.toml simple "review this change" --dry-run
 
 `simple` is a profile defined in the example file. `--dry-run` previews the command without
 launching the agent.
+
+Preview the `assess` workflow the same way, with any text file in place of `notes.md`. Its `read`
+and `risks` steps both take the input file and run in parallel, and `brief` receives both outputs
+under `## read` and `## risks` headings:
+
+```sh
+prat --config examples/config.toml workflows
+prat --config examples/config.toml assess --file notes.md --dry-run
+```
+
+See [workflows](../docs/user/workflows.md).
 
 ## Save your settings
 

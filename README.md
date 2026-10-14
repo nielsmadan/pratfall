@@ -158,8 +158,31 @@ prat remove-empty src
 See [templates](docs/user/running.md#apply-a-template),
 [prompt parameters](docs/user/running.md#fill-prompt-parameters),
 [context files](docs/user/running.md#include-context-files),
-[editor prompts](docs/user/running.md#edit-the-prompt), [code extraction](docs/user/running.md#extract-code)
-and [schema output](docs/user/running.md#request-schema-output).
+[editor prompts](docs/user/running.md#edit-the-prompt),
+[code extraction](docs/user/running.md#extract-code) and [schema output](docs/user/running.md#request-schema-output).
+
+## Workflows
+
+A workflow is a named set of profile steps. Steps run in order, or in parallel when they do not
+depend on each other, and an `after` list sends their outputs downstream:
+
+```toml
+[workflows.review-all]
+steps = [
+  { name = "scan", profile = "simple" },
+  { name = "security", profile = "security-check", after = ["scan"] },
+  { name = "style", profile = "style-check", after = ["scan"] },
+  { name = "report", profile = "write-report", after = ["security", "style"] },
+]
+```
+
+```sh
+git diff | prat review-all
+```
+
+Each `profile` names a profile from your config. `security` and `style` run in parallel after
+`scan`, and `report` receives both outputs. Run `prat workflows` to list them. See
+[workflows](docs/user/workflows.md) for parameters, `bind`, failure behavior and JSON output.
 
 ## Profiles
 

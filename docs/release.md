@@ -71,23 +71,24 @@ distributions, source checksum and generated notes are saved as one workflow art
 ## Check installed packages locally
 
 Run these checks after changes to parsing, configuration, adapters, normalization, or process
-cleanup. The [harness](../scripts/qa_installed.py) uses fake native commands, a restricted PATH
-and disposable XDG configuration. Workflow scenarios run against both wheel and sdist installations,
-covering template listings, composed prompt previews, extraction with native failure metadata and raw
-traces, and a fake editor on a controlling terminal. Editor scenarios verify terminal reads/writes,
-foreground ownership and attribute restoration, and temporary-file cleanup after accepted and rejected
-edits. Q18 checks both completion scripts, the rejected fish shell, and that the hidden completion
-callback offers agents, aliases and configured profiles without launching an agent. W04–W07
-also run both installations through all six public control families: exact native
-argv and composed prompts across nine agents, CLI/config path origins under a different `--cwd`,
-layer precedence and empty-array clearing, binary attachments, native agent and tool selection,
-and Claude/Codex/Qwen schema text/JSON output. Schema checks retain raw trace and accounting on
-native failure, observe private snapshot bytes and permissions during execution, and check removal
-after the entrypoint exits. Rejection checks keep stdin open and supply an editor trap to prove failure
-before input acquisition for unsupported controls, native collisions and invalid selected resources.
-Editor commands and temporary paths stay inside the QA work directory. The harness spends no
-inference credits. Python assertions must be
-enabled; `-O` and `PYTHONOPTIMIZE` are rejected.
+cleanup. The [harness](../scripts/qa_installed.py) uses fake native commands, a restricted PATH and
+disposable XDG configuration. Workflow scenarios run against both wheel and sdist installations,
+covering template listings, composed prompt previews, extraction with native failure metadata and
+raw traces, and a fake editor on a controlling terminal. Editor scenarios verify terminal
+reads/writes, foreground ownership and attribute restoration, and temporary-file cleanup after
+accepted and rejected edits. Q18 checks both completion scripts, the rejected fish shell, and that
+the hidden completion callback offers agents, aliases, configured profiles and the `workflows`
+command without launching an agent. F01 runs a parallel fan-out and merge workflow through the
+installed command. W04–W07 also run both installations through all six public control families:
+exact native argv and composed prompts across nine agents, CLI/config path origins under a different
+`--cwd`, layer precedence and empty-array clearing, binary attachments, native agent and tool
+selection, and Claude/Codex/Qwen schema text/JSON output. Schema checks retain raw trace and
+accounting on native failure, observe private snapshot bytes and permissions during execution, and
+check removal after the entrypoint exits. Rejection checks keep stdin open and supply an editor trap
+to prove failure before input acquisition for unsupported controls, native collisions and invalid
+selected resources. Editor commands and temporary paths stay inside the QA work directory. The
+harness spends no inference credits. Python assertions must be enabled; `-O` and `PYTHONOPTIMIZE`
+are rejected.
 
 The harness keeps independent expected catalog values. Source parity tests under `just check`
 catch drift early; installed QA compares the real `prat agents --json` output. Transport and argv

@@ -93,3 +93,13 @@ def test_first_signal_hook_can_raise_out_of_the_handler() -> None:
         handler(signal.SIGINT, None)
 
     assert state.received == signal.SIGINT
+
+
+def test_handling_accepts_an_explicit_signal_set() -> None:
+    hangup = signal.getsignal(signal.SIGHUP)
+    interrupt = signal.getsignal(signal.SIGINT)
+    handler = handler_for(InterruptionState())
+    with handling(handler, (signal.SIGHUP,)):
+        assert signal.getsignal(signal.SIGHUP) is handler
+        assert signal.getsignal(signal.SIGINT) is interrupt
+    assert signal.getsignal(signal.SIGHUP) is hangup

@@ -147,27 +147,34 @@ class _ProgressDiagnostics:
         descriptor = self.fd
         if self.failed or descriptor is None:
             return
-        offset = 0
-        while offset < len(value):
-            try:
-                written = os.write(descriptor, value[offset : offset + 4096])
-            except BlockingIOError:
-                return
-            except OSError as error:
-                if error.errno in {errno.EAGAIN, errno.EWOULDBLOCK}:
-                    return
-                self.failed = True
-                raise
-            if written == 0:
-                self.failed = True
-                raise OSError(errno.EIO, "stderr write returned zero bytes")
-            offset += written
+        try:
+            _write_nonblocking(descriptor, value)
+        except OSError:
+            self.failed = True
+            raise
 
     def flush(self) -> None:
         return None
 
     def progress(self, elapsed_ms: int, category: Activity) -> None:
         self.line(f"prat: {elapsed_ms / 1000:.1f}s {ACTIVITY_LABELS[category]}")
+
+
+def _write_nonblocking(descriptor: int, data: bytes) -> int:
+    offset = 0
+    while offset < len(data):
+        try:
+            written = os.write(descriptor, data[offset : offset + 4096])
+        except BlockingIOError:
+            return offset
+        except OSError as error:
+            if error.errno in {errno.EAGAIN, errno.EWOULDBLOCK}:
+                return offset
+            raise
+        if written == 0:
+            raise OSError(errno.EIO, "stderr write returned zero bytes")
+        offset += written
+    return offset
 
 
 def _diagnostics_for(*, progress: bool) -> _Diagnostics:
@@ -188,6 +195,31 @@ def _config_warnings(config: Config, diagnostics: _Diagnostics) -> None:
         raise PratError(
             f"Cannot write config warnings: {error}.", code="output_io_error"
         ) from error
+
+
+def _guard[T](action: Callable[[], T], recover: Callable[[Exception], T]) -> T:
+    try:
+        return action()
+    except BrokenPipeError:
+        raise
+    except Exception as error:  # noqa: BLE001 - last resort so no failure escapes as a traceback
+        return recover(error)
+
+
+def _printable(error: Exception) -> str:
+    text = _guard(lambda: f"{type(error).__name__}: {error}", lambda _: type(error).__name__)
+    return text.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
+def _internal_message(error: Exception) -> str:
+    return f"Unexpected failure: {_printable(error)}"
+
+
+def _stderr_is_tty() -> bool:
+    try:
+        return sys.stderr.isatty()
+    except (ValueError, OSError):
+        return False
 
 
 def _presentation_error(error: Exception) -> ResultError:

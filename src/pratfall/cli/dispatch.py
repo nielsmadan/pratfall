@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from contextlib import ExitStack, closing, suppress
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+from typing import BinaryIO
 
 from pratfall.adapters.registry import ADAPTERS
 from pratfall.catalog import AGENTS
@@ -17,17 +18,22 @@ from pratfall.cli.presentation import (
     _diagnostics_for,
     _emit,
     _emit_result,
+    _guard,
+    _internal_message,
     _presentation_error,
     _preview,
+    _stderr_is_tty,
     _StdoutLatch,
     _StreamDiagnostics,
 )
 from pratfall.cli.shell_completion import _completion_script
+from pratfall.cli.workflow_run import run_workflow
 from pratfall.codes import INTERNAL_ERROR, SIGNAL_EXIT_BASE, exit_code_for
 from pratfall.config import config_path, init_config, load_config, option_origins, resolve_profile
 from pratfall.consumer import ByteConsumer, CapturingConsumer
 from pratfall.errors import PratError
 from pratfall.instructions import read_instructions
+from pratfall.limits import WORKFLOW_SPEC_BYTES
 from pratfall.models import (
     Config,
     ConsumedCapture,
@@ -38,12 +44,13 @@ from pratfall.models import (
     RawCapture,
     ResolvedProfile,
     ResultError,
+    Workflow,
 )
 from pratfall.notify import encode, notification_for, send, should_notify
 from pratfall.option_paths import prepare_attachments, prepare_directories, resolve_path
 from pratfall.output import extract_code, normalize, result_dict, validation_error
 from pratfall.prompt_editor import edit_prompt
-from pratfall.prompt_input import InputInterrupted, acquire_prompt, prepend_contexts
+from pratfall.prompt_input import InputInterrupted, PromptSource, acquire_prompt, prepend_contexts
 from pratfall.prompt_templates import (
     BoundInput,
     bind_run_input,
@@ -52,6 +59,7 @@ from pratfall.prompt_templates import (
 )
 from pratfall.runner import ProcessResult, cleanup_process_group, raw_stdout, run
 from pratfall.schema import prepare_schema
+from pratfall.workflow_plan import workflow_parameter_names
 
 
 def _agents(json_mode: bool) -> None:
@@ -185,6 +193,50 @@ def _templates(config: Config, json_mode: bool) -> None:
     _emit({"templates": records}, lines or ["No templates configured."], json_mode=json_mode)
 
 
+def _workflows(config: Config, json_mode: bool) -> None:
+    records = []
+    lines = []
+    for name, workflow in sorted(config.workflows.items()):
+        parameters = workflow_parameter_names(config, workflow)
+        records.append(
+            {
+                "name": name,
+                "parallel": workflow.parallel,
+                "parameters": list(parameters),
+                "source": str(workflow.source),
+                "steps": [
+                    {
+                        "name": step.name,
+                        "profile": step.selector,
+                        "after": list(step.after),
+                        "input": step.input,
+                        "bind": dict(step.bind),
+                    }
+                    for step in workflow.steps
+                ],
+            }
+        )
+        steps = "; ".join(_workflow_step_text(workflow, i) for i in range(len(workflow.steps)))
+        line = f"{name}: {steps}"
+        line += "" if workflow.parallel else " parallel=false"
+        line += f" parameters={','.join(parameters)}" if parameters else ""
+        lines.append(f"{line} source={workflow.source}")
+    _emit({"workflows": records}, lines or ["No workflows configured."], json_mode=json_mode)
+
+
+def _workflow_step_text(workflow: Workflow, index: int) -> str:
+    step = workflow.steps[index]
+    default = (workflow.steps[index - 1].name,) if index else ()
+    text = f"{step.name}={step.selector}"
+    if step.after != default:
+        text += f" after={','.join(step.after) or 'none'}"
+    if step.input == "none":
+        text += " input=none"
+    if step.bind:
+        text += " bind=" + ",".join(f"{key}:{source}" for key, source in step.bind.items())
+    return text
+
+
 def _validate_native_arguments(
     resolved: ResolvedProfile, label: str, origins: Mapping[str, OptionOrigin]
 ) -> None:
@@ -233,6 +285,8 @@ def _dispatch(args: argparse.Namespace) -> int:
             _profiles(config, args.json)
         elif args.command == "templates":
             _templates(config, args.json)
+        elif args.command == "workflows":
+            _workflows(config, args.json)
         elif args.command == "doctor":
             return _doctor(config, args.json, versions=args.versions)
         else:
@@ -303,24 +357,6 @@ def _decode_process(
                 ),
             )
     return process, decoded, stderr
-
-
-def _guard[T](action: Callable[[], T], recover: Callable[[Exception], T]) -> T:
-    try:
-        return action()
-    except BrokenPipeError:
-        raise
-    except Exception as error:  # noqa: BLE001 - last resort so no failure escapes as a traceback
-        return recover(error)
-
-
-def _printable(error: Exception) -> str:
-    text = _guard(lambda: f"{type(error).__name__}: {error}", lambda _: type(error).__name__)
-    return text.encode("utf-8", "backslashreplace").decode("utf-8")
-
-
-def _internal_message(error: Exception) -> str:
-    return f"Unexpected failure: {_printable(error)}"
 
 
 def _after_run_failure(process: ProcessResult, failure: ResultError) -> ProcessResult:
@@ -431,10 +467,15 @@ class _RunState:
     process: ProcessResult | None = None
 
 
-def _run_command(arguments: list[str], invocation_cwd: Path) -> int:
-    state = _RunState(json_mode=_json_requested(arguments))
+@dataclass(frozen=True)
+class _StepRun:
+    input: str | None
+
+
+def _run_command(arguments: list[str], invocation_cwd: Path, step: _StepRun | None = None) -> int:
+    state = _RunState(json_mode=step is not None or _json_requested(arguments))
     return _guard(
-        lambda: _run_selected(arguments, invocation_cwd, state),
+        lambda: _run_selected(arguments, invocation_cwd, state, step),
         lambda error: _internal_failure(error, state),
     )
 
@@ -544,13 +585,6 @@ def _prepare_run_schema(
     return replace(resolved, prepared_schema=prepared)
 
 
-def _stderr_is_tty() -> bool:
-    try:
-        return sys.stderr.isatty()
-    except (ValueError, OSError):
-        return False
-
-
 def _notify_after_run(resolved: ResolvedProfile, result: NormalizedResult) -> None:
     if not should_notify(
         resolved.options, result.status, result.duration_ms, stderr_is_tty=_stderr_is_tty()
@@ -603,10 +637,23 @@ def _render_run_prompt(
     return render_template(template, prompt, parameters=bound.parameters, allow_blank=parsed.edit)
 
 
-def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) -> int:
+def _with_step(parsed: RunArguments, step: _StepRun | None) -> RunArguments:
+    if step is None:
+        return parsed
+    parsed = replace(parsed, json=True, options=replace(parsed.options, notify=False))
+    if step.input is None:
+        return parsed
+    if parsed.prompt_source is not None:
+        raise PratError("Provide exactly one prompt source.", code="invalid_arguments")
+    return replace(parsed, prompt_source=PromptSource("inline", step.input))
+
+
+def _run_selected(
+    arguments: list[str], invocation_cwd: Path, state: _RunState, step: _StepRun | None = None
+) -> int:
     resolved: ResolvedProfile | None = None
     try:
-        parsed = _parse_run(arguments)
+        parsed = _with_step(_parse_run(arguments), step)
         state.json_mode = parsed.json
         with (
             ExitStack() as resources,
@@ -615,7 +662,11 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             parsed = _resolve_run_paths(parsed, invocation_cwd)
             config = load_config(parsed.config, cwd=invocation_cwd)
             _validate_config_native_arguments(config)
-            _config_warnings(config, diagnostics)
+            if step is None:
+                _config_warnings(config, diagnostics)
+                if parsed.selector in config.workflows:
+                    diagnostics.close()
+                    return run_workflow(arguments, parsed, config, invocation_cwd, state.stdout)
             resolved = resolve_profile(config, parsed.selector, parsed.options)
             state.resolved = resolved
             _validate_schema_extraction(resolved, parsed.extract)
@@ -677,3 +728,79 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
         else:
             print(f"prat: {error}", file=sys.stderr)
         return error.exit_code
+
+
+def _read_step_spec(stdin: BinaryIO) -> tuple[list[str], _StepRun, int]:
+    chunks: list[bytes] = []
+    size = 0
+    while size <= WORKFLOW_SPEC_BYTES:
+        try:
+            chunk = stdin.read(min(65536, WORKFLOW_SPEC_BYTES + 1 - size))
+        except (OSError, ValueError) as error:
+            raise PratError(
+                f"Cannot read workflow step spec: {error}.", code="invalid_arguments"
+            ) from error
+        if not chunk:
+            break
+        chunks.append(chunk)
+        size += len(chunk)
+    if size > WORKFLOW_SPEC_BYTES:
+        raise PratError(
+            f"Workflow step spec exceeds the {WORKFLOW_SPEC_BYTES} byte limit.",
+            code="invalid_arguments",
+        )
+    try:
+        spec = json.loads(b"".join(chunks).decode("utf-8"))
+    except (UnicodeDecodeError, ValueError, RecursionError) as error:
+        raise PratError(
+            f"Workflow step spec is not valid JSON: {error}.", code="invalid_arguments"
+        ) from error
+    return _validated_step_spec(spec)
+
+
+def _validated_step_spec(spec: object) -> tuple[list[str], _StepRun, int]:
+    if not isinstance(spec, dict):
+        raise PratError("Workflow step spec must be a JSON object.", code="invalid_arguments")
+    version = spec.get("version")
+    if type(version) is not int or version != 1:
+        raise PratError("Workflow step spec version must be 1.", code="invalid_arguments")
+    arguments = spec.get("arguments")
+    if not isinstance(arguments, list) or not all(isinstance(item, str) for item in arguments):
+        raise PratError(
+            "Workflow step spec arguments must be a list of strings.", code="invalid_arguments"
+        )
+    parent = spec.get("parent")
+    if type(parent) is not int:
+        raise PratError("Workflow step spec parent must be an integer.", code="invalid_arguments")
+    if "input" not in spec:
+        raise PratError("Workflow step spec must include input.", code="invalid_arguments")
+    text = spec["input"]
+    if text is not None and not isinstance(text, str):
+        raise PratError(
+            "Workflow step spec input must be a string or null.", code="invalid_arguments"
+        )
+    return list(arguments), _StepRun(text), parent
+
+
+def _step_failure(error: PratError) -> int:
+    payload = validation_error(error, error.code, error.exit_code, status="error", resolved=None)
+    print(json.dumps(payload, ensure_ascii=False))
+    return error.exit_code
+
+
+def _step_command(
+    stdin: BinaryIO,
+    invocation_cwd: Path,
+    watch_parent: Callable[[int], None] = lambda _: None,
+) -> int:
+    try:
+        arguments, step, parent = _read_step_spec(stdin)
+    except PratError as error:
+        return _step_failure(error)
+    watch_parent(parent)
+    previous = sys.stdin
+    sys.stdin = None
+    try:
+        return _run_command(arguments, invocation_cwd, step)
+    finally:
+        sys.stdin = previous

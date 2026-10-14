@@ -232,7 +232,7 @@ BY_SELECTOR = MappingProxyType(
     {selector: agent for agent in AGENTS for selector in (agent.name, *agent.aliases)}
 )
 MANAGEMENT_COMMANDS = frozenset(
-    {"agents", "profiles", "templates", "doctor", "config", "completion"}
+    {"agents", "profiles", "templates", "workflows", "doctor", "config", "completion"}
 )
 RESERVED_NAMES = frozenset(BY_SELECTOR) | MANAGEMENT_COMMANDS | {"help", "version"}
 

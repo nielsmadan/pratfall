@@ -5,8 +5,10 @@ This file is the canonical coding-agent guidance for Pratfall.
 ## Project
 
 Pratfall is a Python 3.13 CLI named `prat`. It runs one installed coding-agent command for one
-prompt, selected through a built-in alias or a named global profile. `README.md` defines the public
-CLI and configuration contracts.
+prompt, selected through a built-in alias or a named global profile. A named workflow chains such
+runs, each step in its own child `prat __step` process
+([ADR 0006](docs/decisions/0006-run-workflows-as-one-prat-process-per-step.md)). `README.md`
+defines the public CLI and configuration contracts.
 
 ## Commands
 

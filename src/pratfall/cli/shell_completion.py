@@ -21,6 +21,7 @@ from pratfall.config import load_config
 from pratfall.errors import PratError
 from pratfall.models import Config
 from pratfall.prompt_templates import template_parameters
+from pratfall.workflow_plan import workflow_parameter_names
 
 SHELLS = ("bash", "zsh")
 
@@ -219,6 +220,9 @@ def _active_parameters(preceding: list[str], cwd: Path) -> tuple[str, ...]:
         template = config.templates.get(names[-1])
         return template_parameters(template.prompt) if template is not None else ()
     positionals = _positionals(preceding)
+    workflow = config.workflows.get(positionals[0]) if positionals else None
+    if workflow is not None:
+        return workflow_parameter_names(config, workflow)
     profile = config.profiles.get(positionals[0]) if positionals else None
     if profile is None or profile.prompt is None:
         return ()
@@ -244,6 +248,7 @@ def _selectors(preceding: list[str], cwd: Path, *, management: bool) -> list[Can
         candidates.extend(
             (name, f"profile: {profile.agent}") for name, profile in config.profiles.items()
         )
+        candidates.extend((name, "workflow") for name in config.workflows)
     if management:
         candidates.extend(_MANAGEMENT_HELP.items())
     return candidates

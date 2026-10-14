@@ -886,3 +886,221 @@ def test_defaults_reject_prompt(tmp_path: Path) -> None:
     path = write_config(tmp_path, 'version=1\n[defaults]\nprompt="Hi"\n')
     with pytest.raises(PratError, match="unknown field 'prompt'"):
         load_config(path)
+
+
+WORKFLOW_PROFILES = (
+    '[profiles.a]\nagent="codex"\nprompt="Do $folder $input"\n'
+    '[profiles.b]\nagent="codex"\nprompt="Next $mode"\n'
+    '[profiles.bare]\nagent="codex"\n'
+)
+
+
+def workflow_config(tmp_path: Path, body: str) -> Path:
+    return write_config(tmp_path, f"version=1\n{WORKFLOW_PROFILES}{body}")
+
+
+def test_workflow_forms_parse_to_the_same_workflow(tmp_path: Path) -> None:
+    inline = load_config(
+        workflow_config(
+            tmp_path,
+            '[workflows.w]\nsteps=[{name="one",profile="a"},{name="two",profile="b",'
+            'after=["one"],input="none",bind={mode="one"}},{name="top",profile="bare",after=[]}]\n',
+        )
+    )
+    tabular = load_config(
+        workflow_config(
+            tmp_path,
+            '[[workflows.w.steps]]\nname="one"\nprofile="a"\n'
+            '[[workflows.w.steps]]\nname="two"\nprofile="b"\ninput="none"\n'
+            '[workflows.w.steps.bind]\nmode="one"\n'
+            '[[workflows.w.steps]]\nname="top"\nprofile="bare"\nafter=[]\n',
+        )
+    )
+    workflow = inline.workflows["w"]
+    assert workflow == tabular.workflows["w"]
+    assert workflow.parallel is True
+    assert [(s.name, s.selector, s.after, s.input, dict(s.bind)) for s in workflow.steps] == [
+        ("one", "a", (), "upstream", {}),
+        ("two", "b", ("one",), "none", {"mode": "one"}),
+        ("top", "bare", (), "upstream", {}),
+    ]
+    assert workflow.source == tmp_path / "config.toml"
+    with pytest.raises(TypeError):
+        inline.workflows["x"] = workflow  # type: ignore[index]
+
+
+def test_workflow_default_after_is_the_previous_step(tmp_path: Path) -> None:
+    config = load_config(
+        workflow_config(
+            tmp_path,
+            '[workflows.w]\nparallel=false\nsteps=[{name="a1",profile="a"},'
+            '{name="a2",profile="a"},{name="a3",profile="a"}]\n',
+        )
+    )
+    workflow = config.workflows["w"]
+    assert workflow.parallel is False
+    assert [step.after for step in workflow.steps] == [(), ("a1",), ("a2",)]
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ("[workflows.w]\n", r"workflows\.w\.steps: expected a nonempty array of step tables"),
+        ("[workflows.w]\nsteps=[]\n", r"workflows\.w\.steps: expected a nonempty array"),
+        ("[workflows.w]\nsteps=[1]\n", r"workflow 'w'\.steps\[0\]: expected a TOML table"),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"}]\nextra=1\n',
+            r"workflows\.w: unknown field 'extra'",
+        ),
+        (
+            '[workflows.w]\nparallel="yes"\nsteps=[{name="x",profile="a"}]\n',
+            r"workflows\.w\.parallel: expected a boolean",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a",bogus=1}]\n',
+            r"workflow 'w' step 'x': unknown field 'bogus'",
+        ),
+        (
+            '[workflows.w]\nsteps=[{profile="a"}]\n',
+            r"steps\[0\]\.name: expected a nonempty string",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x"}]\n',
+            r"workflow 'w' step 'x'\.profile: expected a nonempty string",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="1x",profile="a"}]\n',
+            r"workflow 'w' step '1x': use letters, digits, underscores or hyphens in step names",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="x",profile="a"}]\n',
+            r"workflow 'w' step 'x': duplicate step name",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a",after=["y"]},{name="y",profile="a"}]\n',
+            r"step 'x'\.after: 'y' is not a step declared earlier in this workflow",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="a",after=["x","x"]}]\n',
+            r"step 'y'\.after: duplicate step names",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a",after="y"}]\n',
+            r"step 'x'\.after: expected an array of strings",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a",input="upstream"}]\n',
+            r"step 'x'\.input: expected \"none\"",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a",bind=1}]\n',
+            r"step 'x'\.bind: expected a TOML table",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a",bind={mode=1}}]\n',
+            r"step 'x'\.bind\.mode: expected a nonempty string",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="nope"}]\n',
+            r"step 'x'\.profile: unknown selector 'nope'",
+        ),
+        (
+            (
+                '[workflows.w]\nsteps=[{name="x",profile="a"}]\n'
+                '[workflows.v]\nsteps=[{name="y",profile="w"}]\n'
+            ),
+            r"workflow 'v' step 'y'\.profile: 'w' is a workflow, not a profile or agent",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",bind={mode="z"}}]\n',
+            r"step 'y'\.bind\.mode: 'z' is not an ancestor of this step",
+        ),
+        (
+            (
+                '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="a",after=[]},'
+                '{name="z",profile="b",after=["y"],bind={mode="x"}}]\n'
+            ),
+            r"step 'z'\.bind\.mode: 'x' is not an ancestor of this step",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",bind={nope="x"}}]\n',
+            r"step 'y'\.bind\.nope: 'b' has no parameter 'nope'",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="bare",input="none"}]\n',
+            r"step 'y': 'bare' has no prompt and input is \"none\", so the step can never receive",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="cx",input="none"}]\n',
+            r"step 'x': 'cx' has no prompt and input is \"none\"",
+        ),
+    ],
+)
+def test_workflow_validation_errors(tmp_path: Path, body: str, message: str) -> None:
+    path = workflow_config(tmp_path, body)
+    with pytest.raises(PratError, match=message):
+        load_config(path)
+
+
+@pytest.mark.parametrize(
+    ("name", "message"),
+    [
+        ("workflows", "name is reserved"),
+        ("doctor", "name is reserved"),
+        ("codex", "name is reserved"),
+        ("cx", "name is reserved"),
+        ('"bad.name"', "workflow names"),
+        ('"-bad"', "workflow names"),
+        ("a", "name is also a profile"),
+    ],
+)
+def test_workflow_name_rules(tmp_path: Path, name: str, message: str) -> None:
+    path = workflow_config(tmp_path, f'[workflows.{name}]\nsteps=[{{name="x",profile="a"}}]\n')
+    with pytest.raises(PratError, match=message):
+        load_config(path)
+
+
+def test_workflows_must_be_a_table(tmp_path: Path) -> None:
+    path = write_config(tmp_path, "version=1\nworkflows=[]\n")
+    with pytest.raises(PratError, match="workflows: expected a TOML table"):
+        load_config(path)
+
+
+def test_workflow_name_allows_digits_hyphens_and_underscores(tmp_path: Path) -> None:
+    path = workflow_config(tmp_path, '[workflows.ok-1_x]\nsteps=[{name="x",profile="a"}]\n')
+    assert "ok-1_x" in load_config(path).workflows
+
+
+def test_profile_named_workflows_is_rejected(tmp_path: Path) -> None:
+    path = write_config(tmp_path, 'version=1\n[profiles.workflows]\nagent="codex"\n')
+    with pytest.raises(PratError, match="name is reserved"):
+        load_config(path)
+
+
+def test_workflow_in_defaults_is_rejected(tmp_path: Path) -> None:
+    path = write_config(tmp_path, "version=1\n[defaults]\nworkflows=1\n")
+    with pytest.raises(PratError, match="unknown field 'workflows'"):
+        load_config(path)
+
+
+def test_local_workflow_replaces_global_and_checks_global_profiles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "xdg"
+    (home / "pratfall").mkdir(parents=True)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(home))
+    global_path = home / "pratfall" / "config.toml"
+    global_path.write_text(
+        f'version=1\n{WORKFLOW_PROFILES}[workflows.w]\nsteps=[{{name="g",profile="a"}}]\n'
+        '[workflows.only]\nsteps=[{name="o",profile="b"}]\n',
+        encoding="utf-8",
+    )
+    work = tmp_path / "work"
+    work.mkdir()
+    local = work / ".pratfile"
+    local.write_text('version=1\n[workflows.w]\nsteps=[{name="l",profile="a"}]\n', encoding="utf-8")
+    config = load_config(cwd=work)
+    assert [step.name for step in config.workflows["w"].steps] == ["l"]
+    assert config.workflows["w"].source == local
+    assert config.workflows["only"].source == global_path
+    assert config.warnings == (f"{local}: workflow 'w' replaces the workflow from {global_path}.",)

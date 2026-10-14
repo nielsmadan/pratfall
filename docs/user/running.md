@@ -161,6 +161,9 @@ close stdin so the agent does not consume the loop's input:
 for dir in src tests; do prat remove-empty "$dir" </dev/null; done
 ```
 
+A [workflow](workflows.md#fill-parameters) takes the same words and `--param` values for the
+parameters of all its steps.
+
 ## Include context files
 
 ```sh
