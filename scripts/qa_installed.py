@@ -2628,6 +2628,9 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "notify_after": None,
                     "command_prefix": None,
                 },
+                "prompt": None,
+                "prompt_source": None,
+                "parameters": [],
             }
         ],
     }
@@ -3428,7 +3431,7 @@ def _exercise_q01_q02(context: _ExerciseContext) -> dict[str, object]:
     for expected in (
         "One-shot coding agents for scripts and pipes.",
         "{agents,profiles,templates,doctor,config,completion}",
-        "prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]",
+        "prat [RUN_OPTIONS] SELECTOR [PROMPT | VALUE...] [-- NATIVE_ARGS]",
         "--progress              Print bounded live activity updates on stderr.",
         "--dry-run               Resolve and print the invocation without launching it.",
     ):
@@ -3576,6 +3579,9 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "notify_after": None,
                     "command_prefix": None,
                 },
+                "prompt": None,
+                "prompt_source": None,
+                "parameters": [],
             }
         ],
     }
@@ -4221,8 +4227,18 @@ def _exercise_w_composition(prat: Path, root: Path) -> dict[str, object]:
     assert _json_result(listing) == {
         "schema_version": 1,
         "templates": [
-            {"name": "complete", "prompt": "Standalone task", "source": str(config)},
-            {"name": "review", "prompt": "Review $$ ${input}", "source": str(config)},
+            {
+                "name": "complete",
+                "prompt": "Standalone task",
+                "source": str(config),
+                "parameters": [],
+            },
+            {
+                "name": "review",
+                "prompt": "Review $$ ${input}",
+                "source": str(config),
+                "parameters": [],
+            },
         ],
     }
     text_listing = _run(prat, root, ["templates"], config=config)

@@ -25,8 +25,13 @@ PRATFILE = """version=1
 agent="claude"
 [profiles.quick]
 agent="gemini"
+[profiles.cleaner]
+agent="claude"
+prompt="Remove empty files under $folder keeping $keep"
 [templates.review]
 prompt="Review $input"
+[templates.move]
+prompt="Move $source to $target"
 """
 
 
@@ -302,7 +307,7 @@ def test_prompt_slot_offers_nothing(tmp_path: Path) -> None:
 
 def test_template_values_from_config(tmp_path: Path) -> None:
     (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
-    assert words(["cc", "-t", ""], tmp_path) == ["review"]
+    assert words(["cc", "-t", ""], tmp_path) == ["move", "review"]
     assert words(["--template", "r"], tmp_path) == ["review"]
 
 
@@ -369,6 +374,10 @@ def test_management_choices_and_flags(
         (["--prompt", "=", "hi", "cc"], ["--prompt=hi", "cc"]),
         (["--template", "="], ["--template="]),
         (["cc", "a", "=", "b"], ["cc", "a", "=", "b"]),
+        (["--param", "folder", "=", "src"], ["--param", "folder=src"]),
+        (["--param", "folder", "="], ["--param", "folder="]),
+        (["--param", "="], ["--param="]),
+        (["--param", "=", "a", "=", "b"], ["--param=a=b"]),
     ],
 )
 def test_bash_equals_wordbreak_is_rejoined(given: list[str], expected: list[str]) -> None:
@@ -443,3 +452,120 @@ def test_every_help_run_flag_is_completed_with_a_description() -> None:
     run_flags = _run_flags()
     assert documented == set(run_flags)
     assert all(run_flags.values())
+
+
+def candidates(arguments: list[str], cwd: Path) -> list[tuple[str, str]]:
+    result = _complete(arguments, cwd)
+    assert result.mode == "words"
+    return list(result.candidates)
+
+
+def test_param_offers_profile_parameters(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    assert candidates(["cleaner", "--param", ""], tmp_path) == [
+        ("folder=", "parameter"),
+        ("keep=", "parameter"),
+    ]
+
+
+def test_param_skips_bound_names(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    assert words(["cleaner", "--param", "folder=src", "--param", ""], tmp_path) == ["keep="]
+    assert words(["cleaner", "--param=folder=src", "--param", ""], tmp_path) == ["keep="]
+
+
+def test_param_skips_names_bound_by_position(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    assert words(["cleaner", "x", "--param", ""], tmp_path) == ["keep="]
+    assert words(["cleaner", "x", "y", "--param", ""], tmp_path) == []
+
+
+def test_positional_after_all_parameters_bound_offers_nothing(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    assert _complete(["cleaner", "x", "sr"], tmp_path).mode == "files"
+    assert _complete(["cleaner", "x", "--param", "keep=y", "sr"], tmp_path).mode == "words"
+    assert _complete(["cleaner", "x", "y", "sr"], tmp_path).mode == "words"
+    assert _complete(["cleaner", "--param", "folder=x", "--param=keep=y", "sr"], tmp_path).mode == (
+        "words"
+    )
+
+
+def test_param_offers_template_parameters_over_profile(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    assert words(["cleaner", "-t", "move", "--param", ""], tmp_path) == ["source=", "target="]
+    assert words(["-t=move", "cleaner", "--param", "t"], tmp_path) == ["target="]
+
+
+def test_param_with_unknown_template_offers_nothing(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    assert words(["cleaner", "-t", "nope", "--param", ""], tmp_path) == []
+
+
+def test_param_without_active_template_offers_nothing(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    assert words(["simple", "--param", ""], tmp_path) == []
+
+
+def test_param_value_part_is_not_completed(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    assert words(["cleaner", "--param", "folder=s"], tmp_path) == []
+
+
+def test_positional_value_in_parameter_mode_completes_paths(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    assert _complete(["cleaner", "sr"], tmp_path).mode == "files"
+    assert _complete(["cc", "-t", "move", "sr"], tmp_path).mode == "files"
+    assert _complete(["cc", "-t", "review", "sr"], tmp_path).mode == "words"
+
+
+def test_bash_split_param_words_resolve_the_selector(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    for split in (["--param", "folder", "=", "src"], ["--param", "=", "folder", "=", "src"]):
+        assert words([*split, "cleaner", "--effort", ""], tmp_path) == [
+            "high",
+            "low",
+            "max",
+            "medium",
+            "xhigh",
+        ]
+
+
+def test_param_is_a_described_flag(tmp_path: Path) -> None:
+    assert dict(candidates(["cc", "--par"], tmp_path)) == {
+        "--param": "Fill a prompt parameter; repeat for several."
+    }
+
+
+BASH_SPLIT_DRIVER = BASH_DRIVER.replace('<<<"$2"', '<<<"${2//=/ = }"')
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="bash is not installed")
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("prat cleaner --param ", ["folder=", "keep="]),
+        ("prat cleaner --param folder=src --param ", ["keep="]),
+        ("prat cleaner --param=folder=src --effort ", ["high", "low", "max", "medium", "xhigh"]),
+    ],
+)
+def test_bash_glue_completes_params(
+    line: str,
+    expected: list[str],
+    shim: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    path = tmp_path / "prat.bash"
+    path.write_text(script("bash", capsys), encoding="utf-8")
+    driver = tmp_path / "driver.bash"
+    driver.write_text(BASH_SPLIT_DRIVER, encoding="utf-8")
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc", str(driver), str(path), line],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=tmp_path,
+        env={"PATH": f"{shim}:/usr/bin:/bin", "XDG_CONFIG_HOME": str(tmp_path / "config-home")},
+    )
+    assert sorted(result.stdout.split()) == expected

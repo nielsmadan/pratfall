@@ -20,6 +20,7 @@ from pratfall.cli.parsing import (
 from pratfall.config import load_config
 from pratfall.errors import PratError
 from pratfall.models import Config
+from pratfall.prompt_templates import template_parameters
 
 SHELLS = ("bash", "zsh")
 
@@ -141,7 +142,7 @@ def _complete(words: Sequence[str], cwd: Path) -> _Completion:
         return _management(positionals[0], positionals[1:], current)
     if current.startswith("-"):
         return _words(current, _run_flags().items())
-    return _Completion("words")
+    return _Completion("files" if _unbound_parameters(preceding, cwd) else "words")
 
 
 def _rejoin_wordbreaks(words: Sequence[str]) -> list[str]:
@@ -149,7 +150,7 @@ def _rejoin_wordbreaks(words: Sequence[str]) -> list[str]:
     open_value = False
     for word in words:
         previous = joined[-1] if joined else ""
-        if word == "=" and previous.startswith("-") and "=" not in previous:
+        if word == "=" and not open_value and _attaches_equals(joined):
             joined[-1] = f"{previous}="
             open_value = True
         elif open_value:
@@ -158,6 +159,11 @@ def _rejoin_wordbreaks(words: Sequence[str]) -> list[str]:
         else:
             joined.append(word)
     return joined
+
+
+def _attaches_equals(joined: list[str]) -> bool:
+    previous = joined[-1] if joined else ""
+    return previous.startswith("-") or (len(joined) > 1 and joined[-2] == "--param")
 
 
 def _positionals(arguments: list[str]) -> list[str]:
@@ -178,9 +184,45 @@ def _value_slot(flag: str, preceding: list[str], current: str, cwd: Path) -> _Co
         config = _load(preceding, cwd)
         templates = config.templates if config is not None else {}
         return _words(current, ((name, "template") for name in templates))
+    if flag == "--param":
+        if "=" in current:
+            return _Completion("words")
+        names = _unbound_parameters(preceding, cwd)
+        return _words(current, ((f"{name}=", "parameter") for name in names))
     if flag == "--effort":
         return _words(current, ((value, "") for value in _efforts(preceding, cwd)))
     return _Completion("words")
+
+
+def _unbound_parameters(preceding: list[str], cwd: Path) -> list[str]:
+    by_position = max(len(_positionals(preceding)) - 1, 0)
+    by_name = {
+        token.value.partition("=")[0]
+        for token in _scan_run(preceding).tokens
+        if token.name == "--param" and token.value is not None
+    }
+    return [
+        name for name in _active_parameters(preceding, cwd)[by_position:] if name not in by_name
+    ]
+
+
+def _active_parameters(preceding: list[str], cwd: Path) -> tuple[str, ...]:
+    config = _load(preceding, cwd)
+    if config is None:
+        return ()
+    names = [
+        token.value
+        for token in _scan_run(preceding).tokens
+        if token.name in _TEMPLATE_FLAGS and token.value is not None
+    ]
+    if names:
+        template = config.templates.get(names[-1])
+        return template_parameters(template.prompt) if template is not None else ()
+    positionals = _positionals(preceding)
+    profile = config.profiles.get(positionals[0]) if positionals else None
+    if profile is None or profile.prompt is None:
+        return ()
+    return template_parameters(profile.prompt.prompt)
 
 
 def _efforts(preceding: list[str], cwd: Path) -> tuple[str, ...]:

@@ -3363,3 +3363,216 @@ def test_command_prefix_launches_the_agent_through_the_prefix(
     assert main(["cx", "prompt", "--config", str(config), "--dry-run", "--json"]) == 0
     preview = json.loads(capsys.readouterr().out)
     assert preview["argv"][:4] == [sys.executable, str(wrapper), "MARK", sys.executable]
+
+
+PARAMETER_CONFIG = """
+[profiles.remove-empty]
+agent="codex"
+prompt="Remove empty files in $folder"
+
+[profiles.move]
+agent="codex"
+prompt="Move $source to ${target}: $input"
+
+[profiles.plain]
+agent="codex"
+prompt="Review this project"
+
+[templates.rename]
+prompt="Rename $old to $new"
+"""
+
+
+def parameter_config(tmp_path: Path, agent: str = "codex", code: str = CODEX_SUCCESS) -> Path:
+    config = write_agent(tmp_path, agent, code)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write(PARAMETER_CONFIG.replace('agent="codex"', f'agent="{agent}"'))
+    return config
+
+
+def sent_prompt(capsys: pytest.CaptureFixture[str]) -> str:
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "success"
+    prompt: str = json.loads(result["output"])["prompt"]
+    return prompt
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    [
+        (["remove-empty", "src"], "Remove empty files in src"),
+        (["--param", "folder=src", "remove-empty"], "Remove empty files in src"),
+        (["remove-empty", "--param", "folder=a=b"], "Remove empty files in a=b"),
+        (["remove-empty", "--param=folder=$x"], "Remove empty files in $x"),
+        (["remove-empty", "--param", "folder=-v"], "Remove empty files in -v"),
+        (["move", "a.py", "lib"], "Move a.py to lib: "),
+        (["move", "a.py", "--param", "target=lib"], "Move a.py to lib: "),
+        (["--param=target=lib", "move", "--param", "source=a.py"], "Move a.py to lib: "),
+        (["cx", "-t", "rename", "foo", "bar"], "Rename foo to bar"),
+        (["remove-empty", "-t", "rename", "foo", "bar"], "Rename foo to bar"),
+        (["plain", "carefully"], "Review this project\n\ncarefully"),
+        (["plain"], "Review this project"),
+    ],
+)
+def test_prompt_parameters_reach_fake_agent(
+    arguments: list[str],
+    expected: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = parameter_config(tmp_path)
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b""))
+    assert main([*arguments, "--config", str(config), "--json"]) == 0
+    assert sent_prompt(capsys) == expected
+
+
+def test_piped_stdin_fills_input_alongside_parameters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = parameter_config(tmp_path)
+    monkeypatch.setattr(sys, "stdin", io.BytesIO("keep history 雪".encode()))
+    assert main(["move", "a.py", "lib", "--config", str(config), "--json"]) == 0
+    assert sent_prompt(capsys) == "Move a.py to lib: keep history 雪"
+
+
+def test_param_after_native_boundary_stays_native(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = parameter_config(tmp_path)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    arguments = ["remove-empty", "src", "--config", str(config), "--json"]
+    assert main([*arguments, "--", "--param", "folder=lib"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"]["message"].startswith(
+        "command line: selector 'remove-empty'.native_args: Codex native argument '--param': "
+    )
+
+
+def test_dry_run_shows_prompt_rendered_with_parameters(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = parameter_config(tmp_path, "gemini", "raise AssertionError('dry run launched agent')")
+    arguments = ["move", "a.py", "--param", "target=lib", "--prompt=now"]
+    assert main([*arguments, "--config", str(config), "--dry-run", "--json"]) == 0
+    assert "--prompt=Move a.py to lib: now" in json.loads(capsys.readouterr().out)["argv"]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (
+            ["remove-empty", "src", "lib"],
+            (
+                "profile 'remove-empty' prompt takes 1 parameter value(s) (folder) but got 2; "
+                "pass free text with --prompt=TEXT or --file PATH."
+            ),
+        ),
+        (
+            ["remove-empty", "-"],
+            (
+                "profile 'remove-empty' prompt: '-' cannot be the value of parameter 'folder'; "
+                "use --param folder=- for a literal dash or --file - to read standard input."
+            ),
+        ),
+        (["move", "a.py"], "profile 'move' prompt: missing value for parameter(s) target."),
+        (
+            ["cx", "-t", "rename", "foo", "--param", "old=bar"],
+            "template 'rename': parameter 'old' is bound more than once.",
+        ),
+        (
+            ["remove-empty", "--param", "dir=src"],
+            "profile 'remove-empty' prompt has no parameter 'dir'; its parameters are folder.",
+        ),
+        (
+            ["remove-empty", "--param", "folder= "],
+            (
+                "profile 'remove-empty' prompt: parameter 'folder' must not be empty or "
+                "whitespace-only."
+            ),
+        ),
+        (
+            ["plain", "--param", "folder=src"],
+            (
+                "--param needs a prompt with parameters, but profile 'plain' prompt has no "
+                "parameters."
+            ),
+        ),
+        (
+            ["cx", "--param", "folder=src"],
+            "--param needs a prompt with parameters, but no template is active.",
+        ),
+        (["plain", "one", "two"], "Provide exactly one prompt source."),
+        (
+            ["remove-empty", "--param", ""],
+            "profile 'remove-empty' prompt: --param '' must have the form NAME=VALUE.",
+        ),
+        (
+            ["remove-empty", "--param", "folder=a\0b"],
+            "profile 'remove-empty' prompt: parameter 'folder' must not contain NUL bytes.",
+        ),
+        (
+            ["remove-empty", "--file", "missing.txt", "--context", "missing.txt", "--edit"],
+            ("profile 'remove-empty' prompt: missing value for parameter(s) folder."),
+        ),
+    ],
+)
+def test_parameter_binding_errors_fail_before_reading_input(
+    arguments: list[str],
+    message: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = parameter_config(tmp_path, "codex", "raise AssertionError('agent launched')")
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main([*arguments, "--config", str(config), "--json"]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["exit_code"] == 2
+    assert result["error"] == {"code": "invalid_arguments", "message": message}
+
+
+def test_parameter_prompt_precedes_context_in_dry_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = parameter_config(tmp_path, "gemini", "raise AssertionError('dry run launched agent')")
+    context = tmp_path / "ctx.md"
+    context.write_text("background")
+    arguments = ["move", "a.py", "lib", "--context", str(context), "--prompt=now"]
+    assert main([*arguments, "--config", str(config), "--dry-run", "--json"]) == 0
+    argv = json.loads(capsys.readouterr().out)["argv"]
+    assert f'--prompt=# Context: "{context}"\n\nbackground\n\nMove a.py to lib: now' in argv
+
+
+def test_parameter_prompt_is_rendered_before_the_editor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = parameter_config(tmp_path)
+    context = tmp_path / "ctx.md"
+    context.write_text("background")
+    drafts: list[bytes] = []
+
+    def fake_editor(draft: bytes, invocation_cwd: Path) -> bytes:
+        drafts.append(draft)
+        return draft + b"!"
+
+    monkeypatch.setattr(dispatch_module, "edit_prompt", fake_editor)
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b""))
+    arguments = ["remove-empty", "src", "--edit", "--context", str(context)]
+    assert main([*arguments, "--config", str(config), "--json"]) == 0
+    expected = f'# Context: "{context}"\n\nbackground\n\nRemove empty files in src'
+    assert drafts == [expected.encode()]
+    assert sent_prompt(capsys) == expected + "!"
+
+
+def test_unknown_selector_wins_over_extra_prompt_words(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = parameter_config(tmp_path)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["missing", "one", "two", "--config", str(config), "--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == {
+        "code": "invalid_arguments",
+        "message": (
+            "Unknown selector 'missing'; run 'prat agents' or 'prat profiles' to list choices."
+        ),
+    }

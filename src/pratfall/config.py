@@ -422,20 +422,33 @@ def _profiles(table: dict[str, object], path: Path) -> dict[str, ProfileLayer]:
                 f"{label}: use letters, digits, underscores or hyphens in profile names."
             )
         settings = _table(value, label)
-        _known_keys(settings, OPTION_FIELDS | {"agent", "extends"}, label)
+        _known_keys(settings, OPTION_FIELDS | {"agent", "extends", "prompt"}, label)
         extends = (
             _string(settings["extends"], f"{label}.extends") if "extends" in settings else None
         )
         agent = _declared_agent(settings.get("agent"), label, required=extends is None)
+        prompt = _profile_prompt(settings, label)
         options = parse_options(
-            {key: val for key, val in settings.items() if key not in ("agent", "extends")},
+            {
+                key: val
+                for key, val in settings.items()
+                if key not in ("agent", "extends", "prompt")
+            },
             label,
             base=path.parent,
         )
         layers[name] = ProfileLayer(
-            name=name, agent=agent, options=options, source=path, extends=extends
+            name=name, agent=agent, options=options, source=path, extends=extends, prompt=prompt
         )
     return layers
+
+
+def _profile_prompt(settings: dict[str, object], label: str) -> str | None:
+    if "prompt" not in settings:
+        return None
+    prompt = _string(settings["prompt"], f"{label}.prompt")
+    validate_template(prompt, f"{label}.prompt")
+    return prompt
 
 
 def _chain(layers: Mapping[str, ProfileLayer], name: str) -> tuple[ProfileLayer, ...]:
@@ -468,6 +481,14 @@ def _resolve_layer(layers: Mapping[str, ProfileLayer], name: str) -> Profile:
         options=merge_options(*(layer.options for layer in chain)),
         source=chain[-1].source,
         layers=chain,
+        prompt=next(
+            (
+                PromptTemplate(prompt=declared_prompt, source=layer.source)
+                for layer in reversed(chain)
+                if (declared_prompt := layer.prompt) is not None
+            ),
+            None,
+        ),
     )
 
 

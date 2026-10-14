@@ -1,7 +1,8 @@
 # Configuration examples
 
 [config.toml](config.toml) demonstrates defaults, named profiles, profile inheritance with
-`extends`, and custom commands, including a trusted wrapper with fixed arguments.
+`extends`, a profile with its own parameterized `prompt` (`prat remove-empty src`), and custom
+commands, including a trusted wrapper with fixed arguments.
 
 ## Try the example
 

@@ -8,6 +8,7 @@ prat cx "review this change"
 
 - [Supply a prompt](#supply-a-prompt)
 - [Apply a template](#apply-a-template)
+  - [Fill prompt parameters](#fill-prompt-parameters)
 - [Include context files](#include-context-files)
 - [Edit the prompt](#edit-the-prompt)
 - [Extract code](#extract-code)
@@ -91,7 +92,9 @@ is read. `prat templates` lists names in sorted order with JSON-quoted prompt st
 
 `$input` and `${input}` substitute the base prompt, including the existing stdin-first combination
 when both redirected stdin and an explicit source are supplied. `$$` produces one literal dollar
-sign. Other dollar expressions are invalid; use `$$` wherever a literal dollar is needed.
+sign. Other valid `$name` or `${name}` placeholders are
+[prompt parameters](#fill-prompt-parameters); malformed dollar expressions are invalid, so use `$$`
+wherever a literal dollar is needed.
 Substitution happens once: dollar expressions in input text remain literal. Without an input
 placeholder, a template appends nonempty base input after two newlines. Whitespace and line endings
 are preserved.
@@ -102,6 +105,61 @@ unavailable stdin and an empty implicit stdin stream count as absent input. Expl
 stdin also fails. The final rendered task must be nonempty, valid UTF-8, NUL-free and at most 1 MiB.
 Template definitions also have a 1 MiB UTF-8 limit, and repeated substitutions are checked against
 the final limit before allocating their expanded text. `--dry-run` uses the same rendered prompt.
+
+### Fill prompt parameters
+
+A template, or a profile with its own
+[`prompt`](profiles.md#give-a-profile-its-own-prompt), can name parameters with `$name` or
+`${name}`. A name starts with an ASCII letter or underscore, continues with ASCII letters, digits
+or underscores, and is case-sensitive. `input` is reserved, and case variants such as `$Input` fail
+configuration loading as likely typos. A name used twice is one parameter, listed in order of first
+appearance by `prat templates` and `prat profiles`.
+
+```toml
+[templates.move]
+prompt = "Move the code in $source into $target."
+
+[profiles.remove-empty]
+agent = "cc"
+prompt = "Delete empty files under $folder."
+```
+
+```sh
+prat remove-empty src
+prat cc -t move old/ new/
+prat cc -t move --param target=new/ --param source=old/
+```
+
+The active template is the one named by `-t`, which takes precedence over the profile's `prompt`;
+otherwise it is the selected profile's `prompt`. Words after the selector fill the parameters in
+order, and `--param NAME=VALUE` fills one by name, splitting at the first `=`. Both forms can be
+mixed, but each parameter takes one value. Values are substituted literally and are never
+expanded again.
+
+With parameters, every word after the selector is a value, so free text goes through
+`--prompt=TEXT` or `--file PATH`, which fill `$input`. A lone `-` cannot be a value; use
+`--param NAME=-` for a literal dash. `--param` is also the way to pass a value beginning with a
+dash. After `--`, `--param` stays a native argument and is rejected by native validation.
+
+These fail with `invalid_arguments` before stdin is read, naming the template or profile:
+
+- a missing, unknown or repeated parameter, or more words than parameters;
+- `--param` without `NAME=VALUE` (including an empty `--param ""`), with an empty name, or for
+  `input`;
+- `--param` when the active prompt has no parameters or no template is active;
+- an empty, whitespace-only, NUL-containing or non-UTF-8 value.
+
+Without parameters, one word after the selector is the prompt, or `-` for stdin, as before. More
+than one word, or a word beside `--prompt`/`--file`, fails with "Provide exactly one prompt
+source." after configuration and selector resolution.
+
+`$input` works alongside parameters. With a `$input` placeholder, redirected stdin or an explicit
+source fills it; without one, nonempty base input is appended as usual. A loop over files should
+close stdin so the agent does not consume the loop's input:
+
+```sh
+for dir in src tests; do prat remove-empty "$dir" </dev/null; done
+```
 
 ## Include context files
 
@@ -296,11 +354,12 @@ detection sees only the variables the session forwards: usually `TERM`, plus iTe
 
 ## Handle timeouts and failures
 
-Prat validates configuration, template names, native options, and `--cwd` before reading input.
-It waits for EOF before starting the execution timeout. Closed or unavailable stdin is an input
-error when stdin is explicitly requested or no other prompt source or template is supplied.
-With a template or `--edit` and no explicit source, it counts as absent input. SIGINT or SIGTERM during input
-acquisition exits with `128 + signal` without launching an agent.
+Prat validates configuration, template names, prompt parameters, native options, and `--cwd`
+before reading input. It waits for EOF before starting the execution timeout. Closed or
+unavailable stdin is an input error when stdin is explicitly requested or no other prompt source
+or template is supplied. With a template or `--edit` and no explicit source, it counts as absent
+input. SIGINT or SIGTERM during input acquisition exits with `128 + signal` without launching an
+agent.
 
 A failed or timed-out run can leave edits in the working directory. Prat does not retry, roll back
 edits, or fall back to another agent or model. A manual rerun starts a fresh invocation.

@@ -44,7 +44,12 @@ from pratfall.option_paths import prepare_attachments, prepare_directories, reso
 from pratfall.output import extract_code, normalize, result_dict, validation_error
 from pratfall.prompt_editor import edit_prompt
 from pratfall.prompt_input import InputInterrupted, acquire_prompt, prepend_contexts
-from pratfall.prompt_templates import render_template
+from pratfall.prompt_templates import (
+    BoundInput,
+    bind_run_input,
+    render_template,
+    template_parameters,
+)
 from pratfall.runner import ProcessResult, cleanup_process_group, raw_stdout, run
 from pratfall.schema import prepare_schema
 
@@ -119,7 +124,18 @@ def _profiles(config: Config, json_mode: bool) -> None:
     for name in sorted(config.profiles):
         resolved = resolve_profile(config, name)
         options = asdict(resolved.options)
-        records.append({"name": name, "agent": resolved.agent.name, "options": options})
+        template = config.profiles[name].prompt
+        parameters = () if template is None else template_parameters(template.prompt)
+        records.append(
+            {
+                "name": name,
+                "agent": resolved.agent.name,
+                "options": options,
+                "prompt": None if template is None else template.prompt,
+                "prompt_source": None if template is None else str(template.source),
+                "parameters": list(parameters),
+            }
+        )
         description = f"{name}: {resolved.agent.name}"
         for key, value in options.items():
             if value is None or (value == () and key != "tools"):
@@ -143,6 +159,10 @@ def _profiles(config: Config, json_mode: bool) -> None:
                 else value
             )
             description += f" {key}={rendered}"
+        if template is not None:
+            description += f" prompt={json.dumps(template.prompt, ensure_ascii=False)}"
+        if parameters:
+            description += f" parameters={','.join(parameters)}"
         lines.append(description)
     _emit({"profiles": records}, lines or ["No profiles configured."], json_mode=json_mode)
 
@@ -151,8 +171,17 @@ def _templates(config: Config, json_mode: bool) -> None:
     records = []
     lines = []
     for name, template in sorted(config.templates.items()):
-        records.append({"name": name, "prompt": template.prompt, "source": str(template.source)})
-        lines.append(f"{name}: {json.dumps(template.prompt, ensure_ascii=False)}")
+        parameters = template_parameters(template.prompt)
+        records.append(
+            {
+                "name": name,
+                "prompt": template.prompt,
+                "source": str(template.source),
+                "parameters": list(parameters),
+            }
+        )
+        line = f"{name}: {json.dumps(template.prompt, ensure_ascii=False)}"
+        lines.append(line + (f" parameters={','.join(parameters)}" if parameters else ""))
     _emit({"templates": records}, lines or ["No templates configured."], json_mode=json_mode)
 
 
@@ -538,6 +567,42 @@ def _finish_run(resolved: ResolvedProfile, result: NormalizedResult, state: _Run
     _guard(lambda: _notify_after_run(resolved, result), lambda _: None)
 
 
+def _active_template(config: Config, parsed: RunArguments) -> tuple[str, str] | None:
+    if parsed.template is not None:
+        template = config.templates.get(parsed.template)
+        if template is None:
+            raise PratError(
+                f"Unknown template {parsed.template!r}; run 'prat templates' to list choices.",
+                code="invalid_arguments",
+            )
+        return template.prompt, f"template '{parsed.template}'"
+    profile = config.profiles.get(parsed.selector)
+    if profile is None or profile.prompt is None:
+        return None
+    return profile.prompt.prompt, f"profile '{parsed.selector}' prompt"
+
+
+def _bind_run_input(config: Config, parsed: RunArguments) -> tuple[str | None, BoundInput]:
+    active = _active_template(config, parsed)
+    template, label = active if active is not None else (None, "")
+    bound = bind_run_input(template, label, parsed.words, parsed.parameters, parsed.prompt_source)
+    return template, bound
+
+
+def _render_run_prompt(
+    parsed: RunArguments, template: str | None, bound: BoundInput, invocation_cwd: Path
+) -> bytes:
+    prompt = acquire_prompt(
+        bound.source,
+        invocation_cwd,
+        allow_absent=template is not None or parsed.edit,
+        allow_blank=parsed.edit,
+    )
+    if template is None:
+        return prompt
+    return render_template(template, prompt, parameters=bound.parameters, allow_blank=parsed.edit)
+
+
 def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) -> int:
     resolved: ResolvedProfile | None = None
     try:
@@ -559,24 +624,10 @@ def _run_selected(arguments: list[str], invocation_cwd: Path, state: _RunState) 
             label = origins.get("native_args", fallback).label
             resolved = _prepare_run_paths(resolved, origins, label)
             cwd = _run_cwd(parsed.cwd, invocation_cwd)
-            template = (
-                config.templates.get(parsed.template) if parsed.template is not None else None
-            )
-            if parsed.template is not None and template is None:
-                raise PratError(
-                    f"Unknown template {parsed.template!r}; run 'prat templates' to list choices.",
-                    code="invalid_arguments",
-                )
+            template, bound = _bind_run_input(config, parsed)
             resolved = _prepare_run_schema(resolved, origins, resources)
             resolved = _prepare_run_instructions(resolved, origins)
-            prompt = acquire_prompt(
-                parsed.prompt_source,
-                invocation_cwd,
-                allow_absent=template is not None or parsed.edit,
-                allow_blank=parsed.edit,
-            )
-            if template is not None:
-                prompt = render_template(template.prompt, prompt, allow_blank=parsed.edit)
+            prompt = _render_run_prompt(parsed, template, bound, invocation_cwd)
             prompt = prepend_contexts(parsed.contexts, prompt, invocation_cwd)
             if parsed.edit:
                 prompt = edit_prompt(prompt, invocation_cwd)

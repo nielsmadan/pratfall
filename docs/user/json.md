@@ -143,8 +143,14 @@ Management commands return separate versioned inventory or config objects. Their
 contain `status`, `exit_code`, and `error`. Agent capability records include `fast`.
 `prat completion` prints shell code and rejects `--json` with `invalid_arguments`.
 
+`prat profiles --json` records add `prompt` and `prompt_source` (the defining file's absolute
+path), both null without a profile `prompt`, and `parameters`, the prompt's parameter names in
+order. In text listings, `prat profiles` appends ` prompt="..."` and ` parameters=a,b`, and
+`prat templates` appends ` parameters=a,b`.
+
 `prat templates --json` returns `schema_version: 1` and a `templates` array sorted by name. Each
-record contains `name`, the unexpanded `prompt`, and the defining file's absolute `source` path.
+record contains `name`, the unexpanded `prompt`, the defining file's absolute `source` path, and
+`parameters`, the prompt parameter names in order of first appearance (empty when there are none).
 An empty inventory returns an empty array; replacement warnings remain on stderr.
 
 Doctor records include `available`, plus nullable `version` and `version_error` fields. Without

@@ -86,6 +86,7 @@ printf 'summarize this checkout\n' | prat gm
 | `--cwd PATH` | Choose the agent's working directory. |
 | `-f PATH` / `--file PATH` | Read a prompt from a UTF-8 file; `-` reads stdin. |
 | `-t NAME` / `--template NAME` | Apply a named prompt template. |
+| `--param NAME=VALUE` | Fill a prompt parameter; repeat for several. |
 | `-e` / `--edit` | Edit the complete prompt in `VISUAL`, `EDITOR`, or `vi`. |
 | `--context PATH` | Prepend a context file; repeat to include several. |
 | `-x` / `--extract` | Return the body of the first fenced code block. |
@@ -142,7 +143,21 @@ git diff | prat cc -t review
 prat templates
 ```
 
-See [templates](docs/user/running.md#apply-a-template), [context files](docs/user/running.md#include-context-files),
+A template or profile `prompt` can also take named parameters, filled by position or `--param`:
+
+```toml
+[profiles.remove-empty]
+agent = "cc"
+prompt = "Delete empty files under $folder."
+```
+
+```sh
+prat remove-empty src
+```
+
+See [templates](docs/user/running.md#apply-a-template),
+[prompt parameters](docs/user/running.md#fill-prompt-parameters),
+[context files](docs/user/running.md#include-context-files),
 [editor prompts](docs/user/running.md#edit-the-prompt), [code extraction](docs/user/running.md#extract-code)
 and [schema output](docs/user/running.md#request-schema-output).
 

@@ -50,6 +50,12 @@ protocol evidence and version-specific quirks live in the [agent references](ref
   retain their source files in immutable config records. Expansion size is checked before repeated
   substitution; rendered prompts use the same 1 MiB input limit. Unknown template names fail before
   input acquisition, while selected templates may supply the task without a base prompt.
+  Any identifier other than `input` is a named parameter. Dispatch binds positional words and
+  `--param` values to the active template (`-t`, else the profile `prompt`) before input
+  acquisition, so binding errors precede any stdin read; `template_parameters` scans placeholders
+  once in linear time. The binder applies the "exactly one prompt source" check to positional
+  words after config and selector resolution; duplicate `--file`/`--prompt=` sources still fail in
+  the parser. Substituted values are not re-expanded.
 - [prompt_input.py](../src/pratfall/prompt_input.py) reads invocation-relative regular files
   nonblocking under the shared input signal handlers. Context files are prepended after template
   rendering, preserving order, duplicate paths and content bytes. JSON-quoted label and separator
@@ -274,10 +280,6 @@ the catalog owns probe arguments.
   consumer exception after parent exit can leave owned descendants behind.
 - Runner signal-handler installation precedes its restoring `try/finally`. A failure partway
   through installation can leave a changed handler installed.
-- Template validation calls the standard library's `Template.get_identifiers()`, whose distinct-name
-  deduplication is quadratic. A large invalid template with thousands of distinct unsupported
-  placeholders can delay configuration loading, even when unselected. Valid templates use only
-  `input` and do not have this distinct-name growth.
 - Whole-document conformance membership in
   [test_adapter_contracts.py](../tests/test_adapter_contracts.py) is maintained manually. Its shared
   decoder matrix currently omits Grok, although Grok uses the shared strict parser. This is a gap in

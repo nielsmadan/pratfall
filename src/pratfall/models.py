@@ -82,12 +82,19 @@ class OptionOrigin:
 
 
 @dataclass(frozen=True)
+class PromptTemplate:
+    prompt: str
+    source: Path
+
+
+@dataclass(frozen=True)
 class ProfileLayer:
     name: str
     agent: str | None
     options: Options
     source: Path
     extends: str | None = None
+    prompt: str | None = None
 
 
 @dataclass(frozen=True)
@@ -96,12 +103,7 @@ class Profile:
     options: Options = Options()
     source: Path | None = None
     layers: tuple[ProfileLayer, ...] = ()
-
-
-@dataclass(frozen=True)
-class PromptTemplate:
-    prompt: str
-    source: Path
+    prompt: PromptTemplate | None = None
 
 
 @dataclass(frozen=True)

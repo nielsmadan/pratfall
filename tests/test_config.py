@@ -16,7 +16,7 @@ from pratfall.config import (
     validate_capabilities,
 )
 from pratfall.errors import PratError
-from pratfall.models import Options
+from pratfall.models import Options, PromptTemplate
 
 
 def write_config(tmp_path: Path, contents: str) -> Path:
@@ -672,7 +672,7 @@ def test_templates_have_independent_names_and_source(tmp_path: Path, name: str) 
         ('[templates.work]\nprompt=""', "nonempty string"),
         ("[templates.work]\nprompt=3", "nonempty string"),
         ('[templates.work]\nprompt="ok"\nagent="codex"', "unknown field"),
-        ('[templates.work]\nprompt="$unknown"', "only.*placeholders"),
+        ('[templates.work]\nprompt="$1"', r"use \$name or \$\{name\} placeholders"),
         ('[templates."bad.name"]\nprompt="ok"', "template names"),
         ('[templates."-bad"]\nprompt="ok"', "template names"),
     ],
@@ -707,9 +707,9 @@ def test_template_merge_replaces_whole_definition_and_warns(tmp_path: Path) -> N
 
 def test_invalid_global_template_is_not_hidden_by_replacement(tmp_path: Path) -> None:
     global_path = init_config()
-    global_path.write_text('version=1\n[templates.work]\nprompt="$wrong"\n', encoding="utf-8")
+    global_path.write_text('version=1\n[templates.work]\nprompt="$Input"\n', encoding="utf-8")
     local = write_config(tmp_path, 'version=1\n[templates.work]\nprompt="valid"\n')
-    with pytest.raises(PratError, match=r"only.*placeholders") as caught:
+    with pytest.raises(PratError, match="differs from 'input' only in case") as caught:
         load_config(local)
     assert str(global_path) in str(caught.value)
 
@@ -825,4 +825,64 @@ def test_command_prefix_executable_resolves_from_its_defining_file(tmp_path: Pat
 def test_invalid_command_prefix_names_its_field(tmp_path: Path, table: str, label: str) -> None:
     path = write_config(tmp_path, f"version=1\n{table}\n")
     with pytest.raises(PratError, match=label):
+        load_config(path)
+
+
+def test_profile_prompt_resolves_with_defining_source(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path,
+        'version=1\n[profiles.base]\nagent="claude"\nprompt="Tidy $folder"\n'
+        '[profiles.child]\nextends="base"\nmodel="m"\n'
+        '[profiles.over]\nextends="child"\nprompt="Sweep ${dir}"\n'
+        '[profiles.plain]\nagent="codex"\n',
+    )
+    config = load_config(path)
+    prompts = {name: profile.prompt for name, profile in config.profiles.items()}
+    assert prompts["base"] == PromptTemplate(prompt="Tidy $folder", source=path)
+    assert prompts["child"] == prompts["base"]
+    assert prompts["over"] == PromptTemplate(prompt="Sweep ${dir}", source=path)
+    assert prompts["plain"] is None
+    assert resolve_profile(config, "child").options == Options(
+        model="m", timeout=DEFAULT_TIMEOUT, native_args=()
+    )
+
+
+def test_profile_prompt_comes_from_the_defining_layer_file(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text('version=1\n[profiles.base]\nagent="claude"\nprompt="Global $x"\n')
+    local_path = tmp_path / ".pratfile"
+    local_path.write_text(
+        'version=1\n[profiles.child]\nextends="base"\n'
+        '[profiles.base]\nagent="claude"\nprompt="Local $y"\n'
+    )
+    config = load_config()
+    assert config.profiles["base"].prompt == PromptTemplate(prompt="Local $y", source=local_path)
+    assert config.profiles["child"].prompt == PromptTemplate(prompt="Local $y", source=local_path)
+
+
+def test_profile_prompt_inherited_from_another_file_keeps_that_source(tmp_path: Path) -> None:
+    global_path = init_config()
+    global_path.write_text('version=1\n[profiles.base]\nagent="claude"\nprompt="Global $x"\n')
+    local_path = tmp_path / ".pratfile"
+    local_path.write_text('version=1\n[profiles.child]\nextends="base"\n')
+    config = load_config()
+    assert config.profiles["child"].prompt == PromptTemplate(prompt="Global $x", source=global_path)
+
+
+def test_invalid_profile_prompt_fails_config_load(tmp_path: Path) -> None:
+    path = write_config(tmp_path, 'version=1\n[profiles.p]\nagent="claude"\nprompt="Cost $5"\n')
+    with pytest.raises(PratError, match=r"profiles\.p\.prompt: use \$name"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("value", ['""', '"  "', "3"])
+def test_profile_prompt_must_be_a_nonempty_string(tmp_path: Path, value: str) -> None:
+    path = write_config(tmp_path, f'version=1\n[profiles.p]\nagent="claude"\nprompt={value}\n')
+    with pytest.raises(PratError, match=r"profiles\.p\.prompt: expected a nonempty string"):
+        load_config(path)
+
+
+def test_defaults_reject_prompt(tmp_path: Path) -> None:
+    path = write_config(tmp_path, 'version=1\n[defaults]\nprompt="Hi"\n')
+    with pytest.raises(PratError, match="unknown field 'prompt'"):
         load_config(path)

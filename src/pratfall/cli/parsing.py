@@ -63,11 +63,12 @@ _RUN_VALUE_FLAGS = {
     "--instructions-file": "instructions_file",
     "--template": "template",
     "-t": "template",
+    "--param": "parameters",
 }
 
 
 _EPILOG = """run syntax:
-  prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]
+  prat [RUN_OPTIONS] SELECTOR [PROMPT | VALUE...] [-- NATIVE_ARGS]
 
 SELECTOR is an agent name (codex, kiro), alias (cx), or profile. See prat agents.
 Redirected stdin precedes prompt text or file contents, separated by two newlines.
@@ -76,6 +77,7 @@ run options:
   --prompt=TEXT           Pass prompt text, including text beginning with a dash.
   -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.
   -t, --template NAME     Apply a named prompt template; additional input is optional.
+  --param NAME=VALUE      Fill a prompt parameter; repeat for several.
   --context PATH         Prepend a UTF-8 context file; repeat to include several.
   -x, --extract           Return the first fenced code block from the answer.
   -e, --edit              Edit the complete prompt in VISUAL, EDITOR, or vi.
@@ -129,6 +131,8 @@ class RunArguments:
     contexts: tuple[str, ...] = ()
     extract: bool = False
     edit: bool = False
+    words: tuple[str, ...] = ()
+    parameters: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -218,8 +222,10 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         "attachments": [],
         "tools": [],
         "disabled_tools": [],
+        "parameters": [],
     }
     selector: str | None = None
+    words: list[str] = []
     prompt_source: PromptSource | None = None
     json_mode = False
     dry_run = False
@@ -261,7 +267,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
                     prompt_source, PromptSource("file", _text_option(value, token.name))
                 )
             elif field in {*repeated, "context"}:
-                _text_option(value, token.name)
+                _text_option(value if field != "parameters" else None, token.name)
                 (contexts if field == "context" else repeated[field]).append(value)
             else:
                 _store_value(values, field, value)
@@ -271,8 +277,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         if selector is None:
             selector = argument
         else:
-            source = PromptSource("stdin") if argument == "-" else PromptSource("inline", argument)
-            prompt_source = _add_prompt_source(prompt_source, source)
+            words.append(argument)
     if selector is None:
         raise PratError("A selector is required.", code="invalid_arguments")
     if edit and dry_run:
@@ -294,6 +299,8 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         tuple(contexts),
         extract,
         edit,
+        tuple(words),
+        tuple(repeated["parameters"]),
     )
 
 

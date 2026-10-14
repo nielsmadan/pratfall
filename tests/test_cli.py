@@ -68,7 +68,8 @@ def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str])
         main(["--help"])
     assert caught.value.code == 0
     output = capsys.readouterr().out
-    assert "prat [RUN_OPTIONS] SELECTOR PROMPT [-- NATIVE_ARGS]" in output
+    assert "prat [RUN_OPTIONS] SELECTOR [PROMPT | VALUE...] [-- NATIVE_ARGS]" in output
+    assert "  --param NAME=VALUE      Fill a prompt parameter; repeat for several." in output
     for flag in (
         "--prompt=TEXT",
         "-f, --file PATH",
@@ -386,6 +387,9 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
                 "notify_after": None,
                 "command_prefix": None,
             },
+            "prompt": None,
+            "prompt_source": None,
+            "parameters": [],
         }
     ]
 
@@ -1059,8 +1063,13 @@ def test_templates_listing_is_sorted_and_versioned(
         assert json.loads(output) == {
             "schema_version": 1,
             "templates": [
-                {"name": "alpha", "prompt": "Review\n$input", "source": str(config)},
-                {"name": "zed", "prompt": "last", "source": str(config)},
+                {
+                    "name": "alpha",
+                    "prompt": "Review\n$input",
+                    "source": str(config),
+                    "parameters": [],
+                },
+                {"name": "zed", "prompt": "last", "source": str(config), "parameters": []},
             ],
         }
     else:
@@ -1084,3 +1093,55 @@ def test_agents_inventory_exposes_extra_directory_support(
         "qwen",
         "copilot",
     }
+
+
+def test_templates_listing_shows_parameters(capsys: pytest.CaptureFixture[str]) -> None:
+    config = Path(".pratfile")
+    config.write_text(
+        'version=1\n[templates.fill]\nprompt="Fix $a in ${b} and $a $input"\n', encoding="utf-8"
+    )
+    assert main(["templates"]) == 0
+    assert capsys.readouterr().out == 'fill: "Fix $a in ${b} and $a $input" parameters=a,b\n'
+    assert main(["templates", "--json"]) == 0
+    record = json.loads(capsys.readouterr().out)["templates"][0]
+    assert record["parameters"] == ["a", "b"]
+
+
+def test_profiles_listing_shows_prompt_and_parameters(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'version=1\n[profiles.base]\nagent="claude"\nprompt="Tidy $folder"\n'
+        '[profiles.plain]\nagent="claude"\n',
+        encoding="utf-8",
+    )
+    assert main(["profiles", "--config", str(path)]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == 'base: claude timeout=600.0 prompt="Tidy $folder" parameters=folder'
+    assert lines[1] == "plain: claude timeout=600.0"
+    assert main(["profiles", "--json", "--config", str(path)]) == 0
+    records = json.loads(capsys.readouterr().out)["profiles"]
+    assert [(r["name"], r["prompt"], r["prompt_source"], r["parameters"]) for r in records] == [
+        ("base", "Tidy $folder", str(path), ["folder"]),
+        ("plain", None, None, []),
+    ]
+
+
+def test_profiles_json_shows_inherited_prompt(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'version=1\n[profiles.base]\nagent="claude"\nprompt="Tidy $folder"\n'
+        '[profiles.child]\nextends="base"\n',
+        encoding="utf-8",
+    )
+    assert main(["profiles", "--json", "--config", str(path)]) == 0
+    records = json.loads(capsys.readouterr().out)["profiles"]
+    child = next(r for r in records if r["name"] == "child")
+    assert (child["prompt"], child["prompt_source"], child["parameters"]) == (
+        "Tidy $folder",
+        str(path),
+        ["folder"],
+    )

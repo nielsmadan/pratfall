@@ -5,6 +5,7 @@ across projects, or locally in a project's `.pratfile`.
 
 - [Create a profile](#create-a-profile)
 - [Define prompt templates](#define-prompt-templates)
+- [Give a profile its own prompt](#give-a-profile-its-own-prompt)
 - [Choose a config file](#choose-a-config-file)
 - [Merge global and local settings](#merge-global-and-local-settings)
 - [Extend a profile](#extend-a-profile)
@@ -49,8 +50,9 @@ prat simple --effort high "investigate this failure"
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
 `model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `attachments`, `instructions`,
-`instructions_file`, `schema`, `tools`, `disabled_tools`, `native_agent`, `session_id`, `notify`,
-`notify_method`, `notify_after`, `command_prefix`, and the agent's supported budget fields.
+`instructions_file`, `prompt`, `schema`, `tools`, `disabled_tools`, `native_agent`, `session_id`,
+`notify`, `notify_method`, `notify_after`, `command_prefix`, and the agent's supported budget
+fields.
 Use `[defaults]` for shared settings.
 
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
@@ -68,9 +70,30 @@ name with a profile, agent or management command.
 prompt = "Review this change:\n\n$input"
 ```
 
-Select it with `prat simple -t review --file change.diff`. Only `$input`, `${input}`, and `$$` are
-supported; malformed or unknown placeholders fail configuration loading even in unused templates.
+Select it with `prat simple -t review --file change.diff`. `$input`, `${input}` and `$$` have fixed
+meanings; case variants of `input` such as `$Input` are rejected, and any other valid `$name` or
+`${name}` is a [prompt parameter](running.md#fill-prompt-parameters).
+Malformed placeholders fail configuration loading even in unused templates.
 See [applying templates](running.md#apply-a-template) for input composition and limits.
+
+## Give a profile its own prompt
+
+A profile can carry a `prompt` that uses the template syntax, so a saved task runs by name:
+
+```toml
+[profiles.remove-empty]
+agent = "claude"
+prompt = "Delete empty files under $folder."
+```
+
+`prat remove-empty src` fills `$folder`; see
+[prompt parameters](running.md#fill-prompt-parameters). `-t NAME` replaces the profile's prompt for
+one run. The prompt is validated like a template, even for unused profiles.
+
+- A profile inherits `prompt` through `extends`; the nearest ancestor that sets one wins. A child
+  can replace it but cannot clear it.
+- `[defaults]` does not accept `prompt`.
+- `prat profiles` shows the prompt and its parameters.
 
 ## Choose a config file
 
