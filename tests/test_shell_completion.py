@@ -594,6 +594,20 @@ def test_param_offers_workflow_parameters(tmp_path: Path) -> None:
     assert words(["tidy", "--param", "folder=src", "--param", ""], tmp_path) == []
 
 
+def test_param_skips_each_as_parameter(tmp_path: Path) -> None:
+    pratfile = (
+        PRATFILE
+        + """[workflows.fan]
+steps = [
+  { name = "first", profile = "simple" },
+  { name = "each", profile = "cleaner", each = "first", as = "keep" },
+]
+"""
+    )
+    (tmp_path / ".pratfile").write_text(pratfile, encoding="utf-8")
+    assert candidates(["fan", "--param", ""], tmp_path) == [("folder=", "parameter")]
+
+
 def test_workflow_positional_slots_complete_files_while_unbound(tmp_path: Path) -> None:
     (tmp_path / ".pratfile").write_text(WORKFLOW_PRATFILE, encoding="utf-8")
     assert _complete(["tidy", "sr"], tmp_path).mode == "files"

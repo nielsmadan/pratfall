@@ -79,8 +79,9 @@ reads/writes, foreground ownership and attribute restoration, and temporary-file
 accepted and rejected edits. Q18 checks both completion scripts, the rejected fish shell, and that
 the hidden completion callback offers agents, aliases, configured profiles and the `workflows`
 command without launching an agent. F01 runs a parallel fan-out and merge workflow through the
-installed command. W04–W07 also run both installations through all six public control families:
-exact native argv and composed prompts across nine agents, CLI/config path origins under a different
+installed command, and F02 runs `each` steps over lines with `as` and over a JSON array with
+`max_parallel = 2`, checking item results and the joined merge input.
+W04–W07 also run both installations through all six public control families: exact native argv and composed prompts across nine agents, CLI/config path origins under a different
 `--cwd`, layer precedence and empty-array clearing, binary attachments, native agent and tool
 selection, and Claude/Codex/Qwen schema text/JSON output. Schema checks retain raw trace and
 accounting on native failure, observe private snapshot bytes and permissions during execution, and

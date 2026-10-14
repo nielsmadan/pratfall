@@ -48,16 +48,27 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "config": frozenset(
         {"catalog", "errors", "models", "prompt_templates", "option_paths", "instructions"}
     ),
-    "workflow_plan": frozenset({"codes", "config", "errors", "models", "prompt_templates"}),
+    "workflow_plan": frozenset(
+        {
+            "codes",
+            "config",
+            "errors",
+            "fences",
+            "limits",
+            "models",
+            "prompt_input",
+            "prompt_templates",
+        }
+    ),
     "runner": frozenset({"codes", "consumer", "interruption", "limits", "models"}),
     "workflow_supervisor": frozenset(
         {
             "codes",
+            "errors",
             "interruption",
             "limits",
             "models",
             "nonblocking",
-            "prompt_input",
             "workflow_plan",
         }
     ),

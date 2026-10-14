@@ -1,13 +1,33 @@
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, fields
+import json
+import math
+import re
+import unicodedata
+from collections import Counter
+from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Set as AbstractSet
+from dataclasses import dataclass, fields, replace
 from typing import Any, assert_never
 
-from pratfall.codes import INTERNAL_ERROR, INTERRUPTED, SIGNAL_EXIT_BASE, Code, exit_code_for
+from pratfall.codes import (
+    INTERNAL_ERROR,
+    INTERRUPTED,
+    INVALID_ARGUMENTS,
+    SIGNAL_EXIT_BASE,
+    STDOUT_LIMIT_EXCEEDED,
+    Code,
+    exit_code_for,
+)
 from pratfall.config import step_prompt
+from pratfall.errors import PratError
+from pratfall.fences import extract_code
+from pratfall.limits import WORKFLOW_EACH_ITEMS, WORKFLOW_RESULT_BYTES
 from pratfall.models import Config, JsonValue, ResultError, Usage, Workflow, WorkflowStep
+from pratfall.prompt_input import PROMPT_LIMIT
 from pratfall.prompt_templates import template_parameters
 
 _USAGE_FIELDS = tuple(field.name for field in fields(Usage))
+_LABEL_CHARACTERS = 80
+_INDEX_LABEL = re.compile(r"#[0-9]+")
 
 
 @dataclass(frozen=True)
@@ -85,15 +105,32 @@ def join_outputs(blocks: tuple[tuple[str, str], ...]) -> str | None:
 
 
 def step_input(step: WorkflowStep, outputs: Mapping[str, str], base: str | None) -> str | None:
+    return _upstream_input(step, outputs, base, ())
+
+
+def instance_input(
+    step: WorkflowStep, item: str, outputs: Mapping[str, str], base: str | None
+) -> str | None:
+    if step.as_parameter is None:
+        return item
+    return _upstream_input(step, outputs, base, (step.each,))
+
+
+def _upstream_input(
+    step: WorkflowStep,
+    outputs: Mapping[str, str],
+    base: str | None,
+    excluded: Collection[str | None],
+) -> str | None:
     match step.input:
         case "none":
             return None
         case "upstream":
             if not step.after:
                 return base
-            bound = frozenset(step.bind.values())
+            skipped = frozenset((*step.bind.values(), *excluded))
             return join_outputs(
-                tuple((name, outputs[name]) for name in step.after if name not in bound)
+                tuple((name, outputs[name]) for name in step.after if name not in skipped)
             )
         case _:
             assert_never(step.input)
@@ -114,20 +151,124 @@ def step_arguments(
     return (step.selector, "--json", "--no-notify", *passthrough, *parameters)
 
 
-def ready_steps(
+def instance_arguments(
+    step: WorkflowStep,
+    prompt: str | None,
+    item: str,
+    values: Mapping[str, str],
+    outputs: Mapping[str, str],
+    passthrough: tuple[str, ...],
+) -> tuple[str, ...]:
+    if step.as_parameter is None:
+        return step_arguments(step, prompt, values, outputs, passthrough)
+    return step_arguments(step, prompt, {**values, step.as_parameter: item}, outputs, passthrough)
+
+
+def input_problem(
+    step: WorkflowStep,
+    prompt: str | None,
+    text: str | None,
+    outputs: Mapping[str, str],
+    item: str | None = None,
+) -> str | None:
+    if prompt is None and text is None:
+        return "has no prompt and received no input."
+    empty = next((name for name, source in step.bind.items() if not outputs[source].strip()), None)
+    if empty is not None:
+        return f"binds parameter '{empty}' to the empty output of step '{step.bind[empty]}'."
+    parameter = () if item is None or step.as_parameter is None else (item,)
+    bound = tuple(trimmed_output(outputs[source]) for source in step.bind.values())
+    values = (text or "", *parameter, *bound)
+    if sum(len(value.encode("utf-8")) for value in values) > PROMPT_LIMIT:
+        return f"input and bound parameters exceed the {PROMPT_LIMIT} byte limit."
+    return None
+
+
+def each_items(step: WorkflowStep, source: StepResult) -> tuple[str, ...]:
+    match step.split:
+        case "lines":
+            items = _line_items(source.output)
+        case "json":
+            items = _json_items(step.each, source)
+        case _:
+            assert_never(step.split)
+    if len(items) > WORKFLOW_EACH_ITEMS:
+        message = (
+            f"output of step '{step.each}' has {len(items)} items, "
+            f"more than the {WORKFLOW_EACH_ITEMS} item limit."
+        )
+        raise PratError(message, code=INVALID_ARGUMENTS)
+    return items
+
+
+def item_labels(items: tuple[str, ...]) -> tuple[str, ...]:
+    counts = Counter(items)
+    return tuple(
+        item if counts[item] == 1 and _labelable(item) else f"#{index}"
+        for index, item in enumerate(items, 1)
+    )
+
+
+def each_result(
+    step: WorkflowStep,
+    items: tuple[str, ...],
+    instances: tuple[StepOutcome, ...],
+    complete: bool,
+) -> StepResult:
+    labels = item_labels(items)
+    indexed = tuple(
+        (outcome.item, outcome.result) for outcome in instances if outcome.item is not None
+    )
+    finished = dict(sorted(indexed, key=lambda pair: pair[0]))
+    failure = next(((index, result) for index, result in indexed if not _succeeded(result)), None)
+    reports = tuple(finished.values())
+    aggregate = StepResult(
+        status="success",
+        exit_code=0,
+        output="",
+        duration_ms=sum(result.duration_ms for result in reports),
+        usage=_summed_usage(reports),
+        cost_usd=_sum_present(result.cost_usd for result in reports),
+        error=None,
+        structured_output_present=False,
+        structured_output=None,
+        payload={},
+    )
+    if failure is not None:
+        index, failed = failure
+        code, message = _error_fields(failed.error)
+        error = ResultError(code, f"item '{labels[index]}': {message}")
+        summary = replace(aggregate, status=failed.status, exit_code=failed.exit_code, error=error)
+    elif not complete:
+        summary = replace(aggregate, status="skipped")
+    else:
+        blocks = tuple(
+            (f"{step.name}[{labels[index]}]", finished[index].output) for index in finished
+        )
+        summary = _joined(aggregate, join_outputs(blocks) or "")
+    entries = [
+        _item_entry(item, labels[index], finished.get(index)) for index, item in enumerate(items)
+    ]
+    return _with_items(summary, entries)
+
+
+def ready_work(
     workflow: Workflow,
-    succeeded: frozenset[str],
-    started: frozenset[str],
-    running: frozenset[str],
-) -> tuple[WorkflowStep, ...]:
+    items: Mapping[str, tuple[str, ...]],
+    succeeded: AbstractSet[str],
+    started: AbstractSet[str],
+    launched: Mapping[str, int],
+    running: Mapping[str, int],
+) -> tuple[tuple[WorkflowStep, int | None], ...]:
     ready = tuple(
-        step
+        work
         for step in workflow.steps
-        if step.name not in started and all(name in succeeded for name in step.after)
+        if all(name in succeeded for name in step.after)
+        for work in _step_work(step, items, started, launched, running)
     )
     if workflow.parallel:
         return ready
-    return () if running else ready[:1]
+    return () if any(running.values()) else ready[:1]
 
 
 def final_steps(workflow: Workflow) -> tuple[str, ...]:
@@ -141,10 +282,16 @@ def workflow_result(
     outcomes: tuple[StepOutcome, ...],
     duration_ms: int,
     interrupted_by: int | None,
+    items: Mapping[str, tuple[str, ...]],
 ) -> dict[str, object]:
-    results = {outcome.step: outcome.result for outcome in outcomes}
-    declared = tuple(results[step.name] for step in workflow.steps if step.name in results)
-    failure = next((outcome for outcome in outcomes if outcome.result.status != "success"), None)
+    direct = {outcome.step: outcome.result for outcome in outcomes if outcome.item is None}
+    results = {
+        step.name: result
+        for step in workflow.steps
+        if (result := _step_outcome(step, direct, outcomes, items)) is not None
+    }
+    declared = _reported(workflow, outcomes)
+    failure = _first_failure(workflow, outcomes, results)
     status, exit_code, output, error = _summary(workflow, results, failure, interrupted_by)
     return {
         "schema_version": 1,
@@ -159,7 +306,7 @@ def workflow_result(
         "steps": [
             {"step": step.name, **results[step.name].payload}
             if step.name in results
-            else {"step": step.name, "status": "skipped"}
+            else _skipped_entry(step)
             for step in workflow.steps
         ],
     }
@@ -193,8 +340,194 @@ def early_result(
     return {"schema_version": 1, "workflow": name} | failure | {"steps": []}
 
 
+def _line_items(output: str) -> tuple[str, ...]:
+    lines = (line.strip() for line in trimmed_output(output).split("\n"))
+    return tuple(line for line in lines if line)
+
+
+def _json_items(source: str | None, result: StepResult) -> tuple[str, ...]:
+    structured = result.structured_output
+    value = structured if isinstance(structured, list) else _parsed(source, result.output)
+    if not isinstance(value, list):
+        raise PratError(f"output of step '{source}' is not a JSON array.", code=INVALID_ARGUMENTS)
+    try:
+        texts = tuple(_encodable(_item_text(element)) for element in value)
+    except ValueError:
+        raise PratError(_invalid_json(source), code=INVALID_ARGUMENTS) from None
+    return tuple(text for text in texts if text is not None)
+
+
+def _parsed(source: str | None, output: str) -> object:
+    for text in (output, extract_code(output)):
+        try:
+            return json.loads(text, parse_constant=_reject_constant, parse_float=_finite_float)
+        except (ValueError, RecursionError):
+            continue
+    raise PratError(_invalid_json(source), code=INVALID_ARGUMENTS)
+
+
+def _invalid_json(source: str | None) -> str:
+    return f"output of step '{source}' is not valid JSON."
+
+
+def _reject_constant(constant: str) -> object:
+    raise ValueError(f"nonfinite number {constant}")
+
+
+def _finite_float(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"nonfinite number {text}")
+    return value
+
+
+def _item_text(element: object) -> str | None:
+    if element is None:
+        return None
+    if isinstance(element, str):
+        return element if element.strip() else None
+    if isinstance(element, list | dict):
+        return json.dumps(element, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    return json.dumps(element, allow_nan=False)
+
+
+def _encodable(text: str | None) -> str | None:
+    if text is not None:
+        text.encode("utf-8")
+    return text
+
+
+def _labelable(item: str) -> bool:
+    return (
+        len(item) <= _LABEL_CHARACTERS
+        and _INDEX_LABEL.fullmatch(item) is None
+        and item.splitlines() == [item]
+        and all(unicodedata.category(character) != "Cc" for character in item)
+    )
+
+
+def _succeeded(result: StepResult) -> bool:
+    return result.status == "success"
+
+
+def _joined(aggregate: StepResult, output: str) -> StepResult:
+    if len(output.encode("utf-8")) <= WORKFLOW_RESULT_BYTES:
+        return replace(aggregate, output=output)
+    message = f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit."
+    error = ResultError(STDOUT_LIMIT_EXCEEDED, message)
+    exit_code = exit_code_for(STDOUT_LIMIT_EXCEEDED)
+    return replace(aggregate, status="error", exit_code=exit_code, error=error)
+
+
+def _skipped_entry(step: WorkflowStep) -> dict[str, object]:
+    entry: dict[str, object] = {"step": step.name, "status": "skipped"}
+    return entry if step.each is None else entry | {"items": []}
+
+
+def _item_entry(item: str, label: str, result: StepResult | None) -> dict[str, object]:
+    if result is None:
+        return {"item": item, "label": label, "status": "skipped"}
+    return {"item": item, "label": label, **result.payload}
+
+
+def _with_items(result: StepResult, entries: list[dict[str, object]]) -> StepResult:
+    error = result.error
+    payload = {
+        "status": result.status,
+        "exit_code": result.exit_code,
+        "output": result.output,
+        "duration_ms": result.duration_ms,
+        "usage": result.usage,
+        "cost_usd": result.cost_usd,
+        "error": None if error is None else {"code": error.code, "message": error.message},
+        "items": entries,
+    }
+    return replace(result, payload=payload)
+
+
+def _step_work(
+    step: WorkflowStep,
+    items: Mapping[str, tuple[str, ...]],
+    started: AbstractSet[str],
+    launched: Mapping[str, int],
+    running: Mapping[str, int],
+) -> tuple[tuple[WorkflowStep, int | None], ...]:
+    if step.each is None or step.name not in items:
+        return () if step.name in started else ((step, None),)
+    first = launched.get(step.name, 0)
+    slots = max(0, step.max_parallel - running.get(step.name, 0))
+    last = min(first + slots, len(items[step.name]))
+    return tuple((step, index) for index in range(first, last))
+
+
+def _step_outcome(
+    step: WorkflowStep,
+    direct: Mapping[str, StepResult],
+    outcomes: tuple[StepOutcome, ...],
+    items: Mapping[str, tuple[str, ...]],
+) -> StepResult | None:
+    if step.each is None:
+        return direct.get(step.name)
+    if step.name in direct:
+        return _with_items(direct[step.name], [])
+    if step.name not in items:
+        return None
+    instances = _instances(step.name, outcomes)
+    complete = len(instances) == len(items[step.name])
+    return each_result(step, items[step.name], instances, complete)
+
+
+def _instances(name: str, outcomes: tuple[StepOutcome, ...]) -> tuple[StepOutcome, ...]:
+    return tuple(
+        outcome for outcome in outcomes if outcome.step == name and outcome.item is not None
+    )
+
+
+def _reported(workflow: Workflow, outcomes: tuple[StepOutcome, ...]) -> tuple[StepResult, ...]:
+    return tuple(
+        outcome.result
+        for step in workflow.steps
+        for outcome in sorted(
+            (outcome for outcome in outcomes if outcome.step == step.name), key=_item_order
+        )
+    )
+
+
+def _item_order(outcome: StepOutcome) -> int:
+    return -1 if outcome.item is None else outcome.item
+
+
+def _first_failure(
+    workflow: Workflow, outcomes: tuple[StepOutcome, ...], results: Mapping[str, StepResult]
+) -> StepOutcome | None:
+    failing = tuple(
+        (_failure_position(step.name, outcomes), declared, step.name)
+        for declared, step in enumerate(workflow.steps)
+        if step.name in results and _step_failed(step, results[step.name])
+    )
+    if not failing:
+        return None
+    _, _, name = min(failing)
+    return StepOutcome(name, results[name])
+
+
+def _step_failed(step: WorkflowStep, result: StepResult) -> bool:
+    partial = step.each is not None and result.status == "skipped"
+    return not _succeeded(result) and not partial
+
+
+def _failure_position(name: str, outcomes: tuple[StepOutcome, ...]) -> int:
+    positions = tuple(index for index, outcome in enumerate(outcomes) if outcome.step == name)
+    failed = (index for index in positions if not _succeeded(outcomes[index].result))
+    return next(failed, positions[-1])
+
+
 def _user_parameters(step: WorkflowStep, prompt: str | None) -> tuple[str, ...]:
-    return tuple(name for name in template_parameters(prompt or "") if name not in step.bind)
+    return tuple(
+        name
+        for name in template_parameters(prompt or "")
+        if name not in step.bind and name != step.as_parameter
+    )
 
 
 def _parameter_value(
@@ -225,7 +558,7 @@ def _summary(
     return "success", 0, join_outputs(blocks) or "", None
 
 
-def _error_fields(error: ResultError | None) -> tuple[str, str]:
+def _error_fields(error: ResultError | None) -> tuple[Code, str]:
     if error is None:
         return INTERNAL_ERROR, "failed without an error report."
     return error.code, error.message

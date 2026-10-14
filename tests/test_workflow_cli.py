@@ -14,10 +14,12 @@ from pathlib import Path
 
 import pytest
 
+from pratfall import workflow_plan as plan_module
 from pratfall import workflow_supervisor as supervisor_module
 from pratfall.cli import dispatch as dispatch_module
 from pratfall.cli import main
 from pratfall.cli import workflow_run as workflow_module
+from pratfall.codes import STDOUT_LIMIT_EXCEEDED, exit_code_for
 from pratfall.errors import PratError
 from pratfall.prompt_input import InputInterrupted
 from test_run_cli import isolate_notify_env, write_agent
@@ -27,6 +29,7 @@ from pathlib import Path
 
 prompt = sys.stdin.buffer.read().decode()
 lines = []
+structured = None
 for line in prompt.split("\\n"):
     command, _, argument = line.partition(" ")
     if command == "@touch":
@@ -52,11 +55,23 @@ for line in prompt.split("\\n"):
         lines.append("  ")
     elif command == "@big":
         lines.append("a" * int(argument))
+    elif command == "@structured":
+        structured = json.loads(argument)
+    elif command == "@enter":
+        running, starts, name = argument.split(" ")
+        lines.append(f"others={len(os.listdir(running))}")
+        Path(running, name).write_text(str(os.getpid()))
+        Path(starts, name).touch()
+    elif command == "@leave":
+        Path(argument).unlink()
     else:
         lines.append(line)
 answer = "\\n".join(lines)
 usage = {"input_tokens": 2, "output_tokens": 3}
-print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": answer, "usage": usage}))
+result = {"type": "result", "subtype": "success", "is_error": False, "result": answer, "usage": usage}
+if structured is not None:
+    result["structured_output"] = structured
+print(json.dumps(result))
 """
 
 LAUNCHER = """import json, os, signal, sys, time
@@ -507,6 +522,10 @@ def test_dry_run_json_matches_contract(tmp_path: Path, capsys: pytest.CaptureFix
                 "after": [],
                 "input": "upstream",
                 "bind": {},
+                "each": None,
+                "split": None,
+                "as": None,
+                "max_parallel": None,
                 "parameters": {"folder": "src"},
             },
             {
@@ -515,6 +534,10 @@ def test_dry_run_json_matches_contract(tmp_path: Path, capsys: pytest.CaptureFix
                 "after": ["clean"],
                 "input": "upstream",
                 "bind": {},
+                "each": None,
+                "split": None,
+                "as": None,
+                "max_parallel": None,
                 "parameters": {},
             },
             {
@@ -523,6 +546,10 @@ def test_dry_run_json_matches_contract(tmp_path: Path, capsys: pytest.CaptureFix
                 "after": ["clean", "pack"],
                 "input": "none",
                 "bind": {"report": "pack"},
+                "each": None,
+                "split": None,
+                "as": None,
+                "max_parallel": None,
                 "parameters": {},
             },
         ],
@@ -1251,3 +1278,572 @@ def test_teardown_reaps_running_children_when_supervision_raises(
         "message": "Unexpected failure: RuntimeError: kaboom",
     }
     assert_gone(int(ready.read_text()))
+
+
+EACH_ENTRY_KEYS = [
+    "step",
+    "status",
+    "exit_code",
+    "output",
+    "duration_ms",
+    "usage",
+    "cost_usd",
+    "error",
+    "items",
+]
+
+
+def lines_fan_out(tmp_path: Path) -> Path:
+    return workflow_config(
+        tmp_path,
+        {"list": "alpha\n\n  beta  ", "review": "Review $file"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="r", profile="review", each="l", as="file"},\n]\n',
+    )
+
+
+def items_of(entry: dict[str, object]) -> list[dict[str, object]]:
+    items = entry["items"]
+    assert isinstance(items, list)
+    return items
+
+
+def test_each_runs_one_instance_per_line_with_the_item_as_parameter(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    config = lines_fan_out(tmp_path)
+    assert main(["fan", "--config", str(config)]) == 0
+    captured = capfd.readouterr()
+    assert captured.out == "## r[alpha]\n\nReview alpha\n\n## r[beta]\n\nReview beta\n"
+    assert "[r[alpha]] prat: launching Claude Code\n" in captured.err
+    assert "[r[beta]] prat: launching Claude Code\n" in captured.err
+
+
+def test_each_json_result_reports_items_and_sums_usage(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = lines_fan_out(tmp_path)
+    assert main(["fan", "--json", "--config", str(config)]) == 0
+    result = json_result(capsys)
+    assert list(result) == RESULT_KEYS
+    assert result["output"] == "## r[alpha]\n\nReview alpha\n\n## r[beta]\n\nReview beta"
+    assert result["usage"] == {
+        "input_tokens": 6,
+        "cached_input_tokens": None,
+        "cache_write_input_tokens": None,
+        "output_tokens": 9,
+        "reasoning_output_tokens": None,
+    }
+    entry = steps_of(result)[1]
+    assert list(entry) == EACH_ENTRY_KEYS
+    assert (entry["step"], entry["status"], entry["exit_code"], entry["error"]) == (
+        "r",
+        "success",
+        0,
+        None,
+    )
+    assert entry["output"] == result["output"]
+    assert entry["usage"] == {
+        "input_tokens": 4,
+        "cached_input_tokens": None,
+        "cache_write_input_tokens": None,
+        "output_tokens": 6,
+        "reasoning_output_tokens": None,
+    }
+    items = items_of(entry)
+    assert [list(item)[:4] for item in items] == [["item", "label", "schema_version", "agent"]] * 2
+    assert [(item["item"], item["label"], item["status"], item["output"]) for item in items] == [
+        ("alpha", "alpha", "success", "Review alpha"),
+        ("beta", "beta", "success", "Review beta"),
+    ]
+    assert entry["duration_ms"] == sum(item["duration_ms"] for item in items)  # type: ignore[misc]
+
+
+def test_each_json_array_items_are_the_input_and_merge_receives_the_labelled_join(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = workflow_config(
+        tmp_path,
+        {"list": '["x", 2, {"k": "v"}, null, " "]', "echo": "E: $input", "merge": "M\n$input"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="e", profile="echo", each="l", split="json"},\n'
+        '  {name="m", profile="merge"},\n]\n',
+    )
+    assert main(["fan", "--config", str(config)]) == 0
+    assert capsys.readouterr().out == (
+        'M\n## e[x]\n\nE: x\n\n## e[2]\n\nE: 2\n\n## e[{"k":"v"}]\n\nE: {"k":"v"}\n'
+    )
+
+
+def test_each_uses_the_structured_output_of_a_schema_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    schema = tmp_path / "schema.json"
+    schema.write_text('{"type":"array"}', encoding="utf-8")
+    source = '@structured ["one", "two"]\nignored'
+    config = workflow_config(
+        tmp_path,
+        {"echo": "E: $input"},
+        f'[profiles.list]\nagent="claude"\nschema={json.dumps(str(schema))}\n'
+        f"prompt={json.dumps(source)}\n\n"
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="e", profile="echo", each="l", split="json"},\n]\n',
+    )
+    assert main(["fan", "--json", "--config", str(config)]) == 0
+    result = json_result(capsys)
+    steps = steps_of(result)
+    assert steps[0]["structured_output"] == ["one", "two"]
+    assert [(item["item"], item["output"]) for item in items_of(steps[1])] == [
+        ("one", "E: one"),
+        ("two", "E: two"),
+    ]
+    assert result["output"] == "## e[one]\n\nE: one\n\n## e[two]\n\nE: two"
+
+
+def started_names(starts: Path) -> set[str]:
+    return {path.name for path in starts.iterdir()}
+
+
+def started_at_least(starts: Path, expected: set[str]) -> bool:
+    return started_names(starts) >= expected
+
+
+def release_in_turn(
+    starts: Path,
+    release: Path,
+    turns: list[tuple[set[str], str]],
+    observed: list[set[str]],
+    missed: list[str],
+) -> None:
+    try:
+        for expected, name in turns:
+            if not poll_until(partial(started_at_least, starts, expected)):
+                missed.append(f"waited for {sorted(expected)}, saw {sorted(started_names(starts))}")
+                return
+            observed.append(started_names(starts))
+            (release / name).touch()
+    finally:
+        for _, name in turns:
+            (release / name).touch()
+
+
+def test_each_queue_runs_at_most_max_parallel_instances_in_item_order(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    running, starts, release = (tmp_path / name for name in ("running", "starts", "release"))
+    for directory in (running, starts, release):
+        directory.mkdir()
+    work = (
+        f"@enter {running} {starts} $name\n@wait {release}/$name\n@leave {running}/$name\n"
+        "done $name"
+    )
+    config = workflow_config(
+        tmp_path,
+        {"list": "a\nb\nc\nd\ne", "work": work},
+        "[workflows.queue]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", as="name", max_parallel=2},\n]\n',
+    )
+    turns = [
+        ({"a", "b"}, "a"),
+        ({"a", "b", "c"}, "b"),
+        ({"a", "b", "c", "d"}, "c"),
+        ({"a", "b", "c", "d", "e"}, "d"),
+        ({"a", "b", "c", "d", "e"}, "e"),
+    ]
+    observed: list[set[str]] = []
+    missed: list[str] = []
+    arguments = (starts, release, turns, observed, missed)
+    driver = threading.Thread(target=release_in_turn, args=arguments)
+    driver.start()
+    try:
+        exit_code = main(["queue", "--json", "--config", str(config)])
+    finally:
+        driver.join()
+    assert missed == []
+    assert exit_code == 0
+    assert observed == [expected for expected, _ in turns]
+    items = items_of(steps_of(json_result(capsys))[1])
+    assert [(item["item"], item["status"]) for item in items] == [
+        (name, "success") for name in "abcde"
+    ]
+    outputs = [str(item["output"]).split("\n") for item in items]
+    assert [lines[1] for lines in outputs] == [f"done {name}" for name in "abcde"]
+    others = [int(lines[0].removeprefix("others=")) for lines in outputs]
+    assert max(others[:2]) <= 1
+    assert others[2:] == [1, 1, 1]
+    assert started_names(running) == set()
+
+
+def test_each_with_no_items_succeeds_and_downstream_runs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log = tmp_path / "calls.log"
+    config = workflow_config(
+        tmp_path,
+        {"list": "@blank", "work": f"@log {log}\nW $input", "tail": "Tail $input"},
+        "[workflows.empty]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l"},\n'
+        '  {name="t", profile="tail"},\n]\n',
+    )
+    assert main(["empty", "--json", "--config", str(config)]) == 0
+    result = json_result(capsys)
+    steps = steps_of(result)
+    assert steps[1] == {
+        "step": "w",
+        "status": "success",
+        "exit_code": 0,
+        "output": "",
+        "duration_ms": 0,
+        "usage": None,
+        "cost_usd": None,
+        "error": None,
+        "items": [],
+    }
+    assert (steps[2]["status"], steps[2]["output"]) == ("success", "Tail ")
+    assert result["output"] == "Tail "
+    assert not log.exists()
+
+
+def release_after_reaped(spawned: list[subprocess.Popen[bytes]], index: int, release: Path) -> None:
+    try:
+        poll_until(lambda: len(spawned) > index and spawned[index].returncode is not None)
+    finally:
+        release.touch()
+
+
+def test_failed_instance_lets_running_finish_and_skips_queued_and_downstream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    b_started, release = tmp_path / "b-started", tmp_path / "release"
+    sources = [f"@wait {b_started}\n@exit 3", f"@touch {b_started}\n@wait {release}\nB", "C", "D"]
+    config = workflow_config(
+        tmp_path,
+        {"list": json.dumps(sources), "run": "$input", "merge": "M $input"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="run", each="l", split="json", max_parallel=2},\n'
+        '  {name="m", profile="merge"},\n]\n',
+    )
+    spawned = spy_spawn(monkeypatch)
+    driver = threading.Thread(target=release_after_reaped, args=(spawned, 1, release))
+    driver.start()
+    try:
+        exit_code = main(["fan", "--json", "--config", str(config)])
+    finally:
+        driver.join()
+    assert exit_code == 3
+    result = json_result(capsys)
+    message = "item '#1': Claude Code exited with status 3."
+    assert result["error"] == {"code": "native_exit", "message": f"step 'w': {message}"}
+    steps = steps_of(result)
+    entry = steps[1]
+    assert (entry["status"], entry["exit_code"], entry["output"], entry["error"]) == (
+        "error",
+        3,
+        "",
+        {"code": "native_exit", "message": message},
+    )
+    items = items_of(entry)
+    assert [(item["label"], item["status"]) for item in items] == [
+        ("#1", "error"),
+        ("#2", "success"),
+        ("C", "skipped"),
+        ("D", "skipped"),
+    ]
+    assert items[1]["output"] == "B"
+    assert items[2:] == [
+        {"item": "C", "label": "C", "status": "skipped"},
+        {"item": "D", "label": "D", "status": "skipped"},
+    ]
+    assert steps[2] == {"step": "m", "status": "skipped"}
+    assert len(spawned) == 3
+
+
+def test_other_step_failing_leaves_each_step_skipped_with_mixed_items(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    marks, release = tmp_path / "marks", tmp_path / "release"
+    marks.mkdir()
+    config = workflow_config(
+        tmp_path,
+        {
+            "list": "a\nb\nc",
+            "work": f"@touch {marks}/$name\n@wait {release}\ndone $name",
+            "bad": f"@wait {marks}/a\n@exit 5",
+        },
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", as="name", max_parallel=1},\n'
+        '  {name="x", profile="bad", after=[]},\n]\n',
+    )
+    spawned = spy_spawn(monkeypatch)
+    driver = threading.Thread(target=release_after_reaped, args=(spawned, 1, release))
+    driver.start()
+    try:
+        exit_code = main(["fan", "--json", "--config", str(config)])
+    finally:
+        driver.join()
+    assert exit_code == 5
+    result = json_result(capsys)
+    assert result["error"] == {
+        "code": "native_exit",
+        "message": "step 'x': Claude Code exited with status 5.",
+    }
+    entry = steps_of(result)[1]
+    assert (entry["status"], entry["exit_code"], entry["output"], entry["error"]) == (
+        "skipped",
+        0,
+        "",
+        None,
+    )
+    items = items_of(entry)
+    assert [(item["item"], item["status"]) for item in items] == [
+        ("a", "success"),
+        ("b", "skipped"),
+        ("c", "skipped"),
+    ]
+    assert items[0]["output"] == "done a"
+    assert started_names(marks) == {"a"}
+
+
+def test_interrupt_during_fan_out_skips_queued_instances_and_stops_running_ones(
+    tmp_path: Path,
+) -> None:
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    config = workflow_config(
+        tmp_path,
+        {"list": "a\nb\nc", "work": f"@touch {marks}/$name\n@hang"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", as="name", max_parallel=2},\n]\n',
+    )
+    parent = subprocess.Popen(
+        [sys.executable, "-P", "-m", "pratfall", "fan", "--json", "--config", str(config)],
+        cwd=tmp_path,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        wait_for(marks / "a")
+        wait_for(marks / "b")
+        parent.send_signal(signal.SIGINT)
+        stdout, stderr = parent.communicate(timeout=60)
+    finally:
+        if parent.poll() is None:
+            parent.kill()
+            parent.communicate()
+    assert parent.returncode == 130, stderr
+    result = json.loads(stdout)
+    assert result["status"] == "interrupted"
+    assert result["error"] == {"code": "interrupted", "message": "Interrupted by signal 2."}
+    items = items_of(steps_of(result)[1])
+    assert [(item["item"], item["status"]) for item in items] == [
+        ("a", "interrupted"),
+        ("b", "interrupted"),
+        ("c", "skipped"),
+    ]
+    assert started_names(marks) == {"a", "b"}
+    for name in ("a", "b"):
+        assert_gone(int((marks / name).read_text()))
+
+
+def each_dry_run_config(tmp_path: Path) -> Path:
+    return workflow_config(
+        tmp_path,
+        {"list": "List", "work": "Do $name for $folder", "echo": "E: $input"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", split="json", as="name", max_parallel=2},\n'
+        '  {name="e", profile="echo", after=["l"], each="l"},\n]\n',
+    )
+
+
+def test_dry_run_text_shows_each_keys(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    config = each_dry_run_config(tmp_path)
+    assert main(["fan", "src", "--dry-run", "--config", str(config)]) == 0
+    assert capsys.readouterr().out == (
+        "l: profile=list after=none input=upstream\n"
+        "w: profile=work after=l input=upstream each=l split=json as=name max_parallel=2"
+        ' parameters=folder="src"\n'
+        "e: profile=echo after=l input=upstream each=l split=lines max_parallel=4\n"
+    )
+
+
+def test_dry_run_json_shows_each_keys(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    config = each_dry_run_config(tmp_path)
+    assert main(["fan", "src", "--dry-run", "--json", "--config", str(config)]) == 0
+    steps = steps_of(json_result(capsys))
+    assert [
+        (step["step"], step["each"], step["split"], step["as"], step["max_parallel"])
+        for step in steps
+    ] == [
+        ("l", None, None, None, None),
+        ("w", "l", "json", "name", 2),
+        ("e", "l", "lines", None, 4),
+    ]
+    assert list(steps[1]) == [
+        "step",
+        "profile",
+        "after",
+        "input",
+        "bind",
+        "each",
+        "split",
+        "as",
+        "max_parallel",
+        "parameters",
+    ]
+    assert steps[1]["parameters"] == {"folder": "src"}
+
+
+def test_each_items_error_fails_the_step_before_any_instance_launches(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log = tmp_path / "calls.log"
+    config = workflow_config(
+        tmp_path,
+        {"list": "not json", "work": f"@log {log}\nW $input"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", split="json"},\n]\n',
+    )
+    assert main(["fan", "--json", "--config", str(config)]) == 2
+    result = json_result(capsys)
+    message = "output of step 'l' is not valid JSON."
+    assert result["error"] == {"code": "invalid_arguments", "message": f"step 'w': {message}"}
+    assert steps_of(result)[1] == {
+        "step": "w",
+        "status": "error",
+        "exit_code": 2,
+        "output": "",
+        "duration_ms": 0,
+        "usage": None,
+        "cost_usd": None,
+        "error": {"code": "invalid_arguments", "message": message},
+        "items": [],
+    }
+    assert not log.exists()
+
+
+def test_each_items_error_stops_a_sibling_ready_in_the_same_batch(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log = tmp_path / "calls.log"
+    config = workflow_config(
+        tmp_path,
+        {"list": "not json", "work": "W $input", "other": f"@log {log}\nO"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", split="json"},\n'
+        '  {name="x", profile="other", after=["l"]},\n]\n',
+    )
+    assert main(["fan", "--json", "--config", str(config)]) == 2
+    steps = steps_of(json_result(capsys))
+    assert [(step["step"], step["status"]) for step in steps] == [
+        ("l", "success"),
+        ("w", "error"),
+        ("x", "skipped"),
+    ]
+    assert not log.exists()
+
+
+def test_each_step_whose_last_instance_fails_skips_downstream(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log = tmp_path / "calls.log"
+    config = workflow_config(
+        tmp_path,
+        {"list": json.dumps(["A", "@exit 3"]), "run": "$input", "merge": f"@log {log}\nM"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="run", each="l", split="json", max_parallel=1},\n'
+        '  {name="m", profile="merge"},\n]\n',
+    )
+    assert main(["fan", "--json", "--config", str(config)]) == 3
+    result = json_result(capsys)
+    message = "item '@exit 3': Claude Code exited with status 3."
+    assert result["error"] == {"code": "native_exit", "message": f"step 'w': {message}"}
+    steps = steps_of(result)
+    assert (steps[1]["status"], steps[1]["exit_code"], steps[1]["error"]) == (
+        "error",
+        3,
+        {"code": "native_exit", "message": message},
+    )
+    assert [(item["item"], item["status"]) for item in items_of(steps[1])] == [
+        ("A", "success"),
+        ("@exit 3", "error"),
+    ]
+    assert steps[2] == {"step": "m", "status": "skipped"}
+    assert not log.exists()
+
+
+def test_each_step_over_the_joined_output_cap_stops_later_launches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(plan_module, "WORKFLOW_RESULT_BYTES", 20)
+    log = tmp_path / "calls.log"
+    config = workflow_config(
+        tmp_path,
+        {"list": "a\nb", "work": "Review $file", "other": f"@log {log}\nO"},
+        "[workflows.fan]\nparallel = false\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", as="file"},\n'
+        '  {name="x", profile="other", after=["l"]},\n]\n',
+    )
+    exit_code = exit_code_for(STDOUT_LIMIT_EXCEEDED)
+    assert main(["fan", "--json", "--config", str(config)]) == exit_code
+    result = json_result(capsys)
+    message = "joined output exceeds the 20 byte limit."
+    assert result["error"] == {"code": STDOUT_LIMIT_EXCEEDED, "message": f"step 'w': {message}"}
+    steps = steps_of(result)
+    assert (steps[1]["status"], steps[1]["exit_code"], steps[1]["error"]) == (
+        "error",
+        exit_code,
+        {"code": STDOUT_LIMIT_EXCEEDED, "message": message},
+    )
+    assert [(item["item"], item["output"]) for item in items_of(steps[1])] == [
+        ("a", "Review a"),
+        ("b", "Review b"),
+    ]
+    assert steps[2] == {"step": "x", "status": "skipped"}
+    assert not log.exists()
+
+
+def test_each_relay_prefix_uses_the_item_label(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    long_item = "x" * 90
+    config = workflow_config(
+        tmp_path,
+        {"list": f"short\n{long_item}", "review": "Review $file"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="r", profile="review", each="l", as="file"},\n]\n',
+    )
+    assert main(["fan", "--config", str(config)]) == 0
+    captured = capfd.readouterr()
+    assert captured.out == f"## r[short]\n\nReview short\n\n## r[#2]\n\nReview {long_item}\n"
+    assert "[r[short]] prat: launching Claude Code\n" in captured.err
+    assert "[r[#2]] prat: launching Claude Code\n" in captured.err
+
+
+def test_never_started_each_step_reports_an_empty_item_list(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = workflow_config(
+        tmp_path,
+        {"list": "@exit 4", "work": "W $input"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l"},\n]\n',
+    )
+    assert main(["fan", "--json", "--config", str(config)]) == 4
+    steps = steps_of(json_result(capsys))
+    assert steps[1] == {"step": "w", "status": "skipped", "items": []}

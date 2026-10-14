@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections import Counter
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -25,20 +26,25 @@ from pratfall.codes import (
     SIGNAL_EXIT_BASE,
     TIMEOUT,
 )
+from pratfall.errors import PratError
 from pratfall.interruption import Handler, handling
 from pratfall.limits import TERMINATE_GRACE, WORKFLOW_RESULT_BYTES
 from pratfall.models import Workflow, WorkflowStep
 from pratfall.nonblocking import write_nonblocking
-from pratfall.prompt_input import PROMPT_LIMIT
 from pratfall.workflow_plan import (
     StepOutcome,
     StepResult,
-    ready_steps,
+    each_items,
+    each_result,
+    input_problem,
+    instance_arguments,
+    instance_input,
+    item_labels,
+    ready_work,
     step_arguments,
     step_input,
     step_result,
     synthesized_result,
-    trimmed_output,
 )
 
 WORKFLOW_SIGNALS: tuple[signal.Signals, ...] = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
@@ -62,12 +68,18 @@ class PreparedWorkflow:
 class Supervised(NamedTuple):
     outcomes: tuple[StepOutcome, ...]
     interrupted_by: int | None
+    items: Mapping[str, tuple[str, ...]]
+
+
+type _Work = tuple[str, int | None]
 
 
 @dataclass(eq=False)
 class _Child:
     step: WorkflowStep
-    index: int
+    item: int | None
+    order: tuple[int, int]
+    prefix: bytes
     process: subprocess.Popen[bytes]
     deadline: float
     stdout: bytearray = field(default_factory=bytearray)
@@ -110,7 +122,14 @@ class _Supervision:
     signals: list[int] = field(default_factory=list)
     outcomes: list[StepOutcome] = field(default_factory=list)
     outputs: dict[str, str] = field(default_factory=dict)
-    running: dict[str, _Child] = field(default_factory=dict)
+    items: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    labels: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    running: dict[_Work, _Child] = field(default_factory=dict)
+    started: set[str] = field(default_factory=set)
+    launched: Counter[str] = field(default_factory=Counter)
+    active: Counter[str] = field(default_factory=Counter)
+    instances: dict[str, list[StepOutcome]] = field(default_factory=dict)
+    failed: bool = False
     relay: _Relay = field(default_factory=_Relay)
 
 
@@ -126,7 +145,7 @@ def supervise(prepared: PreparedWorkflow, launcher: tuple[str, ...], cwd: Path) 
                     _launch_ready(state)
             finally:
                 _teardown(state, list(state.running.values()))
-    return Supervised(tuple(state.outcomes), _first_signal(state))
+    return Supervised(tuple(state.outcomes), _first_signal(state), dict(state.items))
 
 
 def _handled_signals(hangup: object) -> tuple[signal.Signals, ...]:
@@ -148,59 +167,69 @@ def _recorder(state: _Supervision) -> Handler:
     return receive
 
 
-def _failed(state: _Supervision) -> bool:
-    return any(outcome.result.status != "success" for outcome in state.outcomes)
+def _stopped(state: _Supervision) -> bool:
+    return bool(state.signals) or state.failed
 
 
 def _launch_ready(state: _Supervision) -> None:
     workflow = state.prepared.workflow
-    while not state.signals and not _failed(state):
-        started = frozenset(outcome.step for outcome in state.outcomes)
-        running = frozenset(state.running)
-        ready = ready_steps(workflow, frozenset(state.outputs), started | running, running)
+    while not _stopped(state):
+        succeeded = state.outputs.keys()
+        ready = ready_work(
+            workflow, state.items, succeeded, state.started, state.launched, state.active
+        )
         if not ready:
             return
-        _start(state, ready[0])
+        for step, item in ready:
+            if _stopped(state):
+                return
+            _start(state, step, item)
 
 
-def _start(state: _Supervision, step: WorkflowStep) -> None:
+def _start(state: _Supervision, step: WorkflowStep, item: int | None) -> None:
+    if item is not None:
+        state.launched[step.name] += 1
+    else:
+        state.started.add(step.name)
+        if step.each is not None:
+            _prepare_items(state, step, step.each)
+            return
     prepared = state.prepared
     prompt = prepared.prompts[step.selector]
-    text = step_input(step, state.outputs, prepared.base)
-    problem = _input_problem(step, prompt, text, state.outputs)
+    if item is None:
+        text = step_input(step, state.outputs, prepared.base)
+        problem = input_problem(step, prompt, text, state.outputs)
+        arguments = step_arguments(
+            step, prompt, prepared.values, state.outputs, prepared.passthrough
+        )
+        prefix = f"[{step.name}] "
+    else:
+        value = state.items[step.name][item]
+        text = instance_input(step, value, state.outputs, prepared.base)
+        problem = input_problem(step, prompt, text, state.outputs, value)
+        arguments = instance_arguments(
+            step, prompt, value, prepared.values, state.outputs, prepared.passthrough
+        )
+        prefix = f"[{step.name}[{state.labels[step.name][item]}]] "
     if problem is not None:
-        _record(state, step.name, synthesized_result("error", INVALID_ARGUMENTS, problem))
+        _record(state, step, item, synthesized_result("error", INVALID_ARGUMENTS, problem))
         return
-    arguments = step_arguments(step, prompt, prepared.values, state.outputs, prepared.passthrough)
     spec = {"version": 1, "parent": os.getpid(), "arguments": list(arguments), "input": text}
     try:
         process = _spawn(state.launcher, spec, state.cwd)
     except OSError as error:
-        _record(state, step.name, _spawn_failure(error, state.launcher[0]))
+        _record(state, step, item, _spawn_failure(error, state.launcher[0]))
         return
     deadline = time.monotonic() + prepared.timeouts[step.name] + 2 * TERMINATE_GRACE
-    index = prepared.workflow.steps.index(step)
-    child = _Child(step, index, process, deadline + BACKSTOP_SLACK)
-    state.running[step.name] = child
+    order = (prepared.workflow.steps.index(step), -1 if item is None else item)
+    child = _Child(step, item, order, prefix.encode(), process, deadline + BACKSTOP_SLACK)
+    state.running[step.name, item] = child
+    state.active[step.name] += 1
     for stream in (process.stdout, process.stderr):
         if stream is not None:
             os.set_blocking(stream.fileno(), False)
             state.selector.register(stream, selectors.EVENT_READ, child)
     _forward(state, child)
-
-
-def _input_problem(
-    step: WorkflowStep, prompt: str | None, text: str | None, outputs: Mapping[str, str]
-) -> str | None:
-    if prompt is None and text is None:
-        return "has no prompt and received no input."
-    empty = next((name for name, source in step.bind.items() if not outputs[source].strip()), None)
-    if empty is not None:
-        return f"binds parameter '{empty}' to the empty output of step '{step.bind[empty]}'."
-    values = (text or "", *(trimmed_output(outputs[source]) for source in step.bind.values()))
-    if sum(len(value.encode("utf-8")) for value in values) > PROMPT_LIMIT:
-        return f"input and bound parameters exceed the {PROMPT_LIMIT} byte limit."
-    return None
 
 
 def _spawn(
@@ -231,10 +260,44 @@ def _spawn_failure(error: OSError, executable: str) -> StepResult:
     return synthesized_result("error", PROCESS_IO_ERROR, message)
 
 
-def _record(state: _Supervision, step: str, result: StepResult) -> None:
-    state.outcomes.append(StepOutcome(step, result))
+def _prepare_items(state: _Supervision, step: WorkflowStep, source: str) -> None:
+    result = next(
+        outcome.result
+        for outcome in state.outcomes
+        if outcome.step == source and outcome.item is None
+    )
+    try:
+        items = each_items(step, result)
+    except PratError as error:
+        failure = synthesized_result("error", error.code, str(error), error.exit_code)
+        _record(state, step, None, failure)
+        return
+    state.items[step.name] = items
+    state.labels[step.name] = item_labels(items)
+    if not items:
+        state.outputs[step.name] = ""
+
+
+def _record(state: _Supervision, step: WorkflowStep, item: int | None, result: StepResult) -> None:
+    outcome = StepOutcome(step.name, result, item)
+    state.outcomes.append(outcome)
+    if item is None:
+        _publish(state, step.name, result)
+        return
+    instances = state.instances.setdefault(step.name, [])
+    instances.append(outcome)
+    items = state.items[step.name]
+    if result.status != "success":
+        state.failed = True
+    elif len(instances) == len(items):
+        _publish(state, step.name, each_result(step, items, tuple(instances), True))
+
+
+def _publish(state: _Supervision, name: str, result: StepResult) -> None:
     if result.status == "success":
-        state.outputs[step] = result.output
+        state.outputs[name] = result.output
+    else:
+        state.failed = True
 
 
 def _tick(state: _Supervision) -> None:
@@ -250,9 +313,10 @@ def _tick(state: _Supervision) -> None:
         for child in state.running.values()
         if child not in expired and not child.open_streams and child.process.poll() is not None
     ]
-    for child in sorted([*expired, *finished], key=lambda child: child.index):
-        del state.running[child.step.name]
-        _record(state, child.step.name, _outcome_of(state, child, expired=child in expired))
+    for child in sorted([*expired, *finished], key=lambda child: child.order):
+        del state.running[child.step.name, child.item]
+        state.active[child.step.name] -= 1
+        _record(state, child.step, child.item, _outcome_of(state, child, expired=child in expired))
 
 
 def _outcome_of(state: _Supervision, child: _Child, *, expired: bool) -> StepResult:
@@ -306,12 +370,11 @@ def _relay_lines(state: _Supervision, child: _Child) -> None:
         else:
             break
     if lines:
-        prefix = f"[{child.step.name}] ".encode()
-        state.relay.write(b"".join(prefix + line for line in lines))
+        state.relay.write(b"".join(child.prefix + line for line in lines))
 
 
 def _relay(state: _Supervision, child: _Child, line: bytes) -> None:
-    state.relay.write(f"[{child.step.name}] ".encode() + line)
+    state.relay.write(child.prefix + line)
 
 
 def _write_available(descriptor: int, data: bytes) -> None:

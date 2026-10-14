@@ -78,9 +78,16 @@ def _run_workflow(
         _emit_dry_run(prepared, latch, json_mode=parsed.json)
         return 0
     started = time.monotonic()
-    outcomes, interrupted_by = supervise(prepared, launcher, invocation_cwd)
+    supervised = supervise(prepared, launcher, invocation_cwd)
     duration_ms = max(0, round((time.monotonic() - started) * 1000))
-    payload = workflow_result(name, prepared.workflow, outcomes, duration_ms, interrupted_by)
+    payload = workflow_result(
+        name,
+        prepared.workflow,
+        supervised.outcomes,
+        duration_ms,
+        supervised.interrupted_by,
+        supervised.items,
+    )
     _emit_workflow(payload, latch, json_mode=parsed.json)
     _guard(lambda: _notify(config, parsed, payload), lambda _: None)
     return cast(int, payload["exit_code"])
@@ -198,6 +205,10 @@ def _dry_run_payload(prepared: PreparedWorkflow) -> dict[str, object]:
                 "after": list(step.after),
                 "input": step.input,
                 "bind": dict(step.bind),
+                "each": step.each,
+                "split": None if step.each is None else step.split,
+                "as": step.as_parameter,
+                "max_parallel": None if step.each is None else step.max_parallel,
                 "parameters": _step_parameters(prepared, step),
             }
             for step in prepared.workflow.steps
@@ -212,12 +223,21 @@ def _dry_run_line(prepared: PreparedWorkflow, step: WorkflowStep) -> str:
     )
     if step.bind:
         line += " bind=" + ",".join(f"{key}:{source}" for key, source in step.bind.items())
+    line += _each_text(step)
     parameters = _step_parameters(prepared, step)
     if parameters:
         line += " parameters=" + ",".join(
             f"{key}={json.dumps(value, ensure_ascii=False)}" for key, value in parameters.items()
         )
     return line
+
+
+def _each_text(step: WorkflowStep) -> str:
+    if step.each is None:
+        return ""
+    text = f" each={step.each} split={step.split}"
+    text += "" if step.as_parameter is None else f" as={step.as_parameter}"
+    return text + f" max_parallel={step.max_parallel}"
 
 
 def _emit_workflow(payload: dict[str, object], latch: _StdoutLatch, *, json_mode: bool) -> None:

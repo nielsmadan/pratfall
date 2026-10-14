@@ -46,3 +46,17 @@ steps = [
   { name = "risks", profile = "risks", after = [] },
   { name = "brief", profile = "brief", after = ["read", "risks"] },
 ]
+
+[profiles.list-files]
+agent = "cc"
+prompt = "List the source files that need review, one path per line and nothing else."
+
+[profiles.review-file]
+agent = "codex"
+prompt = "Review the file $file for bugs and list them briefly."
+
+[workflows.review-files]
+steps = [
+  { name = "list", profile = "list-files" },
+  { name = "review", profile = "review-file", each = "list", as = "file", max_parallel = 2 },
+]

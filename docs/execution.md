@@ -140,9 +140,12 @@ inherits the terminal.
 ### Workflow orchestration
 
 [workflow_plan.py](../src/pratfall/workflow_plan.py) holds the pure part: a workflow's parameters,
-ready-step selection, output joining, per-step arguments and the aggregate result, all over data
-passed in. [workflow_supervisor.py](../src/pratfall/workflow_supervisor.py) owns child processes:
-spawning, the selector loop, signal forwarding, teardown, stderr relay and result validation.
+ready-work selection, item splitting and labeling, output joining, per-step and per-instance
+arguments and the aggregate result, all over data passed in.
+[fences.py](../src/pratfall/fences.py) (fenced-block extraction, shared with code extraction) and
+[nonblocking.py](../src/pratfall/nonblocking.py) (the nonblocking sink) sit below it as small
+shared modules.
+[workflow_supervisor.py](../src/pratfall/workflow_supervisor.py) owns child processes: spawning, the selector loop, signal forwarding, teardown, stderr relay and result validation.
 [workflow_run.py](../src/pratfall/cli/workflow_run.py) is the edge: flag rejection, preparation,
 dry run, emission and notification. Dispatch hands a selector that names a workflow to
 `run_workflow` after configuration loads, before profile resolution, so a workflow never reaches an
@@ -154,6 +157,14 @@ adapter or the runner itself.
   `parallel` is false), reads their pipes without blocking, and records each result as steps
   finish. After the first failure it starts nothing new and lets running steps finish. A child is
   one `python -P -m pratfall __step` process in its own session.
+- **Instances.** A step with `each` is split when its source succeeds, and each item becomes one
+  instance, a child keyed `(step, item)`. The supervisor keeps counters rather than rescanning
+  results: steps started, and per `each` step the instances launched, running and finished, plus a
+  `failed` flag set where outcomes are recorded. `ready_work` takes those counts and starts the next
+  items in order while fewer than `max_parallel` are running, so a pass costs the same at 4096
+  items as at ten. An `each` step's aggregate is computed once, when its last instance finishes;
+  a failed instance stops new launches, and a split or limit error fails the step before any
+  instance starts.
 - **The `__step` protocol.** The hidden `__step` command is intercepted like `__complete`. The
   parent writes a JSON spec to an unlinked temporary file that becomes the child's stdin: `version`
   (1), `parent` (the workflow process's pid), `arguments` (a list of strings) and `input` (a string

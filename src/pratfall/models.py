@@ -48,6 +48,8 @@ class AgentSpec:
 
 
 MAX_TURNS = 4_294_967_295
+DEFAULT_MAX_PARALLEL = 4
+MAX_PARALLEL_LIMIT = 64
 
 
 @dataclass(frozen=True)
@@ -113,6 +115,10 @@ class WorkflowStep:
     after: tuple[str, ...]
     input: Literal["upstream", "none"] = "upstream"
     bind: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    each: str | None = None
+    split: Literal["lines", "json"] = "lines"
+    as_parameter: str | None = None
+    max_parallel: int = DEFAULT_MAX_PARALLEL
 
 
 @dataclass(frozen=True)

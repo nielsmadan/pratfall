@@ -2,7 +2,8 @@
 
 [config.toml](config.toml) demonstrates defaults, named profiles, profile inheritance with
 `extends`, a profile with its own parameterized `prompt` (`prat remove-empty src`), a workflow
-that fans out to two profiles and merges their outputs (`prat assess --file notes.md`), and custom
+that fans out to two profiles and merges their outputs (`prat assess --file notes.md`), a
+`review-files` workflow that runs one review per line of a file list, two at a time, and custom
 commands, including a trusted wrapper with fixed arguments.
 
 ## Try the example
@@ -26,6 +27,14 @@ under `## read` and `## risks` headings:
 ```sh
 prat --config examples/config.toml workflows
 prat --config examples/config.toml assess --file notes.md --dry-run
+```
+
+`review-files` runs `review` once for each path that `list` prints, with the path filling `$file`.
+Its dry run shows the `each`, `split` and `max_parallel` settings, since the items exist only once
+`list` has run:
+
+```sh
+prat --config examples/config.toml review-files --dry-run
 ```
 
 See [workflows](../docs/user/workflows.md).

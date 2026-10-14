@@ -46,5 +46,7 @@ anything, and builds a synthesized step result for failures it cannot take from 
   skipped; there is still no retry and no agent or model fallback, and a caller's script owns any
   retry policy.
 - Parallel steps share one working directory, and Pratfall does not detect conflicting edits.
+- A step with `each` runs one child per item through the same entry, so an instance is a normal
+  run and a long list is bounded by a per-step `max_parallel` queue.
 - Step output relayed to stdout is limited to the final steps' combined output; per-step detail is
   in the `--json` `steps` array.

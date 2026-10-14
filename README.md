@@ -182,7 +182,9 @@ git diff | prat review-all
 
 Each `profile` names a profile from your config. `security` and `style` run in parallel after
 `scan`, and `report` receives both outputs. Run `prat workflows` to list them. See
-[workflows](docs/user/workflows.md) for parameters, `bind`, failure behavior and JSON output.
+[workflows](docs/user/workflows.md) for parameters, `bind`, failure behavior and JSON output. A
+step can also run once per line or JSON element of an earlier step's output with
+[`each`](docs/user/workflows.md#fan-out-over-items).
 
 ## Profiles
 

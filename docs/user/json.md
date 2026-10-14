@@ -132,6 +132,16 @@ are `interrupted` and `128 + signal`, with error code `interrupted`. An error th
 workflow before any step launches, such as a bad parameter, reports `steps: []` and
 `duration_ms: 0`. `error.message` names the failing step as `step 'NAME': MESSAGE`.
 
+A step with [`each`](workflows.md#fan-out-over-items) reports only `step`, `status`, `exit_code`,
+`output`, `duration_ms`, `usage`, `cost_usd`, `error` and `items`, in that order, with no
+`schema_version`, `agent` or `profile`. `items` is an array in item order. Each entry has `item` (the item text), `label` and, for an instance that ran, the
+instance's [run result](#run-results) fields. An instance that never started is
+`{"item": TEXT, "label": LABEL, "status": "skipped"}`. A failed instance's error reaches the step as
+`item 'LABEL': MESSAGE`. An `each` step stopped by another step's failure before all instances
+finished has status `skipped`, and an empty list gives `items: []` with status `success`. An `each`
+step that never started, or that failed before its items were known, is
+`{"step": NAME, "status": "skipped", "items": []}` or a synthesized error result with `items: []`.
+
 With `--dry-run --json` the preview is:
 
 ```json
@@ -147,6 +157,10 @@ With `--dry-run --json` the preview is:
       "after": [],
       "input": "upstream",
       "bind": {},
+      "each": null,
+      "split": null,
+      "as": null,
+      "max_parallel": null,
       "parameters": {"topic": "tide pools"}
     }
   ]
@@ -158,7 +172,9 @@ known to be a workflow, so that error uses the plain run shape.
 
 `prat workflows --json` returns `schema_version: 1` and a `workflows` array sorted by name. Each
 record has `name`, `parallel`, `parameters`, the defining file's absolute `source`, and `steps`,
-each with `name`, `profile`, `after`, `input` and `bind`.
+each with `name`, `profile`, `after`, `input`, `bind`, `each`, `split`, `as` and `max_parallel`.
+`each` and `as` are null when unset, and `split` and `max_parallel` are null without `each`. The
+dry-run steps carry the same four keys.
 
 ## Errors and partial results
 

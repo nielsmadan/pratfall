@@ -35,6 +35,7 @@ from pratfall.errors import PratError
 from pratfall.instructions import read_instructions
 from pratfall.limits import WORKFLOW_SPEC_BYTES
 from pratfall.models import (
+    DEFAULT_MAX_PARALLEL,
     Config,
     ConsumedCapture,
     DecodedOutput,
@@ -211,6 +212,10 @@ def _workflows(config: Config, json_mode: bool) -> None:
                         "after": list(step.after),
                         "input": step.input,
                         "bind": dict(step.bind),
+                        "each": step.each,
+                        "split": None if step.each is None else step.split,
+                        "as": step.as_parameter,
+                        "max_parallel": None if step.each is None else step.max_parallel,
                     }
                     for step in workflow.steps
                 ],
@@ -234,6 +239,15 @@ def _workflow_step_text(workflow: Workflow, index: int) -> str:
         text += " input=none"
     if step.bind:
         text += " bind=" + ",".join(f"{key}:{source}" for key, source in step.bind.items())
+    if step.each is not None:
+        text += f" each={step.each}"
+        text += "" if step.split == "lines" else f" split={step.split}"
+        text += "" if step.as_parameter is None else f" as={step.as_parameter}"
+        text += (
+            ""
+            if step.max_parallel == DEFAULT_MAX_PARALLEL
+            else f" max_parallel={step.max_parallel}"
+        )
     return text
 
 

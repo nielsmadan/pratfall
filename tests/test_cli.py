@@ -1147,6 +1147,8 @@ def test_profiles_json_shows_inherited_prompt(
     )
 
 
+NO_EACH = {"each": None, "split": None, "as": None, "max_parallel": None}
+
 FAN_OUT_CONFIG = (
     "version=1\n"
     '[profiles.clean]\nagent="codex"\nprompt="Clean $folder $input"\n'
@@ -1177,7 +1179,14 @@ def test_workflows_listing_is_sorted_and_versioned(
                     "parameters": [],
                     "source": str(config),
                     "steps": [
-                        {"name": "s", "profile": "cx", "after": [], "input": "upstream", "bind": {}}
+                        {
+                            "name": "s",
+                            "profile": "cx",
+                            "after": [],
+                            "input": "upstream",
+                            "bind": {},
+                            **NO_EACH,
+                        }
                     ],
                 },
                 {
@@ -1192,6 +1201,7 @@ def test_workflows_listing_is_sorted_and_versioned(
                             "after": [],
                             "input": "upstream",
                             "bind": {},
+                            **NO_EACH,
                         },
                         {
                             "name": "pack",
@@ -1199,6 +1209,7 @@ def test_workflows_listing_is_sorted_and_versioned(
                             "after": [],
                             "input": "upstream",
                             "bind": {},
+                            **NO_EACH,
                         },
                         {
                             "name": "check",
@@ -1206,6 +1217,7 @@ def test_workflows_listing_is_sorted_and_versioned(
                             "after": ["clean", "pack"],
                             "input": "none",
                             "bind": {"report": "pack"},
+                            **NO_EACH,
                         },
                     ],
                 },
@@ -1218,6 +1230,35 @@ def test_workflows_listing_is_sorted_and_versioned(
             "check=verify after=clean,pack input=none bind=report:pack "
             f"parameters=folder,level source={config}\n"
         )
+
+
+EACH_CONFIG = (
+    "version=1\n"
+    '[profiles.list]\nagent="codex"\nprompt="List"\n'
+    '[profiles.fix]\nagent="codex"\nprompt="Fix $file"\n'
+    '[workflows.w]\nsteps=[{name="list",profile="list"},'
+    '{name="a",profile="fix",each="list",as="file"},'
+    '{name="b",profile="fix",after=["list"],each="list",split="json",max_parallel=2,as="file"}]\n'
+)
+
+
+def test_workflows_listing_shows_each_settings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / ".pratfile"
+    config.write_text(EACH_CONFIG, encoding="utf-8")
+    assert main(["workflows"]) == 0
+    assert capsys.readouterr().out == (
+        "w: list=list; a=fix each=list as=file; "
+        f"b=fix after=list each=list split=json as=file max_parallel=2 source={config}\n"
+    )
+    assert main(["workflows", "--json"]) == 0
+    steps = json.loads(capsys.readouterr().out)["workflows"][0]["steps"]
+    assert [{key: step[key] for key in NO_EACH} for step in steps] == [
+        NO_EACH,
+        {"each": "list", "split": "lines", "as": "file", "max_parallel": 4},
+        {"each": "list", "split": "json", "as": "file", "max_parallel": 2},
+    ]
 
 
 def test_empty_workflows_listing(capsys: pytest.CaptureFixture[str]) -> None:

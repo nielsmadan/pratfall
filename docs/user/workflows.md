@@ -7,6 +7,7 @@ a project's `.pratfile`.
 - [Define a workflow](#define-a-workflow)
 - [Order and input](#order-and-input)
 - [Join and bind outputs](#join-and-bind-outputs)
+- [Fan out over items](#fan-out-over-items)
 - [Fill parameters](#fill-parameters)
 - [Parallelism and the working directory](#parallelism-and-the-working-directory)
 - [Failure and interruption](#failure-and-interruption)
@@ -60,14 +61,22 @@ defaults to `true`. A step takes:
 | `after` | Names of steps declared earlier that must succeed first. Defaults to the previous step, or none for the first step. `after = []` makes a root step. |
 | `input` | `"none"` starts the step without upstream input. Any other value is rejected. |
 | `bind` | A table mapping a prompt parameter of the step's profile to an ancestor step whose output fills it. |
+| `each` | Name of an ancestor step whose output is split into items; the step runs once per item. See [fan out over items](#fan-out-over-items). |
+| `split` | With `each`: `"lines"` (the default) or `"json"`. |
+| `as` | With `each`: a prompt parameter of the step's profile that receives the item. |
+| `max_parallel` | With `each`: how many instances run at once, 1 to 64. Defaults to 4. |
 
 A workflow name follows the profile rules: letters, digits, underscores or hyphens. It cannot equal
 a profile name, a built-in agent name or alias, or a management command, including `workflows`.
 A local workflow replaces a global one of the same name, with a warning on stderr, as for profiles.
 `prat config validate` checks every workflow without launching an agent: step names, `after` and
 `bind` references, unknown selectors, and that a step with no prompt and `input = "none"` can
-never receive input. `prat workflows` lists each workflow's steps, parameters and source, and
-`prat workflows --json` returns the same fields.
+never receive input. For an `each` step it also checks that the source is an ancestor and not
+itself an `each` step, that `as` is a prompt parameter of the profile and not in `bind`, and that
+`input = "none"` comes with `as`. `prat workflows` lists each workflow's steps, parameters and
+source, and `prat workflows --json` returns the same fields. In the text listing an `each` step
+adds `each=SOURCE`, and `split=json`, `as=NAME` and `max_parallel=N` when they differ from the
+defaults.
 
 ## Order and input
 
@@ -110,13 +119,96 @@ empty output fails the step with `invalid_arguments`, as does an input plus boun
 { name = "check", profile = "verify", after = ["clean", "pack"], bind = { report = "pack" } }
 ```
 
+## Fan out over items
+
+`each` runs a step once per item of an ancestor step's output. The source can be any ancestor, not
+only a step in `after`, but it cannot itself be an `each` step. `split`, `as` and `max_parallel`
+are rejected without `each`.
+
+```toml
+[workflows.review-files]
+steps = [
+  { name = "list", profile = "file-lister" },
+  { name = "review", profile = "review-one", each = "list", as = "file", max_parallel = 2 },
+]
+```
+
+Here `list` prints one path per line and `review` runs once per path, with the path filling
+`$file` in the `review-one` prompt, two at a time.
+
+### Split the output
+
+With `split = "lines"`, the default, each line of the source output is an item. Lines are
+stripped, and empty lines are dropped.
+
+With `split = "json"` the source must produce a JSON array. Prat uses the source's
+[structured output](json.md#run-results) when that is an array; otherwise it parses the output
+text, and then the content of its first fenced code block. Anything else fails the `each` step
+with `invalid_arguments`, as does a document containing `NaN`, `Infinity` or `-Infinity`. Each
+element becomes one item:
+
+- a string is used as is, and an empty or whitespace-only string is dropped;
+- `null` is dropped;
+- an array or object becomes compact JSON text, with non-ASCII characters kept;
+- a number or boolean becomes its JSON serialization (`1e2` becomes `100.0`).
+
+A list of more than 4096 items fails the `each` step with `invalid_arguments`. An empty list is not
+a failure: the step succeeds with empty output and no instances, and a step after it that has no
+other input is handled as for any empty upstream output.
+
+### What an instance receives
+
+By default the item is the instance's input, so it fills `$input` or follows the prompt as for any
+[step input](#order-and-input). With `as`, the item fills the named prompt parameter instead. That
+parameter is removed from the workflow's own parameters, as for `bind`, and cannot also appear in
+`bind`. The instance's input is then the joined output of its other `after` steps, without the
+`each` source.
+
+Because the item is the only input without `as`, `input = "none"` on an `each` step needs `as`.
+An instance with no prompt and no input, or whose input, item and bound values exceed the 1 MiB
+prompt limit, fails with `invalid_arguments`.
+
+### Labels and joined output
+
+Each item has a label for diagnostics and results. An item that is unique in the list, at most 80
+characters, and free of control characters (so a single line) is its own label. Any other item,
+including a duplicate or one that looks like `#3`, is labeled `#N` with its 1-based position, so
+labels are unique. Stderr relayed from an instance is prefixed `[STEP[LABEL]] `.
+
+The `each` step's output joins its instances' outputs in item order by the
+[usual rules](#join-and-bind-outputs), with `## STEP[LABEL]` headings when more than one output is
+non-empty. Usage, cost and duration are summed over the instances. If the joined output exceeds
+64 MiB, the step fails with `stdout_limit_exceeded`.
+
+### The queue
+
+At most `max_parallel` instances of an `each` step run at once, 4 by default and 1 to 64; the rest
+wait and start in item order as slots free up. Different `each` steps and ordinary steps run
+alongside each other as for other steps. With `parallel = false`, one instance or step runs at a
+time, whatever `max_parallel` says: the workflow runs the next ready step in declared order, and
+within an `each` step the next item.
+
+### Failed and interrupted items
+
+The first failed instance stops new launches across the workflow, as for a failed step. Instances
+already running finish. The `each` step reports the failed instance's status and exit code, with
+the error `item 'LABEL': MESSAGE`, and the workflow error reads `step 'NAME': item 'LABEL':
+MESSAGE`. Items that never started are listed with `status: "skipped"`.
+
+An `each` step that is cut short by another step's failure, with none of its own instances failed,
+is reported `skipped`, not as a failure. If an instance of the `each` step was running when the
+workflow was interrupted, the step is reported `interrupted`. Otherwise it is reported `skipped`:
+with its item entries when its items were already computed, or as never started,
+`{"step": NAME, "status": "skipped", "items": []}`, when it had not begun.
+
 ## Fill parameters
 
-The workflow's parameters are the prompt parameters of its steps' profiles, minus any step's
-`bind`, in order of first appearance. A name used by several steps is one parameter and fills
-all of them. Words after the workflow name and `--param NAME=VALUE` fill parameters exactly as for
-a [profile prompt](running.md#fill-prompt-parameters). Missing, unknown and repeated parameters
-fail before any step starts. A step whose agent selector has no profile prompt takes no parameters.
+The workflow's parameters are the prompt parameters of its steps' profiles, minus any step's `bind`
+and any `each` step's `as`, in order of first appearance. A name used by several steps is one
+parameter and fills all of them. Words after the workflow name and `--param NAME=VALUE` fill
+parameters exactly as for
+a [profile prompt](running.md#fill-prompt-parameters). Missing, unknown and repeated
+parameters fail before any step starts. A step whose agent selector has no profile prompt takes no parameters.
 
 ## Parallelism and the working directory
 
@@ -165,7 +257,9 @@ for the fields. Usage and cost are the sums of the steps that report them.
 ## Preview a workflow
 
 `--dry-run` resolves parameters and prints each step's profile, `after`, input mode, bindings and
-the parameters it receives, without launching an agent:
+the parameters it receives, without launching an agent. An `each` step also shows `each=`,
+`split=` and `max_parallel=` always, and `as=` when set. The items do not exist yet, so nothing is
+split:
 
 ```sh
 prat write "tide pools" --dry-run

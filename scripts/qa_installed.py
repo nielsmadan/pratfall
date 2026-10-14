@@ -1373,6 +1373,14 @@ def _fake_workflow_fence(agent: str, prompt: str) -> int:
     return 17 if prompt.startswith("QA_WORKFLOW_FENCE_FAIL") else 0
 
 
+def _fake_each_list(agent: str, prompt: str) -> int:
+    assert agent == "claude"
+    _answer_claude(
+        '["x", {"k": 1}, 3]' if prompt.startswith("QA_EACH_JSON") else "alpha\n\n beta \ngamma\n"
+    )
+    return 0
+
+
 def _fake_large_stream(agent: str, _prompt: str) -> int:
     event = (json.dumps({"type": "future", "discarded": "x" * (1024 * 1024)}) + "\n").encode()
     for _ in range(9):
@@ -1487,6 +1495,7 @@ _NATIVE_CASES: tuple[tuple[str | tuple[str, ...], _NativeCaseHandler], ...] = (
     ("QA_ACCOUNT_GROK", _fake_account_grok),
     ("QA_NATIVE_17", _fake_native_failure),
     ("QA_WORKFLOW_FENCE", _fake_workflow_fence),
+    (("QA_EACH_LINES", "QA_EACH_JSON"), _fake_each_list),
     ("QA_STREAM_LARGE", _fake_large_stream),
     ("QA_PROGRESS", _fake_progress),
     (
@@ -4977,6 +4986,89 @@ def _exercise_f_fan_out(prat: Path, root: Path) -> dict[str, object]:
     return {"status": "Pass", "result": result, "native_launches": 4}
 
 
+_EACH_CONFIG = """
+[profiles.e-lines]
+agent = "claude"
+prompt = "QA_EACH_LINES"
+[profiles.e-json]
+agent = "claude"
+prompt = "QA_EACH_JSON"
+[profiles.e-one]
+agent = "claude"
+prompt = "QA_EACH_ONE $file"
+[profiles.e-two]
+agent = "claude"
+prompt = "QA_EACH_TWO"
+[profiles.e-merge]
+agent = "claude"
+prompt = "QA_EACH_MERGE"
+[workflows.each]
+steps = [
+  { name = "lines", profile = "e-lines", input = "none" },
+  { name = "json", profile = "e-json", input = "none", after = [] },
+  { name = "one", profile = "e-one", after = ["lines"], each = "lines", as = "file" },
+  { name = "two", profile = "e-two", after = ["json"], each = "json", split = "json", max_parallel = 2 },
+  { name = "merge", profile = "e-merge", after = ["one", "two"] },
+]
+"""
+
+
+def _exercise_f_each(prat: Path, root: Path) -> dict[str, object]:
+    root, config = _workflow_root(root, "each", prat)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write(_EACH_CONFIG)
+    preview = _run(prat, root, ["each", "--dry-run", "--json"], config=config)
+    assert preview.returncode == 0
+    previewed = {_text(step["step"]): step for step in _records(_json_result(preview)["steps"])}
+    assert previewed["one"]["each"] == "lines" and previewed["one"]["as"] == "file"
+    assert previewed["two"]["split"] == "json" and previewed["two"]["max_parallel"] == 2
+    assert _calls(root / "native.jsonl") == []
+    completed = _run(prat, root, ["each", "--json"], config=config)
+    result = _json_result(completed)
+    assert completed.returncode == 0 and len(completed.stdout.splitlines()) == 1
+    assert result["status"] == "success" and result["error"] is None
+    steps = {_text(step["step"]): step for step in _records(result["steps"])}
+    assert list(steps) == ["lines", "json", "one", "two", "merge"]
+    assert {step["status"] for step in steps.values()} == {"success"}
+
+    def prompt_of(record: dict[str, object]) -> str:
+        return _text(json.loads(_text(record["output"]))["prompt"])
+
+    one = _records(steps["one"]["items"])
+    assert [(entry["item"], entry["label"]) for entry in one] == [
+        ("alpha", "alpha"),
+        ("beta", "beta"),
+        ("gamma", "gamma"),
+    ]
+    assert [prompt_of(entry) for entry in one] == [
+        f"QA_EACH_ONE {name}" for name in ("alpha", "beta", "gamma")
+    ]
+    two = _records(steps["two"]["items"])
+    assert [(entry["item"], entry["label"]) for entry in two] == [
+        ("x", "x"),
+        ('{"k":1}', '{"k":1}'),
+        ("3", "3"),
+    ]
+    assert [prompt_of(entry) for entry in two] == [
+        f"QA_EACH_TWO\n\n{item}" for item in ("x", '{"k":1}', "3")
+    ]
+    one_text = "\n\n".join(
+        f"## one[{_text(entry['label'])}]\n\n{_text(entry['output']).removesuffix(chr(10))}"
+        for entry in one
+    )
+    two_text = "\n\n".join(
+        f"## two[{_text(entry['label'])}]\n\n{_text(entry['output']).removesuffix(chr(10))}"
+        for entry in two
+    )
+    assert steps["one"]["output"] == one_text and steps["two"]["output"] == two_text
+    assert (
+        prompt_of(steps["merge"])
+        == f"QA_EACH_MERGE\n\n## one\n\n{one_text}\n\n## two\n\n{two_text}"
+    )
+    assert len(_calls(root / "native.jsonl")) == 9
+    return {"status": "Pass", "result": result, "native_launches": 9}
+
+
 def _exercise_workflows(prat: Path, root: Path, artifact: str) -> dict[str, object]:
     root = root / f"workflows-{artifact}"
     root.mkdir(exist_ok=True)
@@ -4989,6 +5081,7 @@ def _exercise_workflows(prat: Path, root: Path, artifact: str) -> dict[str, obje
         "W06.schemas": _exercise_w_schemas(prat, root),
         "W07.control-rejections": _exercise_w_control_rejections(prat, root),
         "F01.workflow-fan-out": _exercise_f_fan_out(prat, root),
+        "F02.workflow-each": _exercise_f_each(prat, root),
     }
 
 

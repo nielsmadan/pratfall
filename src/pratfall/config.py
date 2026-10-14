@@ -6,11 +6,14 @@ from collections.abc import Mapping
 from dataclasses import asdict, replace
 from pathlib import Path
 from types import MappingProxyType
+from typing import Literal
 
 from pratfall.catalog import BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent
 from pratfall.errors import PratError
 from pratfall.instructions import validate_instructions
 from pratfall.models import (
+    DEFAULT_MAX_PARALLEL,
+    MAX_PARALLEL_LIMIT,
     MAX_TURNS,
     NOTIFY_METHODS,
     AgentSpec,
@@ -519,13 +522,54 @@ def _templates(table: dict[str, object], path: Path) -> dict[str, PromptTemplate
     return templates
 
 
+def _each_settings(
+    settings: dict[str, object], step_label: str, no_input: bool
+) -> tuple[str | None, Literal["lines", "json"], str | None, int]:
+    if "each" not in settings:
+        for key in ("split", "as", "max_parallel"):
+            if key in settings:
+                raise PratError(f"{step_label}.{key}: only valid together with each.")
+        return None, "lines", None, DEFAULT_MAX_PARALLEL
+    each = _string(settings["each"], f"{step_label}.each")
+    split: Literal["lines", "json"] = "lines"
+    if "split" in settings:
+        if settings["split"] == "lines":
+            split = "lines"
+        elif settings["split"] == "json":
+            split = "json"
+        else:
+            raise PratError(f'{step_label}.split: expected "lines" or "json".')
+    as_parameter = _string(settings["as"], f"{step_label}.as") if "as" in settings else None
+    max_parallel = DEFAULT_MAX_PARALLEL
+    if "max_parallel" in settings:
+        value = settings["max_parallel"]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or not 1 <= value <= MAX_PARALLEL_LIMIT
+        ):
+            raise PratError(f"{step_label}.max_parallel: expected an integer from 1 to 64.")
+        max_parallel = value
+    if no_input and as_parameter is None:
+        raise PratError(
+            f'{step_label}.input: "none" needs as when each is set; the item is the input.'
+        )
+    return each, split, as_parameter, max_parallel
+
+
 def _workflow_step(
     value: object, label: str, index: int, previous: tuple[WorkflowStep, ...]
 ) -> WorkflowStep:
     settings = _table(value, f"{label}.steps[{index}]")
     name = _string(settings.get("name"), f"{label}.steps[{index}].name")
     step_label = f"{label} step {name!r}"
-    _known_keys(settings, frozenset({"name", "profile", "after", "input", "bind"}), step_label)
+    _known_keys(
+        settings,
+        frozenset(
+            {"name", "profile", "after", "input", "bind", "each", "split", "as", "max_parallel"}
+        ),
+        step_label,
+    )
     if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", name) is None:
         raise PratError(f"{step_label}: use letters, digits, underscores or hyphens in step names.")
     if any(step.name == name for step in previous):
@@ -554,12 +598,17 @@ def _workflow_step(
         _string(key, f"{step_label}.bind"): _string(source, f"{step_label}.bind.{key}")
         for key, source in bind_table.items()
     }
+    each, split, as_parameter, max_parallel = _each_settings(settings, step_label, no_input)
     return WorkflowStep(
         name=name,
         selector=selector,
         after=after,
         input="none" if no_input else "upstream",
         bind=MappingProxyType(bind),
+        each=each,
+        split=split,
+        as_parameter=as_parameter,
+        max_parallel=max_parallel,
     )
 
 
@@ -609,6 +658,28 @@ def step_prompt(config: Config, step: WorkflowStep) -> str | None:
     return None if template is None else template.prompt
 
 
+def _validate_each(
+    workflow: Workflow,
+    step: WorkflowStep,
+    label: str,
+    ancestors: frozenset[str],
+    parameters: tuple[str, ...],
+) -> None:
+    if step.each is not None:
+        if step.each not in ancestors:
+            raise PratError(f"{label}.each: {step.each!r} is not an ancestor of this step.")
+        source = next(item for item in workflow.steps if item.name == step.each)
+        if source.each is not None:
+            raise PratError(f"{label}.each: step {step.each!r} is itself an each step.")
+    if step.as_parameter is not None:
+        if step.as_parameter not in parameters:
+            raise PratError(
+                f"{label}.as: {step.selector!r} has no parameter {step.as_parameter!r}."
+            )
+        if step.as_parameter in step.bind:
+            raise PratError(f"{label}.as: {step.as_parameter!r} is also bound in bind.")
+
+
 def _validate_workflow_step(
     config: Config, workflow: Workflow, step: WorkflowStep, label: str
 ) -> None:
@@ -633,6 +704,7 @@ def _validate_workflow_step(
             raise PratError(
                 f"{label}.bind.{parameter}: {step.selector!r} has no parameter {parameter!r}."
             )
+    _validate_each(workflow, step, label, ancestors, parameters)
     if prompt is None and step.input == "none" and not step.bind:
         raise PratError(
             f'{label}: {step.selector!r} has no prompt and input is "none", '

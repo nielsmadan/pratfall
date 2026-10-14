@@ -16,7 +16,7 @@ from pratfall.config import (
     validate_capabilities,
 )
 from pratfall.errors import PratError
-from pratfall.models import Options, PromptTemplate
+from pratfall.models import Options, PromptTemplate, WorkflowStep
 
 
 def write_config(tmp_path: Path, contents: str) -> Path:
@@ -1034,6 +1034,58 @@ def test_workflow_default_after_is_the_previous_step(tmp_path: Path) -> None:
             '[workflows.w]\nsteps=[{name="x",profile="cx",input="none"}]\n',
             r"step 'x': 'cx' has no prompt and input is \"none\"",
         ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",split="xml"}]\n',
+            r"step 'y'\.split: expected \"lines\" or \"json\"",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",split="json"}]\n',
+            r"step 'y'\.split: only valid together with each",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",as="mode"}]\n',
+            r"step 'y'\.as: only valid together with each",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",max_parallel=2}]\n',
+            r"step 'y'\.max_parallel: only valid together with each",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel=0}]\n',
+            r"step 'y'\.max_parallel: expected an integer from 1 to 64",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel=65}]\n',
+            r"step 'y'\.max_parallel: expected an integer from 1 to 64",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel=true}]\n',
+            r"step 'y'\.max_parallel: expected an integer from 1 to 64",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel=2.0}]\n',
+            r"step 'y'\.max_parallel: expected an integer from 1 to 64",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",input="none"}]\n',
+            r"step 'y'\.input: \"none\" needs as when each is set",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="q"}]\n',
+            r"step 'y'\.each: 'q' is not an ancestor of this step",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",as="nope"}]\n',
+            r"step 'y'\.as: 'b' has no parameter 'nope'",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",as="mode",bind={mode="x"}}]\n',
+            r"step 'y'\.as: 'mode' is also bound in bind",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x"},{name="z",profile="b",each="y"}]\n',
+            r"step 'z'\.each: step 'y' is itself an each step",
+        ),
     ],
 )
 def test_workflow_validation_errors(tmp_path: Path, body: str, message: str) -> None:
@@ -1081,6 +1133,94 @@ def test_workflow_in_defaults_is_rejected(tmp_path: Path) -> None:
     path = write_config(tmp_path, "version=1\n[defaults]\nworkflows=1\n")
     with pytest.raises(PratError, match="unknown field 'workflows'"):
         load_config(path)
+
+
+def each_step(tmp_path: Path, profiles: str, steps: str) -> WorkflowStep:
+    path = write_config(
+        tmp_path, f"version=1\n{WORKFLOW_PROFILES}{profiles}[workflows.w]\nsteps={steps}\n"
+    )
+    return load_config(path).workflows["w"].steps[-1]
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        (
+            '[{name="x",profile="a"},{name="y",profile="a",after=["x"]},'
+            '{name="z",profile="b",after=["y"],each="x"}]'
+        ),
+        '[{name="x",profile="a"},{name="y",profile="a"},{name="z",profile="b",each="x"}]',
+    ],
+)
+def test_each_may_name_a_transitive_ancestor(tmp_path: Path, steps: str) -> None:
+    step = each_step(tmp_path, "", steps)
+    assert (step.each, step.split, step.as_parameter, step.max_parallel) == ("x", "lines", None, 4)
+
+
+def test_each_as_resolves_against_the_inherited_prompt(tmp_path: Path) -> None:
+    step = each_step(
+        tmp_path,
+        '[profiles.kid]\nextends="b"\n',
+        '[{name="x",profile="a"},{name="y",profile="kid",each="x",as="mode",'
+        'split="json",max_parallel=64}]',
+    )
+    assert (step.each, step.split, step.as_parameter, step.max_parallel) == (
+        "x",
+        "json",
+        "mode",
+        64,
+    )
+
+
+def test_each_with_as_accepts_input_none(tmp_path: Path) -> None:
+    step = each_step(
+        tmp_path,
+        "",
+        '[{name="x",profile="a"},{name="y",profile="b",each="x",as="mode",input="none"}]',
+    )
+    assert (step.input, step.as_parameter) == ("none", "mode")
+
+
+def test_each_and_bind_may_name_the_same_source(tmp_path: Path) -> None:
+    step = each_step(
+        tmp_path,
+        "",
+        '[{name="x",profile="a"},{name="y",profile="b",each="x",bind={mode="x"}}]',
+    )
+    assert (step.each, dict(step.bind)) == ("x", {"mode": "x"})
+
+
+def test_parse_time_each_errors_come_before_ancestor_errors(tmp_path: Path) -> None:
+    path = workflow_config(
+        tmp_path,
+        '[workflows.w]\nsteps=[{name="x",profile="a"},'
+        '{name="y",profile="b",each="q",as="nope",input="none",max_parallel=0}]\n',
+    )
+    with pytest.raises(
+        PratError, match=r"step 'y'\.max_parallel: expected an integer from 1 to 64"
+    ):
+        load_config(path)
+
+
+def test_local_workflow_keeps_each_settings_over_global(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "xdg"
+    (home / "pratfall").mkdir(parents=True)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(home))
+    (home / "pratfall" / "config.toml").write_text(
+        f'version=1\n{WORKFLOW_PROFILES}[workflows.w]\nsteps=[{{name="g",profile="a"}}]\n',
+        encoding="utf-8",
+    )
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / ".pratfile").write_text(
+        'version=1\n[workflows.w]\nsteps=[{name="x",profile="a"},'
+        '{name="y",profile="b",each="x",split="json",as="mode",max_parallel=7}]\n',
+        encoding="utf-8",
+    )
+    step = load_config(cwd=work).workflows["w"].steps[-1]
+    assert (step.each, step.split, step.as_parameter, step.max_parallel) == ("x", "json", "mode", 7)
 
 
 def test_local_workflow_replaces_global_and_checks_global_profiles(
