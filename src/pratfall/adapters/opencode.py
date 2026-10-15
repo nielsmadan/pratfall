@@ -199,11 +199,12 @@ def _text(consumer: _Consumer, event: dict[str, object]) -> None:
         return
     encoded = retained_utf8(text)
     _record(consumer, part_id)
-    if part_id not in state.texts:
-        if state.text_order:
-            consumer.retain.payload(f"join:{part_id}", 1)
-        state.text_order.append(part_id)
+    new_part = part_id not in state.texts
+    if new_part and state.text_order:
+        consumer.retain.payload(f"join:{part_id}", 1)
     consumer.retain.payload(f"text:{part_id}", len(encoded))
+    if new_part:
+        state.text_order.append(part_id)
     state.texts[part_id] = encoded
 
 

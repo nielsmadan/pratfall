@@ -2,6 +2,7 @@ import pytest
 
 from adapter_helpers import codex_stream, opencode_usage, resolved
 from pratfall.adapters import opencode
+from pratfall.consumer import ConsumerFailure, ConsumerLimits
 from pratfall.models import Options, ResultError, Usage
 
 
@@ -341,6 +342,31 @@ def test_opencode_error_preserves_completed_text() -> None:
     )
     assert decoded.output == "partial"
     assert decoded.error == ResultError("provider_error", "unavailable")
+
+
+def test_opencode_text_budget_failure_keeps_prior_parts() -> None:
+    consumer = opencode.consumer(ConsumerLimits(state_bytes=64))
+    consumer.feed(
+        codex_stream(
+            {
+                "type": "text",
+                "part": {"id": "one", "type": "text", "text": "partial", "time": {"end": 1}},
+            }
+        ).encode()
+    )
+    with pytest.raises(ConsumerFailure):
+        consumer.feed(
+            codex_stream(
+                {
+                    "type": "text",
+                    "part": {"id": "two", "type": "text", "text": "x" * 100, "time": {"end": 2}},
+                }
+            ).encode()
+        )
+    with pytest.raises(ConsumerFailure) as failure:
+        consumer.finish()
+    assert failure.value.error.code == "stdout_limit_exceeded"
+    assert failure.value.decoded is not None and failure.value.decoded.output == "partial"
 
 
 def test_opencode_accepts_authentic_message_less_output_length_error() -> None:
