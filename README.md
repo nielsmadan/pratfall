@@ -17,7 +17,9 @@ One-shot coding agents for scripts and pipes.
 Every agent CLI has a headless mode with its own flags, its own way of taking a prompt and its
 own idea of what belongs on stdout. `prat` puts 24 of them behind one set of flags and one
 output contract: the answer on stdout, diagnostics on stderr, and an optional JSON result with
-status and usage. So agents compose like any other Unix tool.
+status and usage. So agents compose like any other Unix tool. Named workflows chain those runs
+into sequences, parallel fan-outs and merges, including one run per item of an earlier step's
+output.
 
 <p align="center">
   <img src="assets/demo.gif" alt="A whodunit in a terminal: Claude commits a bug and hides a confession, Codex finds the culprit through git, Pi sentences it, and a fresh Claude reads the confession, shreds it, and pleads." width="1000">
@@ -161,31 +163,6 @@ See [templates](docs/user/running.md#apply-a-template),
 [editor prompts](docs/user/running.md#edit-the-prompt),
 [code extraction](docs/user/running.md#extract-code) and [schema output](docs/user/running.md#request-schema-output).
 
-## Workflows
-
-A workflow is a named set of profile steps. Steps run in order, or in parallel when they do not
-depend on each other, and an `after` list sends their outputs downstream:
-
-```toml
-[workflows.review-all]
-steps = [
-  { name = "scan", profile = "simple" },
-  { name = "security", profile = "security-check", after = ["scan"] },
-  { name = "style", profile = "style-check", after = ["scan"] },
-  { name = "report", profile = "write-report", after = ["security", "style"] },
-]
-```
-
-```sh
-git diff | prat review-all
-```
-
-Each `profile` names a profile from your config. `security` and `style` run in parallel after
-`scan`, and `report` receives both outputs. Run `prat workflows` to list them. See
-[workflows](docs/user/workflows.md) for parameters, `bind`, failure behavior and JSON output. A
-step can also run once per line or JSON element of an earlier step's output with
-[`each`](docs/user/workflows.md#fan-out-over-items).
-
 ## Profiles
 
 Save an agent and its settings under a name, then use that name like an alias:
@@ -229,6 +206,32 @@ model   = "claude-opus-5"
 `prat profiles` shows resolved profiles and `prat config validate` checks them. See
 [profiles and configuration](docs/user/profiles.md) for defaults, command wrappers and merging
 rules.
+
+## Workflows
+
+A workflow is a named set of profile steps. Steps run in order, or in parallel when they do not
+depend on each other, and an `after` list sends their outputs downstream:
+
+```toml
+[workflows.review-all]
+steps = [
+  { name = "scan", profile = "simple" },
+  { name = "security", profile = "security-check", after = ["scan"] },
+  { name = "style", profile = "style-check", after = ["scan"] },
+  { name = "report", profile = "write-report", after = ["security", "style"] },
+]
+```
+
+```sh
+git diff | prat review-all
+```
+
+Each `profile` names a profile from your config. `security` and `style` run in parallel after
+`scan`, and `report` receives both outputs. Run `prat workflows` to list them. See
+[workflows](docs/user/workflows.md) for parameters, `bind`, failure behavior and JSON output. A
+step can also run once per line or JSON element of an earlier step's output with
+[`each`](docs/user/workflows.md#fan-out-over-items); `max_parallel` sets how many items run at
+once, and the rest wait their turn.
 
 ## More
 
