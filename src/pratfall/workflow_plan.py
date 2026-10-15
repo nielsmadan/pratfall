@@ -6,7 +6,7 @@ from collections import Counter
 from collections.abc import Collection, Iterable, Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, fields, replace
-from typing import Any, assert_never
+from typing import Any, NamedTuple, assert_never
 
 from pratfall.codes import (
     INTERNAL_ERROR,
@@ -20,7 +20,7 @@ from pratfall.codes import (
 from pratfall.config import step_prompt
 from pratfall.errors import PratError
 from pratfall.fences import extract_code
-from pratfall.limits import WORKFLOW_EACH_ITEMS, WORKFLOW_RESULT_BYTES
+from pratfall.limits import WORKFLOW_RESULT_BYTES
 from pratfall.models import Config, JsonValue, ResultError, Usage, Workflow, WorkflowStep
 from pratfall.prompt_input import PROMPT_LIMIT
 from pratfall.prompt_templates import template_parameters
@@ -184,7 +184,12 @@ def input_problem(
     return None
 
 
-def each_items(step: WorkflowStep, source: StepResult) -> tuple[str, ...]:
+class EachItems(NamedTuple):
+    items: tuple[str, ...]
+    dropped: int
+
+
+def each_items(step: WorkflowStep, source: StepResult) -> EachItems:
     match step.split:
         case "lines":
             items = _line_items(source.output)
@@ -192,13 +197,19 @@ def each_items(step: WorkflowStep, source: StepResult) -> tuple[str, ...]:
             items = _json_items(step.each, source)
         case _:
             assert_never(step.split)
-    if len(items) > WORKFLOW_EACH_ITEMS:
-        message = (
-            f"output of step '{step.each}' has {len(items)} items, "
-            f"more than the {WORKFLOW_EACH_ITEMS} item limit."
-        )
-        raise PratError(message, code=INVALID_ARGUMENTS)
-    return items
+    if len(items) <= step.max_items:
+        return EachItems(items, 0)
+    match step.overflow:
+        case "truncate":
+            return EachItems(items[: step.max_items], len(items) - step.max_items)
+        case "error":
+            message = (
+                f"output of step '{step.each}' has {len(items)} items, "
+                f"more than the {step.max_items} item limit."
+            )
+            raise PratError(message, code=INVALID_ARGUMENTS)
+        case _:
+            assert_never(step.overflow)
 
 
 def item_labels(items: tuple[str, ...]) -> tuple[str, ...]:
@@ -214,6 +225,7 @@ def each_result(
     items: tuple[str, ...],
     instances: tuple[StepOutcome, ...],
     complete: bool,
+    dropped: int,
 ) -> StepResult:
     labels = item_labels(items)
     indexed = tuple(
@@ -249,7 +261,7 @@ def each_result(
     entries = [
         _item_entry(item, labels[index], finished.get(index)) for index, item in enumerate(items)
     ]
-    return _with_items(summary, entries)
+    return _with_items(summary, entries, dropped)
 
 
 def ready_work(
@@ -282,7 +294,7 @@ def workflow_result(
     outcomes: tuple[StepOutcome, ...],
     duration_ms: int,
     interrupted_by: int | None,
-    items: Mapping[str, tuple[str, ...]],
+    items: Mapping[str, EachItems],
 ) -> dict[str, object]:
     direct = {outcome.step: outcome.result for outcome in outcomes if outcome.item is None}
     results = {
@@ -430,7 +442,7 @@ def _item_entry(item: str, label: str, result: StepResult | None) -> dict[str, o
     return {"item": item, "label": label, **result.payload}
 
 
-def _with_items(result: StepResult, entries: list[dict[str, object]]) -> StepResult:
+def _with_items(result: StepResult, entries: list[dict[str, object]], dropped: int) -> StepResult:
     error = result.error
     payload = {
         "status": result.status,
@@ -441,6 +453,7 @@ def _with_items(result: StepResult, entries: list[dict[str, object]]) -> StepRes
         "cost_usd": result.cost_usd,
         "error": None if error is None else {"code": error.code, "message": error.message},
         "items": entries,
+        "dropped": dropped,
     }
     return replace(result, payload=payload)
 
@@ -464,17 +477,18 @@ def _step_outcome(
     step: WorkflowStep,
     direct: Mapping[str, StepResult],
     outcomes: tuple[StepOutcome, ...],
-    items: Mapping[str, tuple[str, ...]],
+    items: Mapping[str, EachItems],
 ) -> StepResult | None:
     if step.each is None:
         return direct.get(step.name)
     if step.name in direct:
-        return _with_items(direct[step.name], [])
+        return _with_items(direct[step.name], [], 0)
     if step.name not in items:
         return None
     instances = _instances(step.name, outcomes)
-    complete = len(instances) == len(items[step.name])
-    return each_result(step, items[step.name], instances, complete)
+    listed = items[step.name]
+    complete = len(instances) == len(listed.items)
+    return each_result(step, listed.items, instances, complete, listed.dropped)
 
 
 def _instances(name: str, outcomes: tuple[StepOutcome, ...]) -> tuple[StepOutcome, ...]:

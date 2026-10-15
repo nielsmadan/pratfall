@@ -32,6 +32,7 @@ from pratfall.limits import TERMINATE_GRACE, WORKFLOW_RESULT_BYTES
 from pratfall.models import Workflow, WorkflowStep
 from pratfall.nonblocking import write_nonblocking
 from pratfall.workflow_plan import (
+    EachItems,
     StepOutcome,
     StepResult,
     each_items,
@@ -68,7 +69,7 @@ class PreparedWorkflow:
 class Supervised(NamedTuple):
     outcomes: tuple[StepOutcome, ...]
     interrupted_by: int | None
-    items: Mapping[str, tuple[str, ...]]
+    items: Mapping[str, EachItems]
 
 
 type _Work = tuple[str, int | None]
@@ -123,6 +124,7 @@ class _Supervision:
     outcomes: list[StepOutcome] = field(default_factory=list)
     outputs: dict[str, str] = field(default_factory=dict)
     items: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    dropped: dict[str, int] = field(default_factory=dict)
     labels: dict[str, tuple[str, ...]] = field(default_factory=dict)
     running: dict[_Work, _Child] = field(default_factory=dict)
     started: set[str] = field(default_factory=set)
@@ -145,7 +147,7 @@ def supervise(prepared: PreparedWorkflow, launcher: tuple[str, ...], cwd: Path) 
                     _launch_ready(state)
             finally:
                 _teardown(state, list(state.running.values()))
-    return Supervised(tuple(state.outcomes), _first_signal(state), dict(state.items))
+    return Supervised(tuple(state.outcomes), _first_signal(state), _listed(state))
 
 
 def _handled_signals(hangup: object) -> tuple[signal.Signals, ...]:
@@ -232,6 +234,10 @@ def _start(state: _Supervision, step: WorkflowStep, item: int | None) -> None:
     _forward(state, child)
 
 
+def _listed(state: _Supervision) -> dict[str, EachItems]:
+    return {name: EachItems(items, state.dropped[name]) for name, items in state.items.items()}
+
+
 def _spawn(
     launcher: tuple[str, ...], spec: Mapping[str, object], cwd: Path
 ) -> subprocess.Popen[bytes]:
@@ -267,14 +273,21 @@ def _prepare_items(state: _Supervision, step: WorkflowStep, source: str) -> None
         if outcome.step == source and outcome.item is None
     )
     try:
-        items = each_items(step, result)
+        listed = each_items(step, result)
     except PratError as error:
         failure = synthesized_result("error", error.code, str(error), error.exit_code)
         _record(state, step, None, failure)
         return
-    state.items[step.name] = items
-    state.labels[step.name] = item_labels(items)
-    if not items:
+    state.items[step.name] = listed.items
+    state.dropped[step.name] = listed.dropped
+    state.labels[step.name] = item_labels(listed.items)
+    if listed.dropped:
+        kept = len(listed.items)
+        state.relay.write(
+            f"prat: workflow '{state.prepared.name}' step '{step.name}': "
+            f"running the first {kept} of {kept + listed.dropped} items.\n".encode()
+        )
+    if not listed.items:
         state.outputs[step.name] = ""
 
 
@@ -290,7 +303,11 @@ def _record(state: _Supervision, step: WorkflowStep, item: int | None, result: S
     if result.status != "success":
         state.failed = True
     elif len(instances) == len(items):
-        _publish(state, step.name, each_result(step, items, tuple(instances), True))
+        _publish(
+            state,
+            step.name,
+            each_result(step, items, tuple(instances), True, state.dropped[step.name]),
+        )
 
 
 def _publish(state: _Supervision, name: str, result: StepResult) -> None:

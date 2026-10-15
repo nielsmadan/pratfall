@@ -11,7 +11,15 @@ from types import MappingProxyType
 from typing import ClassVar, Literal, Protocol, TextIO
 
 from pratfall.errors import PratError
-from pratfall.models import Activity, Config, Invocation, ResolvedProfile, ResultError
+from pratfall.limits import WORKFLOW_EACH_ITEMS
+from pratfall.models import (
+    Activity,
+    Config,
+    Invocation,
+    ResolvedProfile,
+    ResultError,
+    WorkflowStep,
+)
 from pratfall.nonblocking import write_nonblocking
 
 ACTIVITY_LABELS: Mapping[Activity, str] = MappingProxyType(
@@ -38,6 +46,11 @@ def _emit(payload: dict[str, object], lines: list[str], *, json_mode: bool) -> N
 # process lifetime, so a broken-stream recovery is not garbage-collected and
 # closed under the test harness (pytest hooks ResourceWarning on the GC close).
 _DEVNULL_STREAMS: dict[str, TextIO] = {}
+
+
+def _limit_text(step: WorkflowStep) -> str:
+    text = "" if step.max_items == WORKFLOW_EACH_ITEMS else f" max_items={step.max_items}"
+    return text + (" overflow=truncate" if step.overflow == "truncate" else "")
 
 
 class _Diagnostics(Protocol):

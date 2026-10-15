@@ -526,6 +526,8 @@ def test_dry_run_json_matches_contract(tmp_path: Path, capsys: pytest.CaptureFix
                 "split": None,
                 "as": None,
                 "max_parallel": None,
+                "max_items": None,
+                "overflow": None,
                 "parameters": {"folder": "src"},
             },
             {
@@ -538,6 +540,8 @@ def test_dry_run_json_matches_contract(tmp_path: Path, capsys: pytest.CaptureFix
                 "split": None,
                 "as": None,
                 "max_parallel": None,
+                "max_items": None,
+                "overflow": None,
                 "parameters": {},
             },
             {
@@ -550,6 +554,8 @@ def test_dry_run_json_matches_contract(tmp_path: Path, capsys: pytest.CaptureFix
                 "split": None,
                 "as": None,
                 "max_parallel": None,
+                "max_items": None,
+                "overflow": None,
                 "parameters": {},
             },
         ],
@@ -1290,6 +1296,7 @@ EACH_ENTRY_KEYS = [
     "cost_usd",
     "error",
     "items",
+    "dropped",
 ]
 
 
@@ -1503,6 +1510,7 @@ def test_each_with_no_items_succeeds_and_downstream_runs(
         "cost_usd": None,
         "error": None,
         "items": [],
+        "dropped": 0,
     }
     assert (steps[2]["status"], steps[2]["output"]) == ("success", "Tail ")
     assert result["output"] == "Tail "
@@ -1698,9 +1706,44 @@ def test_dry_run_json_shows_each_keys(tmp_path: Path, capsys: pytest.CaptureFixt
         "split",
         "as",
         "max_parallel",
+        "max_items",
+        "overflow",
         "parameters",
     ]
     assert steps[1]["parameters"] == {"folder": "src"}
+    assert [(step["max_items"], step["overflow"]) for step in steps] == [
+        (None, None),
+        (4096, "error"),
+        (4096, "error"),
+    ]
+
+
+def test_dry_run_shows_item_limits_in_text_and_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = workflow_config(
+        tmp_path,
+        {"list": "List", "work": "W $input"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", max_parallel="all", max_items=7,'
+        ' overflow="truncate"},\n'
+        '  {name="e", profile="work", after=["l"], each="l", max_items=9},\n]\n',
+    )
+    assert main(["fan", "--dry-run", "--config", str(config)]) == 0
+    assert capsys.readouterr().out == (
+        "l: profile=list after=none input=upstream\n"
+        "w: profile=work after=l input=upstream each=l split=lines max_parallel=64"
+        " max_items=7 overflow=truncate\n"
+        "e: profile=work after=l input=upstream each=l split=lines max_parallel=4 max_items=9\n"
+    )
+    assert main(["fan", "--dry-run", "--json", "--config", str(config)]) == 0
+    steps = steps_of(json_result(capsys))
+    assert [(step["max_parallel"], step["max_items"], step["overflow"]) for step in steps] == [
+        (None, None, None),
+        (64, 7, "truncate"),
+        (4, 9, "error"),
+    ]
 
 
 def test_each_items_error_fails_the_step_before_any_instance_launches(
@@ -1728,7 +1771,71 @@ def test_each_items_error_fails_the_step_before_any_instance_launches(
         "cost_usd": None,
         "error": {"code": "invalid_arguments", "message": message},
         "items": [],
+        "dropped": 0,
     }
+    assert not log.exists()
+
+
+def test_each_overflow_truncate_runs_the_first_items_and_reports_the_rest_dropped(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    log = tmp_path / "calls.log"
+    config = workflow_config(
+        tmp_path,
+        {"list": "a\n\nb\nc\nd\ne\n", "work": f"@log {log}\nW $name"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", as="name", max_parallel=1, max_items=2,'
+        ' overflow="truncate"},\n]\n',
+    )
+    assert main(["fan", "--json", "--config", str(config)]) == 0
+    captured = capfd.readouterr()
+    line = "prat: workflow 'fan' step 'w': running the first 2 of 5 items.\n"
+    assert captured.err.count(line) == 1
+    step = json.loads(captured.out)["steps"][1]
+    assert [(item["item"], item["status"]) for item in step["items"]] == [
+        ("a", "success"),
+        ("b", "success"),
+    ]
+    assert step["dropped"] == 3
+    assert list(step)[-2:] == ["items", "dropped"]
+    assert log.read_text(encoding="utf-8").splitlines() == ["called", "called"]
+
+
+def test_each_overflow_truncate_at_exactly_max_items_writes_no_notice(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    config = workflow_config(
+        tmp_path,
+        {"list": "a\nb\n", "work": "W $name"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", as="name", max_items=2,'
+        ' overflow="truncate"},\n]\n',
+    )
+    assert main(["fan", "--json", "--config", str(config)]) == 0
+    captured = capfd.readouterr()
+    assert "running the first" not in captured.err
+    assert json.loads(captured.out)["steps"][1]["dropped"] == 0
+
+
+def test_each_overflow_error_fails_the_step_before_any_instance_launches(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log = tmp_path / "calls.log"
+    config = workflow_config(
+        tmp_path,
+        {"list": "a\nb\nc", "work": f"@log {log}\nW $name"},
+        "[workflows.fan]\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", as="name", max_items=2},\n]\n',
+    )
+    assert main(["fan", "--json", "--config", str(config)]) == 2
+    result = json_result(capsys)
+    message = "output of step 'l' has 3 items, more than the 2 item limit."
+    assert result["error"] == {"code": "invalid_arguments", "message": f"step 'w': {message}"}
+    step = steps_of(result)[1]
+    assert (step["items"], step["dropped"]) == ([], 0)
     assert not log.exists()
 
 

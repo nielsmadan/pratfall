@@ -34,7 +34,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "nonblocking": frozenset(),
     "fences": frozenset(),
     "errors": frozenset({"codes"}),
-    "models": frozenset({"codes"}),
+    "models": frozenset({"codes", "limits"}),
     "option_paths": frozenset({"errors", "models"}),
     "catalog": frozenset({"errors", "models"}),
     "consumer": frozenset({"limits", "models"}),
@@ -46,7 +46,15 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "prompt_templates": frozenset({"errors", "prompt_input"}),
     "adapters": frozenset({"consumer", "errors", "limits", "models", "schema"}),
     "config": frozenset(
-        {"catalog", "errors", "models", "prompt_templates", "option_paths", "instructions"}
+        {
+            "catalog",
+            "errors",
+            "instructions",
+            "limits",
+            "models",
+            "option_paths",
+            "prompt_templates",
+        }
     ),
     "workflow_plan": frozenset(
         {

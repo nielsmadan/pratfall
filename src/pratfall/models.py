@@ -5,6 +5,7 @@ from types import MappingProxyType
 from typing import Literal
 
 from pratfall.codes import Code
+from pratfall.limits import DEFAULT_MAX_PARALLEL, WORKFLOW_EACH_ITEMS
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 
@@ -48,8 +49,6 @@ class AgentSpec:
 
 
 MAX_TURNS = 4_294_967_295
-DEFAULT_MAX_PARALLEL = 4
-MAX_PARALLEL_LIMIT = 64
 
 
 @dataclass(frozen=True)
@@ -119,6 +118,8 @@ class WorkflowStep:
     split: Literal["lines", "json"] = "lines"
     as_parameter: str | None = None
     max_parallel: int = DEFAULT_MAX_PARALLEL
+    max_items: int = WORKFLOW_EACH_ITEMS
+    overflow: Literal["error", "truncate"] = "error"
 
 
 @dataclass(frozen=True)

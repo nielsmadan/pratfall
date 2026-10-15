@@ -1052,19 +1052,63 @@ def test_workflow_default_after_is_the_previous_step(tmp_path: Path) -> None:
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel=0}]\n',
-            r"step 'y'\.max_parallel: expected an integer from 1 to 64",
+            r"step 'y'\.max_parallel: expected an integer from 1 to 64 or .all.",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel=65}]\n',
-            r"step 'y'\.max_parallel: expected an integer from 1 to 64",
+            r"step 'y'\.max_parallel: expected an integer from 1 to 64 or .all.",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel=true}]\n',
-            r"step 'y'\.max_parallel: expected an integer from 1 to 64",
+            r"step 'y'\.max_parallel: expected an integer from 1 to 64 or .all.",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel=2.0}]\n',
-            r"step 'y'\.max_parallel: expected an integer from 1 to 64",
+            r"step 'y'\.max_parallel: expected an integer from 1 to 64 or .all.",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",max_items=2}]\n',
+            r"step 'y'\.max_items: only valid together with each",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",overflow="truncate"}]\n',
+            r"step 'y'\.overflow: only valid together with each",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_items=0}]\n',
+            r"step 'y'\.max_items: expected an integer from 1 to 4096\.",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_items=4097}]\n',
+            r"step 'y'\.max_items: expected an integer from 1 to 4096\.",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_items=true}]\n',
+            r"step 'y'\.max_items: expected an integer from 1 to 4096\.",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_items=2.0}]\n',
+            r"step 'y'\.max_items: expected an integer from 1 to 4096\.",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_items="all"}]\n',
+            r"step 'y'\.max_items: expected an integer from 1 to 4096\.",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",overflow="drop"}]\n',
+            r"step 'y'\.overflow: expected \"error\" or \"truncate\"\.",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",overflow=true}]\n',
+            r"step 'y'\.overflow: expected \"error\" or \"truncate\"\.",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",overflow=1}]\n',
+            r"step 'y'\.overflow: expected \"error\" or \"truncate\"\.",
+        ),
+        (
+            '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel="ALL"}]\n',
+            r"step 'y'\.max_parallel: expected an integer from 1 to 64 or .all.",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",input="none"}]\n',
@@ -1172,6 +1216,22 @@ def test_each_as_resolves_against_the_inherited_prompt(tmp_path: Path) -> None:
     )
 
 
+def test_each_accepts_all_and_the_item_limit_settings(tmp_path: Path) -> None:
+    step = each_step(
+        tmp_path,
+        "",
+        '[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel="all",'
+        'max_items=4096,overflow="truncate"}]',
+    )
+    assert (step.max_parallel, step.max_items, step.overflow) == (64, 4096, "truncate")
+    other = each_step(
+        tmp_path,
+        "",
+        '[{name="x",profile="a"},{name="y",profile="b",each="x",max_items=1}]',
+    )
+    assert (other.max_parallel, other.max_items, other.overflow) == (4, 1, "error")
+
+
 def test_each_with_as_accepts_input_none(tmp_path: Path) -> None:
     step = each_step(
         tmp_path,
@@ -1197,7 +1257,7 @@ def test_parse_time_each_errors_come_before_ancestor_errors(tmp_path: Path) -> N
         '{name="y",profile="b",each="q",as="nope",input="none",max_parallel=0}]\n',
     )
     with pytest.raises(
-        PratError, match=r"step 'y'\.max_parallel: expected an integer from 1 to 64"
+        PratError, match=r"step 'y'\.max_parallel: expected an integer from 1 to 64 or .all."
     ):
         load_config(path)
 

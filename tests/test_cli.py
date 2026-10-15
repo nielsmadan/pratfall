@@ -1147,7 +1147,14 @@ def test_profiles_json_shows_inherited_prompt(
     )
 
 
-NO_EACH = {"each": None, "split": None, "as": None, "max_parallel": None}
+NO_EACH = {
+    "each": None,
+    "split": None,
+    "as": None,
+    "max_parallel": None,
+    "max_items": None,
+    "overflow": None,
+}
 
 FAN_OUT_CONFIG = (
     "version=1\n"
@@ -1256,8 +1263,41 @@ def test_workflows_listing_shows_each_settings(
     steps = json.loads(capsys.readouterr().out)["workflows"][0]["steps"]
     assert [{key: step[key] for key in NO_EACH} for step in steps] == [
         NO_EACH,
-        {"each": "list", "split": "lines", "as": "file", "max_parallel": 4},
-        {"each": "list", "split": "json", "as": "file", "max_parallel": 2},
+        {**NO_EACH, "each": "list", "split": "lines", "as": "file", "max_parallel": 4}
+        | {"max_items": 4096, "overflow": "error"},
+        {**NO_EACH, "each": "list", "split": "json", "as": "file", "max_parallel": 2}
+        | {"max_items": 4096, "overflow": "error"},
+    ]
+
+
+def test_workflows_listing_shows_item_limits_only_when_set(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / ".pratfile"
+    config.write_text(
+        "version=1\n"
+        '[profiles.list]\nagent="codex"\nprompt="List"\n'
+        '[profiles.fix]\nagent="codex"\nprompt="Fix $file"\n'
+        '[workflows.w]\nsteps=[{name="list",profile="list"},'
+        '{name="a",profile="fix",each="list",as="file",max_items=10},'
+        '{name="b",profile="fix",after=["list"],each="list",as="file",overflow="truncate"},'
+        '{name="c",profile="fix",after=["list"],each="list",as="file",max_parallel="all",'
+        'max_items=4096,overflow="error"}]\n',
+        encoding="utf-8",
+    )
+    assert main(["workflows"]) == 0
+    assert capsys.readouterr().out == (
+        "w: list=list; a=fix each=list as=file max_items=10; "
+        "b=fix after=list each=list as=file overflow=truncate; "
+        f"c=fix after=list each=list as=file max_parallel=64 source={config}\n"
+    )
+    assert main(["workflows", "--json"]) == 0
+    steps = json.loads(capsys.readouterr().out)["workflows"][0]["steps"]
+    assert [(step["max_items"], step["overflow"]) for step in steps] == [
+        (None, None),
+        (10, "error"),
+        (4096, "truncate"),
+        (4096, "error"),
     ]
 
 

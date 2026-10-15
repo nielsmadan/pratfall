@@ -20,6 +20,7 @@ from pratfall.cli.presentation import (
     _emit_result,
     _guard,
     _internal_message,
+    _limit_text,
     _presentation_error,
     _preview,
     _stderr_is_tty,
@@ -33,9 +34,8 @@ from pratfall.config import config_path, init_config, load_config, option_origin
 from pratfall.consumer import ByteConsumer, CapturingConsumer
 from pratfall.errors import PratError
 from pratfall.instructions import read_instructions
-from pratfall.limits import WORKFLOW_SPEC_BYTES
+from pratfall.limits import DEFAULT_MAX_PARALLEL, WORKFLOW_SPEC_BYTES
 from pratfall.models import (
-    DEFAULT_MAX_PARALLEL,
     Config,
     ConsumedCapture,
     DecodedOutput,
@@ -216,6 +216,8 @@ def _workflows(config: Config, json_mode: bool) -> None:
                         "split": None if step.each is None else step.split,
                         "as": step.as_parameter,
                         "max_parallel": None if step.each is None else step.max_parallel,
+                        "max_items": None if step.each is None else step.max_items,
+                        "overflow": None if step.each is None else step.overflow,
                     }
                     for step in workflow.steps
                 ],
@@ -248,6 +250,7 @@ def _workflow_step_text(workflow: Workflow, index: int) -> str:
             if step.max_parallel == DEFAULT_MAX_PARALLEL
             else f" max_parallel={step.max_parallel}"
         )
+        text += _limit_text(step)
     return text
 
 

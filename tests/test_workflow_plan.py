@@ -1,4 +1,5 @@
 from collections.abc import Collection, Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Literal
 
@@ -10,6 +11,7 @@ from pratfall.limits import STDOUT_BYTES, WORKFLOW_EACH_ITEMS, WORKFLOW_RESULT_B
 from pratfall.models import ResultError, Workflow, WorkflowStep
 from pratfall.prompt_input import PROMPT_LIMIT
 from pratfall.workflow_plan import (
+    EachItems,
     StepOutcome,
     StepResult,
     each_items,
@@ -464,21 +466,21 @@ def items_error(step: WorkflowStep, result: StepResult) -> tuple[str, str]:
 
 def test_lines_drop_one_trailing_newline_whitespace_and_blank_lines() -> None:
     result = source("  a.py \n\nb.py\r\n \n\tc.py\n\n")
-    assert each_items(fan("fix", "list"), result) == ("a.py", "b.py", "c.py")
+    assert each_items(fan("fix", "list"), result).items == ("a.py", "b.py", "c.py")
 
 
 def test_json_items_come_from_a_structured_output_list() -> None:
     result = source("not json", ["x.py", 1])
-    assert each_items(fan("fix", "list", split="json"), result) == ("x.py", "1")
+    assert each_items(fan("fix", "list", split="json"), result).items == ("x.py", "1")
 
 
 def test_json_items_parse_the_output_when_structured_output_is_not_a_list() -> None:
     result = source('["a", "b"]\n', {"files": ["x"]})
-    assert each_items(fan("fix", "list", split="json"), result) == ("a", "b")
+    assert each_items(fan("fix", "list", split="json"), result).items == ("a", "b")
 
 
 def test_empty_structured_output_list_wins_over_an_array_in_the_output() -> None:
-    assert each_items(fan("fix", "list", split="json"), source('["a", "b"]', [])) == ()
+    assert each_items(fan("fix", "list", split="json"), source('["a", "b"]', [])).items == ()
 
 
 @pytest.mark.parametrize(
@@ -492,17 +494,17 @@ def test_structured_items_reject_nonfinite_numbers(structured: object) -> None:
 
 
 def test_json_items_parse_plain_output_text() -> None:
-    assert each_items(fan("fix", "list", split="json"), source('["a", "b"]\n')) == ("a", "b")
+    assert each_items(fan("fix", "list", split="json"), source('["a", "b"]\n')).items == ("a", "b")
 
 
 def test_json_items_fall_back_to_the_first_fenced_block() -> None:
     output = 'Files:\n```json\n["a", "b"]\n```\n```json\n["c"]\n```\n'
-    assert each_items(fan("fix", "list", split="json"), source(output)) == ("a", "b")
+    assert each_items(fan("fix", "list", split="json"), source(output)).items == ("a", "b")
 
 
 def test_json_elements_become_item_text_and_null_or_blank_is_dropped() -> None:
     output = '["s", 1, 2.5, true, false, {"k": "\u00e9", "n": [1]}, [1, 2], null, "  ", "", " t "]'
-    assert each_items(fan("fix", "list", split="json"), source(output)) == (
+    assert each_items(fan("fix", "list", split="json"), source(output)).items == (
         "s",
         "1",
         "2.5",
@@ -556,7 +558,7 @@ def test_json_output_that_is_not_an_array_is_an_items_error(
 def test_item_limit_counts_items_after_dropping_null_and_blank() -> None:
     at_limit = ["x"] * WORKFLOW_EACH_ITEMS + [None, ""]
     result = source("[]", at_limit)
-    assert len(each_items(fan("fix", "list", split="json"), result)) == WORKFLOW_EACH_ITEMS
+    assert len(each_items(fan("fix", "list", split="json"), result).items) == WORKFLOW_EACH_ITEMS
     over = source("\n".join(["x"] * (WORKFLOW_EACH_ITEMS + 1)))
     assert items_error(fan("fix", "list"), over) == (
         "invalid_arguments",
@@ -705,7 +707,7 @@ def test_each_step_whose_items_failed_is_not_ready_again() -> None:
 def test_empty_item_list_launches_nothing_and_succeeds_with_empty_output() -> None:
     workflow = graph(node("list"), fan("fix", "list"), node("merge", "fix"))
     assert ready(workflow, LISTED, LISTED, items={"fix": ()}) == ()
-    result = each_result(workflow.steps[1], (), (), True)
+    result = each_result(workflow.steps[1], (), (), True, 0)
     assert (result.status, result.exit_code, result.output, result.error) == (
         "success",
         0,
@@ -744,7 +746,7 @@ def test_each_result_joins_outputs_in_item_order_with_labelled_headings() -> Non
         instance(0, timed("X\n", 10, usage=tokens(1), cost_usd=0.5)),
         instance(1, timed(" \n", 5)),
     )
-    result = each_result(fan("fix", "list"), items, instances, True)
+    result = each_result(fan("fix", "list"), items, instances, True, 0)
     assert result.payload == {
         "status": "success",
         "exit_code": 0,
@@ -764,6 +766,7 @@ def test_each_result_joins_outputs_in_item_order_with_labelled_headings() -> Non
             {"item": "y" * 81, "label": "#2", **instances[2].result.payload},
             {"item": "z.py", "label": "z.py", **instances[0].result.payload},
         ],
+        "dropped": 0,
     }
     assert (result.status, result.output, result.duration_ms, result.cost_usd) == (
         "success",
@@ -774,7 +777,7 @@ def test_each_result_joins_outputs_in_item_order_with_labelled_headings() -> Non
 
 
 def test_each_result_with_one_item_is_its_bare_output() -> None:
-    result = each_result(fan("fix", "list"), ("x.py",), (instance(0, child("X\n")),), True)
+    result = each_result(fan("fix", "list"), ("x.py",), (instance(0, child("X\n")),), True, 0)
     assert result.output == "X"
 
 
@@ -786,7 +789,7 @@ def test_each_result_reports_the_first_failed_instance() -> None:
         status="error", exit_code=1, error={"code": "native_exit", "message": "Codex exited."}
     )
     instances = (instance(0, child("A")), instance(3, broken), instance(1, timeout))
-    result = each_result(fan("fix", "list"), ("a", "b", "c", "d"), instances, False)
+    result = each_result(fan("fix", "list"), ("a", "b", "c", "d"), instances, False, 0)
     assert (result.status, result.exit_code, result.output) == ("error", 1, "")
     assert result.error == ResultError("native_exit", "item 'd': Codex exited.")
     assert result.payload["error"] == {"code": "native_exit", "message": "item 'd': Codex exited."}
@@ -800,7 +803,7 @@ def test_each_result_reports_the_first_failed_instance() -> None:
 
 def test_each_result_of_a_partial_step_is_skipped() -> None:
     instances = (instance(0, child("A", usage=tokens(2), cost_usd=0.5)),)
-    result = each_result(fan("fix", "list"), ("a", "b"), instances, False)
+    result = each_result(fan("fix", "list"), ("a", "b"), instances, False, 0)
     assert result.payload == {
         "status": "skipped",
         "exit_code": 0,
@@ -813,6 +816,7 @@ def test_each_result_of_a_partial_step_is_skipped() -> None:
             {"item": "a", "label": "a", **child("A", usage=tokens(2), cost_usd=0.5)},
             {"item": "b", "label": "b", "status": "skipped"},
         ],
+        "dropped": 0,
     }
 
 
@@ -820,7 +824,7 @@ def test_each_result_over_the_joined_output_cap_fails_the_step() -> None:
     block = "x" * STDOUT_BYTES
     items = tuple("abcdefgh")
     instances = tuple(instance(index, child(block)) for index in range(len(items)))
-    result = each_result(fan("fix", "list"), items, instances, True)
+    result = each_result(fan("fix", "list"), items, instances, True, 0)
     assert (result.status, result.exit_code, result.output) == ("error", 1, "")
     assert result.error == ResultError(
         "stdout_limit_exceeded", f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit."
@@ -829,14 +833,14 @@ def test_each_result_over_the_joined_output_cap_fails_the_step() -> None:
 
 def test_each_result_at_exactly_the_joined_output_cap_succeeds() -> None:
     block = "x" * WORKFLOW_RESULT_BYTES
-    result = each_result(fan("fix", "list"), ("a",), (instance(0, child(block)),), True)
+    result = each_result(fan("fix", "list"), ("a",), (instance(0, child(block)),), True, 0)
     assert (result.status, result.exit_code, result.error) == ("success", 0, None)
     assert result.output == block
 
 
 def test_each_result_one_byte_over_the_joined_output_cap_fails() -> None:
     block = "x" * (WORKFLOW_RESULT_BYTES + 1)
-    result = each_result(fan("fix", "list"), ("a",), (instance(0, child(block)),), True)
+    result = each_result(fan("fix", "list"), ("a",), (instance(0, child(block)),), True, 0)
     assert (result.status, result.exit_code, result.output) == ("error", 1, "")
     assert result.error == ResultError(
         "stdout_limit_exceeded", f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit."
@@ -844,7 +848,7 @@ def test_each_result_one_byte_over_the_joined_output_cap_fails() -> None:
 
 
 FIXES = graph(node("list"), fan("fix", "list", as_parameter="file"), node("merge", "fix"))
-FIX_ITEMS = {"fix": ("a", "b")}
+FIX_ITEMS = {"fix": EachItems(("a", "b"), 0)}
 
 
 def test_workflow_result_sums_instances_without_double_counting() -> None:
@@ -873,6 +877,7 @@ def test_workflow_result_sums_instances_without_double_counting() -> None:
             {"item": "a", "label": "a", **child("A\n", usage=tokens(100), cost_usd=0.25)},
             {"item": "b", "label": "b", **child("B\n", usage=tokens(10), cost_usd=0.25)},
         ],
+        "dropped": 0,
     }
 
 
@@ -930,6 +935,7 @@ def test_pre_launch_items_error_has_no_item_entries() -> None:
             "message": "output of step 'list' is not a JSON array.",
         },
         "items": [],
+        "dropped": 0,
     }
 
 
@@ -954,6 +960,7 @@ def test_each_step_cut_short_by_another_failure_is_partial() -> None:
             {"item": "a", "label": "a", **child("A")},
             {"item": "b", "label": "b", "status": "skipped"},
         ],
+        "dropped": 0,
     }
 
 
@@ -979,7 +986,7 @@ def test_interrupted_fan_out_reports_the_signal_and_skips_queued_items() -> None
         instance(0, child("A")),
         instance(1, interrupted),
     )
-    items = {"fix": ("a", "b", "c")}
+    items = {"fix": EachItems(("a", "b", "c"), 0)}
     result = workflow_result("fixes", FIXES, outcomes, 1, 2, items)
     assert (result["status"], result["exit_code"], result["output"]) == ("interrupted", 130, "")
     assert result["error"] == {"code": "interrupted", "message": "Interrupted by signal 2."}
@@ -1005,8 +1012,8 @@ def test_output_cap_failure_counts_from_the_last_instance_completion() -> None:
     instances = tuple(instance(index, block) for index in range(len(items)))
     before = (outcome("list", child("a")), *instances, outcome("check", broken))
     after = (outcome("list", child("a")), *instances[:-1], outcome("check", broken), instances[-1])
-    first = workflow_result("fixes", workflow, before, 1, None, {"fix": items})
-    second = workflow_result("fixes", workflow, after, 1, None, {"fix": items})
+    first = workflow_result("fixes", workflow, before, 1, None, {"fix": EachItems(items, 0)})
+    second = workflow_result("fixes", workflow, after, 1, None, {"fix": EachItems(items, 0)})
     assert first["error"] == {
         "code": "stdout_limit_exceeded",
         "message": f"step 'fix': joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit.",
@@ -1014,7 +1021,7 @@ def test_output_cap_failure_counts_from_the_last_instance_completion() -> None:
     assert second["error"] == {"code": "native_exit", "message": "step 'check': x"}
 
 
-CAPPED_ITEMS = {"fix": tuple("abcdefgh")}
+CAPPED_ITEMS = {"fix": EachItems(tuple("abcdefgh"), 0)}
 CAPPED = tuple(instance(index, child("x" * STDOUT_BYTES)) for index in range(8))
 
 
@@ -1046,3 +1053,51 @@ def test_workflow_result_reports_a_never_started_each_step_with_an_empty_item_li
         {"step": "fix", "status": "skipped", "items": []},
         {"step": "merge", "status": "skipped"},
     ]
+
+
+def capped(max_items: int, overflow: Literal["error", "truncate"]) -> WorkflowStep:
+    return replace(fan("fix", "list"), max_items=max_items, overflow=overflow)
+
+
+def test_item_limit_error_reports_the_step_limit_above_it() -> None:
+    result = source("a\n\nb\nc\n")
+    assert items_error(capped(2, "error"), result) == (
+        "invalid_arguments",
+        "output of step 'list' has 3 items, more than the 2 item limit.",
+    )
+
+
+@pytest.mark.parametrize("overflow", ["error", "truncate"])
+def test_items_at_and_below_the_step_limit_are_kept_whole(
+    overflow: Literal["error", "truncate"],
+) -> None:
+    result = source("a\n\nb\n")
+    assert each_items(capped(2, overflow), result) == EachItems(("a", "b"), 0)
+    assert each_items(capped(3, overflow), result) == EachItems(("a", "b"), 0)
+
+
+def test_truncate_keeps_the_first_items_and_counts_the_rest_after_blanks() -> None:
+    result = source("a\n \nb\nc\n\nd\ne\n")
+    assert each_items(capped(2, "truncate"), result) == EachItems(("a", "b"), 3)
+
+
+def test_truncate_applies_to_json_items_after_dropping_null_and_blank() -> None:
+    result = source("[]", ["a", None, "", "b", "c"])
+    step = replace(fan("fix", "list", split="json"), max_items=2, overflow="truncate")
+    assert each_items(step, result) == EachItems(("a", "b"), 1)
+
+
+def test_each_result_reports_the_dropped_count_after_the_items() -> None:
+    instances = (instance(0, child("A")), instance(1, child("B")))
+    result = each_result(fan("fix", "list"), ("a", "b"), instances, True, 3)
+    assert list(result.payload)[-2:] == ["items", "dropped"]
+    assert result.payload["dropped"] == 3
+    assert each_result(fan("fix", "list"), ("a", "b"), instances, True, 0).payload["dropped"] == 0
+
+
+def test_workflow_result_carries_the_dropped_count_into_the_step_entry() -> None:
+    outcomes = (outcome("list", child("a\nb\nc")), instance(0, child("A")), instance(1, child("B")))
+    items = {"fix": EachItems(("a", "b"), 1)}
+    steps = workflow_result("fixes", FIXES, outcomes, 1, None, items)["steps"]
+    assert isinstance(steps, list)
+    assert steps[1]["dropped"] == 1

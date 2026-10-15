@@ -64,7 +64,9 @@ defaults to `true`. A step takes:
 | `each` | Name of an ancestor step whose output is split into items; the step runs once per item. See [fan out over items](#fan-out-over-items). |
 | `split` | With `each`: `"lines"` (the default) or `"json"`. |
 | `as` | With `each`: a prompt parameter of the step's profile that receives the item. |
-| `max_parallel` | With `each`: how many instances run at once, 1 to 64. Defaults to 4. |
+| `max_parallel` | With `each`: how many instances run at once, 1 to 64, or `"all"` for 64. Defaults to 4. |
+| `max_items` | With `each`: the most items the step may run, 1 to 4096. Defaults to 4096. |
+| `overflow` | With `each`: `"error"` (the default) fails the step when there are more than `max_items` items; `"truncate"` runs the first `max_items` and drops the rest. |
 
 A workflow name follows the profile rules: letters, digits, underscores or hyphens. It cannot equal
 a profile name, a built-in agent name or alias, or a management command, including `workflows`.
@@ -75,8 +77,8 @@ never receive input. For an `each` step it also checks that the source is an anc
 itself an `each` step, that `as` is a prompt parameter of the profile and not in `bind`, and that
 `input = "none"` comes with `as`. `prat workflows` lists each workflow's steps, parameters and
 source, and `prat workflows --json` returns the same fields. In the text listing an `each` step
-adds `each=SOURCE`, and `split=json`, `as=NAME` and `max_parallel=N` when they differ from the
-defaults.
+adds `each=SOURCE`, and `split=json`, `as=NAME`, `max_parallel=N`, `max_items=N` and
+`overflow=truncate` when they differ from the defaults.
 
 ## Order and input
 
@@ -122,8 +124,8 @@ empty output fails the step with `invalid_arguments`, as does an input plus boun
 ## Fan out over items
 
 `each` runs a step once per item of an ancestor step's output. The source can be any ancestor, not
-only a step in `after`, but it cannot itself be an `each` step. `split`, `as` and `max_parallel`
-are rejected without `each`.
+only a step in `after`, but it cannot itself be an `each` step. `split`, `as`, `max_parallel`,
+`max_items` and `overflow` are rejected without `each`.
 
 ```toml
 [workflows.review-files]
@@ -152,9 +154,32 @@ element becomes one item:
 - an array or object becomes compact JSON text, with non-ASCII characters kept;
 - a number or boolean becomes its JSON serialization (`1e2` becomes `100.0`).
 
-A list of more than 4096 items fails the `each` step with `invalid_arguments`. An empty list is not
-a failure: the step succeeds with empty output and no instances, and a step after it that has no
-other input is handled as for any empty upstream output.
+An empty list is not a failure: the step succeeds with empty output and no instances, and a step
+after it that has no other input is handled as for any empty upstream output.
+
+### Limit the items
+
+Items are counted after empty and `null` ones are dropped. `max_items` sets how many the step may
+run, 4096 at most and by default. With `overflow = "error"`, the default, a longer list fails the
+`each` step with `invalid_arguments` before any instance launches: `output of step 'SOURCE' has N
+items, more than the M item limit.`
+
+With `overflow = "truncate"`, the first `max_items` items run and the rest are dropped. Prat writes
+one line to stderr when it cuts the list:
+
+```text
+prat: workflow 'review-files' step 'review': running the first 20 of 57 items.
+```
+
+The stderr line is a best-effort notice and can be lost when stderr is blocked. The step's JSON entry
+reports the number of dropped items as [`dropped`](json.md#workflow-results), and that field is the
+record.
+Dropped items get no instance and no `items` entry.
+
+```toml
+{ name = "review", profile = "review-one", each = "list", as = "file",
+  max_parallel = "all", max_items = 20, overflow = "truncate" }
+```
 
 ### What an instance receives
 
@@ -182,11 +207,11 @@ non-empty. Usage, cost and duration are summed over the instances. If the joined
 
 ### The queue
 
-At most `max_parallel` instances of an `each` step run at once, 4 by default and 1 to 64; the rest
-wait and start in item order as slots free up. Different `each` steps and ordinary steps run
-alongside each other as for other steps. With `parallel = false`, one instance or step runs at a
-time, whatever `max_parallel` says: the workflow runs the next ready step in declared order, and
-within an `each` step the next item.
+At most `max_parallel` instances of an `each` step run at once, 4 by default and 1 to 64 (`"all"`
+means 64); the rest wait and start in item order as slots free up. Different `each` steps and
+ordinary steps run alongside each other as for other steps. With `parallel = false`, one instance
+or step runs at a time, whatever `max_parallel` says: the workflow runs the next ready step in
+declared order, and within an `each` step the next item.
 
 ### Failed and interrupted items
 
@@ -258,8 +283,8 @@ for the fields. Usage and cost are the sums of the steps that report them.
 
 `--dry-run` resolves parameters and prints each step's profile, `after`, input mode, bindings and
 the parameters it receives, without launching an agent. An `each` step also shows `each=`,
-`split=` and `max_parallel=` always, and `as=` when set. The items do not exist yet, so nothing is
-split:
+`split=` and `max_parallel=` always, `as=` when set, and `max_items=` and `overflow=truncate` when
+they differ from the defaults. The items do not exist yet, so nothing is split:
 
 ```sh
 prat write "tide pools" --dry-run

@@ -6,14 +6,13 @@ from collections.abc import Mapping
 from dataclasses import asdict, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from pratfall.catalog import BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent
 from pratfall.errors import PratError
 from pratfall.instructions import validate_instructions
+from pratfall.limits import DEFAULT_MAX_PARALLEL, MAX_PARALLEL_LIMIT, WORKFLOW_EACH_ITEMS
 from pratfall.models import (
-    DEFAULT_MAX_PARALLEL,
-    MAX_PARALLEL_LIMIT,
     MAX_TURNS,
     NOTIFY_METHODS,
     AgentSpec,
@@ -522,14 +521,60 @@ def _templates(table: dict[str, object], path: Path) -> dict[str, PromptTemplate
     return templates
 
 
-def _each_settings(
-    settings: dict[str, object], step_label: str, no_input: bool
-) -> tuple[str | None, Literal["lines", "json"], str | None, int]:
+class _EachSettings(NamedTuple):
+    each: str | None = None
+    split: Literal["lines", "json"] = "lines"
+    as_parameter: str | None = None
+    max_parallel: int = DEFAULT_MAX_PARALLEL
+    max_items: int = WORKFLOW_EACH_ITEMS
+    overflow: Literal["error", "truncate"] = "error"
+
+
+def _bounded_integer(value: object, ceiling: int) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= ceiling:
+        return None
+    return value
+
+
+def _max_parallel(settings: dict[str, object], step_label: str) -> int:
+    if "max_parallel" not in settings:
+        return DEFAULT_MAX_PARALLEL
+    value = settings["max_parallel"]
+    if value == "all":
+        return MAX_PARALLEL_LIMIT
+    parallel = _bounded_integer(value, MAX_PARALLEL_LIMIT)
+    if parallel is None:
+        raise PratError(f'{step_label}.max_parallel: expected an integer from 1 to 64 or "all".')
+    return parallel
+
+
+def _max_items(settings: dict[str, object], step_label: str) -> int:
+    if "max_items" not in settings:
+        return WORKFLOW_EACH_ITEMS
+    items = _bounded_integer(settings["max_items"], WORKFLOW_EACH_ITEMS)
+    if items is None:
+        raise PratError(
+            f"{step_label}.max_items: expected an integer from 1 to {WORKFLOW_EACH_ITEMS}."
+        )
+    return items
+
+
+def _overflow(settings: dict[str, object], step_label: str) -> Literal["error", "truncate"]:
+    match settings.get("overflow", "error"):
+        case "error":
+            return "error"
+        case "truncate":
+            return "truncate"
+        case _:
+            raise PratError(f'{step_label}.overflow: expected "error" or "truncate".')
+
+
+def _each_settings(settings: dict[str, object], step_label: str, no_input: bool) -> _EachSettings:
     if "each" not in settings:
-        for key in ("split", "as", "max_parallel"):
+        for key in ("split", "as", "max_parallel", "max_items", "overflow"):
             if key in settings:
                 raise PratError(f"{step_label}.{key}: only valid together with each.")
-        return None, "lines", None, DEFAULT_MAX_PARALLEL
+        return _EachSettings()
     each = _string(settings["each"], f"{step_label}.each")
     split: Literal["lines", "json"] = "lines"
     if "split" in settings:
@@ -540,21 +585,14 @@ def _each_settings(
         else:
             raise PratError(f'{step_label}.split: expected "lines" or "json".')
     as_parameter = _string(settings["as"], f"{step_label}.as") if "as" in settings else None
-    max_parallel = DEFAULT_MAX_PARALLEL
-    if "max_parallel" in settings:
-        value = settings["max_parallel"]
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, int)
-            or not 1 <= value <= MAX_PARALLEL_LIMIT
-        ):
-            raise PratError(f"{step_label}.max_parallel: expected an integer from 1 to 64.")
-        max_parallel = value
+    max_parallel = _max_parallel(settings, step_label)
+    max_items = _max_items(settings, step_label)
+    overflow = _overflow(settings, step_label)
     if no_input and as_parameter is None:
         raise PratError(
             f'{step_label}.input: "none" needs as when each is set; the item is the input.'
         )
-    return each, split, as_parameter, max_parallel
+    return _EachSettings(each, split, as_parameter, max_parallel, max_items, overflow)
 
 
 def _workflow_step(
@@ -566,7 +604,19 @@ def _workflow_step(
     _known_keys(
         settings,
         frozenset(
-            {"name", "profile", "after", "input", "bind", "each", "split", "as", "max_parallel"}
+            {
+                "name",
+                "profile",
+                "after",
+                "input",
+                "bind",
+                "each",
+                "split",
+                "as",
+                "max_parallel",
+                "max_items",
+                "overflow",
+            }
         ),
         step_label,
     )
@@ -598,17 +648,19 @@ def _workflow_step(
         _string(key, f"{step_label}.bind"): _string(source, f"{step_label}.bind.{key}")
         for key, source in bind_table.items()
     }
-    each, split, as_parameter, max_parallel = _each_settings(settings, step_label, no_input)
+    each = _each_settings(settings, step_label, no_input)
     return WorkflowStep(
         name=name,
         selector=selector,
         after=after,
         input="none" if no_input else "upstream",
         bind=MappingProxyType(bind),
-        each=each,
-        split=split,
-        as_parameter=as_parameter,
-        max_parallel=max_parallel,
+        each=each.each,
+        split=each.split,
+        as_parameter=each.as_parameter,
+        max_parallel=each.max_parallel,
+        max_items=each.max_items,
+        overflow=each.overflow,
     )
 
 

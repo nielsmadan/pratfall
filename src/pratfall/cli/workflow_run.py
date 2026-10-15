@@ -13,6 +13,7 @@ from pratfall.cli.presentation import (
     _emit_stdout,
     _guard,
     _internal_message,
+    _limit_text,
     _stderr_is_tty,
     _StdoutLatch,
 )
@@ -209,6 +210,8 @@ def _dry_run_payload(prepared: PreparedWorkflow) -> dict[str, object]:
                 "split": None if step.each is None else step.split,
                 "as": step.as_parameter,
                 "max_parallel": None if step.each is None else step.max_parallel,
+                "max_items": None if step.each is None else step.max_items,
+                "overflow": None if step.each is None else step.overflow,
                 "parameters": _step_parameters(prepared, step),
             }
             for step in prepared.workflow.steps
@@ -237,7 +240,8 @@ def _each_text(step: WorkflowStep) -> str:
         return ""
     text = f" each={step.each} split={step.split}"
     text += "" if step.as_parameter is None else f" as={step.as_parameter}"
-    return text + f" max_parallel={step.max_parallel}"
+    text += f" max_parallel={step.max_parallel}"
+    return text + _limit_text(step)
 
 
 def _emit_workflow(payload: dict[str, object], latch: _StdoutLatch, *, json_mode: bool) -> None:
