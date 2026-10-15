@@ -194,6 +194,10 @@ class _Consumer(JsonlConsumer):
                 return
             self.retain.text("provider", error)
             self.provider_error = ResultError("provider_error", error)
+        elif reason == "length":
+            error = "Pi stopped at the output token limit."
+            self.retain.text("provider", error)
+            self.provider_error = ResultError("provider_error", error)
         else:
             self.retain.release("provider")
             self.provider_error = None

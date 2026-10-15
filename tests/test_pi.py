@@ -10,7 +10,7 @@ from pratfall.cli import main
 from pratfall.config import load_config, resolve_profile
 from pratfall.consumer import ConsumerFailure, ConsumerLimits
 from pratfall.errors import PratError
-from pratfall.models import Options, Usage
+from pratfall.models import Options, ResultError, Usage
 
 
 def stream(*events: object) -> str:
@@ -253,6 +253,12 @@ def test_pi_provider_failure_retains_partial_text(reason: str) -> None:
     assert decoded.output == "partial"
     assert decoded.error is not None and decoded.error.code == "provider_error"
     assert decoded.error.message == "failed"
+
+
+def test_pi_output_token_limit_is_a_provider_failure_with_partial_text() -> None:
+    decoded = pi.decode(stream(end(message("truncated", stopReason="length")), SETTLED))
+    assert decoded.output == "truncated"
+    assert decoded.error == ResultError("provider_error", "Pi stopped at the output token limit.")
 
 
 @pytest.mark.parametrize(

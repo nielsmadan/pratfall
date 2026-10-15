@@ -72,7 +72,9 @@ An assistant `stopReason` of `error` or `aborted` produces a normalized provider
 Pi exits zero. [Print mode](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/src/modes/print-mode.ts)
 only converts those message states to nonzero exits in text mode. A final error without text retains
 the previous completed assistant text as partial output. Invalid or unfinished streams fail with a
-protocol error; output remains bounded by the shared consumer limits.
+protocol error; output remains bounded by the shared consumer limits. A final `length` stop
+reason (the output token limit) is also a provider error; its truncated text remains partial
+output, matching OpenCode's `length` and Grok's `max_tokens` handling.
 
 Prat sums assistant `message_end` usage exactly once across attempts and turns: `input`, `output`,
 `cacheRead`, `cacheWrite`, and native USD `cost.total`. Repeated lifecycle snapshots are not summed.
