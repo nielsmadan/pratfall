@@ -29,9 +29,10 @@ The [stream emitter](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/c
 can emit intermediate subagent error results without a parent discriminator. The
 [root run loop](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packages/cli/src/nonInteractiveCli.ts)
 waits for background task completion before emitting its final result (lines 3077–3184), and
-emits a result on its failure path (3249–3305). The last valid result therefore governs; repeated
-results are accepted, malformed records remain errors, and assistant text alone cannot complete
-successfully. Only known system, user and stream-event records are ignored. JSONL bounds apply.
+emits a result on its failure path (3249–3305). The last valid root result therefore governs;
+results with a non-null `parent_tool_use_id` are child results and are ignored in plain and schema
+modes. Repeated results are accepted, malformed records remain errors, and assistant text alone
+cannot complete successfully. Only known system, user and stream-event records are ignored. JSONL bounds apply.
 These contracts were statically checked on 2026-09-11 before accepting fake executable fixtures.
 
 ## Implementation

@@ -133,6 +133,9 @@ class _Consumer(JsonlConsumer):
 
     def apply(self, event: dict[str, object]) -> Activity | None:
         event_type = event["type"]
+        if event_type == "result" and event.get("parent_tool_use_id") is not None:
+            self.result_last = False
+            return None
         self.result_last = event_type == "result"
         if event_type == "assistant":
             self._assistant(event)
@@ -318,12 +321,6 @@ class _SchemaConsumer(_Consumer):
 
     def parse_record(self, line: str) -> object:
         return parse_json(line, max_depth=JSON_DEPTH + 2, numeric_bytes=self.numeric_bytes)
-
-    def apply(self, event: dict[str, object]) -> Activity | None:
-        if event["type"] == "result" and event.get("parent_tool_use_id") is not None:
-            self.result_last = False
-            return None
-        return super().apply(event)
 
     def _text(self, text: str) -> None:
         pass

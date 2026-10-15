@@ -13,7 +13,7 @@ from pratfall.cli import main
 from pratfall.config import load_config, resolve_profile
 from pratfall.consumer import ConsumerFailure, ConsumerLimits
 from pratfall.errors import PratError
-from pratfall.models import Options, PreparedSchema, ResolvedProfile, Usage
+from pratfall.models import Options, PreparedSchema, ResolvedProfile, ResultError, Usage
 from pratfall.schema import parse_json
 
 
@@ -231,6 +231,18 @@ def test_qwen_malformed_records_keep_prior_text(suffix: str) -> None:
     decoded = qwen.decode(stream(assistant()) + suffix)
     assert decoded.output == "partial"
     assert decoded.error is not None and decoded.error.code == "protocol_error"
+
+
+def test_qwen_child_result_cannot_replace_root_failure() -> None:
+    decoded = qwen.decode(
+        stream(
+            assistant("root partial"),
+            result(subtype="error_during_execution", is_error=True, error={"message": "root"}),
+            result(result="child answer", parent_tool_use_id="tool-1"),
+        )
+    )
+    assert decoded.output == "root partial"
+    assert decoded.error == ResultError("provider_error", "root")
 
 
 @pytest.mark.parametrize("payload", ["", stream(assistant()), stream(result(), assistant())])
