@@ -624,18 +624,13 @@ def test_init_reports_parent_creation_failure(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "name",
     [
-        "openhands",
-        "oh",
         "warp",
-        "iflow",
-        "if",
         "qwen",
         "amp",
         "reasonix",
         "rx",
         "droid",
         "dr",
-        "kimi",
         "vibe",
         "crush",
         "cr",

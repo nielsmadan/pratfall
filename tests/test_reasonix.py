@@ -280,3 +280,16 @@ def test_reasonix_native_failure_outranks_malformed_optional_usage() -> None:
     assert decoded.output == "answer" and decoded.usage is None
     assert decoded.error is not None and decoded.error.code == "provider_error"
     assert decoded.error.message == "Reasonix run ended with recovery_paused."
+
+
+def test_reasonix_current_readiness_preserves_native_completion() -> None:
+    decoded = reasonix.decode(
+        json.dumps(result(readiness={"unverified": True}, permission_denials=["write"]))
+    )
+    assert decoded.output == "answer"
+    assert decoded.error is None
+    assert decoded.usage == Usage(3, 1, None, 2, None)
+    options = Options(native_args=("--fail-on-unverified",))
+    resolved = resolved_profile("reasonix", options)
+    reasonix.validate(resolved)
+    assert reasonix.build(resolved, b"task").argv[-1] == "--fail-on-unverified"

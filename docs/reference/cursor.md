@@ -16,6 +16,10 @@ as `--force` remain data. No token usage is documented, and the argv prompt inhe
 Whole-document parsing is bounded and rejects duplicate keys, excessive numeric width/nesting,
 nonfinite numbers and invalid Unicode anywhere in the document.
 
+The 2026-10-13 output-documentation recheck confirms this envelope. Its `result` can aggregate
+assistant commentary before tools and the later answer; Prat returns that native string without
+attempting to isolate only the final prose. Current package delimiter parsing was not re-audited.
+
 ## Session id (verified 2026-09-19)
 
 The documented single-JSON success object carries `session_id` beside `result` and

@@ -35,7 +35,7 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
         for name in (
             "--delete-session",
             "--effort",
-            "--engine",
+            "--agent-engine",
             "--model",
             "--output-format",
             "--resume-id",

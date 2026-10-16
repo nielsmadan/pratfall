@@ -22,14 +22,27 @@ The [programmatic formatter](https://github.com/mistralai/mistral-vibe/blob/v2.2
 emits the complete public-history array using camelCase aliases. Its text projection searches
 backward for the last nonempty assistant message, joining text blocks with blank lines; empty
 later assistant messages cannot replace earlier text. A valid array without assistant text can
-succeed with empty output. There is no terminal event. Native errors and conversation-limit
-exhaustion raise before JSON finalization; native status takes precedence. Whole JSON guards apply.
+succeed with empty output. There is no terminal event. In this pinned baseline, native errors and
+conversation-limit exhaustion raise before JSON finalization; native status takes precedence.
+Whole JSON guards apply.
 The [public history types](https://github.com/mistralai/mistral-vibe/blob/v2.25.2/vibe/app_server/models.py)
 separate message, reasoning, effect, callback, checkpoint and notice entries. Only assistant
 message text is returned; tool failures or notice prose do not prove a failed conversation.
 No model/accounting mapping is established. Default native agent accepts edits; programmatic
 approval callbacks are denied. Existing native settings/authentication remain active. These
 contracts were frozen before fixtures; no native execution or setup was performed.
+
+## Documentation recheck (2026-10-13)
+
+The [2.26.1 README](https://github.com/mistralai/mistral-vibe/blob/v2.26.1/README.md) retains the
+stdin/JSON invocation and native limits. Current programmatic execution finalizes history on
+interrupted runs, so the baseline's pre-finalization behavior is not a general current guarantee.
+Exit 3 denotes limits/refusal. Usage, cost, and outcome export through `--output-dir` is separate
+from the stdout history consumed by Prat; normalized accounting remains unknown.
+
+The current documented built-ins are `ask`, `plan`, `accept-edits`, and `auto-approve`, plus `lean`
+when installed and custom agents. The older `smart-approve` listing below is baseline evidence,
+not a current inventory. This recheck did not include authenticated execution.
 
 ## Implementation
 

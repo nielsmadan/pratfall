@@ -59,5 +59,17 @@ and fake argv tests; no authenticated native run was performed.
 The [CLI reference](https://docs.factory.ai/droid-cli/cli-reference) documents `-s,
 --session-id <id>` as "Continue an existing session" and `--fork` as "Fork and resume a session
 in a new copy". Both are resume semantics, so Prat does not grant the `session_id` capability
-to Droid; a one-shot run has no earlier session to continue. Both stay reserved. Droid reports
-no session in its result protocol, so `native_session_id` is null.
+to Droid; a one-shot run has no earlier session to continue. Both stay reserved.
+
+## Documentation recheck (2026-10-13)
+
+The current [exec reference](https://docs.factory.ai/droid-exec/overview#output-formats-and-artifacts)
+includes `session_id` in its JSON success example and says: “extract session IDs for continuation”.
+The earlier claim that the native protocol reports no session was incorrect. Prat now reports a string `session_id` as `native_session_id`, ignoring malformed optional shapes.
+Accepting a requested session ID and reporting a returned one are separate capabilities.
+
+The installed binary reports version 0.228.0. Its `exec --help` failed before displaying help
+because this audit session could not read `~/.factory/settings.json`; `nono why --self` confirmed
+`path_not_granted` for that exact file. No authenticated example completed. This is a local sandbox
+blocker, not evidence of a broken native protocol. The exec guide documents `FACTORY_API_KEY` for
+headless authentication; Prat continues to inherit native authentication.

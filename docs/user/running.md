@@ -62,9 +62,9 @@ Files must be regular files or symlinks to regular files. Invalid input fails wi
 an agent starts. Relative file paths resolve from the invocation directory, independently of
 `--cwd`.
 
-Gemini, Copilot, Cursor, Kiro, OpenHands, Warp, iFlow, Devin, and Grok receive prompts as command
+Gemini, Copilot, Cursor, Kiro, Kimi Code, Warp, Devin, and Grok receive prompts as command
 arguments, so the operating system's argument-size limit may be lower than 1 MiB.
-Reasonix, Kimi, Vibe, and Grok trim surrounding whitespace natively. Crush 0.93.1 adds two trailing
+Reasonix, Vibe, and Grok trim surrounding whitespace natively. Crush 0.98.1 adds two trailing
 newlines to the original input. Prat supplies the same prompt bytes before these native changes.
 
 ## Apply a template
@@ -294,7 +294,9 @@ prat cx "review this change" --dry-run
 
 `--dry-run` reads and validates the prompt, then prints the resolved command without launching it.
 Prompts sent through stdin appear as a byte count; prompts sent as command arguments appear in
-full. Add `--json` for a machine-readable preview.
+full. Add `--json` for a machine-readable preview. When an adapter overrides child environment
+variables, JSON includes an `env` object containing only those overrides; the text preview shows
+an equivalent `env NAME=VALUE command` invocation. Inherited environment values are not printed.
 
 ## Watch progress and diagnostics
 
@@ -310,6 +312,23 @@ Progress updates contain category labels only, with at most one update per secon
 at least every five seconds. `--progress` applies to one run and cannot be saved in a profile.
 A slow stderr reader can cause progress, trace, and diagnostic writes to be dropped in this mode,
 so they do not delay the agent deadline. Trace can show only what the native CLI emits.
+
+On a nonzero native exit, the result's error message includes captured stderr followed by the
+adapter's recognized provider error, with identical diagnostics included once. The combined
+diagnostic is limited to 4,096 characters plus a truncation marker. Native exit codes are preserved.
+These diagnostics can contain native payload text; inspect them before sharing.
+
+For a failed Goose startup, for example, a missing credential reported as plain text on stdout
+appears in the error message. Use `--trace` to inspect other unrecognized stdout diagnostics, and
+`--dry-run` to see the resolved native command without running it:
+
+```sh
+prat goose 'Reply with exactly PRAT_OK.' --trace --json
+prat goose 'Reply with exactly PRAT_OK.' --dry-run
+```
+
+For stdin-based agents such as Goose, the preview shows the input byte count; pipe the original
+prompt to the displayed command when reproducing the run directly.
 
 ## Get a completion notification
 
@@ -375,7 +394,7 @@ unless a timeout, interruption, or runner error takes precedence. Unexpected fai
 
 ## Output limits
 
-Streaming output from Codex, Copilot, Antigravity, OpenCode, Warp, Qwen, Amp, Kimi, and OpenHands is
+Streaming output from Codex, Copilot, Antigravity, OpenCode, Kilo, Warp, Qwen, Amp, and Kimi Code is
 decoded as it arrives. Other JSON and text adapters retain complete stdout.
 
 | Output | Limit |
@@ -586,7 +605,7 @@ image-capable model and payload limits remain authoritative; a recognized filena
 not establish valid content. `--dry-run` performs these same local checks without launching an agent.
 
 Native equivalents after `--` remain accepted when the public attachment array is absent or empty.
-An active public list rejects equivalent native options, including Codex `-i` and OpenCode `-f`.
+An active public list rejects equivalent native options, including Codex `-i` and OpenCode/Kilo `-f`.
 
 ## Request schema output
 

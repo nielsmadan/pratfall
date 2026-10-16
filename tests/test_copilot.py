@@ -222,3 +222,60 @@ def test_copilot_reports_the_session_on_its_failure_paths() -> None:
     )
     assert truncated.error is not None
     assert truncated.session_id is None
+
+
+@pytest.mark.parametrize("location", ["top", "data", "parent"])
+@pytest.mark.parametrize(
+    "event_type",
+    ["assistant.message", "assistant.message_delta", "session.error", "session.warning"],
+)
+def test_copilot_subagent_records_cannot_override_root_success(
+    location: str, event_type: str
+) -> None:
+    data: dict[str, object] = {
+        "messageId": "child",
+        "content": "child text",
+        "deltaContent": "child delta",
+        "model": "child-model",
+        "errorType": "fatal",
+        "message": "child failed",
+        "warningType": "policy_blocked",
+    }
+    event: dict[str, object] = {"type": event_type, "data": data}
+    if location == "top":
+        event["agentId"] = "child"
+    else:
+        data["agentId" if location == "data" else "parentToolCallId"] = "child"
+    decoded = copilot.decode(
+        codex_stream(
+            {
+                "type": "assistant.message",
+                "data": {"messageId": "root", "content": "root answer", "model": "root-model"},
+            },
+            event,
+            copilot_result(),
+        )
+    )
+    assert decoded.output == "root answer"
+    assert decoded.reported_models == ("root-model",)
+    assert decoded.error is None
+
+
+def test_copilot_empty_subagent_markers_preserve_root_answer() -> None:
+    decoded = copilot.decode(
+        codex_stream(
+            {
+                "type": "assistant.message",
+                "agentId": "",
+                "data": {
+                    "agentId": "",
+                    "parentToolCallId": "",
+                    "messageId": "root",
+                    "content": "root answer",
+                },
+            },
+            copilot_result(),
+        )
+    )
+    assert decoded.output == "root answer"
+    assert decoded.error is None

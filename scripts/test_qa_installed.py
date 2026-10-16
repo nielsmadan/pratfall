@@ -426,9 +426,7 @@ def test_artifact_entry_point_version_mismatch_is_rejected(tmp_path: Path) -> No
 @pytest.mark.parametrize(
     ("agent", "arguments"),
     [
-        ("openhands", ["--headless", "--json", "--task=-雪\nnext"]),
         ("warp", ["agent", "run", "--output-format", "ndjson", "--prompt=-雪\nnext"]),
-        ("iflow", ["--prompt=-雪\nnext"]),
         (
             "grok",
             ["--no-auto-update", "--output-format", "json", "--single=-雪\nnext"],
@@ -453,9 +451,7 @@ def test_new_native_contracts_reject_incorrect_invocation_and_stdin(
 
 def test_new_native_contracts_check_flag_arity() -> None:
     for agent, arguments in (
-        ("openhands", ["--headless", "--json", "--override-with-envs=true", "--task=x"]),
         ("warp", ["agent", "run", "--output-format", "ndjson", "--model", "--prompt=x"]),
-        ("iflow", ["--plan=true", "--prompt=x"]),
         ("grok", ["--no-auto-update", "--output-format", "json", "--rules", "--single=x"]),
     ):
         with pytest.raises(AssertionError):
@@ -469,17 +465,6 @@ def test_new_native_contracts_check_flag_arity() -> None:
         ("amp", ["--execute", "--stream-json"]),
         ("reasonix", ["run", "--output-format", "json"]),
         ("droid", ["exec", "--output-format", "json"]),
-        (
-            "kimi",
-            [
-                "--print",
-                "--input-format",
-                "text",
-                "--output-format",
-                "stream-json",
-                "--final-message-only",
-            ],
-        ),
         ("vibe", ["--prompt", "--output", "json"]),
         ("crush", ["run", "--quiet"]),
         ("cortex", ["exec", "--file", "-"]),
@@ -489,7 +474,7 @@ def test_stdin_native_contracts_reject_wrong_argv(agent: str, arguments: list[st
     prompt = "-雪\nnext\n"
     expected = prompt + "\n\n" if agent == "crush" else prompt
     assert qa._prompt(agent, arguments, prompt.encode()) == (
-        prompt.strip() if agent in {"reasonix", "kimi", "vibe"} else expected
+        prompt.strip() if agent in {"reasonix", "vibe"} else expected
     )
     for wrong in (
         [],
@@ -512,18 +497,6 @@ def test_stdin_native_contracts_reject_wrong_argv(agent: str, arguments: list[st
         ("qwen", ["--output-format", "stream-json", "--debug=true"]),
         ("amp", ["--execute", "--stream-json", "--stream-json-thinking=true"]),
         ("droid", ["exec", "--output-format", "json", "--auto"]),
-        (
-            "kimi",
-            [
-                "--print",
-                "--input-format",
-                "text",
-                "--output-format",
-                "stream-json",
-                "--final-message-only",
-                "--thinking=true",
-            ],
-        ),
         ("vibe", ["--prompt", "--output", "json", "--max-tokens"]),
         ("crush", ["run", "--quiet", "--verbose=true"]),
         ("cortex", ["--connection", "exec", "--file", "-"]),
@@ -858,7 +831,6 @@ def test_a_tier_namespace_preserves_ordinary_fake_and_source_prompts(
         ("qwen", "QA_A09.vibe_projection", ["--output-format", "stream-json"]),
         ("qwen", "QA_A12.recovery", ["--output-format", "stream-json"]),
         ("vibe", "QA_A09.unknown", ["--prompt", "--output", "json"]),
-        ("openhands", "QA_A12.unknown", ["--headless", "--json", "--task=QA_A12.unknown"]),
     ],
 )
 def test_fake_dispatch_rejects_unknown_or_wrong_agent_a_tier_controls(
@@ -871,7 +843,7 @@ def test_fake_dispatch_rejects_unknown_or_wrong_agent_a_tier_controls(
     log = tmp_path / "native.jsonl"
     monkeypatch.setenv("PRAT_QA_LOG", str(log))
     monkeypatch.setenv("PYTHON_COLORS", "0")
-    stdin = b"" if agent == "openhands" else prompt.encode()
+    stdin = prompt.encode()
     completed = subprocess.run(
         [sys.executable, str(SCRIPT), "--fake-native", agent, *arguments],
         input=stdin,
@@ -901,9 +873,9 @@ def test_a_tier_protocol_cases_through_source_entry_point(
     prat, config = source_entry_point
     results = qa._exercise_a_protocols(prat, tmp_path, config)
     assert set(results) == {expected.case for expected in qa._PROTOCOL_EXPECTATIONS}
-    assert len(results) == 25
+    assert len(results) == 18
     assert all(observation["status"] == "Pass" for observation in results.values())
-    assert len(qa._calls(tmp_path / "native.jsonl")) == 25
+    assert len(qa._calls(tmp_path / "native.jsonl")) == 18
 
 
 def test_hostile_nesting_fixture_emits_the_full_bounded_document(

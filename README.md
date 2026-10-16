@@ -67,7 +67,9 @@ Choose an agent by name or short alias:
 
 Names of four letters or fewer, such as `kiro`, `qwen` and `amp`, need no alias. `prat agents`
 lists all 24 with the settings each supports; [agents and limitations](docs/user/agents.md) has
-the details.
+the details. Goose and Kilo are supported; `kimi` targets Kimi Code. Unmaintained OpenHands and
+iFlow are removed. See [profile migration](docs/user/profiles.md#upgrade-existing-profiles) and the
+[installation/test queue](docs/reference/live-verification.md).
 
 ## Same flags everywhere
 

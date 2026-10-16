@@ -1,223 +1,157 @@
 import json
-import os
-import sys
 from pathlib import Path
 
 import pytest
 
-from adapter_helpers import resolved as resolved_profile
+from adapter_helpers import resolved
 from pratfall.adapters import kimi
-from pratfall.catalog import BY_NAME
 from pratfall.cli import main
-from pratfall.config import load_config, resolve_profile
 from pratfall.consumer import ConsumerFailure, ConsumerLimits
 from pratfall.errors import PratError
-from pratfall.models import Options, ResolvedProfile
+from pratfall.models import Options
 
 
-def message(content: object = "answer", **fields: object) -> str:
-    return json.dumps({"role": "assistant", "content": content, **fields})
+def stream(*events: object) -> str:
+    return "".join(json.dumps(event) + "\n" for event in events)
 
 
-def test_kimi_literal_stdin_and_boolean_thinking() -> None:
-    prompt = "-雪\n$(touch forbidden)\n".encode()
-    invocation = kimi.build(
-        ResolvedProfile(
-            BY_NAME["kimi"],
-            None,
-            ("wrapper", "$HOME"),
-            Options(model="model-x", native_args=("--no-thinking", "--plan")),
-        ),
-        prompt,
-    )
+def test_kimi_code_transports_literal_prompt_as_one_argv_value() -> None:
+    prompt = "-雪\n$HOME `id` $(touch forbidden)\n"
+    invocation = kimi.build(resolved("kimi", Options(model="kimi-k2")), prompt.encode())
     assert invocation.argv == (
-        "wrapper",
-        "$HOME",
-        "--print",
-        "--input-format",
-        "text",
+        "kimi-wrapper",
+        "native",
         "--output-format",
         "stream-json",
-        "--final-message-only",
         "--model",
-        "model-x",
+        "kimi-k2",
+        f"--prompt={prompt}",
+    )
+    assert invocation.stdin == b""
+
+
+@pytest.mark.parametrize(
+    "flag",
+    [
+        "--print",
+        "--input-format=text",
+        "--final-message-only",
+        "--thinking",
         "--no-thinking",
         "--plan",
-    )
-    assert invocation.stdin == prompt
-
-
-@pytest.mark.parametrize(
-    "arguments",
-    [
-        ("--prompt=x",),
-        ("-cx",),
-        ("--print",),
-        ("--quiet",),
-        ("--input-format=x",),
-        ("--output-format=x",),
-        ("--final-message-only",),
-        ("-mmodel",),
-        ("--config=x",),
-        ("--config-file=x",),
-        ("-wpath",),
-        ("--session=x",),
-        ("--resume=x",),
-        ("--continue",),
-        ("--acp",),
-        ("--wire",),
-        ("--remote=x",),
-        ("login",),
-        ("--thinking=true",),
-        ("--unknown",),
-        ("@args",),
+        "--yolo",
+        "--auto",
+        "--resume=x",
+        "--prompt=x",
+        "--model=x",
+        "--output-format=text",
     ],
 )
-def test_kimi_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
+def test_kimi_code_rejects_legacy_and_managed_flags(flag: str) -> None:
     with pytest.raises(PratError):
-        kimi.validate(resolved_profile("kimi", Options(native_args=arguments)))
+        kimi.validate(resolved("kimi", Options(native_args=(flag,))))
 
 
-@pytest.mark.parametrize(
-    "options",
-    [
-        Options(effort="high"),
-        Options(fast=False),
-        Options(max_turns=3),
-        Options(max_budget_usd=1),
-        Options(max_ai_credits=1),
-    ],
-)
-def test_kimi_unsupported_controls(native_contract_config: Path, options: Options) -> None:
-    with pytest.raises(PratError, match="does not support"):
-        resolve_profile(
-            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "kimi", options
-        )
-
-
-def test_kimi_independent_native_contract(
-    native_contract_config: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    prompt = "-literal café 雪\n$HOME `id` $(touch forbidden)\n"
-    status = main(
-        [
-            "--config",
-            str(native_contract_config),
-            "kimi",
-            "--json",
-            "--model",
-            "model-x",
-            f"--prompt={prompt}",
-            "--",
-            "--thinking",
-            "--debug",
-        ]
+def test_kimi_code_handles_metadata_tools_goals_and_final_answer() -> None:
+    payload = stream(
+        {"role": "meta", "type": "system.version", "version": "2.1.1"},
+        {"role": "assistant", "content": "Checking"},
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {"type": "function", "id": "t", "function": {"name": "read", "arguments": "{}"}}
+            ],
+        },
+        {"role": "tool", "content": "tool output", "tool_call_id": "t"},
+        {"role": "meta", "type": "turn.step.retrying", "error_message": "transient"},
+        {"role": "assistant", "content": "Final 雪"},
+        {"role": "assistant", "content": ""},
+        {"type": "goal.summary", "status": "complete", "tokensUsed": 42},
+        {"role": "meta", "type": "session.resume_hint", "session_id": "session"},
     )
-    payload = json.loads(capsys.readouterr().out)
-    assert status == 0
-    native = json.loads(payload["output"])
-    assert native == json.loads((native_contract_config.parent / "native-calls.jsonl").read_text())
-    assert native["argv"] == [
-        "--print",
-        "--input-format",
-        "text",
-        "--output-format",
-        "stream-json",
-        "--final-message-only",
-        "--model",
-        "model-x",
-        "--thinking",
-        "--debug",
-    ]
-    assert native["stdin"] == prompt and native["prompt"] == prompt.strip()
-    assert payload["usage"] is payload["reported_models"] is payload["cost_usd"] is None
-
-
-@pytest.mark.parametrize("payload", ["", " \r\n", message("")])
-def test_kimi_empty_final_output_is_success(payload: str) -> None:
-    decoded = kimi.decode(payload)
-    assert decoded.output == "" and decoded.error is None
-
-
-def test_kimi_last_assistant_message_and_split_unicode() -> None:
-    consumer = kimi.consumer()
-    payload = (
-        message("earlier") + "\r\n" + message("last 雪") + "\n" + message("last 雪")
-    ).encode()
-    for byte in payload:
-        consumer.feed(bytes([byte]))
-    decoded = consumer.finish()
-    assert decoded.output == "last 雪" and decoded.error is None
-    assert decoded.usage is None
-    assert decoded.reported_models is None
-    assert decoded.cost_usd is None
+    for split in range(len(payload.encode()) + 1):
+        consumer = kimi.consumer()
+        data = payload.encode()
+        consumer.feed(data[:split])
+        consumer.feed(data[split:])
+        result = consumer.finish()
+        assert result.output == "Final 雪"
+        assert result.session_id == "session"
+        assert result.error is None
+        assert result.usage is None
 
 
 @pytest.mark.parametrize(
-    "payload",
+    "event",
     [
-        "garbage",
-        "[]",
-        "{}",
-        message([]),
-        message(None),
-        message(role="user"),
-        '{"type":"result","result":"answer"}',
-        message(type="tool", content={"text": "bad"}),
-        "[" * 2000 + "]" * 2000,
-        '{"role":"assistant","content":' + "1" * 5000 + "}",
+        {"role": "assistant", "content": 5},
+        {"role": "future"},
+        {"role": "meta", "type": "unknown"},
+        {"role": "meta", "type": []},
+        {"role": "meta", "type": "session.resume_hint", "session_id": 1},
     ],
 )
-def test_kimi_malformed_records_preserve_emitted_answer(payload: str) -> None:
-    decoded = kimi.decode(message("partial") + "\n" + payload)
-    assert decoded.output == "partial"
-    assert decoded.error is not None and decoded.error.code == "protocol_error"
+def test_kimi_code_retains_answer_after_malformed_record(event: object) -> None:
+    result = kimi.decode(stream({"role": "assistant", "content": "partial"}, event))
+    assert result.output == "partial"
+    assert result.error is not None and result.error.code == "protocol_error"
 
 
-def test_kimi_invalid_unicode_preserves_previous_answer() -> None:
-    decoded = kimi.decode(message("partial") + "\n" + message("\ud800"))
-    assert decoded.output == "partial"
-    assert decoded.error is not None and decoded.error.code == "output_encoding"
-
-
-def test_kimi_state_replacement_and_overflow_retains_last_answer() -> None:
-    consumer = kimi.consumer(ConsumerLimits(state_bytes=5))
-    consumer.feed((message("first") + "\n" + message("last") + "\n").encode())
+def test_kimi_code_state_overflow_retains_previous_answer() -> None:
+    consumer = kimi.consumer(ConsumerLimits(state_bytes=7))
+    consumer.feed(stream({"role": "assistant", "content": "partial"}).encode())
     with pytest.raises(ConsumerFailure):
-        consumer.feed((message("too long") + "\n").encode())
+        consumer.feed(stream({"role": "assistant", "content": "longer answer"}).encode())
+    with pytest.raises(ConsumerFailure) as failure:
+        consumer.finish()
+    assert failure.value.decoded is not None
+    assert failure.value.decoded.output == "partial"
+
+
+def test_kimi_code_independent_native_contract(
+    native_contract_config: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    prompt = "-雪\n$HOME $(touch forbidden)\n"
+    assert (
+        main(["--config", str(native_contract_config), "kimi", f"--prompt={prompt}", "--json"]) == 0
+    )
+    result = json.loads(capsys.readouterr().out)
+    record = json.loads(result["output"])
+    assert result["status"] == "success"
+    assert record["argv"] == ["--output-format", "stream-json", f"--prompt={prompt}"]
+    assert record["stdin"] == ""
+    assert record["prompt"] == prompt
+
+
+def test_kimi_session_replacement_refunds_combined_retention_budget() -> None:
+    consumer = kimi.consumer(ConsumerLimits(state_bytes=10))
+    consumer.feed(stream({"role": "assistant", "content": "answer"}).encode())
+    consumer.feed(
+        stream({"role": "meta", "type": "session.resume_hint", "session_id": "long"}).encode()
+    )
+    consumer.feed(
+        stream({"role": "meta", "type": "session.resume_hint", "session_id": "s"}).encode()
+    )
+    consumer.feed(stream({"role": "assistant", "content": "123456789"}).encode())
+    result = consumer.finish()
+    assert result.output == "123456789"
+    assert result.session_id == "s"
+    assert result.error is None
+
+
+def test_kimi_session_overflow_preserves_previous_answer_and_session() -> None:
+    consumer = kimi.consumer(ConsumerLimits(state_bytes=10))
+    consumer.feed(stream({"role": "assistant", "content": "answer"}).encode())
+    consumer.feed(
+        stream({"role": "meta", "type": "session.resume_hint", "session_id": "old"}).encode()
+    )
+    with pytest.raises(ConsumerFailure):
+        consumer.feed(
+            stream({"role": "meta", "type": "session.resume_hint", "session_id": "12345"}).encode()
+        )
     with pytest.raises(ConsumerFailure) as failure:
         consumer.finish()
     assert failure.value.error.code == "stdout_limit_exceeded"
-    assert failure.value.decoded is not None and failure.value.decoded.output == "last"
-
-
-@pytest.mark.parametrize(
-    ("stdout", "native_exit", "output", "error"),
-    [
-        ("", 0, "", None),
-        (message("partial") + "\nAuthentication failed", 17, "partial", "native_exit"),
-        ("Authentication failed", 2, "", "native_exit"),
-        (message("partial") + "\nAuthentication failed", 0, "partial", "protocol_error"),
-    ],
-)
-def test_kimi_runner_eof_and_native_error_precedence(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    stdout: str,
-    native_exit: int,
-    output: str,
-    error: str | None,
-) -> None:
-    command = [
-        sys.executable,
-        "-c",
-        f"import sys; sys.stdout.write({stdout!r}); sys.exit({native_exit})",
-    ]
-    config = tmp_path / "result.toml"
-    config.write_text(f"version=1\n[agents.kimi]\ncommand={json.dumps(command)}\n")
-    status = main(["--config", str(config), "kimi", "task", "--json"])
-    value = json.loads(capsys.readouterr().out)
-    assert status == value["exit_code"] == (native_exit or int(error is not None))
-    assert value["native_exit_code"] == native_exit and value["output"] == output
-    assert (value["error"]["code"] if error else value["error"]) == error
+    assert failure.value.decoded is not None
+    assert failure.value.decoded.output == "answer"
+    assert failure.value.decoded.session_id == "old"

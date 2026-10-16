@@ -167,6 +167,7 @@ class ResolvedProfile:
 class Invocation:
     argv: tuple[str, ...]
     stdin: bytes
+    env: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

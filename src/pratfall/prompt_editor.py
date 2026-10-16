@@ -2,6 +2,7 @@ import os
 import shlex
 import signal
 import subprocess
+import sys
 import tempfile
 import termios
 import time
@@ -13,6 +14,20 @@ from pratfall.errors import PratError
 from pratfall.interruption import InterruptionState, handler_for, handling
 from pratfall.limits import FINAL_DRAIN_GRACE, TERMINATE_GRACE
 from pratfall.prompt_input import InputInterrupted, read_edited_prompt
+
+_EDITOR_LAUNCH = """
+import os, signal, sys
+errors = int(sys.argv[1])
+os.set_inheritable(errors, False)
+try:
+    previous = signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+    os.tcsetpgrp(0, os.getpgrp())
+    signal.signal(signal.SIGTTOU, previous)
+    os.execvp(sys.argv[2], sys.argv[2:])
+except OSError as error:
+    os.write(errors, str(error).encode('utf-8', errors='replace')[:4096])
+    sys.exit(127 if isinstance(error, FileNotFoundError) else 126)
+"""
 
 
 def edit_prompt(draft: bytes, invocation_cwd: Path, environ: Mapping[str, str]) -> bytes:
@@ -75,30 +90,30 @@ def _run_editor(
 ) -> None:
     if state.received is not None:
         return
-    process = subprocess.Popen(
-        command,
-        cwd=invocation_cwd,
-        stdin=descriptor,
-        stdout=descriptor,
-        stderr=descriptor,
-        process_group=0,
-    )
-    try:
-        if process.poll() is None:
-            try:
-                with _terminal_ownership_change():
-                    os.tcsetpgrp(descriptor, process.pid)
-            except OSError:
-                if process.poll() is None:
-                    raise
-            _signal_group(process.pid, signal.SIGCONT)
-        code = _wait_editor(process, state)
-        if code in (-signal.SIGINT, -signal.SIGTERM):
-            state.received = state.received or -code
-        elif code != 0 and state.received is None:
-            raise PratError(f"Editor exited with status {code}.", code="invalid_arguments")
-    finally:
-        _cleanup(process, state)
+    read_fd, write_fd = os.pipe()
+    with os.fdopen(read_fd, "rb") as errors, os.fdopen(write_fd, "wb") as report:
+        process = subprocess.Popen(
+            [sys.executable, "-I", "-S", "-c", _EDITOR_LAUNCH, str(write_fd), *command],
+            cwd=invocation_cwd,
+            stdin=descriptor,
+            stdout=descriptor,
+            stderr=descriptor,
+            process_group=0,
+            pass_fds=(write_fd,),
+        )
+        report.close()
+        try:
+            code = _wait_editor(process, state)
+            if state.received is None:
+                detail = errors.read(4096).decode("utf-8", errors="replace")
+                if detail:
+                    raise PratError(f"Cannot edit prompt: {detail}.", code="invalid_arguments")
+            if code in (-signal.SIGINT, -signal.SIGTERM):
+                state.received = state.received or -code
+            elif code != 0 and state.received is None:
+                raise PratError(f"Editor exited with status {code}.", code="invalid_arguments")
+        finally:
+            _cleanup(process, state)
 
 
 def _wait_editor(process: subprocess.Popen[bytes], state: InterruptionState) -> int:
@@ -108,7 +123,7 @@ def _wait_editor(process: subprocess.Popen[bytes], state: InterruptionState) -> 
         pid, status = os.waitpid(process.pid, os.WNOHANG | os.WUNTRACED)
         if pid:
             if os.WIFSTOPPED(status):
-                if os.WSTOPSIG(status) == signal.SIGTTIN:
+                if os.WSTOPSIG(status) in (signal.SIGTTIN, signal.SIGTTOU):
                     _signal_group(process.pid, signal.SIGCONT)
                 else:
                     raise PratError(

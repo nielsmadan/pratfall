@@ -297,17 +297,29 @@ def test_timeout_still_kills_descendant_after_parent_exits_and_pipes_close(tmp_p
 
 
 def test_timeout_kills_process_group_that_ignores_term(tmp_path: Path) -> None:
+    ready = tmp_path / "ready"
     code = (
         "import signal,subprocess,sys,time;"
         "signal.signal(signal.SIGTERM,signal.SIG_IGN);"
         "subprocess.Popen([sys.executable,'-c',"
         "'import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(30)']);"
+        f"open({str(ready)!r},'w').close();"
         "time.sleep(30)"
     )
-    result = run(python(code), tmp_path, 0.2)
+
+    def await_ready(_elapsed: int, activity: Activity) -> None:
+        if activity != "starting":
+            return
+        deadline = time.monotonic() + 5
+        while not ready.exists():
+            if time.monotonic() >= deadline:
+                raise TimeoutError("Fake agent did not become ready.")
+            time.sleep(0.01)
+
+    result = run(python(code), tmp_path, 0.2, progress=await_ready)
     assert result.timed_out is True
     assert result.native_exit_code == -signal.SIGKILL
-    assert 2_100 <= result.duration_ms < 4_000
+    assert 2_100 <= result.duration_ms < 8_000
 
 
 def test_timeout_does_not_wait_unused_term_grace_after_group_exits(tmp_path: Path) -> None:

@@ -18,8 +18,15 @@ PREFIXES = {
     "hermes": ["chat", "--oneshot", "--quiet", "--query-file", "-"],
     "copilot": ["--output-format=json"],
     "opencode": ["run", "--format", "json"],
+    "kilo": ["run", "--format", "json"],
 }
-FLAGS = {"codex": "--image", "hermes": "--image", "copilot": "--attachment", "opencode": "--file"}
+FLAGS = {
+    "codex": "--image",
+    "hermes": "--image",
+    "copilot": "--attachment",
+    "opencode": "--file",
+    "kilo": "--file",
+}
 
 
 def _suffix(agent: str, prompt: str) -> list[str]:
@@ -67,6 +74,7 @@ def test_attachment_fake_receives_binary_file_path_and_prompt(
             ]
         ),
     }
+    outputs["kilo"] = outputs["opencode"]
     script.write_text(
         "import json, pathlib, sys\n"
         f"pathlib.Path({str(log)!r}).write_text(json.dumps([sys.argv[1:], sys.stdin.read()]))\n"
@@ -242,6 +250,9 @@ def test_invalid_attachment_fails_before_input(
         ("opencode", ["--file=x"]),
         ("opencode", ["-f", "x"]),
         ("opencode", ["-fx"]),
+        ("kilo", ["--file=x"]),
+        ("kilo", ["-f", "x"]),
+        ("kilo", ["-fx"]),
     ],
 )
 def test_attachment_collision_and_native_only_compatibility(
@@ -328,6 +339,7 @@ def test_attachment_inventory(capsys: pytest.CaptureFixture[str]) -> None:
         "hermes": (["image"], 1),
         "copilot": (["image", "native document"], None),
         "opencode": (["file"], None),
+        "kilo": (["file"], None),
         "pi": (["image", "text file"], None),
     }
     assert main(["agents"]) == 0

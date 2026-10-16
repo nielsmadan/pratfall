@@ -119,6 +119,7 @@ def run(
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         start_new_session=True,
+                        env={**os.environ, **dict(invocation.env)} if invocation.env else None,
                     )
                 except OSError as error:
                     return _spawn_failure(started, error, invocation.argv[0])

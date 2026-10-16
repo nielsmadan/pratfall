@@ -15,14 +15,14 @@ from pratfall.adapters import (
     devin,
     droid,
     gemini,
+    goose,
     grok,
     hermes,
-    iflow,
+    kilo,
     kimi,
     kiro,
     openclaw,
     opencode,
-    openhands,
     pi,
     qwen,
     reasonix,
@@ -126,11 +126,9 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
             validate=opencode.validate,
             consumer=opencode.consumer,
         ),
-        "openhands": Adapter(
-            build=openhands.build,
-            validate=openhands.validate,
-            consumer=openhands.consumer,
-        ),
+        "kimi": Adapter(build=kimi.build, validate=kimi.validate, consumer=kimi.consumer),
+        "goose": Adapter(build=goose.build, validate=goose.validate, whole_document=goose.decode),
+        "kilo": Adapter(build=kilo.build, validate=kilo.validate, consumer=kilo.consumer),
         "warp": Adapter(
             build=warp.build,
             validate=warp.validate,
@@ -150,7 +148,6 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
             build=reasonix.build, validate=reasonix.validate, whole_document=reasonix.decode
         ),
         "droid": Adapter(build=droid.build, validate=droid.validate, whole_document=droid.decode),
-        "kimi": Adapter(build=kimi.build, validate=kimi.validate, consumer=kimi.consumer),
         "vibe": Adapter(build=vibe.build, validate=vibe.validate, whole_document=vibe.decode),
         "crush": Adapter(build=crush.build, validate=crush.validate, whole_document=crush.decode),
         "devin": Adapter(build=devin.build, validate=devin.validate, whole_document=devin.decode),
@@ -158,10 +155,5 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
             build=cortex.build, validate=cortex.validate, whole_document=cortex.decode
         ),
         "grok": Adapter(build=grok.build, validate=grok.validate, whole_document=grok.decode),
-        "iflow": Adapter(
-            build=iflow.build,
-            validate=iflow.validate,
-            whole_document=iflow.decode,
-        ),
     }
 )

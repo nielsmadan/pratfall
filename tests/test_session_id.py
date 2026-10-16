@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from adapter_helpers import codex_stream, codex_usage, copilot_result
-from pratfall.adapters import claude, codex, copilot, cursor, grok
+from pratfall.adapters import claude, codex, copilot, cursor, droid, grok, kimi
 from pratfall.catalog import BY_NAME
 from pratfall.cli import dispatch, main
 from pratfall.config import config_path, load_config, option_origins, parse_options, resolve_profile
@@ -202,7 +202,7 @@ def test_session_id_inventory_and_profile_listing(
 # Reporting is free wherever the native protocol already carries an id. Requesting forwards a
 # native flag, so it is granted only where that flag names a NEW session rather than resuming
 # one. Each agent's verified quote and date live in docs/reference/<agent>.md; amp, cortex,
-# crush, iflow and warp are unverified rather than excluded.
+# crush and warp are unverified rather than excluded.
 REQUESTING = {name for name, spec in BY_NAME.items() if spec.capabilities.session_id}
 REPORTING = {name for name, spec in BY_NAME.items() if spec.capabilities.reports_session_id}
 
@@ -222,6 +222,8 @@ def test_the_inventory_declares_both_sides_of_the_feature(
         "codex",
         "copilot",
         "cursor",
+        "droid",
+        "kimi",
         "grok",
     }
     assert REQUESTING <= REPORTING
@@ -230,6 +232,23 @@ def test_the_inventory_declares_both_sides_of_the_feature(
 @pytest.mark.parametrize("agent", sorted(REPORTING))
 def test_every_reporting_agent_surfaces_its_session(agent: str) -> None:
     documents = {
+        "droid": lambda: droid.decode(
+            json.dumps(
+                {
+                    "type": "result",
+                    "subtype": "success",
+                    "is_error": False,
+                    "result": "answer",
+                    "session_id": "native-session",
+                }
+            )
+        ),
+        "kimi": lambda: kimi.decode(
+            codex_stream(
+                {"role": "assistant", "content": "answer"},
+                {"role": "meta", "type": "session.resume_hint", "session_id": "native-session"},
+            )
+        ),
         "claude": lambda: claude.decode(
             json.dumps(
                 {

@@ -74,7 +74,8 @@ the [agent references](reference/overview.md).
   requested. It uses a private temporary directory and Markdown file, reopens the saved path for
   bounded validation, and runs the configured editor with argv in the invocation directory.
   The editor gets `/dev/tty` for all streams and a process group in the current session. Foreground
-  ownership transfers under scoped SIGTTOU suppression; startup SIGTTIN stops resume after handoff.
+  ownership transfers in a small Python launcher before it executes the editor, under scoped
+  SIGTTOU suppression. Later SIGTTIN/SIGTTOU stops resume under the same owned foreground group.
   Foreground ownership, terminal attributes and handlers restore on every exit. Editor interruption
   and descendant cleanup use bounded TERM/KILL escalation before the native agent deadline begins.
   Cleanup removes the entire temporary directory, including atomic-save sidecars, and terminates
@@ -225,18 +226,13 @@ which adapters use incremental consumption.
   `EVENT_BYTES`, `RETAINED_STATE_BYTES`, `RECORD_COUNT`, `NUMERIC_BYTES`. It also owns the
   `TERMINATE_GRACE` and `FINAL_DRAIN_GRACE` cleanup windows.
 
-[OpenHands](reference/openhands.md) needs a separate bounded consumer for mixed SDK events and
-native prose. Its trailing Rich summary is never reparsed as events; keep that exception out of
-the strict shared JSONL framer.
-
-All eight whole-document JSON adapters share one strictness rule: Claude, Cursor, Droid, Gemini,
-Grok, OpenClaw, Reasonix and Vibe reject a duplicate object key, a nonfinite number, a numeric literal
+All nine whole-document JSON adapters share one strictness rule: Claude, Cursor, Droid, Gemini,
+Goose, Grok, OpenClaw, Reasonix and Vibe reject a duplicate object key, a nonfinite number, a numeric literal
 wider than `NUMERIC_BYTES`, nesting deep enough to exhaust the parser, and an unpaired surrogate
 anywhere in the document, including in fields that adapter never reads. The duplicate-key, numeric
 and nesting guards run inside `parse`, while the nonfinite and unpaired-surrogate walk applies to a
 successfully-shaped document, so a provider or protocol failure detected earlier takes precedence.
-Claude, Cursor, Gemini and OpenClaw accepted all of those before 2026-09-14; one rule for eight
-adapters was chosen over four divergent ones, and the tightening is deliberate rather than a
+Claude, Cursor, Gemini and OpenClaw accepted all of those before 2026-09-14; one shared rule was chosen over four divergent ones, and the tightening is deliberate rather than a
 compatibility guarantee. Rejections name the underlying reason: `parse` reports the
 standard-library decoder message, a duplicate object key, an over-wide numeric literal or excessive
 nesting behind each agent's own message prefix.
@@ -267,6 +263,10 @@ the [agent references](reference/overview.md) establish each contract.
 [`normalize`](../src/pratfall/output.py) applies precedence in this order: interruption, runner
 timeout, runner error, decoded native timeout, native signal or nonzero exit, decoder error, success.
 Consequently, native nonzero exit takes precedence over ordinary protocol errors.
+Its `native_exit` message includes captured stderr followed by a recognized provider error,
+with identical diagnostics included once,
+bounded to 4,096 diagnostic characters plus a truncation marker. The native status remains the
+exit code; malformed protocol details do not replace the native failure.
 
 Populate nullable usage, `reported_models`, and `cost_usd` only from verified native mappings.
 [`model_map`, `model` and `cost`](../src/pratfall/adapters/accounting.py) validate nonempty UTF-8
@@ -418,3 +418,9 @@ Editor timing tests wait for editor readiness, hold the editor open beyond the a
 leave enough agent startup time for a busy host. Editor PTY subprocesses are not instrumented by
 the current `just coverage` run; assess their behavioral assertions separately from the reported
 module coverage.
+
+OpenCode and Kilo import their common JSONL protocol from `adapters/opencode_stream.py`, while
+keeping native argument validation and invocation construction separate. Kilo sets only its child
+invocation's `KILO_NO_DAEMON=1` through immutable `Invocation.env` overrides merged into the
+child environment by the runner, preventing implicit daemon attachment. The configured executable
+remains the directly spawned command, preserving startup-error classification.

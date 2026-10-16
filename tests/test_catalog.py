@@ -13,19 +13,19 @@ from pratfall.errors import PratError
         ("gemini", ("gm",)),
         ("antigravity", ("ag", "agy")),
         ("copilot", ("cp",)),
+        ("kimi", ()),
+        ("kilo", ()),
+        ("goose", ()),
         ("kiro", ()),
         ("cursor", ("cu",)),
         ("openclaw", ("claw",)),
         ("hermes", ("hm",)),
         ("opencode", ("oc",)),
-        ("openhands", ("oh",)),
         ("warp", ()),
-        ("iflow", ("if",)),
         ("qwen", ()),
         ("amp", ()),
         ("reasonix", ("rx",)),
         ("droid", ("dr",)),
-        ("kimi", ()),
         ("vibe", ()),
         ("crush", ("cr",)),
         ("devin", ("dv",)),
@@ -71,3 +71,9 @@ def test_only_verified_agents_support_fast_mode() -> None:
 def test_unknown_agent_is_actionable() -> None:
     with pytest.raises(PratError, match="prat agents"):
         get_agent("unknown")
+
+
+@pytest.mark.parametrize("name", ["openhands", "oh", "iflow", "if"])
+def test_retired_agents_are_rejected_with_selection_guidance(name: str) -> None:
+    with pytest.raises(PratError, match="prat agents"):
+        get_agent(name)

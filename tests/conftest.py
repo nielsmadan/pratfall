@@ -34,14 +34,14 @@ def native_contract_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> P
     config = tmp_path / "native-contract.toml"
     lines = ["version=1"]
     for agent in (
-        "openhands",
+        "kimi",
+        "kilo",
+        "goose",
         "warp",
-        "iflow",
         "qwen",
         "amp",
         "reasonix",
         "droid",
-        "kimi",
         "vibe",
         "crush",
         "devin",

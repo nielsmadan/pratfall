@@ -337,9 +337,13 @@ Built-in names, aliases, and management commands are reserved profile names. Whe
 introduces a collision, rename your profile, update commands that use it, and run
 `prat config validate`.
 
-This release reserves `openhands`, `oh`, `warp`, `iflow`, `if`, `qwen`, `amp`, `reasonix`, `rx`,
-`droid`, `dr`, `kimi`, `vibe`, `crush`, `cr`, `devin`, `dv`, `cortex`, `co`, and `grok`.
-For example, rename `[profiles.oh]` to `[profiles.my-openhands]`, keeping its agent and settings.
+The new built-ins reserve `goose` and `kilo`. Rename colliding profiles, for example
+`[profiles.goose]` to `[profiles.my-goose]`, keeping its agent and settings.
+
+OpenHands and iFlow have been removed: delete or retarget any `[agents.openhands]`,
+`[agents.iflow]`, or profiles selecting `openhands`/`oh`/`iflow`/`if`. The `kimi` selector now
+requires Kimi Code 2.1.1+, not the retired Python package; remove legacy native flags such as
+`--thinking`, `--plan`, and `--final-message-only`. Run `prat config validate` before use.
 
 `templates` is also reserved. Rename an existing `[profiles.templates]` and update invocations
 that select it before upgrading. The same applies to `completion`, reserved for the shell

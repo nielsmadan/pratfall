@@ -6,7 +6,8 @@ from pratfall.adapters.whole_json import document_error, encoding_error, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
 _ALLOWED: Mapping[str, Flag] = MappingProxyType(
-    {"--show-thinking": Flag(0)} | {name: Flag(1) for name in ("--max-steps", "--permission-mode")}
+    {"--show-thinking": Flag(0), "--fail-on-unverified": Flag(0)}
+    | {name: Flag(1) for name in ("--max-steps", "--permission-mode")}
 )
 _RESERVED: Mapping[str, Flag] = MappingProxyType(
     {

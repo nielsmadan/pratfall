@@ -6,7 +6,9 @@
 ## Native contract
 
 The [official CLI reference](https://docs.warp.dev/reference/cli/) documents local `oz agent run`,
-model selection and legacy support through the end of September 2026. Source is pinned to
+model selection and a supported legacy interface. On 2026-10-13 the reference states:
+“Warp will publish guidance before any support change.” The earlier September 2026 deadline
+is no longer the documented policy. Source is pinned to
 [6f575836c02bd80a4b2de2755e952bec1793d3df](https://github.com/warpdotdev/warp/tree/6f575836c02bd80a4b2de2755e952bec1793d3df)
 (checked 2026-09-11), rather than an unverified installed binary version. The
 [Clap arguments](https://github.com/warpdotdev/warp/blob/6f575836c02bd80a4b2de2755e952bec1793d3df/crates/warp_cli/src/agent.rs)

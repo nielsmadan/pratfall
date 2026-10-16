@@ -18,6 +18,7 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--model",
             "-m",
             "--small-model",
+            "--reasoning-effort",
             "--session",
             "-s",
             "--cwd",
@@ -44,6 +45,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     argv = [*resolved.command, "run", "--quiet"]
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
+    if resolved.options.effort is not None:
+        argv.extend(("--reasoning-effort", resolved.options.effort))
     argv.extend(arguments)
     return Invocation(tuple(argv), prompt)
 

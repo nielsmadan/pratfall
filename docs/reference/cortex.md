@@ -8,11 +8,14 @@
 The [CLI reference](https://docs.snowflake.com/en/user-guide/cortex-code/cli-reference), checked
 2026-09-11, establishes executable `cortex`, invocation `exec --file -`, and plain stdin.
 Global `--model`, `--effort minimal|low|medium|high|max`, and `--max-turns` map the corresponding
-Prat options; native turns count each conversation round. Optional `--connection`/`-c` takes one
+Prat options. The 2026-10-13 reference defines the limit as “Maximum number of agentic turns per
+conversation round”. Optional `--connection`/`-c` takes one
 value selecting an existing Snowflake connection. Global options precede `exec`. No fast or
 spending controls are verified. Prompt/print/file/output, model/effort/turns, workdir/config,
 session/resume/continue/private, plan/bypass, cloud/remote/executor and administrative controls
-are reserved or rejected. `--github` implies cloud execution and is also blocked. The version
+are reserved or rejected. `--github` is a cloud-related credential control and is also blocked;
+the reference describes it as “With `--cloud`, allow authenticated GitHub access”, not as an
+independent cloud-execution selector. The version
 diagnostic is `--version`.
 
 Exec disables plan mode and rejects interactive asks. Existing Snowflake account, connection and

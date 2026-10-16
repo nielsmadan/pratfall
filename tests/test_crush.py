@@ -53,6 +53,7 @@ def test_crush_defaults_add_only_one_shot_controls() -> None:
         ("--model=other",),
         ("-mother",),
         ("--small-model=x",),
+        ("--reasoning-effort=high",),
         ("--session=x",),
         ("-sx",),
         ("--continue",),
@@ -89,7 +90,6 @@ def test_crush_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
 @pytest.mark.parametrize(
     "options",
     [
-        Options(effort="high"),
         Options(fast=False),
         Options(max_turns=2),
         Options(max_budget_usd=1),
@@ -167,3 +167,8 @@ def test_crush_native_exit_controls_success(
     assert (result["error"]["code"] if native_exit else result["error"]) == (
         "native_exit" if native_exit else None
     )
+
+
+def test_crush_effort_is_forwarded_in_the_native_invocation() -> None:
+    invocation = crush.build(resolved_profile("crush", Options(effort="high")), b"task")
+    assert invocation.argv[-2:] == ("--reasoning-effort", "high")

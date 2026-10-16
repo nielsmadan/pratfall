@@ -1,6 +1,6 @@
-# Crush 0.93.1
+# Crush 0.98.1
 
-**Evidence recorded:** 2026-09-11.
+**Evidence recorded:** 2026-09-11, refreshed for 0.98.1 effort support on 2026-10-13.
 **Method:** Static primary-source and package inspection; native agents were not executed.
 
 ## Native contract
@@ -14,8 +14,12 @@ text without trimming. The independent fake records raw stdin separately from th
 Accepted native options are `--verbose`/`-v` and `--debug`/`-d`, each with zero values;
 debug is inherited from the [root command](https://github.com/charmbracelet/crush/blob/v0.93.1/internal/cmd/root.go).
 Prompt/output/model/small-model, cwd/data-dir/config, session/continue, host/channels/server,
-permission-bypass and administrative selectors are reserved or rejected. Effort, fast and
-normalized budgets are unsupported. The version diagnostic is `--version`.
+permission-bypass and administrative selectors are reserved or rejected. Fast and normalized budgets are unsupported. Effort maps to native `--reasoning-effort`;
+accepted values depend on the selected model. The version diagnostic is `--version`.
+
+On 2026-10-13 the [0.98.1 run command](https://github.com/charmbracelet/crush/blob/v0.98.1/internal/cmd/run.go)
+still supports this invocation and additionally exposes `--reasoning-effort`. Prat now maps public effort to this flag and reserves its native spelling to prevent competing
+overrides. No authenticated native run was performed.
 
 The [local application](https://github.com/charmbracelet/crush/blob/v0.93.1/internal/app/app.go)
 automatically approves the noninteractive session. Existing provider configuration is required.

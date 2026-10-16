@@ -29,19 +29,19 @@ it does not maintain a fixed model catalog.
 | OpenClaw | `openclaw` | `claw` | Embedded `agent exec`; optional token usage, model identity, and native USD cost |
 | Hermes | `hermes` | `hm` | Quiet text mode; usage unknown |
 | OpenCode | `opencode` | `oc` | Structured stream, token usage, and per-step native USD cost; model IDs unavailable |
-| OpenHands | `openhands` | `oh` | SDK final assistant/finish text; native headless autoapproval; no model/effort override; accounting unknown |
 | Warp | `warp` | none | Legacy executable `oz`; NDJSON agent text; model override, no effort or accounting |
-| iFlow | `iflow` | `if` | Legacy text mode; existing BYOK setup required; model override, no effort or accounting |
 | Qwen Code | `qwen` | none | JSONL final result, token counts and root-message model IDs; model and native session-turn limit |
 | Amp | `amp` | none | JSONL final result and optional token counts; no generic model, effort or budget override |
 | Reasonix | `reasonix` | `rx` | Whole JSON final result and native token counts; configured provider selector and provider-specific effort |
 | Droid | `droid` | `dr` | Whole JSON result; model and provider-specific reasoning effort; accounting unknown |
-| Kimi CLI | `kimi` | none | Final-only assistant JSONL; native autoapproval; model override; accounting unknown |
+| Kimi Code | `kimi` | none | Latest assistant text and returned session ID; native autoapproval; model override; accounting unknown |
 | Mistral Vibe | `vibe` | none | Whole public-history JSON; native turns/USD limits; no model/effort override or accounting |
-| Crush | `crush` | `cr` | Quiet text capture; local run autoapproval; model override; accounting unknown |
+| Crush | `crush` | `cr` | Quiet text capture; local run autoapproval; model and effort override; accounting unknown |
 | Devin | `devin` | `dv` | Print text capture; requires trusted workspace; model override; accounting unknown |
 | Cortex Code / CoCo | `cortex` | `co` | Exec text capture; Snowflake connection required; model/effort/turns; accounting unknown |
 | Grok Build | `grok` | none | Whole JSON result; model/effort/turns; native tokens, model IDs and complete USD cost |
+| Goose | `goose` | none | Last assistant text from JSON history; native USD cost and turn limit; token usage unknown |
+| Kilo | `kilo` | none | OpenCode-compatible events, token usage and native USD cost; daemon attachment disabled |
 | Pi | `pi` | none | v0.85.1+ JSON events; model/effort/tools/attachments; native session saving |
 
 ## Shared controls and limitations
@@ -147,47 +147,17 @@ extra directories, native-agent selection, fast mode and budgets are unsupported
 [Pi reference](../reference/pi.md) for supported passthrough flags, path restrictions and evidence.
 
 
-### OpenHands
-
-Support targets CLI 1.16.0 with its pinned SDK 1.21.0.
-
-- **Setup and permissions:** configure OpenHands before running headlessly. Headless mode
-  automatically approves actions and disables the native critic. Prat adds no approval layer.
-- **Model:** use native settings, or pass `--override-with-envs` after `--` to select an existing
-  environment configuration.
-- **Completion:** Prat requires a terminal SDK assistant message or finish action. Status lines
-  and the echoed conversation summary do not prove completion. Conversation error events fail
-  even with exit zero. A finish message can report that the work could not be done; Prat does
-  not judge task success from its prose.
-
 ### Warp
 
 Warp uses local `oz agent run`. Its
-[legacy `oz` interface](https://docs.warp.dev/reference/cli/) is documented through the end of
-September 2026. The newer `warp` TUI has no verified replacement one-shot invocation here.
+[legacy `oz` interface](https://docs.warp.dev/reference/cli/) remains supported; the current docs
+promise guidance before support changes. The newer `warp` TUI has no verified replacement one-shot invocation here.
 Compatibility needs rechecking at release time; Prat has no date cutoff or automatic fallback.
 
 - **Permissions:** native permissions and authentication remain active.
 - **Native arguments:** `--name`/`-n`, `--strict-mcp-startup` and `--mcp-startup-timeout`.
 - **Output:** Prat joins NDJSON agent messages in order, excluding reasoning and tool output.
   Tool errors can be recovered from. Exit zero and end of stream complete the run, even without text.
-
-### iFlow
-
-iFlow support targets the published 0.5.19 package. Maintenance ended on 2026-03-20 and its hosted
-service closed on 2026-04-17. The [official FAQ](https://vibex.iflow.cn/t/topic/4819) confirms
-existing installations can continue using custom APIs. Configure your own API key natively before
-using this adapter. The pinned package defaults to automatic approval for noninteractive prompts unless native settings or
-explicit modes override it.
-
-- **Native arguments:** `--default` (manual approval), `--plan` (planning) and `--thinking`, for
-  example `prat if "review this" -- --plan`. Thinking is not a generic effort setting.
-- **Output:** stdout may include banners and progress. Prat cannot detect errors in prose;
-  native exit status determines success. Usage, observed model and cost stay unknown.
-
-**Shared by OpenHands, Warp and iFlow:** they inherit native authentication and settings. Native
-startup may update or migrate settings; Prat does not run setup or edit vendor configuration.
-Prompts are passed as literal arguments, subject to operating-system argument-size limits.
 
 ### Qwen Code
 
@@ -214,9 +184,11 @@ Amp uses `--execute --stream-json` with plain stdin and one terminal result.
 
 ### Reasonix
 
-Support targets 1.38.5.
+Support targets Reasonix 2.37.0, retaining the older core result envelope. See the
+[version-line audit](../reference/reasonix.md).
 
-- **Permissions:** default headless ask permissions fail closed.
+- **Permissions:** native defaults select automatic mode only for a trusted workspace with
+  working write-confining sandbox support; otherwise headless ask mode refuses writes.
 - **Controls:** `--model` selects a configured provider name; effort levels depend on the provider.
   Native `--max-steps` counts tool-call rounds and is available after `--`, alongside
   `--permission-mode` and `--show-thinking`. It does not map to `max_turns`.
@@ -240,17 +212,35 @@ Droid uses `exec --output-format json` with plain stdin.
 - **Output:** Prat requires a successful native result object. Usage, observed models and USD
   cost stay unknown.
 
-### Kimi CLI
+### Kimi Code
 
-Support targets kimi-cli 1.50.0, not its successor kimi-code.
+Support targets `@moonshot-ai/kimi-code` 2.1.1+, executable `kimi`; the retired Python `kimi-cli`
+is incompatible. Prat sends `--output-format stream-json --prompt=TEXT` with empty stdin.
+Model selection is supported. Native `--skills-dir` and `--add-dir` accept paths after `--`.
+Legacy thinking/print/input-format flags are rejected.
 
-- **Permissions:** print mode automatically approves tools and dismisses user questions.
-- **Controls:** native `--thinking`/`--no-thinking`, `--plan` and `--debug` are available after
-  `--`. Thinking is boolean, not generic effort.
-- **Input and output:** Prat uses final-message-only stream JSON with plain stdin, which Kimi
-  trims. It returns the last emitted assistant string; exit zero and end of stream can succeed
-  without output. Buffered text cannot be recovered if Kimi never emits it. Plain-text native
-  errors preserve the failure status and any answer already emitted. Accounting is unverified.
+Headless execution automatically approves tools subject to native deny rules. Prat returns the
+latest nonempty assistant text and the session ID from native resume metadata. Tools, retry
+metadata and goal summaries do not become answers. Native exit status and EOF determine success;
+usage and cost remain unknown. See the [Kimi Code contract](../reference/kimi.md).
+
+### Goose
+
+`goose run --quiet --no-session --output-format json --instructions -` reads stdin. Configure
+provider authentication with `goose configure` first. Public model and turn limits are supported;
+select an already-configured provider with native `--provider NAME` after `--`.
+
+Prat returns the last assistant text from completed JSON history and native USD cost when present.
+Token usage remains unknown. Native permissions remain active. See the [Goose contract](../reference/goose.md).
+
+### Kilo
+
+`kilo run --format json` reads stdin. Prat disables automatic daemon attachment through the child
+invocation's `KILO_NO_DAEMON=1`, keeping execution in its owned process group. Authentication and
+permissions remain native; no approval flag is injected.
+
+Model, effort (`--variant`) and file attachments are supported. Output, token usage and cost use
+the shared OpenCode protocol decoder. See the [Kilo contract](../reference/kilo.md).
 
 ### Mistral Vibe
 
@@ -275,12 +265,13 @@ setup or configuration changes.
 
 ### Crush
 
-Support targets 0.93.1. `run --quiet` reads stdin and hides the native spinner. Prat sends the
+Support targets 0.98.1. `run --quiet` reads stdin and hides the native spinner. Prat sends the
 original prompt bytes; Crush adds two trailing newlines without trimming the input.
 
 - **Setup and permissions:** existing provider setup is required. Local run automatically
   approves its session.
-- **Controls:** model selection is supported; generic effort, fast and budgets are unsupported.
+- **Controls:** model and effort selection are supported; fast and budgets are unsupported.
+  Effort maps to `--reasoning-effort`; accepted values depend on the model.
   Optional native flags are `--verbose`/`-v` and `--debug`/`-d`.
 - **Server backend:** `CRUSH_CLIENT_SERVER` can select a server whose lifetime is outside Prat's
   child process group. Native model overrides there can update workspace preferences.
@@ -350,16 +341,17 @@ new session — Claude "Use a specific session ID for the conversation", Grok "U
 UUID for a new session", Copilot "a new session is created only when the value is a valid
 UUID". It is withheld where the flag resumes one instead — Droid "Continue an existing
 session", Antigravity "Resume a previous conversation by ID", Kimi "Resumes a session" — since
-Prat runs one shot per invocation. `amp --thread`, `cortex`/`crush`/`iflow --session`, `warp --conversation` and the reserved
+Prat runs one shot per invocation. `amp --thread`, `cortex`/`crush --session`, `warp --conversation` and the reserved
 `--session-id` on `qwen` and `pi` are simply unverified, and stay reserved until someone
 checks.
 
 Copilot is the one dual-mode case: an id that matches an existing session resumes it instead of
 creating one. A freshly generated UUID always creates.
 
-**Reporting.** `--json` reports `native_session_id` for every agent whose result protocol
-carries one: Claude Code (`session_id`), Codex (`thread.started.thread_id`), Copilot
-(`sessionId`), Cursor (`session_id`) and Grok (`sessionId`). `prat agents --json` declares this
+**Reporting.** `--json` reports `native_session_id` for these implemented native fields:
+Claude Code (`session_id`), Codex (`thread.started.thread_id`), Copilot (`sessionId`),
+Cursor and Droid (`session_id`), Kimi Code (`session.resume_hint.session_id`), and Grok
+(`sessionId`). `prat agents --json` declares this
 as the boolean `reports_session_id` capability, separately from `session_id`, because the two
 sets differ. It prefers what the agent reported and falls back to what was requested, so a run
 that dies before reporting still names its session. A reported id that is blank or cannot be
@@ -388,7 +380,7 @@ calls automatically. Prat adds no approval flags. See [selection rules](running.
 | Codex | Repeated `--image=PATH`, followed by `-- -` for the stdin task | Images; comma-free paths. |
 | Hermes | `--image=PATH` | One image per query. |
 | Copilot | Repeated `--attachment=PATH` | Images and native documents. |
-| OpenCode | Repeated `--file=PATH` | Files; public attachments reject directories. |
+| OpenCode / Kilo | Repeated `--file=PATH` | Files; public attachments reject directories. |
 | Pi | Repeated `@PATH` | Images and text files; Pi adds native text wrappers and skips empty files. |
 
 Other agents reject nonempty `attachments`. `prat agents --json` exposes `attachments`,

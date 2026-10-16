@@ -7,9 +7,13 @@
 
 ## Native contract
 
-Docs advertise `--output-format stream-json` on V2/V3, but omit event schemas. V3 documentation
-also says classic `kiro-cli chat` does not support V3, so do not silently force an engine.
-Native exit codes include 0 success, 1 failure, 3 mandatory MCP startup failure.
+Docs advertise `--output-format stream-json` on V2/V3, but omit complete event schemas.
+The 2026-10-13 [headless reference](https://kiro.dev/docs/cli/headless/) documents
+`kiro-cli chat --v3 --no-interactive` and `--agent-engine <v1|v2|v3>`; the earlier claim that
+classic chat cannot use V3 is stale. Prat does not force an engine.
+Native exit codes include 0 success, 1 failure, 3 mandatory MCP startup failure, and 4 for an
+unavailable selected agent. In V3, an unavailable requested model can produce a warning and the
+run continues; passing `--model` does not guarantee the requested model was used.
 Do not confuse model-list `--format json` with chat format or build a structured decoder from
 convenient guessed fixtures.
 

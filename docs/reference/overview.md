@@ -3,6 +3,9 @@
 This reference records the external CLI contracts used by Pratfall. Each agent has its own
 page so its source links, version baseline, and open questions stay together.
 
+The [2026-10-13 local verification record](live-verification.md) distinguishes current executable
+discovery, version probes, and blocked live examples from documentation-only evidence.
+
 ## Evidence scope
 
 Initial interface evidence was recorded on 2026-09-09 through source inspection and
@@ -55,25 +58,25 @@ argv fixtures without authenticated execution.
 | [Codex](codex.md) | `codex exec --json` | `--model` | `-c model_reasoning_effort="LEVEL"` | No verified total-token/spend cap | Installed 0.153.4, [noninteractive docs](https://developers.openai.com/codex/noninteractive), [event source](https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs) |
 | [Gemini](gemini.md) | `gemini --output-format json --prompt=PROMPT` | `--model` | Unsupported | None verified | [Headless reference](https://geminicli.com/docs/cli/headless) and [UI telemetry source](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/telemetry/uiTelemetry.ts) |
 | [Antigravity](antigravity.md) | `agy --input-format stream-json --output-format stream-json` with one stdin user event; requires 1.1.15+ | `--model` | `--effort low\|medium\|high` | No verified native timeout for stdin stream mode | [1.1.15 changelog](https://github.com/google-antigravity/antigravity-cli/blob/main/CHANGELOG.md) and [stdin stream docs](https://antigravity.google/docs/cli/headless#stream-prompts-from-stdin); installed 1.1.11 predates this interface |
-| [Copilot](copilot.md) | `copilot --output-format=json --prompt=PROMPT` | `--model` | `--effort low\|medium\|high\|xhigh\|max` | `--max-ai-credits`, soft per-response cap | [CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference) and published 1.0.83 package source |
+| [Copilot](copilot.md) | `copilot --output-format=json --prompt=PROMPT` | `--model` | `--effort low\|medium\|high\|xhigh\|max` | `--max-ai-credits`, soft per-response cap | [CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference) and published 1.0.97 package source |
 | [Kiro](kiro.md) | `kiro-cli chat --no-interactive --wrap never -- PROMPT` | `--model` | `--effort low\|medium\|high\|xhigh\|max` | None verified | [CLI reference](https://kiro.dev/docs/reference/cli-commands/), [headless](https://kiro.dev/docs/cli/headless/), and statically inspected 2.21.2 package |
 | [Cursor](cursor.md) | `agent --print --output-format json agent -- PROMPT` | `--model` | Unsupported | None verified | [Parameters](https://cursor.com/docs/cli/reference/parameters), [output format](https://cursor.com/docs/cli/reference/output-format), and published 2026.09.08 package source |
 | [OpenClaw](openclaw.md) | `openclaw agent exec --json --message-file -` | `--model provider/model` | `--thinking` | Native timeout in seconds | [Agent exec](https://docs.openclaw.ai/cli/agent) and [result projection](https://github.com/openclaw/openclaw/blob/main/src/commands/agent-exec-result.ts) |
 | [Hermes](hermes.md) | `hermes chat --oneshot --quiet --query-file -` | `--model`, `--provider` | `--reasoning none\|minimal\|low\|medium\|high\|xhigh\|max\|ultra` | `--max-turns` | [CLI docs](https://hermes-agent.nousresearch.com/docs/reference/cli-commands), [source](https://github.com/NousResearch/hermes-agent/blob/main/cli.py) |
 | [OpenCode](opencode.md) | `opencode run --format json` with stdin prompt | `--model provider/model` | `--variant` (provider-specific string) | None verified | Installed 1.18.29 help, [run emitter](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/cli/cmd/run.ts), and [session processor](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/session/processor.ts) |
-| [OpenHands](openhands.md) | `openhands --headless --json --task=PROMPT` | Unsupported | Unsupported | None verified | [CLI 1.16.0 / SDK 1.21.0](openhands.md) |
 | [Warp](warp.md) | `oz agent run --output-format ndjson --prompt=PROMPT` | `--model` | Unsupported | None verified | [Legacy Oz source](warp.md) |
-| [iFlow](iflow.md) | `iflow --prompt=PROMPT` | `--model` | Unsupported | None verified | [0.5.19 package](iflow.md) |
 | [Qwen Code](qwen.md) | `qwen --output-format stream-json` with stdin | `--model` | Unsupported | `--max-session-turns` | [0.23.3 source](qwen.md) |
 | [Amp](amp.md) | `amp --execute --stream-json` with stdin | Unsupported | Unsupported | None verified | [Official docs](amp.md) |
-| [Reasonix](reasonix.md) | `reasonix run --output-format json` with stdin | `--model` configured provider | `--effort` | Native `--max-steps`, not normalized turns | [1.38.5 source](reasonix.md) |
+| [Reasonix](reasonix.md) | `reasonix run --output-format json` with stdin | `--model` configured provider | `--effort` | Native `--max-steps`, not normalized turns | [2.37.0 source](reasonix.md) |
 | [Droid](droid.md) | `droid exec --output-format json` with stdin | `--model` | `--reasoning-effort` | None verified | [0.209.0 baseline](droid.md) |
-| [Kimi CLI](kimi.md) | `kimi --print --input-format text --output-format stream-json --final-message-only` with stdin | `--model` | Unsupported | None verified | [1.50.0 source](kimi.md) |
+| [Kimi Code](kimi.md) | `kimi --output-format stream-json --prompt=PROMPT` | `--model` | Unsupported | None verified | [2.1.1 source](kimi.md) |
 | [Mistral Vibe](vibe.md) | `vibe --prompt --output json` with stdin | Unsupported | Unsupported | `--max-turns`, `--max-price` | [2.25.2 source](vibe.md) |
-| [Crush](crush.md) | `crush run --quiet` with stdin | `--model` | Unsupported | None verified | [0.93.1 source](crush.md) |
+| [Crush](crush.md) | `crush run --quiet` with stdin | `--model` | `--reasoning-effort` | None verified | [0.98.1 source](crush.md) |
 | [Devin](devin.md) | `devin -p -- PROMPT` | `--model` | Unsupported | None verified | [3000.10.21 baseline](devin.md) |
 | [Cortex Code / CoCo](cortex.md) | `cortex exec --file -` with stdin | `--model` | `--effort minimal\|low\|medium\|high\|max` | `--max-turns` | [1.1.78 baseline](cortex.md) |
 | [Grok Build](grok.md) | `grok --no-auto-update --output-format json --single=PROMPT` | `--model` | `--reasoning-effort none\|minimal\|low\|medium\|high\|xhigh\|max` | `--max-turns` | [Official docs and source](grok.md) |
+| [Goose](goose.md) | `goose run --quiet --no-session --output-format json --instructions -` | `--model` | Unsupported | `--max-turns` | [Current official source](goose.md) |
+| [Kilo](kilo.md) | `kilo run --format json` with stdin and child `KILO_NO_DAEMON=1` | `--model provider/model` | `--variant` | None verified | [Current official source](kilo.md) |
 | [Pi](pi.md) | `pi --print --mode json` with stdin | `--model` | `--thinking off\|minimal\|low\|medium\|high\|xhigh\|max` | None verified | [v0.85.1 source](pi.md) |
 
 ## Remaining factual verification
@@ -90,8 +93,7 @@ reconstructed command as sole evidence for exact argv.
 
 ## A-tier contracts frozen on 2026-09-11
 
-The OpenHands, Warp, iFlow, Qwen, Amp, Reasonix, Droid, Kimi, Vibe, Crush, Devin, and Cortex
-contracts were established by static primary-source and package inspection before
+The original twelve additional contracts were established by static primary-source and package inspection before
 writing their adapters and independent fake-native fixtures. No native agent, including help or
 version, was executed. Fixtures establish Prat's behavior against these contracts, not compatibility
 with every installed release. Version probes use `--version` except Amp's `version`; normal
@@ -100,3 +102,11 @@ agent pages establish a mapping; missing fields remain null.
 
 The Grok contract was established separately on 2026-09-14 from official xAI documentation and
 source revision `37949780c144e37df692e3d669051a21fec24f20`. Grok was not installed or executed.
+
+## Catalog refresh (2026-10-13)
+
+OpenHands and iFlow were removed because their CLIs are no longer maintained. The `kimi` selector
+now targets maintained Kimi Code 2.1.1 instead of retired `kimi-cli`. Goose and Kilo were added.
+Reasonix 2.37.0 retains the core one-shot contract; Crush effort and Droid returned session IDs
+are now mapped. See the [verification queue](live-verification.md) for maintenance evidence,
+installation prerequisites, deferred candidates and outstanding user-run examples.

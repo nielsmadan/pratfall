@@ -109,7 +109,9 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "__main__": frozenset({"cli"}),
 }
 
-ADAPTER_SHARED: frozenset[str] = frozenset({"accounting", "native_args", "whole_json"})
+ADAPTER_SHARED: frozenset[str] = frozenset(
+    {"accounting", "native_args", "whole_json", "opencode_stream"}
+)
 
 ADAPTER_AGENTS: frozenset[str] = frozenset(
     {
@@ -124,14 +126,14 @@ ADAPTER_AGENTS: frozenset[str] = frozenset(
         "devin",
         "droid",
         "gemini",
+        "goose",
         "grok",
+        "kilo",
         "hermes",
-        "iflow",
         "kimi",
         "kiro",
         "openclaw",
         "opencode",
-        "openhands",
         "pi",
         "qwen",
         "reasonix",
@@ -146,6 +148,7 @@ SIBLING_IMPORTS_ALLOWED: Mapping[str, Mapping[str, frozenset[str]]] = {
         "accounting": frozenset(),
         "native_args": frozenset(),
         "whole_json": frozenset(),
+        "opencode_stream": frozenset({"accounting"}),
         "registry": ADAPTER_AGENTS,
         **dict.fromkeys(sorted(ADAPTER_AGENTS), ADAPTER_SHARED),
     },

@@ -40,14 +40,6 @@ if request.get('immediate'):
         process.wait(timeout=3)
         return process
     subprocess.Popen = spawn
-if request.get('race'):
-    original = os.tcsetpgrp
-    def transfer(fd, group):
-        if group != foreground:
-            pid, status = os.waitpid(group, os.WUNTRACED)
-            report['startup_stop'] = os.WSTOPSIG(status)
-        original(fd, group)
-    os.tcsetpgrp = transfer
 try:
     if 'args' in request:
         report['code'] = main(request['args'])
@@ -147,6 +139,9 @@ def editor_session(
         with suppress(ProcessLookupError, PermissionError):
             os.killpg(process.pid, signal.SIGKILL)
         process.wait(timeout=5)
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
         editor_record = directory / "editor.json"
         if editor_record.exists():
             with suppress(ProcessLookupError, PermissionError):
@@ -184,14 +179,21 @@ os.write(2, b'EDITOR DIAGNOSTIC\\n')
     assert not Path(record["path"]).exists()
 
 
-def test_editor_startup_terminal_read_race(tmp_path: Path) -> None:
-    code = "os.write(1, b'READING\\n')\npath.write_bytes(os.read(0, 100))\n"
-    with editor_session(tmp_path, code, {"race": True}) as session:
-        session.wait_for(b"READING")
-        os.write(session.master, b"after stop\n")
+@pytest.mark.parametrize("operation", ["read", "attributes"])
+def test_editor_owns_terminal_before_first_operation(tmp_path: Path, operation: str) -> None:
+    code = (
+        "os.write(1, b'READING\\n')\npath.write_bytes(os.read(0, 100))\n"
+        if operation == "read"
+        else "termios.tcsetattr(0, termios.TCSANOW, termios.tcgetattr(0))\npath.write_text('edited')"
+    )
+    with editor_session(tmp_path, code) as session:
+        if operation == "read":
+            session.wait_for(b"READING")
+            os.write(session.master, b"edited\n")
         report, _, _ = session.finish()
-    assert report["startup_stop"] == signal.SIGTTIN
-    assert report["value"] == "after stop\n"
+    assert report["value"].strip() == "edited"
+    record = json.loads((tmp_path / "editor.json").read_text())
+    assert record["foreground"]
 
 
 @pytest.mark.parametrize(
@@ -306,7 +308,7 @@ while True: signal.pause()
 
 
 @pytest.mark.parametrize("code", [0, 9])
-def test_editor_exits_before_foreground_handoff(tmp_path: Path, code: int) -> None:
+def test_editor_immediate_exit_restores_foreground(tmp_path: Path, code: int) -> None:
     with editor_session(tmp_path, f"sys.exit({code})", {"immediate": True}) as session:
         report, _, _ = session.finish()
     assert report["code"] == (2 if code else 0)
@@ -410,8 +412,9 @@ def test_edit_cli_allows_absent_or_blank_draft(tmp_path: Path, arguments: list[s
     )
 
 
-def test_editor_resumes_sigttin_stop_after_handoff(tmp_path: Path) -> None:
-    code = "os.kill(os.getpid(), signal.SIGTTIN)\npath.write_text('resumed')"
+@pytest.mark.parametrize("chosen", [signal.SIGTTIN, signal.SIGTTOU])
+def test_editor_resumes_terminal_stop_after_handoff(tmp_path: Path, chosen: signal.Signals) -> None:
+    code = f"os.kill(os.getpid(), {int(chosen)})\npath.write_text('resumed')"
     with editor_session(tmp_path, code) as session:
         report, _, _ = session.finish()
     assert report["value"] == "resumed"

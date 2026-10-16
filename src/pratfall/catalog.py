@@ -121,9 +121,16 @@ AGENTS = (
         ("opencode",),
         Capabilities(effort=True, attachments=True, attachment_types=("file",)),
     ),
-    AgentSpec("openhands", "OpenHands", ("oh",), ("openhands",), Capabilities(model=False)),
+    AgentSpec("kimi", "Kimi Code", (), ("kimi",), Capabilities(reports_session_id=True)),
+    AgentSpec("goose", "Goose", (), ("goose",), Capabilities(budgets=frozenset({"max_turns"}))),
+    AgentSpec(
+        "kilo",
+        "Kilo",
+        (),
+        ("kilo",),
+        Capabilities(effort=True, attachments=True, attachment_types=("file",)),
+    ),
     AgentSpec("warp", "Warp", (), ("oz",)),
-    AgentSpec("iflow", "iFlow", ("if",), ("iflow",)),
     AgentSpec(
         "qwen",
         "Qwen Code",
@@ -148,6 +155,7 @@ AGENTS = (
         ("dr",),
         ("droid",),
         Capabilities(
+            reports_session_id=True,
             instructions=True,
             tools=True,
             disabled_tools=True,
@@ -167,7 +175,6 @@ AGENTS = (
             ),
         ),
     ),
-    AgentSpec("kimi", "Kimi", (), ("kimi",)),
     AgentSpec(
         "vibe",
         "Mistral Vibe",
@@ -183,7 +190,7 @@ AGENTS = (
             disabled_tools_scope="native available tools, including MCP and connectors",
         ),
     ),
-    AgentSpec("crush", "Crush", ("cr",), ("crush",)),
+    AgentSpec("crush", "Crush", ("cr",), ("crush",), Capabilities(effort=True)),
     AgentSpec("devin", "Devin", ("dv",), ("devin",)),
     AgentSpec(
         "cortex",

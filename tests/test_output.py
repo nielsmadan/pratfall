@@ -180,3 +180,56 @@ def test_native_signal_and_success_json_shape() -> None:
 def test_envelope_reports_the_session_the_agent_named() -> None:
     result = normalize(RESOLVED, process(), DecodedOutput(output="answer", session_id="abc123"))
     assert result_dict(result)["native_session_id"] == "abc123"
+
+
+@pytest.mark.parametrize("native", [1, 23])
+def test_native_failure_retains_provider_diagnostic(native: int) -> None:
+    result = normalize(
+        RESOLVED,
+        process(native),
+        DecodedOutput(error=ResultError("provider_error", "Missing API key.")),
+    )
+    assert result.exit_code == native
+    assert result.error == ResultError(
+        "native_exit", f"Codex exited with status {native}.\nMissing API key."
+    )
+
+
+def test_native_failure_includes_bounded_stderr() -> None:
+    native = ProcessResult(RawCapture(), b"x" * 5000, 1, 42)
+    result = normalize(RESOLVED, native, DecodedOutput())
+    assert result.error == ResultError(
+        "native_exit", "Codex exited with status 1.\n" + "x" * 4096 + "\n[diagnostic truncated]"
+    )
+
+
+@pytest.mark.parametrize(
+    ("provider", "expected"),
+    [
+        ("Provider reported a failed run.", "401 Unauthorized\nProvider reported a failed run."),
+        ("401 Unauthorized", "401 Unauthorized"),
+    ],
+)
+def test_native_failure_retains_stderr_alongside_provider_error(
+    provider: str, expected: str
+) -> None:
+    native = ProcessResult(RawCapture(), b"401 Unauthorized\n", 1, 42)
+    result = normalize(
+        RESOLVED, native, DecodedOutput(error=ResultError("provider_error", provider))
+    )
+    assert result.error == ResultError("native_exit", "Codex exited with status 1.\n" + expected)
+
+
+def test_combined_native_diagnostics_are_bounded() -> None:
+    native = ProcessResult(RawCapture(), b"x" * 3000, 1, 42)
+    result = normalize(
+        RESOLVED, native, DecodedOutput(error=ResultError("provider_error", "y" * 3000))
+    )
+    assert result.error == ResultError(
+        "native_exit",
+        "Codex exited with status 1.\n"
+        + "x" * 3000
+        + "\n"
+        + "y" * 1095
+        + "\n[diagnostic truncated]",
+    )

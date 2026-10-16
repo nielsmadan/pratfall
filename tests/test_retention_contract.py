@@ -1,6 +1,6 @@
 import json
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -10,9 +10,9 @@ from pratfall.adapters import (
     antigravity,
     codex,
     copilot,
+    kilo,
     kimi,
     opencode,
-    openhands,
     pi,
     qwen,
     warp,
@@ -56,10 +56,8 @@ def test_capturing_consumer_preserves_native_stdout_with_a_complete_bound() -> N
 
 
 def _budget(consumer: ByteConsumer) -> StateBudget:
-    if isinstance(consumer, JsonlConsumer):
-        return consumer.budget
-    assert isinstance(consumer, openhands._Consumer)
-    return consumer._budget
+    assert isinstance(consumer, JsonlConsumer)
+    return consumer.budget
 
 
 def _retained(consumer: ByteConsumer) -> tuple[int, int]:
@@ -183,21 +181,8 @@ def _antigravity_usage(**changes: int) -> dict[str, int]:
     return usage
 
 
-def _openhands_message(text: object) -> dict[str, object]:
-    content = [{"type": "text", "text": text}]
-    return {
-        "kind": "MessageEvent",
-        "source": "agent",
-        "llm_message": {"role": "assistant", "content": content},
-    }
-
-
 def _warp_agent(text: object) -> dict[str, object]:
     return {"type": "agent", "text": text}
-
-
-def _kimi_message(content: object, role: str = "assistant") -> dict[str, object]:
-    return {"role": role, "content": content}
 
 
 def test_codex_retains_identifier_answer_and_usage_for_each_transition() -> None:
@@ -528,49 +513,6 @@ def test_warp_charges_every_answer_and_never_refunds() -> None:
     assert decoded.error is None
 
 
-def test_kimi_replaces_the_answer_and_never_charges_a_record() -> None:
-    incremental = kimi.consumer(_state_limits(1024))
-
-    _feed(incremental, _kimi_message("first"))
-    assert _retained(incremental) == (len(b"first"), 0)
-
-    _feed(incremental, _kimi_message("a much longer answer"))
-    assert _retained(incremental) == (len(b"a much longer answer"), 0)
-
-    _feed(incremental, _kimi_message("ok"))
-    assert _retained(incremental) == (len(b"ok"), 0)
-
-    _feed(incremental, _kimi_message("x", role="user"))
-    diagnostic = len(b"Malformed Kimi final assistant message.")
-    assert _retained(incremental) == (len(b"ok") + diagnostic, 0)
-
-
-def test_openhands_charges_one_terminal_answer_and_replaces_diagnostics() -> None:
-    incremental = openhands.consumer(_state_limits(1024))
-
-    _feed(incremental, {"kind": "SystemPromptEvent"})
-    assert _retained(incremental) == (0, 0)
-
-    _feed(incremental, _openhands_message("done"))
-    assert _retained(incremental) == (len(b"done"), 1)
-
-    _feed(incremental, {"kind": "ConversationErrorEvent", "code": "E", "detail": "blew up"})
-    assert _retained(incremental) == (len(b"done") + len(b"blew up"), 1)
-
-    _feed(incremental, {"kind": "ConversationErrorEvent", "code": "E", "detail": "later"})
-    assert _retained(incremental) == (len(b"done") + len(b"blew up"), 1)
-
-
-def test_openhands_provider_error_refunds_the_retained_protocol_diagnostic() -> None:
-    incremental = openhands.consumer(_state_limits(1024))
-
-    _feed(incremental, {"kind": "UnknownKind"})
-    assert _retained(incremental) == (len(b"Unknown OpenHands event kind."), 0)
-
-    _feed(incremental, {"kind": "ConversationErrorEvent", "code": "E", "detail": "boom"})
-    assert _retained(incremental) == (len(b"boom"), 0)
-
-
 def test_antigravity_charges_init_result_answer_and_usage_fields() -> None:
     incremental = antigravity.consumer(_state_limits(1024))
 
@@ -688,14 +630,6 @@ _COPILOT = _Canonical(
     3,
     DecodedOutput(output="hi", session_id="session", reported_models=("g",)),
 )
-_KIMI = _Canonical(
-    "kimi",
-    kimi.consumer,
-    _stream(_kimi_message("hi")),
-    len(b"hi"),
-    0,
-    DecodedOutput(output="hi"),
-)
 _OPENCODE = _Canonical(
     "opencode",
     opencode.consumer,
@@ -707,13 +641,17 @@ _OPENCODE = _Canonical(
     1,
     DecodedOutput(output="hi", usage=Usage(1, 4, 5, 2, 3), cost_usd=0),
 )
-_OPENHANDS = _Canonical(
-    "openhands",
-    openhands.consumer,
-    _stream(_openhands_message("hi")),
-    len(b"hi"),
-    1,
-    DecodedOutput(output="hi"),
+_KILO = replace(_OPENCODE, name="kilo", factory=kilo.consumer)
+_KIMI = _Canonical(
+    "kimi",
+    kimi.consumer,
+    _stream(
+        {"role": "assistant", "content": "hi"},
+        {"role": "meta", "type": "session.resume_hint", "session_id": "session"},
+    ),
+    len(b"hi") + len(b"session"),
+    0,
+    DecodedOutput(output="hi", session_id="session"),
 )
 _PI = _Canonical(
     "pi",
@@ -756,9 +694,9 @@ _CANONICAL = (
     _ANTIGRAVITY,
     _CODEX,
     _COPILOT,
+    _KILO,
     _KIMI,
     _OPENCODE,
-    _OPENHANDS,
     _PI,
     _QWEN,
     _WARP,
@@ -1039,25 +977,6 @@ def test_opencode_partial_answer_usage_and_cost_survive_a_missing_stop_diagnosti
     assert decoded.error == failure.value.error
 
 
-def test_openhands_partial_answer_survives_a_duplicate_terminal_diagnostic() -> None:
-    incremental = openhands.consumer(_state_limits(len(b"partial")))
-    _feed(incremental, _openhands_message("partial"))
-    assert _retained(incremental) == (len(b"partial"), 1)
-
-    with pytest.raises(ConsumerFailure) as feeding:
-        _feed(incremental, _openhands_message("x"))
-    assert feeding.value.error.code == "stdout_limit_exceeded"
-
-    with pytest.raises(ConsumerFailure) as failure:
-        incremental.finish()
-    decoded = failure.value.decoded
-    assert decoded is not None
-    assert decoded.output == "partial"
-    assert decoded.usage is None
-    assert decoded.cost_usd is None
-    assert decoded.error is None
-
-
 @pytest.mark.parametrize(
     ("factory", "accepted", "rejected", "expected"),
     [
@@ -1065,12 +984,6 @@ def test_openhands_partial_answer_survives_a_duplicate_terminal_diagnostic() -> 
             amp.consumer,
             _amp_assistant("partial"),
             _amp_assistant("muchlongeranswer"),
-            DecodedOutput(output="partial"),
-        ),
-        (
-            kimi.consumer,
-            _kimi_message("partial"),
-            _kimi_message("muchlongeranswer"),
             DecodedOutput(output="partial"),
         ),
         (
@@ -1086,7 +999,7 @@ def test_openhands_partial_answer_survives_a_duplicate_terminal_diagnostic() -> 
             DecodedOutput(output="partial"),
         ),
     ],
-    ids=["amp", "kimi", "qwen", "warp"],
+    ids=["amp", "qwen", "warp"],
 )
 def test_shared_finalization_carries_the_answer_retained_before_the_failure(
     factory: ConsumerFactory, accepted: object, rejected: object, expected: DecodedOutput
@@ -1125,10 +1038,10 @@ def test_antigravity_finalization_carries_the_answer_and_usage_before_the_failur
 
 
 def test_trailing_record_failure_during_finish_still_carries_the_prior_answer() -> None:
-    incremental = kimi.consumer(_state_limits(len(b"partial")))
-    payload = _stream(_kimi_message("partial")) + json.dumps(_kimi_message("muchlonger"))
+    incremental = warp.consumer(_state_limits(len(b"partial")))
+    payload = _stream(_warp_agent("partial")) + json.dumps(_warp_agent("muchlonger"))
     incremental.feed(payload.encode("ascii"))
-    assert _retained(incremental) == (len(b"partial"), 0)
+    assert _retained(incremental) == (len(b"partial"), 1)
 
     with pytest.raises(ConsumerFailure) as failure:
         incremental.finish()
@@ -1149,9 +1062,7 @@ def test_trailing_record_failure_during_finish_still_carries_the_prior_answer() 
         ),
         (codex.consumer, (_codex_item("a", _SURROGATE),)),
         (copilot.consumer, (_copilot_message("m", _SURROGATE),)),
-        (kimi.consumer, (_kimi_message(_SURROGATE),)),
         (opencode.consumer, (_opencode_text("p", _SURROGATE),)),
-        (openhands.consumer, (_openhands_message(_SURROGATE),)),
         (qwen.consumer, (_qwen_assistant(_SURROGATE),)),
         (warp.consumer, (_warp_agent(_SURROGATE),)),
     ],
@@ -1160,9 +1071,7 @@ def test_trailing_record_failure_during_finish_still_carries_the_prior_answer() 
         "antigravity",
         "codex",
         "copilot",
-        "kimi",
         "opencode",
-        "openhands",
         "qwen",
         "warp",
     ],

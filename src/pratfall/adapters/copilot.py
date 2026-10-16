@@ -236,6 +236,13 @@ class _Consumer(JsonlConsumer):
 def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | None:
     state = consumer.state
     event_type = event["type"]
+    if event_type in {
+        "assistant.message",
+        "assistant.message_delta",
+        "session.error",
+        "session.warning",
+    } and _subagent(event):
+        return None
     if event_type in {"assistant.message", "assistant.message_delta"}:
         state.recognized = True
         _message(consumer, event, event_type)
@@ -259,20 +266,25 @@ def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | No
     return None
 
 
+def _subagent(event: dict[str, object]) -> bool:
+    data = event.get("data")
+    markers = [event.get("agentId")]
+    if isinstance(data, dict):
+        markers.extend((data.get("agentId"), data.get("parentToolCallId")))
+    return any(isinstance(marker, str) and bool(marker) for marker in markers)
+
+
 def _message(consumer: _Consumer, event: dict[str, object], event_type: object) -> None:
     state = consumer.state
     data = event.get("data")
     if not isinstance(data, dict):
         consumer.malformed(f"Copilot {event_type} event is malformed.")
         return
-    agent_id = event.get("agentId")
-    parent_tool_call = data.get("parentToolCallId")
-    if (agent_id is not None and not isinstance(agent_id, str)) or (
-        parent_tool_call is not None and not isinstance(parent_tool_call, str)
+    if any(
+        marker is not None and not isinstance(marker, str)
+        for marker in (event.get("agentId"), data.get("agentId"), data.get("parentToolCallId"))
     ):
         consumer.malformed(f"Copilot {event_type} event is malformed.")
-        return
-    if agent_id is not None or parent_tool_call is not None:
         return
     message_id = data.get("messageId")
     field = "content" if event_type == "assistant.message" else "deltaContent"

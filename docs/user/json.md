@@ -89,7 +89,10 @@ Agent-specific accounting rules:
   cache-read counts. Cache-write counts stay null because its cache-creation field means cache
   misses. `cost_usd` stays null because its cost alias may use another currency.
 
-Amp, OpenHands, and Vibe have no generic model override.
+Goose reports native USD cost when available; its token inclusion semantics remain unverified,
+so usage stays null. Kimi Code reports its returned session ID but no token or cost accounting.
+
+Amp and Vibe have no generic model override.
 
 ## Workflow results
 

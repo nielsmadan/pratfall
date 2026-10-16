@@ -23,6 +23,7 @@ from pratfall.adapters import (
     cursor,
     droid,
     gemini,
+    goose,
     grok,
     hermes,
     kiro,
@@ -824,7 +825,6 @@ _RETENTION_STREAMS: Mapping[str, Callable[[str], str]] = {
         {"type": "assistant.message", "data": {"messageId": "m", "content": answer}},
         copilot_result(),
     ),
-    "kimi": lambda answer: codex_stream({"role": "assistant", "content": answer}),
     "opencode": lambda answer: codex_stream(
         {
             "type": "text",
@@ -840,16 +840,6 @@ _RETENTION_STREAMS: Mapping[str, Callable[[str], str]] = {
                 "tokens": opencode_usage(),
             },
         },
-    ),
-    "openhands": lambda answer: codex_stream(
-        {
-            "kind": "MessageEvent",
-            "source": "agent",
-            "llm_message": {
-                "role": "assistant",
-                "content": [{"type": "text", "text": answer}],
-            },
-        }
     ),
     "qwen": lambda answer: codex_stream(
         {
@@ -871,8 +861,10 @@ _RETENTION_STREAMS: Mapping[str, Callable[[str], str]] = {
         },
         {"type": "agent_settled"},
     ),
+    "kimi": lambda answer: codex_stream({"role": "assistant", "content": answer}),
     "warp": lambda answer: codex_stream({"type": "agent", "text": answer}),
 }
+_RETENTION_STREAMS = {**_RETENTION_STREAMS, "kilo": _RETENTION_STREAMS["opencode"]}
 _CONSUMER_AGENTS = sorted(
     name for name, adapter in ADAPTERS.items() if adapter.consumer is not None
 )
@@ -965,6 +957,14 @@ _WHOLE_JSON_DECODERS: dict[str, tuple[AdapterModule, str, str]] = {
         '{"type":"result","subtype":"success","is_error":false,"result":"answer","unused":null}',
     ),
     "gemini": (gemini, "Gemini", '{"response":"answer","unused":null}'),
+    "goose": (
+        goose,
+        "Goose",
+        (
+            '{"messages":[{"role":"assistant","content":[{"type":"text","text":"answer"}]}],'
+            '"metadata":{"status":"completed"},"unused":null}'
+        ),
+    ),
     "grok": (
         grok,
         "Grok",
@@ -1058,7 +1058,7 @@ _WHOLE_JSON_FIELD_GUARDS: tuple[tuple[str, str, str, Code, str], ...] = (
 
 
 def test_whole_json_cases_cover_every_nontext_document_adapter() -> None:
-    text_adapters = {"cortex", "crush", "devin", "hermes", "iflow", "kiro"}
+    text_adapters = {"cortex", "crush", "devin", "hermes", "kiro"}
     assert set(_WHOLE_JSON_DECODERS) | text_adapters == {
         name for name, adapter in ADAPTERS.items() if adapter.whole_document is not None
     }

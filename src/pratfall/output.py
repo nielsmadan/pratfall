@@ -8,6 +8,8 @@ from pratfall.schema import validate_json
 
 __all__ = ["extract_code", "normalize", "result_dict", "validation_error"]
 
+_DIAGNOSTIC_CHARS = 4096
+
 
 def normalize(
     resolved: ResolvedProfile,
@@ -45,13 +47,25 @@ def normalize(
             ResultError("native_signal", f"{resolved.agent.label} died from signal {signum}."),
         )
     if native_exit not in {None, 0}:
+        provider = (
+            decoded.error.message
+            if decoded.error is not None and decoded.error.code == "provider_error"
+            else ""
+        )
+        stderr = process.stderr.decode("utf-8", errors="replace").strip()
+        detail = "\n".join(dict.fromkeys(text for text in (stderr, provider) if text))
+        if len(detail) > _DIAGNOSTIC_CHARS:
+            detail = detail[:_DIAGNOSTIC_CHARS] + "\n[diagnostic truncated]"
+        message = f"{resolved.agent.label} exited with status {native_exit}."
+        if detail:
+            message += f"\n{detail}"
         return _result(
             resolved,
             process,
             decoded,
             "error",
             native_exit,
-            ResultError("native_exit", f"{resolved.agent.label} exited with status {native_exit}."),
+            ResultError("native_exit", message),
         )
     if decoded.error is not None:
         return _result(resolved, process, decoded, "error", FAILURE_EXIT, decoded.error)

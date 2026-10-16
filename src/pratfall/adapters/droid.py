@@ -91,8 +91,10 @@ def decode(stdout: str) -> DecodedOutput:
     except UnicodeEncodeError:
         output = ""
         output_error = encoding_error()
+    session = value.get("session_id")
     return DecodedOutput(
         output=output,
+        session_id=session if isinstance(session, str) else None,
         error=_completion(value) or output_error or document_error(value, "Droid"),
     )
 

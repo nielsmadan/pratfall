@@ -240,6 +240,8 @@ def _preview(
         "timeout": resolved.options.timeout,
         "stdin_bytes": len(invocation.stdin),
     }
+    if invocation.env:
+        payload["env"] = dict(invocation.env)
     if schema is not None:
         payload["schema"] = resolved.options.schema
         payload["schema_transport"] = "temporary prepared file" if schema.path else "inline JSON"
@@ -247,10 +249,15 @@ def _preview(
         _emit_stdout(json.dumps(payload, ensure_ascii=False), latch)
         return
     fast = "native" if resolved.options.fast is None else str(resolved.options.fast).lower()
+    command = (
+        ["env", *(f"{key}={value}" for key, value in invocation.env), *argv]
+        if invocation.env
+        else argv
+    )
     _emit_stdout(
         "\n".join(
             (
-                f"command: {shlex.join(argv)}",
+                f"command: {shlex.join(command)}",
                 *(
                     [f"schema: {resolved.options.schema} ({payload['schema_transport']})"]
                     if schema is not None

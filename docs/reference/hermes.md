@@ -8,10 +8,16 @@
 ## Native contract
 
 Do not use `hermes -z` as the default. [oneshot.py](https://github.com/NousResearch/hermes-agent/blob/main/hermes_cli/oneshot.py)
-unconditionally enables `HERMES_YOLO_MODE` and `HERMES_ACCEPT_HOOKS`, and can exit 0 after a
-nonempty failed result. The quiet chat path preserves the separate explicit `--yolo` control,
+unconditionally enables `HERMES_YOLO_MODE` and `HERMES_ACCEPT_HOOKS`. The 2026-10-13 source
+now returns 2 for failed, partial, or explicitly incomplete results; the earlier claim that a
+nonempty failed result can exit zero is stale. The quiet chat path preserves the separate explicit `--yolo` control,
 prints final response text on stdout and diagnostics/session id on stderr, checks `result.failed`
 for exit 1, and exits 130 on interruption. Quiet output has no usage JSON, so usage is null.
+
+The [CLI reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands), rechecked
+2026-10-13, also documents `chat --format stream-json` with `--query-file`. Its terminal result
+contains text, exit code, session ID, and token counts; initialization includes the model.
+Prat currently selects the quiet text path and does not consume this structured alternative.
 
 Current parser and dispatch source verifies that chat accepts `--reasoning`, forwards it through
 `cmd_chat`, and applies it to this run. Prat accepts only the canonical values

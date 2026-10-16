@@ -60,14 +60,14 @@ AGENTS = {
     "openclaw": "openclaw",
     "hermes": "hermes",
     "opencode": "opencode",
-    "openhands": "openhands",
+    "kimi": "kimi",
+    "goose": "goose",
+    "kilo": "kilo",
     "warp": "oz",
-    "iflow": "iflow",
     "qwen": "qwen",
     "amp": "amp",
     "reasonix": "reasonix",
     "droid": "droid",
-    "kimi": "kimi",
     "vibe": "vibe",
     "crush": "crush",
     "devin": "devin",
@@ -86,8 +86,6 @@ ALIASES = {
     "claw": "openclaw",
     "hm": "hermes",
     "oc": "opencode",
-    "oh": "openhands",
-    "if": "iflow",
     "rx": "reasonix",
     "dr": "droid",
     "cr": "crush",
@@ -101,6 +99,8 @@ _EFFORT_VALUES = {
     "pi": ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
     "claude": ["low", "medium", "high", "xhigh", "max"],
     "codex": None,
+    "crush": None,
+    "kilo": None,
     "antigravity": ["low", "medium", "high"],
     "copilot": ["low", "medium", "high", "xhigh", "max"],
     "kiro": ["low", "medium", "high", "xhigh", "max"],
@@ -113,6 +113,7 @@ _EFFORT_VALUES = {
     "grok": ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
 }
 _BUDGETS = {
+    "goose": ["max_turns"],
     "claude": ["max_budget_usd", "max_turns"],
     "copilot": ["max_ai_credits"],
     "hermes": ["max_turns"],
@@ -121,7 +122,7 @@ _BUDGETS = {
     "cortex": ["max_turns"],
     "grok": ["max_turns"],
 }
-_NO_MODEL = frozenset({"openhands", "amp", "vibe"})
+_NO_MODEL = frozenset({"amp", "vibe"})
 _FAST = frozenset({"claude", "codex"})
 _ADD_DIRS = frozenset({"claude", "codex", "gemini", "qwen", "copilot"})
 _ATTACHMENT_TYPES = {
@@ -130,12 +131,13 @@ _ATTACHMENT_TYPES = {
     "hermes": ["image"],
     "copilot": ["image", "native document"],
     "opencode": ["file"],
+    "kilo": ["file"],
 }
 _SCHEMA = frozenset({"claude", "codex", "qwen"})
 _INSTRUCTIONS = frozenset({"claude", "codex", "qwen", "droid"})
 _NATIVE_AGENTS = frozenset({"claude", "copilot", "vibe"})
 _SESSION_IDS = frozenset({"claude", "copilot", "grok"})
-_REPORTS_SESSION_IDS = frozenset({"claude", "codex", "copilot", "cursor", "grok"})
+_REPORTS_SESSION_IDS = frozenset({"claude", "codex", "copilot", "cursor", "grok", "droid", "kimi"})
 _TOOLS_EMPTY = frozenset({"claude", "copilot", "pi"})
 _TOOLS_SCOPES = {
     "pi": "built-in, extension and custom tools",
@@ -154,19 +156,13 @@ _DISABLED_TOOLS_SCOPES = {
     "vibe": "native available tools, including MCP and connectors",
 }
 _STDIN_PREFIXES = {
+    "kilo": ["run", "--format", "json"],
+    "goose": ["run", "--quiet", "--no-session", "--output-format", "json", "--instructions", "-"],
     "pi": ["--print", "--mode", "json"],
     "qwen": ["--output-format", "stream-json"],
     "amp": ["--execute", "--stream-json"],
     "reasonix": ["run", "--output-format", "json"],
     "droid": ["exec", "--output-format", "json"],
-    "kimi": [
-        "--print",
-        "--input-format",
-        "text",
-        "--output-format",
-        "stream-json",
-        "--final-message-only",
-    ],
     "vibe": ["--prompt", "--output", "json"],
     "crush": ["run", "--quiet"],
     "cortex": [],
@@ -175,14 +171,26 @@ _STDIN_SUFFIXES = {"cortex": ["exec", "--file", "-"]}
 
 
 _NATIVE_PREFIXES = {
-    "openhands": ["--headless", "--json"],
+    "kimi": ["--output-format", "stream-json"],
     "warp": ["agent", "run", "--output-format", "ndjson"],
-    "iflow": [],
     "devin": ["-p"],
     "grok": ["--no-auto-update", "--output-format", "json"],
 }
-_PROMPT_FLAGS = {"grok": "--single=", "openhands": "--task="}
+_PROMPT_FLAGS = {"grok": "--single="}
 _NATIVE_OPTIONS = {
+    "goose": {"--model": 1, "--max-turns": 1, "--provider": 1},
+    "kilo": {
+        "--model": 1,
+        "--variant": 1,
+        "--file": 1,
+        "--agent": 1,
+        "--title": 1,
+        "--log-level": 1,
+        "--auto": 0,
+        "--thinking": 0,
+        "--print-logs": 0,
+    },
+    "kimi": {"--model": 1, "--skills-dir": 1, "--add-dir": 1},
     "pi": {
         "--model": 1,
         "--thinking": 1,
@@ -208,7 +216,14 @@ _NATIVE_OPTIONS = {
         "--no-session": 0,
         "--offline": 0,
     },
-    "crush": {"--model": 1, "--verbose": 0, "-v": 0, "--debug": 0, "-d": 0},
+    "crush": {
+        "--reasoning-effort": 1,
+        "--model": 1,
+        "--verbose": 0,
+        "-v": 0,
+        "--debug": 0,
+        "-d": 0,
+    },
     "devin": {"--model": 1, "--permission-mode": 1},
     "cortex": {"--model": 1, "--effort": 1, "--max-turns": 1, "--connection": 1, "-c": 1},
     "droid": {
@@ -235,7 +250,6 @@ _NATIVE_OPTIONS = {
         "--no-wait-for-background": 0,
         "--background-wait-timeout": 1,
     },
-    "kimi": {"--model": 1, "--thinking": 0, "--no-thinking": 0, "--plan": 0, "--debug": 0},
     "vibe": {
         "--agent": 1,
         "--max-turns": 1,
@@ -244,7 +258,6 @@ _NATIVE_OPTIONS = {
         "--enabled-tools": 1,
         "--disabled-tools": 1,
     },
-    "openhands": {"--override-with-envs": 0},
     "warp": {
         "--model": 1,
         "--name": 1,
@@ -252,7 +265,6 @@ _NATIVE_OPTIONS = {
         "--strict-mcp-startup": 0,
         "--mcp-startup-timeout": 1,
     },
-    "iflow": {"--model": 1, "--thinking": 0, "--plan": 0, "--default": 0},
     "qwen": {
         "--include-directories": 1,
         "--core-tools": 1,
@@ -273,6 +285,7 @@ _NATIVE_OPTIONS = {
         "--permission-mode": 1,
         "--max-steps": 1,
         "--show-thinking": 0,
+        "--fail-on-unverified": 0,
     },
 }
 
@@ -386,6 +399,8 @@ def _checked_argv_prompt(agent: str, arguments: list[str], data: bytes) -> str:
 def _prompt(agent: str, arguments: list[str], data: bytes) -> str:
     if agent in _NATIVE_PREFIXES:
         return _checked_argv_prompt(agent, arguments, data)
+    if agent == "kilo":
+        assert os.environ.get("KILO_NO_DAEMON") == "1", "Kilo daemon attachment must be disabled"
     if agent in _STDIN_PREFIXES:
         prefix = _STDIN_PREFIXES[agent]
         assert arguments[: len(prefix)] == prefix, f"incorrect {agent} invocation: {arguments!r}"
@@ -398,7 +413,7 @@ def _prompt(agent: str, arguments: list[str], data: bytes) -> str:
         assert prompt.strip(), f"missing {agent} stdin prompt"
         if agent == "crush":
             return prompt + "\n\n"
-        return prompt.strip() if agent in {"reasonix", "kimi", "vibe", "pi"} else prompt
+        return prompt.strip() if agent in {"reasonix", "vibe", "pi"} else prompt
     if agent == "antigravity":
         return _text(_record(json.loads(data)["message"])["content"])
     if agent in {"gemini", "copilot"}:
@@ -406,6 +421,21 @@ def _prompt(agent: str, arguments: list[str], data: bytes) -> str:
     if agent in {"cursor", "kiro"}:
         return arguments[arguments.index("--") + 1]
     return data.decode()
+
+
+def _answer_goose(answer: str) -> None:
+    print(
+        json.dumps(
+            {
+                "messages": [{"role": "assistant", "content": [{"type": "text", "text": answer}]}],
+                "metadata": {"status": "completed"},
+            }
+        )
+    )
+
+
+def _answer_kimi(answer: str) -> None:
+    print(json.dumps({"role": "assistant", "content": answer}))
 
 
 def _answer_droid(answer: str) -> None:
@@ -447,10 +477,6 @@ def _answer_grok(answer: str) -> None:
             }
         )
     )
-
-
-def _answer_kimi(answer: str) -> None:
-    print(json.dumps({"role": "assistant", "content": answer}))
 
 
 def _answer_vibe(answer: str) -> None:
@@ -583,24 +609,6 @@ def _answer_copilot(answer: str) -> None:
             }
         )
     )
-
-
-def _answer_openhands(answer: str) -> None:
-    _openhands_startup()
-    print(
-        json.dumps(
-            {
-                "kind": "MessageEvent",
-                "source": "agent",
-                "id": "answer",
-                "llm_message": {
-                    "role": "assistant",
-                    "content": [{"type": "text", "text": answer}],
-                },
-            }
-        )
-    )
-    _openhands_summary()
 
 
 def _answer_warp(answer: str) -> None:
@@ -804,45 +812,17 @@ _ANSWER_EMITTERS: dict[str, Callable[[str], None]] = {
     "cursor": _answer_cursor,
     "openclaw": _answer_openclaw,
     "opencode": _answer_opencode,
-    "openhands": _answer_openhands,
+    "kilo": _answer_opencode,
     "warp": _answer_warp,
     "qwen": _answer_qwen,
     "amp": _answer_amp,
     "reasonix": _answer_reasonix,
+    "kimi": _answer_kimi,
+    "goose": _answer_goose,
     "droid": _answer_droid,
     "grok": _answer_grok,
-    "kimi": _answer_kimi,
     "vibe": _answer_vibe,
 }
-
-
-def _openhands_startup() -> None:
-    print(
-        "OpenHands CLI terminal UI may not work correctly in this environment: "
-        "Rich detected a non-interactive or unsupported terminal; interactive UI may not render correctly"
-    )
-    print(
-        "To override Rich's detection, you can set TTY_INTERACTIVE=1 (and optionally TTY_COMPATIBLE=1)."
-    )
-    print("Initializing agent...")
-    print("✓ Hooks loaded")
-    print("✓ Agent initialized with model: native-model")
-    print("Agent is working")
-
-
-def _openhands_summary() -> None:
-    print("Agent finished")
-    print("──────── CONVERSATION SUMMARY ────────")
-    print("Number of agent messages: 1")
-    print("Last message sent by the agent:")
-    print("╭─ Agent ─────────────────────╮")
-    print("│ echoed native summary text │")
-    print("╰────────────────────────────╯")
-    print("──────────────────────────────────────")
-    print("Goodbye! 👋")
-    print("Conversation ID: 12345678123456781234567812345678")
-    print("Hint: run openhands --resume 12345678-1234-5678-1234-567812345678")
-    print("to resume this conversation.")
 
 
 def _answer(agent: str, answer: str) -> None:
@@ -863,60 +843,6 @@ def _assistant(text: str, model: str, parent: str | None = None) -> dict[str, ob
             "usage": {"input_tokens": 900, "output_tokens": 700},
         },
     }
-
-
-def _fake_openhands_case(prompt: str) -> int:
-    _openhands_startup()
-    if prompt == "QA_A12.conversation_error":
-        print(
-            _jsonl(
-                {"kind": "ConversationErrorEvent", "code": "APIError", "detail": "setup failed"}
-            ),
-            end="",
-        )
-    else:
-        for reasoning in (None, "private reasoning"):
-            print(
-                _jsonl(
-                    {
-                        "kind": "MessageEvent",
-                        "source": "agent",
-                        "llm_message": {
-                            "role": "assistant",
-                            "content": [],
-                            "reasoning_content": reasoning,
-                        },
-                    },
-                    {
-                        "kind": "MessageEvent",
-                        "source": "user",
-                        "llm_message": {
-                            "role": "user",
-                            "content": [{"type": "text", "text": "Continue working."}],
-                        },
-                    },
-                ),
-                end="",
-            )
-        if prompt == "QA_A12.recovery":
-            print(
-                _jsonl(
-                    {
-                        "kind": "MessageEvent",
-                        "source": "agent",
-                        "llm_message": {
-                            "role": "assistant",
-                            "content": [{"type": "text", "text": "OPENHANDS_RECOVERED"}],
-                        },
-                    }
-                ),
-                end="",
-            )
-        else:
-            assert prompt == "QA_A12.missing_terminal"
-    _openhands_summary()
-    print('{"kind":"ConversationErrorEvent","detail":"echoed summary text"}')
-    return 0
 
 
 type _FakeOutput = tuple[str, int]
@@ -1044,16 +970,11 @@ _A_TIER_CASES: dict[tuple[str, str], _FakeCaseHandler] = {
     ("reasonix", "QA_A11.paused"): lambda: _reasonix_a11_case(
         "recovery_paused", "REASONIX_PARTIAL"
     ),
-    ("kimi", "QA_A13.kimi_empty"): _fixed_fake_case(""),
     ("warp", "QA_A13.warp_empty"): _fixed_fake_case(
         _jsonl(
             {"type": "agent_reasoning", "text": "private reasoning"},
             {"type": "tool_error", "error": "recoverable tool failure"},
         )
-    ),
-    ("kimi", "QA_A13.kimi_native_failure"): _fixed_fake_case(
-        _jsonl({"role": "assistant", "content": "KIMI_PARTIAL"}) + "native plain-text error\n",
-        17,
     ),
     ("warp", "QA_A13.warp_native_failure"): _fixed_fake_case(
         _jsonl(
@@ -1069,26 +990,16 @@ _A_TIER_CASES: dict[tuple[str, str], _FakeCaseHandler] = {
         (agent, f"QA_A15.{agent}_{outcome}"): _fixed_fake_case(
             "native banner\nError: quoted example\nTEXT_CAPTURE\r\n", returncode
         )
-        for agent in ("iflow", "crush", "devin", "cortex")
+        for agent in ("crush", "devin", "cortex")
         for outcome, returncode in (("success", 0), ("failure", 17))
     },
 }
-
-_OPENHANDS_A_TIER_CASES = frozenset(
-    {
-        "QA_A12.recovery",
-        "QA_A12.conversation_error",
-        "QA_A12.missing_terminal",
-    }
-)
 
 
 def _fake_a_tier(agent: str, prompt: str) -> int | None:
     if re.match(r"QA_A[0-9]{2}\.", prompt) is None:
         return None
     prompt = prompt.rstrip("\n")
-    if agent == "openhands" and prompt in _OPENHANDS_A_TIER_CASES:
-        return _fake_openhands_case(prompt)
     handler = _A_TIER_CASES.get((agent, prompt))
     if handler is None:
         raise ValueError(f"Unknown A-tier fixture for {agent}: {prompt!r}")
@@ -2332,32 +2243,7 @@ _PROTOCOL_EXPECTATIONS = (
         tokens=(13, 5, 3),
     ),
     _ProtocolExpectation("A11.aliases", "reasonix", "REASONIX_SUCCESS", tokens=(13, 5, 3)),
-    _ProtocolExpectation("A12.recovery", "openhands", "OPENHANDS_RECOVERED"),
-    _ProtocolExpectation(
-        "A12.conversation_error",
-        "openhands",
-        exit_code=1,
-        error_code="provider_error",
-        error_message="setup failed",
-    ),
-    _ProtocolExpectation(
-        "A12.missing_terminal",
-        "openhands",
-        exit_code=1,
-        error_code="protocol_error",
-        error_message="OpenHands stream ended without a terminal assistant event.",
-    ),
-    _ProtocolExpectation("A13.kimi_empty", "kimi"),
     _ProtocolExpectation("A13.warp_empty", "warp"),
-    _ProtocolExpectation(
-        "A13.kimi_native_failure",
-        "kimi",
-        "KIMI_PARTIAL",
-        17,
-        17,
-        "native_exit",
-        "Kimi exited with status 17.",
-    ),
     _ProtocolExpectation(
         "A13.warp_native_failure",
         "warp",
@@ -2399,7 +2285,6 @@ _PROTOCOL_EXPECTATIONS = (
             f"{label} exited with status 17." if exit_code else None,
         )
         for agent, label in (
-            ("iflow", "iFlow"),
             ("crush", "Crush"),
             ("devin", "Devin"),
             ("cortex", "Cortex Code"),
@@ -2501,7 +2386,7 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
     payload = _json_result(completed)
     assert completed.returncode == 0 and payload["schema_version"] == 1
     records = {_text(record["name"]): record for record in _records(payload["agents"])}
-    assert len(_records(payload["agents"])) == len(records) == 24
+    assert len(_records(payload["agents"])) == len(records) == len(AGENTS)
     assert set(records) == set(AGENTS)
     for name, record in records.items():
         assert record["command"] == [AGENTS[name]]
@@ -2527,7 +2412,7 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
             "tools_scope": _TOOLS_SCOPES.get(name),
             "disabled_tools_scope": _DISABLED_TOOLS_SCOPES.get(name),
         }
-    assert len(ALIASES) == 17 and not set(ALIASES).intersection(AGENTS)
+    assert len(ALIASES) == 15 and not set(ALIASES).intersection(AGENTS)
     doctor = _run(prat, root, ["doctor", "--json"], config=config)
     inventory = _json_result(doctor)
     assert doctor.returncode == 0 and inventory["schema_version"] == 1
@@ -2715,10 +2600,8 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
     before = len(_calls(root / "native.jsonl"))
     controls = {}
     for selector, arguments, message in (
-        ("oh", ["--model", "chosen"], "model: OpenHands does not support a model override."),
         ("amp", ["--effort", "high"], "effort: Amp does not support an effort override."),
         ("vibe", ["--model", "chosen"], "model: Mistral Vibe does not support a model override."),
-        ("kimi", ["--effort", "high"], "effort: Kimi does not support an effort override."),
         ("rx", ["--max-turns", "3"], "max_turns: Reasonix does not support this budget."),
         ("cr", ["--fast"], "fast: Crush does not support a fast-mode override."),
     ):
@@ -2735,7 +2618,7 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
         )
         controls[selector] = _compact_result(completed)
     collisions = {}
-    for name in ("oh", "vibe"):
+    for name in ("amp", "vibe"):
         collision = root / f"collision-{name}.toml"
         collision.write_text(f'version = 1\n[profiles.{name}]\nagent = "codex"\n', encoding="utf-8")
         completed = _run(
