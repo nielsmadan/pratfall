@@ -307,8 +307,7 @@ report `internal_error` rather than a traceback. Both ordinary and progress diag
 decoded answer and accounting when stderr fails. Ordinary
 diagnostics flush before final result emission; a failed stream is redirected to prevent another
 flush at interpreter shutdown from replacing the normalized exit code. The progress sink is
-deliberately never redirected: it writes with `os.write`, so no buffer survives to be flushed, and
-redirecting it would restore the saved descriptor flags onto the replacement descriptor.
+deliberately never redirected: it writes with `os.write`, so no buffer survives to be flushed.
 A zero-signal `killpg` probe returning EPERM keeps the group pending within the existing deadline;
 persistent denial fails cleanup, and SIGTERM/SIGKILL permission errors remain explicit failures.
 This handles macOS group teardown where a successful SIGTERM can precede a denied existence probe;
@@ -326,11 +325,15 @@ resets that state. It observes the actual `print` operation because stdout may u
 other than UTF-8. `UnicodeEncodeError` means no bytes were committed; other write failures may be
 partial, so their fallback uses stderr to avoid appending a second result.
 Opt-in progress uses the static [`Activity`](../src/pratfall/models.py) category vocabulary, whose
-labels live in `ACTIVITY_LABELS`, through the nonblocking
-[`_ProgressDiagnostics`](../src/pratfall/cli/presentation.py) sink, which sets and restores stderr's
-descriptor flags exactly once per invocation, covering config warnings and the run alike.
-Backpressure drops progress, trace and diagnostic writes rather than delaying the run; other sink
-failures enter normal cleanup and result handling.
+labels live in `ACTIVITY_LABELS`, through the
+[`_ProgressDiagnostics`](../src/pratfall/cli/presentation.py) sink. It and the workflow stderr
+relay write through [`write_nonblocking`](../src/pratfall/nonblocking.py), which never changes
+stderr's descriptor flags: `O_NONBLOCK` belongs to the open file description, which stdout shares under
+`2>&1` or on a terminal, so setting it would make result writes fail with `BlockingIOError`.
+Instead each write of at most `PIPE_BUF` bytes waits for `select` to report the descriptor
+writable, and a full descriptor drops the write. Backpressure therefore drops progress, trace and
+diagnostic writes rather than delaying the run; other sink failures enter normal cleanup and
+result handling.
 
 [`_doctor`](../src/pratfall/cli/doctor.py) reuses the runner with a three-second deadline and
 64 KiB per-stream bounds. The CLI selects opaque text and records per-agent probe errors;

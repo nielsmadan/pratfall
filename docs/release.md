@@ -22,7 +22,7 @@ the helper's remote-branch and ancestry checks. The local helper uses Git for re
 publication of the branch and tag, with Git push access to the repository.
 
 Check that origin's actual host is `github.com`: the repository check in the helper's
-[`inspect`](../scripts/release.py) matches a URL substring rather than parsing its host.
+[`check_release`](../scripts/release.py) matches a URL substring rather than parsing its host.
 This validation limitation was deferred in the 2026-09-09 review.
 
 The workflow needs `HOMEBREW_TAP_TOKEN` as a repository Actions secret: a fine-grained PAT

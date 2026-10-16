@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -132,13 +133,15 @@ def test_grok_accepts_verified_native_arguments(arguments: tuple[str, ...]) -> N
 )
 def test_grok_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "grok", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "grok", options
+        )
 
 
 def test_grok_effort_union_is_validated(native_contract_config: Path) -> None:
     expected = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
     assert BY_NAME["grok"].capabilities.effort_values == expected
-    config = load_config(native_contract_config)
+    config = load_config(native_contract_config, cwd=Path.cwd(), env=os.environ)
     for effort in expected:
         assert resolve_profile(config, "grok", Options(effort=effort)).options.effort == effort
     with pytest.raises(PratError, match="Grok Build accepts:"):

@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -89,7 +90,9 @@ def test_kimi_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
 )
 def test_kimi_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "kimi", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "kimi", options
+        )
 
 
 def test_kimi_independent_native_contract(

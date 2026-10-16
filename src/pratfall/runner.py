@@ -63,12 +63,14 @@ def raw_stdout(capture: Capture) -> bytes:
 
 
 @dataclass(frozen=True)
-class OutputLimits:
+class RunLimits:
     stdout: int = STDOUT_BYTES
     stderr: int = STDERR_BYTES
+    terminate_grace: float = TERMINATE_GRACE
+    final_drain_grace: float = FINAL_DRAIN_GRACE
 
 
-DEFAULT_OUTPUT_LIMITS = OutputLimits()
+DEFAULT_LIMITS = RunLimits()
 
 
 @dataclass
@@ -81,7 +83,7 @@ class _RunContext:
     started: float
     timeout: float
     signal_state: _SignalState
-    output_limits: OutputLimits
+    limits: RunLimits
     progress: Callable[[int, Activity], None] | None
 
 
@@ -90,7 +92,7 @@ def run(
     cwd: Path,
     timeout: float,
     *,
-    output_limits: OutputLimits = DEFAULT_OUTPUT_LIMITS,
+    limits: RunLimits = DEFAULT_LIMITS,
     consumer: ByteConsumer | None = None,
     progress: Callable[[int, Activity], None] | None = None,
 ) -> ProcessResult:
@@ -125,7 +127,7 @@ def run(
                     if progress is not None:
                         progress(_duration(started), "starting")
                 except OSError as error:
-                    _force_cleanup(process)
+                    _force_cleanup(process, limits)
                     _finish_consumer(consumer_state)
                     return ProcessResult(
                         consumer_state.capture(b""),
@@ -134,20 +136,18 @@ def run(
                         _duration(started),
                         _presentation_error(error),
                     )
-                context = _RunContext(started, timeout, signal_state, output_limits, progress)
+                context = _RunContext(started, timeout, signal_state, limits, progress)
                 return _collect(process, context, consumer_state)
         except OSError as error:
             if process is not None:
-                _force_cleanup(process)
-            consumer_error: ResultError | None = None
-            if process is not None:
-                consumer_error = _finish_consumer(consumer_state)[1]
-            failure = ResultError("process_io_error", f"Process I/O failed: {error}.")
-            failure = consumer_error or failure
-            if signal_state.received is not None:
-                failure = ResultError(
-                    "interrupted", f"Interrupted by signal {signal_state.received}."
-                )
+                _force_cleanup(process, limits)
+            consumer_error = _finish_consumer(consumer_state)[1] if process is not None else None
+            failure = (
+                ResultError("interrupted", f"Interrupted by signal {signal_state.received}.")
+                if signal_state.received is not None
+                else consumer_error
+                or ResultError("process_io_error", f"Process I/O failed: {error}.")
+            )
             return ProcessResult(
                 consumer_state.capture(b""),
                 b"",
@@ -206,7 +206,7 @@ def _collect(
             with suppress(OSError):
                 os.killpg(process.pid, signal.SIGKILL)
             try:
-                process.wait(timeout=FINAL_DRAIN_GRACE)
+                process.wait(timeout=context.limits.final_drain_grace)
             except subprocess.TimeoutExpired:
                 cleanup_error = cleanup_error or "agent process could not be reaped"
     if context.signal_state.received is not None:
@@ -271,16 +271,13 @@ def _drain(
             return None, True
         wait = min(0.05, deadline - now)
         for key, _ in selector.select(max(0.0, wait)):
-            read_error = _read_ready(selector, key, output, context.output_limits)
+            read_error = _read_ready(selector, key, output, context.limits)
             if read_error is not None:
                 return read_error, False
             pending_activity = output.activity or pending_activity
             output.activity = None
         if context.progress is not None:
-            elapsed = now - last_progress
-            category: Activity | None = pending_activity if elapsed >= PROGRESS_INTERVAL else None
-            if category is None and elapsed >= HEARTBEAT_INTERVAL:
-                category = "working"
+            category = _progress_category(pending_activity, now - last_progress)
             if category is not None:
                 try:
                     context.progress(_duration(context.started), category)
@@ -290,11 +287,17 @@ def _drain(
                 pending_activity = None
 
 
+def _progress_category(pending: Activity | None, elapsed: float) -> Activity | None:
+    if pending is not None and elapsed >= PROGRESS_INTERVAL:
+        return pending
+    return "working" if elapsed >= HEARTBEAT_INTERVAL else None
+
+
 def _read_ready(
     selector: selectors.BaseSelector,
     key: selectors.SelectorKey,
     output: _OutputState,
-    output_limits: OutputLimits,
+    limits: RunLimits,
 ) -> ResultError | None:
     name = key.data
     try:
@@ -316,7 +319,7 @@ def _read_ready(
             output.consumer_failed = True
             return failure.error
         return None
-    limit = output_limits.stdout if name == "stdout" else output_limits.stderr
+    limit = limits.stdout if name == "stdout" else limits.stderr
     remaining = limit - len(output.buffers[name])
     output.buffers[name].extend(chunk[:remaining])
     if len(chunk) > remaining:
@@ -330,23 +333,23 @@ def _terminate_and_drain(
     selector: selectors.BaseSelector,
     output: _OutputState,
     signal_state: _SignalState,
-    output_limits: OutputLimits,
+    limits: RunLimits,
 ) -> None:
     if not signal_state.repeated:
         _signal_group(process.pid, signal.SIGTERM)
-    grace_deadline = time.monotonic() + TERMINATE_GRACE
+    grace_deadline = time.monotonic() + limits.terminate_grace
     while time.monotonic() < grace_deadline and not signal_state.repeated:
         for key, _ in selector.select(0.05):
-            _read_ready(selector, key, output, output_limits)
+            _read_ready(selector, key, output, limits)
         parent_reaped = process.poll() is not None
         if parent_reaped and not selector.get_map() and not _process_group_exists(process.pid):
             break
     _signal_group(process.pid, signal.SIGKILL)
-    kill_deadline = time.monotonic() + FINAL_DRAIN_GRACE
+    kill_deadline = time.monotonic() + limits.final_drain_grace
     while time.monotonic() < kill_deadline:
         wait = min(0.05, max(0.0, kill_deadline - time.monotonic()))
         for key, _ in selector.select(wait):
-            _read_ready(selector, key, output, output_limits)
+            _read_ready(selector, key, output, limits)
         parent_reaped = process.poll() is not None
         if parent_reaped and not selector.get_map() and not _process_group_exists(process.pid):
             return
@@ -371,7 +374,7 @@ def _terminate_after_failure(
             selector,
             output,
             context.signal_state,
-            context.output_limits,
+            context.limits,
         )
     except OSError as failure:
         with suppress(OSError):
@@ -380,7 +383,7 @@ def _terminate_after_failure(
     return None
 
 
-def _force_cleanup(process: subprocess.Popen[bytes]) -> None:
+def _force_cleanup(process: subprocess.Popen[bytes], limits: RunLimits) -> None:
     if process.stdout is not None:
         process.stdout.close()
     if process.stderr is not None:
@@ -389,18 +392,18 @@ def _force_cleanup(process: subprocess.Popen[bytes]) -> None:
         os.killpg(process.pid, signal.SIGKILL)
     if process.poll() is None:
         with suppress(subprocess.TimeoutExpired):
-            process.wait(timeout=FINAL_DRAIN_GRACE)
+            process.wait(timeout=limits.final_drain_grace)
 
 
-def cleanup_process_group(process_group: int) -> str | None:
+def cleanup_process_group(process_group: int, limits: RunLimits = DEFAULT_LIMITS) -> str | None:
     try:
         _signal_group(process_group, signal.SIGTERM)
-        deadline = time.monotonic() + TERMINATE_GRACE
+        deadline = time.monotonic() + limits.terminate_grace
         while time.monotonic() < deadline and _process_group_exists(process_group):
             time.sleep(0.05)
         if _process_group_exists(process_group):
             _signal_group(process_group, signal.SIGKILL)
-            kill_deadline = time.monotonic() + FINAL_DRAIN_GRACE
+            kill_deadline = time.monotonic() + limits.final_drain_grace
             while time.monotonic() < kill_deadline and _process_group_exists(process_group):
                 time.sleep(0.01)
             if _process_group_exists(process_group):

@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -64,10 +65,10 @@ def test_native_agent_fake_receives_exact_literal_argv(
 
 
 def test_native_agent_four_layer_precedence_and_provenance(tmp_path: Path) -> None:
-    global_path = config_path()
+    global_path = config_path(cwd=Path.cwd(), env=os.environ)
     global_path.parent.mkdir(parents=True)
     global_path.write_text('version=1\n[defaults]\nnative_agent="global"\n')
-    global_config = load_config()
+    global_config = load_config(cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(global_config, "claude").options.native_agent == "global"
     assert option_origins(global_config, "claude")["native_agent"].label == (
         f"{global_path}: defaults.native_agent (selector 'claude')"
@@ -77,7 +78,7 @@ def test_native_agent_four_layer_precedence_and_provenance(tmp_path: Path) -> No
         'version=1\n[defaults]\nnative_agent="local"\n'
         '[profiles.work]\nagent="claude"\nnative_agent="profile"\n'
     )
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "claude").options.native_agent == "local"
     assert option_origins(config, "claude")["native_agent"].label == (
         f"{local}: defaults.native_agent (selector 'claude')"

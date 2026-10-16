@@ -1,5 +1,7 @@
 import json
+from collections.abc import Mapping
 from dataclasses import replace
+from types import MappingProxyType
 
 from pratfall.adapters.accounting import cost, model_map
 from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
@@ -13,81 +15,87 @@ from pratfall.consumer import ConsumerFailure, ConsumerLimits, Retention, StateB
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 from pratfall.schema import retain_answer
 
-_ALLOWED = {
-    name: Flag(0)
-    for name in (
-        "--allow-dangerously-skip-permissions",
-        "--bare",
-        "--dangerously-skip-permissions",
-        "--disable-slash-commands",
-        "--exclude-dynamic-system-prompt-sections",
-        "--no-chrome",
-        "--restricted",
-        "--safe-mode",
-        "--strict-mcp-config",
-        "--verbose",
-    )
-} | {
-    name: Flag(1)
-    for name in (
-        "--add-dir",
-        "--agent",
-        "--agents",
-        "--allowedTools",
-        "--allowed-tools",
-        "--append-system-prompt",
-        "--autocompact",
-        "--betas",
-        "--debug-file",
-        "--disallowedTools",
-        "--disallowed-tools",
-        "--fallback-model",
-        "--file",
-        "--json-schema",
-        "--mcp-config",
-        "--name",
-        "--permission-mode",
-        "--permission-prompts",
-        "--plugin-dir",
-        "--plugin-url",
-        "--setting-sources",
-        "--system-prompt",
-        "--tools",
-    )
-}
-_RESERVED = {
-    name: Flag(0, joined=name in {"-c", "-p"})
-    for name in (
-        "-c",
-        "--continue",
-        "--fork-session",
-        "--forward-subagent-text",
-        "--include-hook-events",
-        "--include-partial-messages",
-        "--no-session-persistence",
-        "-p",
-        "--print",
-        "--replay-user-messages",
-    )
-} | {
-    name: Flag(1, joined=name in {"-r", "-w"})
-    for name in (
-        "--effort",
-        "--environment",
-        "--input-format",
-        "--max-budget-usd",
-        "--max-turns",
-        "--model",
-        "--output-format",
-        "--remote-control",
-        "--resume",
-        "--settings",
-        "-r",
-        "--session-id",
-        "--worktree",
-        "-w",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--allow-dangerously-skip-permissions",
+            "--bare",
+            "--dangerously-skip-permissions",
+            "--disable-slash-commands",
+            "--exclude-dynamic-system-prompt-sections",
+            "--no-chrome",
+            "--restricted",
+            "--safe-mode",
+            "--strict-mcp-config",
+            "--verbose",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--add-dir",
+            "--agent",
+            "--agents",
+            "--allowedTools",
+            "--allowed-tools",
+            "--append-system-prompt",
+            "--autocompact",
+            "--betas",
+            "--debug-file",
+            "--disallowedTools",
+            "--disallowed-tools",
+            "--fallback-model",
+            "--file",
+            "--json-schema",
+            "--mcp-config",
+            "--name",
+            "--permission-mode",
+            "--permission-prompts",
+            "--plugin-dir",
+            "--plugin-url",
+            "--setting-sources",
+            "--system-prompt",
+            "--tools",
+        )
+    }
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0, joined=name in {"-c", "-p"})
+        for name in (
+            "-c",
+            "--continue",
+            "--fork-session",
+            "--forward-subagent-text",
+            "--include-hook-events",
+            "--include-partial-messages",
+            "--no-session-persistence",
+            "-p",
+            "--print",
+            "--replay-user-messages",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-r", "-w"})
+        for name in (
+            "--effort",
+            "--environment",
+            "--input-format",
+            "--max-budget-usd",
+            "--max-turns",
+            "--model",
+            "--output-format",
+            "--remote-control",
+            "--resume",
+            "--settings",
+            "-r",
+            "--session-id",
+            "--worktree",
+            "-w",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
@@ -123,7 +131,7 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    reserved = _RESERVED | (
+    reserved = dict(_RESERVED) | (
         {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
     )
     if resolved.options.instructions is not None or resolved.options.instructions_file is not None:

@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
@@ -7,28 +10,31 @@ from pratfall.consumer import (
 )
 from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
-_ALLOWED = {"--stream-json-thinking": Flag(0)}
-_RESERVED = {
-    name: Flag(0, joined=name in {"-x", "-o"})
-    for name in ("--execute", "-x", "--stream-json", "--stream-json-input", "--no-tui", "-o")
-} | {
-    name: Flag(1)
-    for name in (
-        "--model",
-        "--effort",
-        "--mode",
-        "--executor",
-        "--runner-id",
-        "--cwd",
-        "--config",
-        "--settings-file",
-        "--thread",
-        "--resume",
-        "--output-format",
-        "--prompt",
-        "--max-turns",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType({"--stream-json-thinking": Flag(0)})
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0, joined=name in {"-x", "-o"})
+        for name in ("--execute", "-x", "--stream-json", "--stream-json-input", "--no-tui", "-o")
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--model",
+            "--effort",
+            "--mode",
+            "--executor",
+            "--runner-id",
+            "--cwd",
+            "--config",
+            "--settings-file",
+            "--thread",
+            "--resume",
+            "--output-format",
+            "--prompt",
+            "--max-turns",
+        )
+    }
+)
 _AMP_SYSTEM_ERRORS = {"error_during_execution", "error_max_turns"}
 
 

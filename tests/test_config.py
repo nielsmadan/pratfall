@@ -26,7 +26,7 @@ def write_config(tmp_path: Path, contents: str) -> Path:
 
 
 def test_missing_default_resolves_builtin_defaults() -> None:
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     resolved = resolve_profile(config, "cx")
     assert config.exists is False
     assert resolved.agent.name == "codex"
@@ -38,9 +38,9 @@ def test_missing_default_resolves_builtin_defaults() -> None:
 @pytest.mark.parametrize("name", ["ki", "wp", "qw", "km", "mv"])
 def test_removed_agent_aliases_are_available_for_profiles(tmp_path: Path, name: str) -> None:
     with pytest.raises(PratError, match="Unknown"):
-        resolve_profile(load_config(), name)
+        resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), name)
     path = write_config(tmp_path, f'version=1\n[profiles.{name}]\nagent="codex"\n')
-    resolved = resolve_profile(load_config(path), name)
+    resolved = resolve_profile(load_config(path, cwd=Path.cwd(), env=os.environ), name)
     assert resolved.profile == name
     assert resolved.agent.name == "codex"
 
@@ -48,53 +48,56 @@ def test_removed_agent_aliases_are_available_for_profiles(tmp_path: Path, name: 
 def test_explicit_missing_file_fails(tmp_path: Path) -> None:
     path = tmp_path / "missing.toml"
     with pytest.raises(PratError, match=f"{path}: config file does not exist"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
-@pytest.mark.parametrize("xdg", [None, ""])
-def test_absent_or_empty_xdg_uses_home(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    xdg: str | None,
-) -> None:
-    monkeypatch.setenv("HOME", str(tmp_path))
-    if xdg is None:
-        monkeypatch.delenv("XDG_CONFIG_HOME")
-    else:
-        monkeypatch.setenv("XDG_CONFIG_HOME", xdg)
-    assert config_path() == tmp_path / ".config/pratfall/config.toml"
+@pytest.mark.parametrize("xdg", [{}, {"XDG_CONFIG_HOME": ""}])
+def test_absent_or_empty_xdg_uses_home(tmp_path: Path, xdg: dict[str, str]) -> None:
+    env = {"HOME": str(tmp_path), **xdg}
+    assert config_path(cwd=Path("/elsewhere"), env=env) == tmp_path / ".config/pratfall/config.toml"
 
 
-def test_relative_paths_use_invocation_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("XDG_CONFIG_HOME", "settings")
-    assert config_path(cwd=tmp_path) == tmp_path / "settings/pratfall/config.toml"
-    assert config_path("other.toml", cwd=tmp_path) == tmp_path / "other.toml"
+def test_relative_paths_use_invocation_cwd(tmp_path: Path) -> None:
+    env = {"XDG_CONFIG_HOME": "settings"}
+    assert config_path(cwd=tmp_path, env=env) == tmp_path / "settings/pratfall/config.toml"
+    assert config_path("other.toml", cwd=tmp_path, env=env) == tmp_path / "other.toml"
+
+
+def test_load_config_reads_global_config_from_the_given_environment(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    project.mkdir()
+    global_path = init_config(cwd=project, env={"HOME": str(home)})
+    (project / ".pratfile").write_text('version=1\n[profiles.local]\nagent="cc"\n')
+    config = load_config(cwd=project, env={"HOME": str(home)})
+    assert global_path == home / ".config/pratfall/config.toml"
+    assert config.sources == (global_path, project / ".pratfile")
 
 
 def test_explicit_file_merges_over_global_and_replaces_automatic_local(tmp_path: Path) -> None:
-    default = init_config()
+    default = init_config(cwd=Path.cwd(), env=os.environ)
     (tmp_path / ".pratfile").write_text('version=1\n[profiles.auto]\nagent="codex"\n')
     path = write_config(tmp_path, 'version=1\n[profiles.other]\nagent="gm"\n')
-    assert list(load_config(path).profiles) == ["simple", "other"]
-    assert list(load_config().profiles) == ["simple", "auto"]
-    assert config_path() == default
+    assert list(load_config(path, cwd=Path.cwd(), env=os.environ).profiles) == ["simple", "other"]
+    assert list(load_config(cwd=Path.cwd(), env=os.environ).profiles) == ["simple", "auto"]
+    assert config_path(cwd=Path.cwd(), env=os.environ) == default
 
 
 def test_local_config_works_without_global_and_does_not_search_parents(tmp_path: Path) -> None:
     local = tmp_path / ".pratfile"
     local.write_text('version=1\n[profiles.local]\nagent="cc"\n')
-    config = load_config(cwd=tmp_path)
+    config = load_config(cwd=tmp_path, env=os.environ)
     assert config.path == local
     assert config.sources == (local,)
     assert config.exists is True
     assert resolve_profile(config, "local").agent.name == "claude"
     child = tmp_path / "child"
     child.mkdir()
-    assert load_config(cwd=child).exists is False
+    assert load_config(cwd=child, env=os.environ).exists is False
 
 
 def test_local_defaults_commands_and_profiles_merge_by_their_boundaries(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(
         'version=1\n[defaults]\nmodel="global-model"\neffort="low"\ntimeout=90\n'
         'fast=true\nnative_args=["--verbose"]\n'
@@ -110,7 +113,7 @@ def test_local_defaults_commands_and_profiles_merge_by_their_boundaries(tmp_path
         '[profiles.shared]\nagent="cx"\neffort="high"\n'
         '[profiles.local-only]\nagent="cc"\n'
     )
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     assert config.sources == (global_path, local_path)
     assert set(config.profiles) == {"shared", "global-only", "local-only"}
     shared = resolve_profile(config, "shared")
@@ -136,53 +139,55 @@ def test_local_defaults_commands_and_profiles_merge_by_their_boundaries(tmp_path
 
 
 def test_profiles_are_validated_with_merged_defaults(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text('version=1\n[defaults]\neffort="invalid"\n[profiles.work]\nagent="cc"\n')
     (tmp_path / ".pratfile").write_text('version=1\n[defaults]\neffort="low"\n')
-    assert resolve_profile(load_config(), "work").options.effort == "low"
+    assert (
+        resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "work").options.effort == "low"
+    )
     (tmp_path / ".pratfile").write_text('version=1\n[defaults]\neffort="invalid"\n')
     with pytest.raises(PratError, match=f"{tmp_path / '.pratfile'}: defaults.effort"):
-        load_config()
+        load_config(cwd=Path.cwd(), env=os.environ)
 
 
 def test_local_profiles_are_validated_against_inherited_defaults(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text("version=1\n[defaults]\nfast=true\n")
     local = tmp_path / ".pratfile"
     local.write_text('version=1\n[profiles.work]\nagent="gm"\n')
     with pytest.raises(PratError, match=f"{global_path}: defaults.fast"):
-        load_config()
+        load_config(cwd=Path.cwd(), env=os.environ)
 
 
 @pytest.mark.parametrize("layer", ["global", "local"])
 @pytest.mark.parametrize("contents", ["version=1\n[", "version=2", "version=1\nunknown=true"])
 def test_invalid_layers_fail_with_source_context(tmp_path: Path, layer: str, contents: str) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     local_path = tmp_path / ".pratfile"
     local_path.write_text("version=1\n")
     invalid = global_path if layer == "global" else local_path
     invalid.write_text(contents)
     with pytest.raises(PratError) as caught:
-        load_config()
+        load_config(cwd=Path.cwd(), env=os.environ)
     assert str(caught.value).startswith(str(invalid))
 
 
 def test_explicit_missing_file_fails_even_with_automatic_local(tmp_path: Path) -> None:
-    init_config()
+    init_config(cwd=Path.cwd(), env=os.environ)
     (tmp_path / ".pratfile").write_text("version=1\n")
     with pytest.raises(PratError, match=r"missing\.toml: config file does not exist"):
-        load_config("missing.toml")
+        load_config("missing.toml", cwd=Path.cwd(), env=os.environ)
 
 
 def test_automatic_local_read_errors_are_reported(tmp_path: Path) -> None:
     (tmp_path / ".pratfile").mkdir()
     with pytest.raises(PratError, match=r"\.pratfile: cannot read config"):
-        load_config()
+        load_config(cwd=Path.cwd(), env=os.environ)
 
 
 def test_selecting_global_explicitly_loads_it_once() -> None:
-    path = init_config()
-    config = load_config(path)
+    path = init_config(cwd=Path.cwd(), env=os.environ)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     assert config.sources == (path,)
     assert config.warnings == ()
 
@@ -191,7 +196,7 @@ def test_selecting_global_explicitly_loads_it_once() -> None:
 def test_global_file_alias_loads_once_and_keeps_selected_command_base(
     tmp_path: Path, alias_kind: str
 ) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(
         'version=1\n[defaults]\ntimeout=20\n[agents.codex]\ncommand=["./wrapper"]\n'
         '[profiles.work]\nagent="codex"\n'
@@ -203,7 +208,9 @@ def test_global_file_alias_loads_once_and_keeps_selected_command_base(
     else:
         selected = tmp_path / (".pratfile" if alias_kind == "automatic" else "alias.toml")
         selected.symlink_to(global_path)
-    config = load_config(None if alias_kind == "automatic" else selected)
+    config = load_config(
+        None if alias_kind == "automatic" else selected, cwd=Path.cwd(), env=os.environ
+    )
     assert config.sources == (selected,)
     assert config.path == selected
     assert config.warnings == ()
@@ -213,11 +220,11 @@ def test_global_file_alias_loads_once_and_keeps_selected_command_base(
 
 
 def test_local_false_override_keeps_its_source(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text("version=1\n[defaults]\nfast=true\n")
     local = tmp_path / ".pratfile"
     local.write_text("version=1\n[defaults]\nfast=false\n")
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "cx").options.fast is False
     with pytest.raises(PratError) as caught:
         resolve_profile(config, "gm")
@@ -229,9 +236,9 @@ def test_explicit_relative_path_resolves_commands_from_its_own_directory(tmp_pat
     settings.mkdir()
     path = settings / "custom.toml"
     path.write_text('version=1\n[agents.codex]\ncommand=["./wrapper"]\n')
-    assert resolve_profile(load_config("settings/custom.toml", cwd=tmp_path), "cx").command == (
-        str(settings / "wrapper"),
-    )
+    assert resolve_profile(
+        load_config("settings/custom.toml", cwd=tmp_path, env=os.environ), "cx"
+    ).command == (str(settings / "wrapper"),)
 
 
 def test_scalars_and_native_arguments_follow_precedence(tmp_path: Path) -> None:
@@ -254,7 +261,7 @@ max_turns=4
 native_args=["--allowed-tools", "literal argument"]
 """,
     )
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     resolved = resolve_profile(config, "work", Options(model="cli-model", timeout=12))
     assert resolved.agent.name == "claude"
     assert resolved.profile == "work"
@@ -290,7 +297,7 @@ agent="codex"
 native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", "~/file", "--sandbox", "two words"]
 """,
     )
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     resolved = resolve_profile(config, "work")
     assert resolved.command == (
         str(tmp_path / "bin/wrapper"),
@@ -393,7 +400,7 @@ def test_invalid_config_identifies_source_and_field(
 ) -> None:
     path = write_config(tmp_path, contents)
     with pytest.raises(PratError, match=message) as caught:
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
     assert str(caught.value).startswith(str(path))
     assert caught.value.exit_code == 2
 
@@ -430,14 +437,14 @@ agent="hermes"
 max_turns=3
 """,
     )
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "credit").options.max_ai_credits == 2.5
     assert resolve_profile(config, "turns").options.max_turns == 3
 
 
 def test_defaults_and_overrides_are_validated_for_selected_builtin(tmp_path: Path) -> None:
     path = write_config(tmp_path, 'version=1\n[defaults]\nmodel="new-model"\n')
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "kiro").options.model == "new-model"
     with pytest.raises(PratError, match="Hermes accepts:"):
         resolve_profile(config, "hm", Options(effort="unknown"))
@@ -448,7 +455,7 @@ def test_fast_mode_follows_cli_profile_defaults_precedence(tmp_path: Path) -> No
         tmp_path,
         'version=1\n[defaults]\nfast=true\n[profiles.work]\nagent="codex"\nfast=false\n',
     )
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "cx").options.fast is True
     assert resolve_profile(config, "work").options.fast is False
     assert resolve_profile(config, "work", Options(fast=True)).options.fast is True
@@ -456,7 +463,7 @@ def test_fast_mode_follows_cli_profile_defaults_precedence(tmp_path: Path) -> No
 
 def test_global_fast_is_checked_only_when_a_builtin_is_resolved(tmp_path: Path) -> None:
     path = write_config(tmp_path, "version=1\n[defaults]\nfast=true\n")
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "cc").options.fast is True
     with pytest.raises(PratError, match="Gemini does not support"):
         resolve_profile(config, "gm")
@@ -468,7 +475,7 @@ def test_notify_settings_parse_from_defaults_and_profile(tmp_path: Path) -> None
         'version=1\n[defaults]\nnotify=true\nnotify_method="osc9"\nnotify_after=5\n'
         '[profiles.work]\nagent="codex"\nnotify=false\nnotify_method="bel"\nnotify_after=0\n',
     )
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     defaults_only = resolve_profile(config, "cx")
     assert defaults_only.options.notify is True
     assert defaults_only.options.notify_method == "osc9"
@@ -480,24 +487,29 @@ def test_notify_settings_parse_from_defaults_and_profile(tmp_path: Path) -> None
 
 
 def test_local_notify_false_overrides_global_true(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text("version=1\n[defaults]\nnotify=true\n")
     local = tmp_path / ".pratfile"
     local.write_text("version=1\n[defaults]\nnotify=false\n")
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "cx").options.notify is False
 
 
 def test_notify_cli_override_wins_through_resolve_profile(tmp_path: Path) -> None:
     path = write_config(tmp_path, 'version=1\n[profiles.work]\nagent="codex"\nnotify=false\n')
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "work").options.notify is False
     assert resolve_profile(config, "work", Options(notify=True)).options.notify is True
 
 
 def test_notify_after_zero_is_accepted(tmp_path: Path) -> None:
     path = write_config(tmp_path, "version=1\n[defaults]\nnotify_after=0\n")
-    assert resolve_profile(load_config(path), "cx").options.notify_after == 0
+    assert (
+        resolve_profile(
+            load_config(path, cwd=Path.cwd(), env=os.environ), "cx"
+        ).options.notify_after
+        == 0
+    )
 
 
 @pytest.mark.parametrize(
@@ -516,7 +528,7 @@ def test_command_line_capability_rejections_are_invalid_arguments(
     selector: str, overrides: Options, field: str
 ) -> None:
     with pytest.raises(PratError) as caught:
-        resolve_profile(load_config(), selector, overrides)
+        resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), selector, overrides)
     assert caught.value.code == "invalid_arguments"
     assert caught.value.exit_code == 2
     assert str(caught.value).startswith(f"command line: selector {selector!r}.{field}: ")
@@ -534,7 +546,7 @@ def test_config_supplied_capability_rejections_stay_invalid_config(
 ) -> None:
     path = write_config(tmp_path, contents)
     with pytest.raises(PratError) as caught:
-        resolve_profile(load_config(path), selector)
+        resolve_profile(load_config(path, cwd=Path.cwd(), env=os.environ), selector)
     assert caught.value.code == "invalid_config"
     assert caught.value.exit_code == 2
     assert str(caught.value).startswith(f"{path}: {label}: ")
@@ -542,21 +554,21 @@ def test_config_supplied_capability_rejections_stay_invalid_config(
 
 def test_unknown_selector_suggests_inventory() -> None:
     with pytest.raises(PratError, match="prat profiles") as caught:
-        resolve_profile(load_config(), "unknown")
+        resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "unknown")
     assert caught.value.code == "invalid_arguments"
 
 
 def test_config_init_creates_valid_sample_and_refuses_overwrite(tmp_path: Path) -> None:
     path = tmp_path / "nested/config.toml"
-    assert init_config(path) == path
+    assert init_config(path, cwd=Path.cwd(), env=os.environ) == path
     assert path.read_text(encoding="utf-8") == SAMPLE_CONFIG
-    resolved = resolve_profile(load_config(path), "simple")
+    resolved = resolve_profile(load_config(path, cwd=Path.cwd(), env=os.environ), "simple")
     assert resolved.agent.name == "codex"
     assert resolved.options.model == "gpt-5.6-luna"
     assert resolved.options.effort == "low"
     original = path.read_bytes()
     with pytest.raises(PratError, match="already exists"):
-        init_config(path)
+        init_config(path, cwd=Path.cwd(), env=os.environ)
     assert path.read_bytes() == original
 
 
@@ -567,7 +579,7 @@ def test_config_init_secures_only_new_paths_under_open_umask(tmp_path: Path) -> 
     path = existing / "new" / "nested" / "config.toml"
     previous_umask = os.umask(0)
     try:
-        init_config(path)
+        init_config(path, cwd=Path.cwd(), env=os.environ)
     finally:
         os.umask(previous_umask)
     assert existing.stat().st_mode & 0o777 == 0o751
@@ -580,7 +592,7 @@ def test_config_init_preserves_existing_file_mode_and_contents(tmp_path: Path) -
     path = write_config(tmp_path, "preserve this")
     path.chmod(0o640)
     with pytest.raises(PratError, match="already exists"):
-        init_config(path)
+        init_config(path, cwd=Path.cwd(), env=os.environ)
     assert path.read_text(encoding="utf-8") == "preserve this"
     assert path.stat().st_mode & 0o777 == 0o640
 
@@ -590,23 +602,23 @@ def test_init_refuses_existing_symlink(tmp_path: Path) -> None:
     link = tmp_path / "link.toml"
     link.symlink_to(target)
     with pytest.raises(PratError, match="already exists"):
-        init_config(link)
+        init_config(link, cwd=Path.cwd(), env=os.environ)
     assert target.read_text(encoding="utf-8") == "preserve this"
 
 
 def test_file_read_errors_have_config_context(tmp_path: Path) -> None:
     with pytest.raises(PratError, match="cannot read config"):
-        load_config(tmp_path)
+        load_config(tmp_path, cwd=Path.cwd(), env=os.environ)
     path = tmp_path / "invalid.toml"
     path.write_bytes(b"\xff")
     with pytest.raises(PratError, match="cannot read config"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def test_init_reports_parent_creation_failure(tmp_path: Path) -> None:
     file = write_config(tmp_path, "existing file")
     with pytest.raises(PratError, match="cannot create config"):
-        init_config(file / "config.toml")
+        init_config(file / "config.toml", cwd=Path.cwd(), env=os.environ)
 
 
 @pytest.mark.parametrize(
@@ -638,7 +650,7 @@ def test_new_agent_profile_collisions_have_exact_migration_diagnostic(
 ) -> None:
     path = write_config(tmp_path, f'version=1\n[profiles.{name}]\nagent="codex"\n')
     with pytest.raises(PratError) as failure:
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
     assert str(failure.value) == (
         f"{path}: profiles.{name}: name is reserved; choose a different profile name."
     )
@@ -647,7 +659,7 @@ def test_new_agent_profile_collisions_have_exact_migration_diagnostic(
 def test_extreme_toml_integer_is_a_normalized_config_error(tmp_path: Path) -> None:
     path = write_config(tmp_path, "version=" + "9" * 5000 + "\n")
     with pytest.raises(PratError, match="invalid TOML") as caught:
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
     assert caught.value.code == "invalid_config"
     assert caught.value.exit_code == 2
     assert str(caught.value).startswith(str(path))
@@ -656,7 +668,7 @@ def test_extreme_toml_integer_is_a_normalized_config_error(tmp_path: Path) -> No
 @pytest.mark.parametrize("name", ["work", "cx", "templates", "A_1-z"])
 def test_templates_have_independent_names_and_source(tmp_path: Path, name: str) -> None:
     path = write_config(tmp_path, f'version=1\n[templates.{name}]\nprompt="Review $input"\n')
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     assert config.templates[name].prompt == "Review $input"
     assert config.templates[name].source == path
     with pytest.raises(TypeError):
@@ -680,19 +692,19 @@ def test_templates_have_independent_names_and_source(tmp_path: Path, name: str) 
 def test_invalid_template_schema(tmp_path: Path, definition: str, message: str) -> None:
     path = write_config(tmp_path, "version=1\n" + definition)
     with pytest.raises(PratError, match=message) as caught:
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
     assert str(path) in str(caught.value)
 
 
 def test_template_merge_replaces_whole_definition_and_warns(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(
         'version=1\n[templates.work]\nprompt="global $input"\n'
         '[templates.other]\nprompt="other"\n[profiles.work]\nagent="codex"\n',
         encoding="utf-8",
     )
     local = write_config(tmp_path, 'version=1\n[templates.work]\nprompt="local"\n')
-    config = load_config(local)
+    config = load_config(local, cwd=Path.cwd(), env=os.environ)
     assert {name: item.prompt for name, item in config.templates.items()} == {
         "work": "local",
         "other": "other",
@@ -706,22 +718,22 @@ def test_template_merge_replaces_whole_definition_and_warns(tmp_path: Path) -> N
 
 
 def test_invalid_global_template_is_not_hidden_by_replacement(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text('version=1\n[templates.work]\nprompt="$Input"\n', encoding="utf-8")
     local = write_config(tmp_path, 'version=1\n[templates.work]\nprompt="valid"\n')
     with pytest.raises(PratError, match="differs from 'input' only in case") as caught:
-        load_config(local)
+        load_config(local, cwd=Path.cwd(), env=os.environ)
     assert str(global_path) in str(caught.value)
 
 
 def test_templates_is_reserved_for_profile_names(tmp_path: Path) -> None:
     path = write_config(tmp_path, 'version=1\n[profiles.templates]\nagent="codex"\n')
     with pytest.raises(PratError, match="name is reserved"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def test_directory_paths_follow_layer_origins_and_replace_lists(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text('version=1\n[defaults]\nadd_dirs=["global"]\n')
     local = tmp_path / "local" / "settings.toml"
     local.parent.mkdir()
@@ -730,7 +742,7 @@ def test_directory_paths_follow_layer_origins_and_replace_lists(tmp_path: Path) 
         '[profiles.extra]\nagent="codex"\nadd_dirs=["profile", "profile"]\n'
         '[profiles.clear]\nagent="cursor"\nadd_dirs=[]\n'
     )
-    config = load_config(local)
+    config = load_config(local, cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "cx").options.add_dirs == (str(local.parent / "local"),)
     assert resolve_profile(config, "extra").options.add_dirs == (
         str(local.parent / "profile"),
@@ -742,9 +754,9 @@ def test_directory_paths_follow_layer_origins_and_replace_lists(tmp_path: Path) 
         "/cli",
     )
     local.write_text('version=1\n[profiles.extra]\nagent="codex"\n')
-    assert resolve_profile(load_config(local), "extra").options.add_dirs == (
-        str(global_path.parent / "global"),
-    )
+    assert resolve_profile(
+        load_config(local, cwd=Path.cwd(), env=os.environ), "extra"
+    ).options.add_dirs == (str(global_path.parent / "global"),)
 
 
 @pytest.mark.parametrize("value", ['"directory"', "[1]", '[""]', '[" "]'])
@@ -752,7 +764,7 @@ def test_directory_config_requires_nonempty_path_strings(tmp_path: Path, value: 
     path = tmp_path / "bad.toml"
     path.write_text(f"version=1\n[defaults]\nadd_dirs={value}\n")
     with pytest.raises(PratError, match=r"defaults.add_dirs"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def test_directory_defaults_validate_every_effective_profile(tmp_path: Path) -> None:
@@ -761,11 +773,11 @@ def test_directory_defaults_validate_every_effective_profile(tmp_path: Path) -> 
         'version=1\n[defaults]\nadd_dirs=["missing"]\n[profiles.other]\nagent="cursor"\n'
     )
     with pytest.raises(PratError, match=r"defaults.add_dirs.*does not support extra directories"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def test_command_prefix_precedence_runs_profile_then_agent_then_defaults(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(
         'version=1\n[defaults]\ncommand_prefix=["global-prefix"]\n'
         '[agents.codex]\ncommand=["./bin/codex"]\n'
@@ -778,7 +790,7 @@ def test_command_prefix_precedence_runs_profile_then_agent_then_defaults(tmp_pat
         '[profiles.direct]\nagent="claude"\ncommand_prefix=[]\n'
         '[profiles.traced]\nagent="codex"\ncommand_prefix=["env", "TRACE=1"]\n'
     )
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     codex = str(global_path.parent / "bin/codex")
     assert resolve_profile(config, "cx").command == ("sops-exec", codex)
     assert resolve_profile(config, "cc").command == ("claude-prefix", "--flag", "claude")
@@ -789,10 +801,13 @@ def test_command_prefix_precedence_runs_profile_then_agent_then_defaults(tmp_pat
 
 
 def test_local_agent_command_prefix_keeps_the_global_agent_command(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text('version=1\n[agents.codex]\ncommand=["/opt/codex"]\n')
     (tmp_path / ".pratfile").write_text('version=1\n[agents.codex]\ncommand_prefix=["sops-exec"]\n')
-    assert resolve_profile(load_config(), "cx").command == ("sops-exec", "/opt/codex")
+    assert resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "cx").command == (
+        "sops-exec",
+        "/opt/codex",
+    )
 
 
 def test_command_prefix_executable_resolves_from_its_defining_file(tmp_path: Path) -> None:
@@ -802,7 +817,7 @@ def test_command_prefix_executable_resolves_from_its_defining_file(tmp_path: Pat
         '[agents.gemini]\ncommand_prefix=["./bin/gemini-wrap"]\n'
         '[profiles.work]\nagent="pi"\ncommand_prefix=["tools/wrap"]\n',
     )
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "cx").command == (
         str(tmp_path / "bin/wrap"),
         "./literal",
@@ -825,7 +840,7 @@ def test_command_prefix_executable_resolves_from_its_defining_file(tmp_path: Pat
 def test_invalid_command_prefix_names_its_field(tmp_path: Path, table: str, label: str) -> None:
     path = write_config(tmp_path, f"version=1\n{table}\n")
     with pytest.raises(PratError, match=label):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def test_profile_prompt_resolves_with_defining_source(tmp_path: Path) -> None:
@@ -836,7 +851,7 @@ def test_profile_prompt_resolves_with_defining_source(tmp_path: Path) -> None:
         '[profiles.over]\nextends="child"\nprompt="Sweep ${dir}"\n'
         '[profiles.plain]\nagent="codex"\n',
     )
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     prompts = {name: profile.prompt for name, profile in config.profiles.items()}
     assert prompts["base"] == PromptTemplate(prompt="Tidy $folder", source=path)
     assert prompts["child"] == prompts["base"]
@@ -848,44 +863,44 @@ def test_profile_prompt_resolves_with_defining_source(tmp_path: Path) -> None:
 
 
 def test_profile_prompt_comes_from_the_defining_layer_file(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text('version=1\n[profiles.base]\nagent="claude"\nprompt="Global $x"\n')
     local_path = tmp_path / ".pratfile"
     local_path.write_text(
         'version=1\n[profiles.child]\nextends="base"\n'
         '[profiles.base]\nagent="claude"\nprompt="Local $y"\n'
     )
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     assert config.profiles["base"].prompt == PromptTemplate(prompt="Local $y", source=local_path)
     assert config.profiles["child"].prompt == PromptTemplate(prompt="Local $y", source=local_path)
 
 
 def test_profile_prompt_inherited_from_another_file_keeps_that_source(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text('version=1\n[profiles.base]\nagent="claude"\nprompt="Global $x"\n')
     local_path = tmp_path / ".pratfile"
     local_path.write_text('version=1\n[profiles.child]\nextends="base"\n')
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     assert config.profiles["child"].prompt == PromptTemplate(prompt="Global $x", source=global_path)
 
 
 def test_invalid_profile_prompt_fails_config_load(tmp_path: Path) -> None:
     path = write_config(tmp_path, 'version=1\n[profiles.p]\nagent="claude"\nprompt="Cost $5"\n')
     with pytest.raises(PratError, match=r"profiles\.p\.prompt: use \$name"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 @pytest.mark.parametrize("value", ['""', '"  "', "3"])
 def test_profile_prompt_must_be_a_nonempty_string(tmp_path: Path, value: str) -> None:
     path = write_config(tmp_path, f'version=1\n[profiles.p]\nagent="claude"\nprompt={value}\n')
     with pytest.raises(PratError, match=r"profiles\.p\.prompt: expected a nonempty string"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def test_defaults_reject_prompt(tmp_path: Path) -> None:
     path = write_config(tmp_path, 'version=1\n[defaults]\nprompt="Hi"\n')
     with pytest.raises(PratError, match="unknown field 'prompt'"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 WORKFLOW_PROFILES = (
@@ -905,7 +920,9 @@ def test_workflow_forms_parse_to_the_same_workflow(tmp_path: Path) -> None:
             tmp_path,
             '[workflows.w]\nsteps=[{name="one",profile="a"},{name="two",profile="b",'
             'after=["one"],input="none",bind={mode="one"}},{name="top",profile="bare",after=[]}]\n',
-        )
+        ),
+        cwd=Path.cwd(),
+        env=os.environ,
     )
     tabular = load_config(
         workflow_config(
@@ -914,7 +931,9 @@ def test_workflow_forms_parse_to_the_same_workflow(tmp_path: Path) -> None:
             '[[workflows.w.steps]]\nname="two"\nprofile="b"\ninput="none"\n'
             '[workflows.w.steps.bind]\nmode="one"\n'
             '[[workflows.w.steps]]\nname="top"\nprofile="bare"\nafter=[]\n',
-        )
+        ),
+        cwd=Path.cwd(),
+        env=os.environ,
     )
     workflow = inline.workflows["w"]
     assert workflow == tabular.workflows["w"]
@@ -935,7 +954,9 @@ def test_workflow_default_after_is_the_previous_step(tmp_path: Path) -> None:
             tmp_path,
             '[workflows.w]\nparallel=false\nsteps=[{name="a1",profile="a"},'
             '{name="a2",profile="a"},{name="a3",profile="a"}]\n',
-        )
+        ),
+        cwd=Path.cwd(),
+        env=os.environ,
     )
     workflow = config.workflows["w"]
     assert workflow.parallel is False
@@ -1135,7 +1156,7 @@ def test_workflow_default_after_is_the_previous_step(tmp_path: Path) -> None:
 def test_workflow_validation_errors(tmp_path: Path, body: str, message: str) -> None:
     path = workflow_config(tmp_path, body)
     with pytest.raises(PratError, match=message):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 @pytest.mark.parametrize(
@@ -1153,37 +1174,37 @@ def test_workflow_validation_errors(tmp_path: Path, body: str, message: str) -> 
 def test_workflow_name_rules(tmp_path: Path, name: str, message: str) -> None:
     path = workflow_config(tmp_path, f'[workflows.{name}]\nsteps=[{{name="x",profile="a"}}]\n')
     with pytest.raises(PratError, match=message):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def test_workflows_must_be_a_table(tmp_path: Path) -> None:
     path = write_config(tmp_path, "version=1\nworkflows=[]\n")
     with pytest.raises(PratError, match="workflows: expected a TOML table"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def test_workflow_name_allows_digits_hyphens_and_underscores(tmp_path: Path) -> None:
     path = workflow_config(tmp_path, '[workflows.ok-1_x]\nsteps=[{name="x",profile="a"}]\n')
-    assert "ok-1_x" in load_config(path).workflows
+    assert "ok-1_x" in load_config(path, cwd=Path.cwd(), env=os.environ).workflows
 
 
 def test_profile_named_workflows_is_rejected(tmp_path: Path) -> None:
     path = write_config(tmp_path, 'version=1\n[profiles.workflows]\nagent="codex"\n')
     with pytest.raises(PratError, match="name is reserved"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def test_workflow_in_defaults_is_rejected(tmp_path: Path) -> None:
     path = write_config(tmp_path, "version=1\n[defaults]\nworkflows=1\n")
     with pytest.raises(PratError, match="unknown field 'workflows'"):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def each_step(tmp_path: Path, profiles: str, steps: str) -> WorkflowStep:
     path = write_config(
         tmp_path, f"version=1\n{WORKFLOW_PROFILES}{profiles}[workflows.w]\nsteps={steps}\n"
     )
-    return load_config(path).workflows["w"].steps[-1]
+    return load_config(path, cwd=Path.cwd(), env=os.environ).workflows["w"].steps[-1]
 
 
 @pytest.mark.parametrize(
@@ -1259,7 +1280,7 @@ def test_parse_time_each_errors_come_before_ancestor_errors(tmp_path: Path) -> N
     with pytest.raises(
         PratError, match=r"step 'y'\.max_parallel: expected an integer from 1 to 64 or .all."
     ):
-        load_config(path)
+        load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
 def test_local_workflow_keeps_each_settings_over_global(
@@ -1279,7 +1300,7 @@ def test_local_workflow_keeps_each_settings_over_global(
         '{name="y",profile="b",each="x",split="json",as="mode",max_parallel=7}]\n',
         encoding="utf-8",
     )
-    step = load_config(cwd=work).workflows["w"].steps[-1]
+    step = load_config(cwd=work, env=os.environ).workflows["w"].steps[-1]
     assert (step.each, step.split, step.as_parameter, step.max_parallel) == ("x", "json", "mode", 7)
 
 
@@ -1299,7 +1320,7 @@ def test_local_workflow_replaces_global_and_checks_global_profiles(
     work.mkdir()
     local = work / ".pratfile"
     local.write_text('version=1\n[workflows.w]\nsteps=[{name="l",profile="a"}]\n', encoding="utf-8")
-    config = load_config(cwd=work)
+    config = load_config(cwd=work, env=os.environ)
     assert [step.name for step in config.workflows["w"].steps] == ["l"]
     assert config.workflows["w"].source == local
     assert config.workflows["only"].source == global_path

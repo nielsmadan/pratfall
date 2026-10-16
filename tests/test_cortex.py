@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -101,13 +102,21 @@ def test_cortex_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
 
 @pytest.mark.parametrize("effort", ["minimal", "low", "medium", "high", "max"])
 def test_cortex_verified_effort_enum(native_contract_config: Path, effort: str) -> None:
-    resolved = resolve_profile(load_config(native_contract_config), "co", Options(effort=effort))
+    resolved = resolve_profile(
+        load_config(native_contract_config, cwd=Path.cwd(), env=os.environ),
+        "co",
+        Options(effort=effort),
+    )
     assert cortex.build(resolved, b"task").argv[-5:] == ("--effort", effort, "exec", "--file", "-")
 
 
 def test_cortex_rejects_unverified_effort(native_contract_config: Path) -> None:
     with pytest.raises(PratError, match="effort"):
-        resolve_profile(load_config(native_contract_config), "co", Options(effort="xhigh"))
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ),
+            "co",
+            Options(effort="xhigh"),
+        )
 
 
 @pytest.mark.parametrize(
@@ -115,7 +124,9 @@ def test_cortex_rejects_unverified_effort(native_contract_config: Path) -> None:
 )
 def test_cortex_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "co", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "co", options
+        )
 
 
 @pytest.mark.parametrize("selector", ["cortex", "co", "cortex-review"])

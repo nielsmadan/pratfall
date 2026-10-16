@@ -17,6 +17,7 @@ from pratfall.adapters import claude, codex, qwen
 from pratfall.adapters.registry import ADAPTERS
 from pratfall.catalog import BY_NAME
 from pratfall.cli import dispatch, main
+from pratfall.cli.presentation import _StreamDiagnostics
 from pratfall.config import config_path, load_config, resolve_profile
 from pratfall.consumer import ConsumerFailure, ConsumerLimits, Retention, StateBudget
 from pratfall.errors import PratError
@@ -171,7 +172,7 @@ def test_schema_validation_precedes_prompt_and_editor(
 def test_schema_inheritance_listing_override_and_extract_rejection(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    global_path = config_path()
+    global_path = config_path(cwd=Path.cwd(), env=os.environ)
     global_path.parent.mkdir(parents=True)
     global_path.write_text('version=1\n[defaults]\nschema="global.json"\n')
     local = tmp_path / ".pratfile"
@@ -181,7 +182,9 @@ def test_schema_inheritance_listing_override_and_extract_rejection(
     assert main(["profiles", "--json"]) == 0
     record = json.loads(capsys.readouterr().out)["profiles"][0]
     assert record["options"]["schema"] == str(tmp_path / "missing.json")
-    assert load_config().defaults.schema == str(global_path.parent / "global.json")
+    assert load_config(cwd=Path.cwd(), env=os.environ).defaults.schema == str(
+        global_path.parent / "global.json"
+    )
     assert main(["work", "--extract", "task", "--json"]) == 2
     assert "cannot be used together" in json.loads(capsys.readouterr().out)["error"]["message"]
     schema = tmp_path / "chosen.json"
@@ -198,7 +201,7 @@ def test_schema_inheritance_listing_override_and_extract_rejection(
 
 
 def test_schema_config_layer_origins_and_priority(tmp_path: Path) -> None:
-    global_path = config_path()
+    global_path = config_path(cwd=Path.cwd(), env=os.environ)
     global_path.parent.mkdir(parents=True)
     global_path.write_text('version=1\n[defaults]\nschema="global"\n')
     local = tmp_path / "nested" / "local.toml"
@@ -206,7 +209,7 @@ def test_schema_config_layer_origins_and_priority(tmp_path: Path) -> None:
     local.write_text(
         'version=1\n[defaults]\nschema="local"\n[profiles.work]\nagent="claude"\nschema="profile"\n'
     )
-    config = load_config(local)
+    config = load_config(local, cwd=Path.cwd(), env=os.environ)
     assert config.defaults.schema == str(local.parent / "local")
     assert resolve_profile(config, "work").options.schema == str(local.parent / "profile")
     assert resolve_profile(config, "work", Options(schema="cli")).options.schema == "cli"
@@ -306,7 +309,8 @@ def test_schema_failure_cleanup_preserves_native_precedence(
     decoded = DecodedOutput(error=ResultError("protocol_error", "missing structured answer"))
     capture = ConsumedCapture(decoded) if consumed else RawCapture(b"{}")
     process = ProcessResult(capture, b"", native_exit, 0, process_group=123)
-    process, result, _ = dispatch._decode_process(resolved, process)
+    plan = dispatch._RunPlan(resolved, Invocation(("fake",), b""), Path(), 1, None, True, False)
+    process, result = dispatch._present_run(plan, _StreamDiagnostics(), process)
     assert groups == [123]
     error = normalize(resolved, process, result).error
     assert error is not None
@@ -315,14 +319,14 @@ def test_schema_failure_cleanup_preserves_native_precedence(
     )
 
 
-def test_schema_cleanup_failure_is_observable_with_native_exit(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(dispatch, "cleanup_process_group", lambda group: "test cleanup denied")
+def test_schema_cleanup_failure_is_observable_with_native_exit() -> None:
     resolved = ResolvedProfile(BY_NAME["claude"], None, ("fake",), Options(schema="source"))
     process = ProcessResult(RawCapture(b"{}"), b"", 7, 0, process_group=123)
-    process, decoded, stderr = dispatch._decode_process(resolved, process)
-    assert "test cleanup denied" in stderr
+    decoded, stderr, _ = dispatch._decode_process(resolved, process)
+    decoded, stderr = dispatch._with_decode_cleanup_failure(decoded, stderr, "test cleanup denied")
+    assert stderr == "\nprat: Process-group cleanup failed: test cleanup denied.\n"
+    assert decoded.error is not None
+    assert decoded.error.message.endswith("Process-group cleanup failed: test cleanup denied.")
     assert normalize(resolved, process, decoded).exit_code == 7
 
 
@@ -431,9 +435,8 @@ def test_schema_fake_timeout_keeps_structured_answer(
 
 @pytest.mark.parametrize("timeout, interruption", [(True, None), (False, signal.SIGINT)])
 def test_schema_protocol_failure_never_overrides_timeout_or_interruption(
-    timeout: bool, interruption: int | None, monkeypatch: pytest.MonkeyPatch
+    timeout: bool, interruption: int | None
 ) -> None:
-    monkeypatch.setattr(dispatch, "cleanup_process_group", lambda group: None)
     resolved = ResolvedProfile(BY_NAME["claude"], None, ("fake",), Options(schema="source"))
     process = ProcessResult(
         RawCapture(b"{}"),
@@ -444,7 +447,7 @@ def test_schema_protocol_failure_never_overrides_timeout_or_interruption(
         interrupted_by=interruption,
         process_group=123,
     )
-    process, decoded, _ = dispatch._decode_process(resolved, process)
+    decoded, _, _ = dispatch._decode_process(resolved, process)
     result = normalize(resolved, process, decoded)
     assert result.status == ("timeout" if timeout else "interrupted")
     assert result.exit_code == (124 if timeout else 130)

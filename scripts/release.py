@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import NotRequired, TypedDict
 
@@ -40,6 +41,23 @@ class State(TypedDict):
     ahead: str
 
 
+@dataclass(frozen=True)
+class RepoFacts:
+    status: str
+    branch: str
+    shallow: bool
+    fetch_url: str
+    push_url: str
+    refs: dict[str, str]
+    head: str
+    includes_remote: bool
+    tags: frozenset[str]
+    tag_targets: dict[str, str]
+    includes_latest: bool
+    messages: tuple[str, ...]
+    ahead: str
+
+
 class ReleaseError(Exception):
     pass
 
@@ -73,18 +91,19 @@ def bumped(base: tuple[int, ...], kind: str, components: int) -> str:
 def suggested(
     base: tuple[int, ...], messages: list[str], components: int
 ) -> tuple[str | None, dict[str, int]]:
-    counts = {"features": 0, "fixes": 0, "breaking": 0}
-    for message in messages:
-        header = message.splitlines()[0]
-        match = re.match(r"(\w+)(?:\([^\n]*\))?(!)?:", header)
-        if not match:
-            continue
-        if match[2] or re.search(r"^BREAKING[ -]CHANGE:", message, re.MULTILINE):
-            counts["breaking"] += 1
-        if match[1] == "feat":
-            counts["features"] += 1
-        elif match[1] in {"fix", "perf"}:
-            counts["fixes"] += 1
+    parsed = [
+        (match, message)
+        for message in messages
+        if (match := re.match(r"(\w+)(?:\([^\n]*\))?(!)?:", message.splitlines()[0]))
+    ]
+    counts = {
+        "features": sum(match[1] == "feat" for match, _ in parsed),
+        "fixes": sum(match[1] in {"fix", "perf"} for match, _ in parsed),
+        "breaking": sum(
+            bool(match[2] or re.search(r"^BREAKING[ -]CHANGE:", message, re.MULTILINE))
+            for match, message in parsed
+        ),
+    }
     if counts["breaking"]:
         kind = "minor" if components == SEMVER_PARTS and base[0] == 0 else "major"
     elif counts["features"] or (components == TWO_PART_VERSION and counts["fixes"]):
@@ -101,64 +120,123 @@ def remote_refs(root: Path) -> dict[str, str]:
     return dict(line.split()[::-1] for line in result.splitlines())
 
 
-def clean(root: Path) -> None:
-    status = run(root, "git", "status", "--porcelain", "--untracked-files=all")
+def require_clean(status: str) -> None:
     if status:
         raise ReleaseError("The checkout must be clean before releasing:\n" + status)
 
 
-def inspect(root: Path, config: Config) -> State:
-    clean(root)
+def clean(root: Path) -> None:
+    require_clean(run(root, "git", "status", "--porcelain", "--untracked-files=all"))
+
+
+def succeeds(root: Path, *args: str) -> bool:
+    try:
+        run(root, *args)
+    except ReleaseError:
+        return False
+    return True
+
+
+def tag_pattern(components: int) -> str:
+    return r"v(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){" + str(components - 1) + "}"
+
+
+def latest_tag(tags: frozenset[str], components: int) -> str | None:
+    return max(tags, key=lambda tag: version_tuple(tag, components), default=None)
+
+
+def commit_messages(log: str) -> tuple[str, ...]:
+    return tuple(message.strip() for message in log.split("\0") if message.strip())
+
+
+def gather(root: Path, components: int) -> RepoFacts:
+    status = run(root, "git", "status", "--porcelain", "--untracked-files=all")
     branch = run(root, "git", "symbolic-ref", "--short", "HEAD")
+    shallow = run(root, "git", "rev-parse", "--is-shallow-repository") == "true"
+    fetch_url = run(root, "git", "remote", "get-url", "--all", "origin")
+    push_url = run(root, "git", "remote", "get-url", "--push", "--all", "origin")
+    refs = remote_refs(root)
+    head = run(root, "git", "rev-parse", "HEAD")
+    remote_head = refs.get("refs/heads/" + branch)
+    includes_remote = remote_head is not None and succeeds(
+        root, "git", "merge-base", "--is-ancestor", remote_head, head
+    )
+    pattern = tag_pattern(components)
+    tags = frozenset(
+        tag
+        for tag in run(root, "git", "tag", "--list", "v*").splitlines()
+        if re.fullmatch(pattern, tag)
+    )
+    tag_targets = {tag: run(root, "git", "rev-parse", tag + "^{commit}") for tag in tags}
+    latest = latest_tag(tags, components)
+    includes_latest = latest is None or succeeds(
+        root, "git", "merge-base", "--is-ancestor", latest, head
+    )
+    log = run(root, "git", "log", "--format=%B%x00", latest + "..HEAD" if latest else "HEAD")
+    ahead = (
+        run(root, "git", "rev-list", "--count", f"{remote_head}..HEAD") if includes_remote else ""
+    )
+    return RepoFacts(
+        status,
+        branch,
+        shallow,
+        fetch_url,
+        push_url,
+        refs,
+        head,
+        includes_remote,
+        tags,
+        tag_targets,
+        includes_latest,
+        commit_messages(log),
+        ahead,
+    )
+
+
+def check_release(facts: RepoFacts, config: Config) -> State:
+    require_clean(facts.status)
+    branch = facts.branch
     if branch != config["branch"]:
         raise ReleaseError(f"Release from {config['branch']}, not {branch}.")
-    if run(root, "git", "rev-parse", "--is-shallow-repository") == "true":
+    if facts.shallow:
         raise ReleaseError("Release calculation requires complete Git history and tags.")
-    origin = run(root, "git", "remote", "get-url", "--all", "origin")
-    if "\n" in origin or origin != run(
-        root, "git", "remote", "get-url", "--push", "--all", "origin"
-    ):
+    origin = facts.fetch_url
+    if "\n" in origin or origin != facts.push_url:
         raise ReleaseError("origin must have one matching fetch and push destination.")
     if config.get("workflow"):
         match = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$", origin)
         if not match or match[1] != config["repository"]:
             raise ReleaseError("origin does not match the configured GitHub release repository.")
-    refs = remote_refs(root)
-    head = run(root, "git", "rev-parse", "HEAD")
-    remote_head = refs.get("refs/heads/" + branch)
-    if not remote_head:
+    refs = facts.refs
+    if not refs.get("refs/heads/" + branch):
         raise ReleaseError(f"origin/{branch} does not exist.")
-    try:
-        run(root, "git", "merge-base", "--is-ancestor", remote_head, head)
-    except ReleaseError as error:
-        raise ReleaseError(
-            f"Update this checkout to include origin/{branch} before releasing."
-        ) from error
+    if not facts.includes_remote:
+        raise ReleaseError(f"Update this checkout to include origin/{branch} before releasing.")
     components = config["components"]
-    pattern = r"v(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){" + str(components - 1) + "}"
-    tags = {
-        tag
-        for tag in run(root, "git", "tag", "--list", "v*").splitlines()
-        if re.fullmatch(pattern, tag)
-    }
+    pattern = tag_pattern(components)
     published = {ref[10:] for ref in refs if re.fullmatch("refs/tags/" + pattern, ref)}
-    if tags != published:
+    if facts.tags != published:
         raise ReleaseError("Local and origin release tags differ; reconcile them before releasing.")
-    for tag in sorted(tags, key=lambda item: version_tuple(item, components)):
-        target = run(root, "git", "rev-parse", tag + "^{commit}")
+    for tag in sorted(facts.tags, key=lambda item: version_tuple(item, components)):
         remote_target = refs.get("refs/tags/" + tag + "^{}", refs["refs/tags/" + tag])
-        if target != remote_target:
+        if facts.tag_targets[tag] != remote_target:
             raise ReleaseError(f"Local {tag} does not match origin.")
-    latest = max(tags, key=lambda tag: version_tuple(tag, components), default=None)
-    if latest:
-        run(root, "git", "merge-base", "--is-ancestor", latest, head)
-    revision_range = latest + "..HEAD" if latest else "HEAD"
-    messages = run(root, "git", "log", "--format=%B%x00", revision_range).split("\0")
-    messages = [message.strip() for message in messages if message.strip()]
-    if not messages:
+    latest = latest_tag(facts.tags, components)
+    if latest and not facts.includes_latest:
+        raise ReleaseError(f"{latest} is not an ancestor of HEAD.")
+    if not facts.messages:
         raise ReleaseError("There are no commits to release.")
-    ahead = run(root, "git", "rev-list", "--count", remote_head + "..HEAD")
-    return {"head": head, "refs": refs, "latest": latest, "messages": messages, "ahead": ahead}
+    return {
+        "head": facts.head,
+        "refs": refs,
+        "latest": latest,
+        "messages": list(facts.messages),
+        "ahead": facts.ahead,
+    }
+
+
+def inspect(root: Path, config: Config) -> State:
+    return check_release(gather(root, config["components"]), config)
 
 
 def select_version(value: str, state: State, config: Config) -> str:

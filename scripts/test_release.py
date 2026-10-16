@@ -6,14 +6,15 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 import pytest
 
 if TYPE_CHECKING:
-    from release import Config
+    from release import Config, RepoFacts
 
 SCRIPT = Path(__file__).with_name("release.py")
 SPEC = importlib.util.spec_from_file_location("release", SCRIPT)
@@ -112,6 +113,123 @@ def test_version_policy() -> None:
     ]
     for base, messages, components, expected in cases:
         assert release.suggested(base, messages, components)[0] == expected
+
+
+def test_change_counts_skip_unconventional_headers() -> None:
+    messages = [
+        "feat(cli)!: replace",
+        "fix: repair",
+        "perf: speed up",
+        "chore: tidy\n\nBREAKING CHANGE: drop flag",
+        "not conventional\n\nBREAKING CHANGE: ignored",
+        "feat: add",
+    ]
+    assert release.suggested((1, 2, 0), messages, 3) == (
+        "2.0.0",
+        {"features": 2, "fixes": 2, "breaking": 2},
+    )
+
+
+def test_change_counts_reject_empty_message() -> None:
+    with pytest.raises(IndexError):
+        release.suggested((1, 2, 0), ["fix: repair", ""], 3)
+
+
+HEAD = "h" * 40
+TAG_COMMIT = "c" * 40
+LOCAL_CONFIG: "Config" = {
+    "name": "Fixture",
+    "branch": "main",
+    "components": 3,
+    "initial_version": "0.1.0",
+    "tools": [],
+    "checks": [],
+    "publication": "Version tag",
+    "stages": [],
+}
+RULES_CONFIG: "Config" = {**LOCAL_CONFIG, "workflow": "release.yml", "repository": "owner/repo"}
+
+
+def repo_facts(**changes: Any) -> "RepoFacts":
+    facts: RepoFacts = release.RepoFacts(
+        status="",
+        branch="main",
+        shallow=False,
+        fetch_url="git@github.com:owner/repo.git",
+        push_url="git@github.com:owner/repo.git",
+        refs={
+            "refs/heads/main": HEAD,
+            "refs/tags/v1.2.0": "t" * 40,
+            "refs/tags/v1.2.0^{}": TAG_COMMIT,
+            "refs/tags/version-2": "u" * 40,
+        },
+        head=HEAD,
+        includes_remote=True,
+        tags=frozenset({"v1.2.0"}),
+        tag_targets={"v1.2.0": TAG_COMMIT},
+        includes_latest=True,
+        messages=("fix: repair",),
+        ahead="1",
+    )
+    return replace(facts, **changes)
+
+
+def test_release_rules_accept_consistent_repository() -> None:
+    assert release.check_release(repo_facts(), RULES_CONFIG) == {
+        "head": HEAD,
+        "refs": repo_facts().refs,
+        "latest": "v1.2.0",
+        "messages": ["fix: repair"],
+        "ahead": "1",
+    }
+
+
+def test_release_rules_compare_lightweight_remote_tag_directly() -> None:
+    facts = repo_facts(refs={"refs/heads/main": HEAD, "refs/tags/v1.2.0": TAG_COMMIT})
+    assert release.check_release(facts, RULES_CONFIG)["latest"] == "v1.2.0"
+
+
+def test_release_rules_allow_first_release() -> None:
+    facts = repo_facts(
+        refs={"refs/heads/main": HEAD},
+        tags=frozenset(),
+        tag_targets={},
+        includes_latest=False,
+    )
+    assert release.check_release(facts, RULES_CONFIG)["latest"] is None
+
+
+def test_release_rules_skip_repository_match_without_workflow() -> None:
+    facts = repo_facts(fetch_url="/srv/origin.git", push_url="/srv/origin.git")
+    assert release.check_release(facts, LOCAL_CONFIG)["head"] == HEAD
+
+
+@pytest.mark.parametrize(
+    ("changes", "error"),
+    [
+        ({"status": "?? notes.txt"}, "must be clean before releasing:\n\\?\\? notes.txt"),
+        ({"branch": "topic"}, "Release from main, not topic"),
+        ({"shallow": True}, "requires complete Git history"),
+        ({"fetch_url": "a\nb", "push_url": "a\nb"}, "one matching fetch and push"),
+        ({"push_url": "git@github.com:owner/fork.git"}, "one matching fetch and push"),
+        (
+            {
+                "fetch_url": "git@github.com:other/repo.git",
+                "push_url": "git@github.com:other/repo.git",
+            },
+            "does not match the configured GitHub",
+        ),
+        ({"refs": {"refs/tags/v1.2.0": TAG_COMMIT}}, "origin/main does not exist"),
+        ({"includes_remote": False}, "include origin/main before releasing"),
+        ({"tags": frozenset({"v1.2.0", "v1.1.0"})}, "Local and origin release tags differ"),
+        ({"tag_targets": {"v1.2.0": HEAD}}, "Local v1.2.0 does not match origin"),
+        ({"includes_latest": False}, "v1.2.0 is not an ancestor of HEAD"),
+        ({"messages": ()}, "no commits to release"),
+    ],
+)
+def test_release_rules_reject_inconsistent_repository(changes: dict[str, Any], error: str) -> None:
+    with pytest.raises(release.ReleaseError, match=error):
+        release.check_release(repo_facts(**changes), RULES_CONFIG)
 
 
 def test_dry_run_preserves_checkout_and_remote(checkout: Checkout) -> None:

@@ -2,6 +2,7 @@ import os
 import signal
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Literal
 
 from pratfall.models import NotifyMethod, Options
@@ -16,14 +17,16 @@ KONSOLE_OSC777_VERSION = 230400
 MINUTE = 60
 HOUR = 3600
 
-TERM_PROGRAM_SEQUENCES: Mapping[str, Sequence] = {
-    "iTerm.app": "osc9",
-    "ghostty": "osc777",
-    "WezTerm": "osc777",
-    "WarpTerminal": "osc777",
-    "vscode": "osc99",
-    "Apple_Terminal": "bel",
-}
+TERM_PROGRAM_SEQUENCES: Mapping[str, Sequence] = MappingProxyType(
+    {
+        "iTerm.app": "osc9",
+        "ghostty": "osc777",
+        "WezTerm": "osc777",
+        "WarpTerminal": "osc777",
+        "vscode": "osc99",
+        "Apple_Terminal": "bel",
+    }
+)
 
 _UNSAFE = dict.fromkeys((*range(0x20), *range(0x7F, 0xA0)), " ") | {ord(";"): ","}
 
@@ -44,14 +47,8 @@ def _duration(duration_ms: int) -> str:
 
 
 def notification_for(agent_label: str, status: str, duration_ms: int) -> Notification:
-    duration = _duration(duration_ms)
-    if status == "success":
-        body = f"{agent_label} done in {duration}"
-    elif status == "timeout":
-        body = f"{agent_label} timed out after {duration}"
-    else:
-        body = f"{agent_label} failed after {duration}"
-    return Notification(title="prat", body=body)
+    verb = {"success": "done in", "timeout": "timed out after"}.get(status, "failed after")
+    return Notification(title="prat", body=f"{agent_label} {verb} {_duration(duration_ms)}")
 
 
 def should_notify(options: Options, status: str, duration_ms: int, *, stderr_is_tty: bool) -> bool:

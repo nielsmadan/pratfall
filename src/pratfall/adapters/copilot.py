@@ -1,5 +1,7 @@
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from pratfall.adapters.accounting import model
 from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
@@ -14,7 +16,7 @@ from pratfall.consumer import (
 )
 from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError
 
-_ALLOWED = (
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
     {
         name: Flag(0)
         for name in (
@@ -72,40 +74,43 @@ _ALLOWED = (
         )
     }
 )
-_RESERVED = {
-    name: Flag(0, joined=name in {"-p", "-s"})
-    for name in (
-        "--continue",
-        "--no-banner",
-        "-p",
-        "--silent",
-        "-s",
-    )
-} | {
-    name: Flag(1, joined=name in {"-C", "-i", "-n", "-r", "-w"})
-    for name in (
-        "-C",
-        "--connect",
-        "--effort",
-        "-i",
-        "--interactive",
-        "--max-ai-credits",
-        "--model",
-        "-n",
-        "--name",
-        "--output-format",
-        "--prompt",
-        "--reasoning-effort",
-        "-r",
-        "--resume",
-        "--session-id",
-        "--share",
-        "--share-gist",
-        "--stream",
-        "-w",
-        "--worktree",
-    )
-}
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0, joined=name in {"-p", "-s"})
+        for name in (
+            "--continue",
+            "--no-banner",
+            "-p",
+            "--silent",
+            "-s",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-C", "-i", "-n", "-r", "-w"})
+        for name in (
+            "-C",
+            "--connect",
+            "--effort",
+            "-i",
+            "--interactive",
+            "--max-ai-credits",
+            "--model",
+            "-n",
+            "--name",
+            "--output-format",
+            "--prompt",
+            "--reasoning-effort",
+            "-r",
+            "--resume",
+            "--session-id",
+            "--share",
+            "--share-gist",
+            "--stream",
+            "-w",
+            "--worktree",
+        )
+    }
+)
 _TERMINAL_WARNINGS = frozenset({"compaction_static_context_blocked", "policy_blocked"})
 
 
@@ -121,8 +126,7 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append(f"--max-ai-credits={options.max_ai_credits}")
     if options.session_id is not None:
         argv.append(f"--session-id={options.session_id}")
-    for directory in options.add_dirs or ():
-        argv.append(f"--add-dir={directory}")
+    argv.extend(f"--add-dir={directory}" for directory in options.add_dirs or ())
     if options.tools is not None:
         if options.tools:
             argv.append("--available-tools=" + ",".join(options.tools))
@@ -132,15 +136,14 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append("--excluded-tools=" + ",".join(options.disabled_tools))
     if options.native_agent is not None:
         argv.append(f"--agent={options.native_agent}")
-    for attachment in resolved.options.attachments or ():
-        argv.append(f"--attachment={attachment}")
+    argv.extend(f"--attachment={attachment}" for attachment in resolved.options.attachments or ())
     argv.extend(arguments)
     argv.append(f"--prompt={prompt.decode('utf-8')}")
     return Invocation(tuple(argv), b"")
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    reserved = _RESERVED | (
+    reserved = dict(_RESERVED) | (
         {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
     )
     if resolved.options.attachments:

@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -97,7 +98,9 @@ def test_crush_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
 )
 def test_crush_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "cr", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "cr", options
+        )
 
 
 @pytest.mark.parametrize("selector", ["crush", "cr", "crush-review"])

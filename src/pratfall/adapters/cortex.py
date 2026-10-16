@@ -1,47 +1,53 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile
 
-_ALLOWED = {name: Flag(1) for name in ("--connection", "-c")}
-_RESERVED = {
-    name: Flag(0)
-    for name in (
-        "--continue",
-        "--private",
-        "--plan",
-        "--auto-accept-plans",
-        "--bypass",
-        "--dangerously-allow-all-tool-calls",
-        "--no-workspace",
-        "--help",
-        "--version",
-        "-V",
-    )
-} | {
-    name: Flag(1, joined=name in {"-m", "-w", "-r", "-p", "-f"})
-    for name in (
-        "--model",
-        "-m",
-        "--effort",
-        "--max-turns",
-        "--workdir",
-        "-w",
-        "--cwd",
-        "--config",
-        "--resume",
-        "-r",
-        "--session",
-        "--print",
-        "-p",
-        "--prompt",
-        "--file",
-        "-f",
-        "--output-format",
-        "--cloud",
-        "--github",
-        "--executor",
-        "--remote",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType({name: Flag(1) for name in ("--connection", "-c")})
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--continue",
+            "--private",
+            "--plan",
+            "--auto-accept-plans",
+            "--bypass",
+            "--dangerously-allow-all-tool-calls",
+            "--no-workspace",
+            "--help",
+            "--version",
+            "-V",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-m", "-w", "-r", "-p", "-f"})
+        for name in (
+            "--model",
+            "-m",
+            "--effort",
+            "--max-turns",
+            "--workdir",
+            "-w",
+            "--cwd",
+            "--config",
+            "--resume",
+            "-r",
+            "--session",
+            "--print",
+            "-p",
+            "--prompt",
+            "--file",
+            "-f",
+            "--output-format",
+            "--cloud",
+            "--github",
+            "--executor",
+            "--remote",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:

@@ -1,30 +1,36 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.adapters.whole_json import document_error, encoding_error, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
-_ALLOWED = {"--show-thinking": Flag(0)} | {
-    name: Flag(1) for name in ("--max-steps", "--permission-mode")
-}
-_RESERVED = {
-    name: Flag(0, joined=name in {"-p", "-c"})
-    for name in ("--print", "-p", "--continue", "-c", "--events-jsonl", "--copy", "--takeover")
-} | {
-    name: Flag(1)
-    for name in (
-        "--model",
-        "--effort",
-        "--output-format",
-        "--dir",
-        "--cwd",
-        "--config",
-        "--resume",
-        "--prompt",
-        "--profile",
-        "--preset",
-        "--metrics",
-        "--trajectory",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {"--show-thinking": Flag(0)} | {name: Flag(1) for name in ("--max-steps", "--permission-mode")}
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0, joined=name in {"-p", "-c"})
+        for name in ("--print", "-p", "--continue", "-c", "--events-jsonl", "--copy", "--takeover")
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--model",
+            "--effort",
+            "--output-format",
+            "--dir",
+            "--cwd",
+            "--config",
+            "--resume",
+            "--prompt",
+            "--profile",
+            "--preset",
+            "--metrics",
+            "--trajectory",
+        )
+    }
+)
 _COMPLETIONS = {
     "success": False,
     "incomplete_read": False,

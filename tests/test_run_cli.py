@@ -9,7 +9,7 @@ import stat
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from itertools import pairwise
 from pathlib import Path
@@ -20,10 +20,11 @@ from pratfall import cli as cli_module
 from pratfall import runner as runner_module
 from pratfall.cli import dispatch as dispatch_module
 from pratfall.cli import main
+from pratfall.cli.presentation import _presentation_error
 from pratfall.config import init_config
 from pratfall.models import ConsumedCapture, DecodedOutput, RawCapture, ResultError, Usage
 from pratfall.prompt_input import PROMPT_LIMIT
-from pratfall.runner import ProcessResult
+from pratfall.runner import ProcessResult, RunLimits
 
 NOTIFY_ENV_KEYS = (
     "TMUX",
@@ -336,7 +337,7 @@ def test_run_uses_local_profile_and_global_wrapper_from_invocation_directory(
 ) -> None:
     monkeypatch.setenv("PATH", "")
     fake_config = write_agent(tmp_path, "codex", CODEX_SUCCESS, profile="work")
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(fake_config.read_text())
     local_path = tmp_path / local_name
     local_path.write_text('version=1\n[profiles.work]\nagent="cx"\nmodel="local-model"\n')
@@ -374,7 +375,7 @@ def test_config_warning_failure_returns_json_error_before_reading_input(
     capsys: pytest.CaptureFixture[str],
     flags: list[str],
 ) -> None:
-    init_config()
+    init_config(cwd=Path.cwd(), env=os.environ)
     (tmp_path / ".pratfile").write_text('version=1\n[profiles.simple]\nagent="cx"\n')
     monkeypatch.setattr(sys, "stderr", BrokenOutput())
     monkeypatch.setattr(sys, "stdin", UnreadInput())
@@ -1905,15 +1906,12 @@ def test_final_diagnostic_and_flush_failures_preserve_results(
     assert cleaned == [123]
 
 
-def test_final_presentation_cleanup_failure_stays_normalized(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        dispatch_module, "cleanup_process_group", lambda _group: "permission denied"
-    )
+def test_final_presentation_cleanup_failure_stays_normalized() -> None:
     process = ProcessResult(RawCapture(), b"", 0, 12, process_group=123)
-    updated = dispatch_module._after_run_presentation_failure(
-        process, BrokenPipeError("closed diagnostics")
+    updated = dispatch_module._with_failure(
+        process,
+        _presentation_error(BrokenPipeError("closed diagnostics")),
+        "permission denied",
     )
     assert updated.error == ResultError(
         "output_io_error",
@@ -1927,13 +1925,12 @@ def test_unverified_bounded_cleanup_preserves_primary_failure_and_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     signals: list[signal.Signals] = []
-    monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
-    monkeypatch.setattr(runner_module, "FINAL_DRAIN_GRACE", 0)
     monkeypatch.setattr(runner_module, "_process_group_exists", lambda _group: True)
     monkeypatch.setattr(
         runner_module, "_signal_group", lambda _group, chosen: signals.append(chosen)
     )
-    cleanup_error = runner_module.cleanup_process_group(123)
+    no_grace = RunLimits(terminate_grace=0, final_drain_grace=0)
+    cleanup_error = runner_module.cleanup_process_group(123, no_grace)
     assert signals == [signal.SIGTERM, signal.SIGKILL]
     assert cleanup_error == "could not verify owned process-group cleanup before the deadline"
 
@@ -2112,13 +2109,13 @@ def test_progress_stderr_failure_restores_flags_without_redirecting_the_descript
     assert stat.S_ISFIFO(mode)
 
 
-def test_progress_run_toggles_stderr_nonblocking_once_including_config_warnings(
+def test_progress_run_never_changes_stderr_flags_including_config_warnings(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     fake_config = write_agent(tmp_path, "codex", CODEX_SUCCESS, profile="work")
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(fake_config.read_text(), encoding="utf-8")
     local_path = tmp_path / ".pratfile"
     local_path.write_text('version=1\n[profiles.work]\nagent="cx"\n', encoding="utf-8")
@@ -2143,7 +2140,7 @@ def test_progress_run_toggles_stderr_nonblocking_once_including_config_warnings(
     written = diagnostics.read_text(encoding="utf-8")
     assert f"prat: warning: {local_path}: profile 'work' replaces" in written
     assert "finished with status success" in written
-    assert applied == [original | os.O_NONBLOCK, original]
+    assert applied == []
     assert restored & os.O_NONBLOCK == original & os.O_NONBLOCK
 
 
@@ -2367,7 +2364,7 @@ def _drain(descriptor: int) -> bytes:
         chunks.append(data)
 
 
-def test_progress_dry_run_preview_into_full_shared_stream_normalizes_without_traceback(
+def test_progress_dry_run_preview_waits_for_full_shared_stream_instead_of_failing(
     tmp_path: Path,
 ) -> None:
     local_path = _colliding_profiles(tmp_path, 1000)
@@ -2395,16 +2392,16 @@ def test_progress_dry_run_preview_into_full_shared_stream_normalizes_without_tra
     os.close(write_descriptor)
     try:
         assert process.stdin is not None
-        process.stdin.write(b"Z" * 40000)
+        process.stdin.write(b"Z" * 200_000)
         process.stdin.close()
         time.sleep(1.0)
         assert process.poll() is None
         output = _drain(read_descriptor)
-        assert process.wait(timeout=10) == 1
-        assert b"Traceback" not in output
-        assert b"prat: Unexpected failure: BlockingIOError" in output
-        # Pipe buffering makes preview delivery nondeterministic in this failure case.
-        assert output.count(b'"status": "error"') == 0
+        assert process.wait(timeout=10) == 0
+        preview = json.loads(output.splitlines()[-1])
+        assert preview["dry_run"] is True
+        assert any("Z" * 200_000 in arg for arg in preview["argv"])
+        assert b"prat: warning:" in output
     finally:
         if process.poll() is None:
             process.kill()
@@ -3553,7 +3550,7 @@ def test_parameter_prompt_is_rendered_before_the_editor(
     context.write_text("background")
     drafts: list[bytes] = []
 
-    def fake_editor(draft: bytes, invocation_cwd: Path) -> bytes:
+    def fake_editor(draft: bytes, invocation_cwd: Path, environ: object) -> bytes:
         drafts.append(draft)
         return draft + b"!"
 
@@ -3595,7 +3592,7 @@ def step_result(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
 def run_step(
     stdin: io.BytesIO, tmp_path: Path, watch: Callable[[int], None] = lambda _: None
 ) -> int:
-    return dispatch_module._step_command(stdin, tmp_path, watch)
+    return dispatch_module._step_command(stdin, tmp_path, os.environ, watch)
 
 
 def step_prompt(capsys: pytest.CaptureFixture[str]) -> str:
@@ -3626,9 +3623,9 @@ def test_step_never_reads_process_stdin(
     seen: list[object] = []
     real = dispatch_module._run_command
 
-    def spy(arguments: list[str], cwd: Path, step: object) -> int:
+    def spy(arguments: list[str], cwd: Path, environ: Mapping[str, str], step: object) -> int:
         seen.append(sys.stdin)
-        return real(arguments, cwd, step)  # type: ignore[arg-type]
+        return real(arguments, cwd, environ, step)  # type: ignore[arg-type]
 
     monkeypatch.setattr(dispatch_module, "_run_command", spy)
     monkeypatch.setattr(sys, "stdin", io.StringIO("SENTINEL"))
@@ -3756,7 +3753,7 @@ def test_step_suppresses_config_warnings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(
         write_agent(tmp_path, "codex", CODEX_SUCCESS, profile="work").read_text()
     )
@@ -3814,7 +3811,7 @@ def test_step_entry_starts_watchdog_with_spec_parent_and_detaches_stdin(
     watched: list[int] = []
     seen: list[object] = []
 
-    def step(spec: object, cwd: object, watch: Callable[[int], None]) -> int:
+    def step(spec: object, cwd: object, environ: object, watch: Callable[[int], None]) -> int:
         seen.append(spec)
         watch(4242)
         return 0

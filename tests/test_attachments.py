@@ -2,6 +2,7 @@ import io
 import json
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -87,10 +88,10 @@ def test_attachment_fake_receives_binary_file_path_and_prompt(
 
 
 def test_attachments_four_layer_path_origins_and_clearing(tmp_path: Path) -> None:
-    global_path = config_path()
+    global_path = config_path(cwd=Path.cwd(), env=os.environ)
     global_path.parent.mkdir(parents=True)
     global_path.write_text('version=1\n[defaults]\nattachments=["global"]\n')
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "codex").options.attachments == (
         str(global_path.parent / "global"),
     )
@@ -101,7 +102,7 @@ def test_attachments_four_layer_path_origins_and_clearing(tmp_path: Path) -> Non
         '[profiles.work]\nagent="codex"\nattachments=["profile", "profile"]\n'
         '[profiles.clear]\nagent="claude"\nattachments=[]\n'
     )
-    config = load_config(local)
+    config = load_config(local, cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "codex").options.attachments == (str(local.parent / "local"),)
     assert (
         resolve_profile(config, "work").options.attachments == (str(local.parent / "profile"),) * 2
@@ -115,9 +116,9 @@ def test_attachments_four_layer_path_origins_and_clearing(tmp_path: Path) -> Non
     assert resolve_profile(config, "clear").options.attachments == ()
     assert resolve_profile(config, "work", Options(attachments=())).options.attachments == ()
     local.write_text('version=1\n[profiles.work]\nagent="codex"\n')
-    assert resolve_profile(load_config(local), "work").options.attachments == (
-        str(global_path.parent / "global"),
-    )
+    assert resolve_profile(
+        load_config(local, cwd=Path.cwd(), env=os.environ), "work"
+    ).options.attachments == (str(global_path.parent / "global"),)
 
 
 @pytest.mark.parametrize("agent", PREFIXES)
@@ -351,7 +352,7 @@ def test_attachment_editor_task_and_later_native_file_read(
     )
     drafts: list[bytes] = []
 
-    def edit(draft: bytes, _cwd: Path) -> bytes:
+    def edit(draft: bytes, _cwd: Path, _environ: Mapping[str, str]) -> bytes:
         drafts.append(draft)
         image.write_bytes(b"\xff\x00after")
         return b"edited task"

@@ -16,7 +16,7 @@ import tarfile
 import termios
 import time
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -1097,8 +1097,9 @@ def _fake_a_tier(agent: str, prompt: str) -> int | None:
     return returncode
 
 
-def _write_native_record(record: dict[str, object], *, ensure_ascii: bool = False) -> None:
-    log_path = Path(os.environ["PRAT_QA_LOG"])
+def _write_native_record(
+    log_path: Path, record: dict[str, object], *, ensure_ascii: bool = False
+) -> None:
     descriptor = os.open(log_path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
     try:
         os.write(descriptor, (json.dumps(record, ensure_ascii=ensure_ascii) + "\n").encode())
@@ -1115,10 +1116,10 @@ def _is_version_probe(agent: str, arguments: list[str]) -> bool:
     )
 
 
-def _fake_version_probe(agent: str, arguments: list[str]) -> int:
+def _fake_version_probe(agent: str, arguments: list[str], log_path: Path) -> int:
     assert sys.stdin.buffer.read() == b""
     _write_native_record(
-        {"agent": agent, "argv": arguments, "version_probe": True}, ensure_ascii=True
+        log_path, {"agent": agent, "argv": arguments, "version_probe": True}, ensure_ascii=True
     )
     mode = arguments[0] if arguments else ""
     if arguments != VERSION_ARGS[agent]:
@@ -1595,10 +1596,10 @@ def _fake_schema(agent: str, prompt: str) -> int:
     return 17 if failed else 0
 
 
-def _fake_native(agent: str, arguments: list[str]) -> int:
+def _fake_native(agent: str, arguments: list[str], log_path: Path) -> int:
     _record_owner()
     if _is_version_probe(agent, arguments):
-        return _fake_version_probe(agent, arguments)
+        return _fake_version_probe(agent, arguments, log_path)
     data = sys.stdin.buffer.read()
     prompt = _prompt(agent, arguments, data)
     record = {
@@ -1610,7 +1611,7 @@ def _fake_native(agent: str, arguments: list[str]) -> int:
     }
     if "QA_CONTROLS" in prompt:
         record.update(_control_observations(agent, arguments))
-    _write_native_record(record)
+    _write_native_record(log_path, record)
     if "QA_CONTROLS_SCHEMA" in prompt:
         return _fake_schema(agent, prompt)
     a_tier_exit = _fake_a_tier(agent, prompt)
@@ -1712,14 +1713,13 @@ def _start(
     owners = root / "owners"
     owners.mkdir(exist_ok=True)
     owner_path = owners / f"invocation-{time.monotonic_ns()}.jsonl"
-    env["PRAT_QA_OWNER"] = str(owner_path)
     process = subprocess.Popen(
         command,
         cwd=root / "consumer",
         stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env=env,
+        env={**env, "PRAT_QA_OWNER": str(owner_path)},
         start_new_session=True,
     )
     return _Invocation(process, owner_path, stdin)
@@ -3349,11 +3349,7 @@ _ENHANCEMENT_SCENARIOS: tuple[_EnhancementScenario, ...] = (
 
 
 def _exercise_enhancements(context: _EnhancementContext) -> dict[str, object]:
-    results: dict[str, object] = {}
-    for scenario in _ENHANCEMENT_SCENARIOS:
-        case, observation = scenario(context)
-        results[case] = observation
-    return results
+    return dict(scenario(context) for scenario in _ENHANCEMENT_SCENARIOS)
 
 
 def _exercise_routes(prat: Path, root: Path, config: Path) -> dict[str, object]:
@@ -4573,9 +4569,13 @@ def _control_cases(root: Path) -> list[tuple[str, list[str], list[str]]]:
 
 def _control_argv(agent: str, options: list[str], prompt: str) -> list[str]:
     prefix = _CONTROL_PREFIXES.get(agent, _STDIN_PREFIXES.get(agent, []))
-    suffix = ["--prompt=" + prompt] if agent in {"gemini", "copilot"} else []
-    if agent == "codex":
-        suffix = ["--", "-"] if any(arg.startswith("--image=") for arg in options) else ["-"]
+    suffix = (
+        (["--", "-"] if any(arg.startswith("--image=") for arg in options) else ["-"])
+        if agent == "codex"
+        else ["--prompt=" + prompt]
+        if agent in {"gemini", "copilot"}
+        else []
+    )
     return [*prefix, *options, *suffix]
 
 
@@ -5085,26 +5085,45 @@ def _exercise_workflows(prat: Path, root: Path, artifact: str) -> dict[str, obje
     }
 
 
-def _exercise_artifacts(context: _ExerciseContext, results: dict[str, object]) -> None:
-    for artifact, entry_point in (("wheel", context.prat), ("sdist", context.sdist_prat)):
-        a_results = {
-            "A01.inventory": _exercise_a_inventory(entry_point, context.root, context.config),
-            "A02.routes": results["Q05"]
-            if artifact == "wheel"
-            else _exercise_routes(entry_point, context.root, context.config),
-            "A03.profile": _exercise_a_profile(entry_point, context.root),
-            "A04.sources": _exercise_a_sources(entry_point, context.root, context.config),
-            "A05.session": _exercise_a_session(entry_point, context.root, context.config),
-            "A08.versions": results["E06"]
-            if artifact == "wheel"
-            else _exercise_versions(entry_point, context.root, context.config),
-            **_exercise_a_rejections(entry_point, context.root, context.config),
-            **_exercise_a_protocols(entry_point, context.root, context.config),
-            **_exercise_workflows(entry_point, context.root, artifact),
+def _exercise_artifact(
+    context: _ExerciseContext, results: Mapping[str, object], artifact: str, entry_point: Path
+) -> dict[str, object]:
+    return {
+        "A01.inventory": _exercise_a_inventory(entry_point, context.root, context.config),
+        "A02.routes": results["Q05"]
+        if artifact == "wheel"
+        else _exercise_routes(entry_point, context.root, context.config),
+        "A03.profile": _exercise_a_profile(entry_point, context.root),
+        "A04.sources": _exercise_a_sources(entry_point, context.root, context.config),
+        "A05.session": _exercise_a_session(entry_point, context.root, context.config),
+        "A08.versions": results["E06"]
+        if artifact == "wheel"
+        else _exercise_versions(entry_point, context.root, context.config),
+        **_exercise_a_rejections(entry_point, context.root, context.config),
+        **_exercise_a_protocols(entry_point, context.root, context.config),
+        **_exercise_workflows(entry_point, context.root, artifact),
+    }
+
+
+def _exercise_artifacts(
+    context: _ExerciseContext, results: Mapping[str, object]
+) -> dict[str, object]:
+    observed = {
+        artifact: _exercise_artifact(context, results, artifact, entry_point)
+        for artifact, entry_point in (("wheel", context.prat), ("sdist", context.sdist_prat))
+    }
+    cases = dict.fromkeys(case for observations in observed.values() for case in observations)
+    return {
+        case: {
+            "status": "Pass",
+            "artifacts": {
+                artifact: observations[case]
+                for artifact, observations in observed.items()
+                if case in observations
+            },
         }
-        for case, observation in a_results.items():
-            aggregate = _record(results.setdefault(case, {"status": "Pass", "artifacts": {}}))
-            _record(aggregate["artifacts"])[artifact] = observation
+        for case in cases
+    }
 
 
 def _write_evidence(context: _ExerciseContext, results: dict[str, object]) -> None:
@@ -5165,7 +5184,7 @@ def _exercise(inputs: _ExerciseInputs) -> int:
         context.consumer / "enhancement prompt.md",
     )
     results.update(_exercise_enhancements(enhancement_context))
-    _exercise_artifacts(context, results)
+    results |= _exercise_artifacts(context, results)
     _write_evidence(context, results)
     statuses = [result["status"] for result in results.values() if isinstance(result, dict)]
     print(
@@ -5199,7 +5218,11 @@ def main() -> int:
     if args.fake_editor:
         return _fake_editor(*args.fake_editor)
     if args.fake_native:
-        return _fake_native(args.fake_native[0], [*args.fake_native[1:], *args.native_tail])
+        return _fake_native(
+            args.fake_native[0],
+            [*args.fake_native[1:], *args.native_tail],
+            Path(os.environ["PRAT_QA_LOG"]),
+        )
     if args.native_tail:
         parser.error("unexpected positional arguments")
     if args.lock_holder:

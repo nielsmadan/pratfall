@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -132,7 +133,7 @@ def test_native_patterns_are_preserved(
 
 
 def test_tool_arrays_replace_all_four_layers_and_keep_winning_origins(tmp_path: Path) -> None:
-    global_path = config_path()
+    global_path = config_path(cwd=Path.cwd(), env=os.environ)
     global_path.parent.mkdir(parents=True)
     global_path.write_text(
         'version=1\n[defaults]\ntools=["Global"]\ndisabled_tools=["GlobalDeny"]\n'
@@ -143,7 +144,7 @@ def test_tool_arrays_replace_all_four_layers_and_keep_winning_origins(tmp_path: 
         '[profiles.work]\nagent="claude"\ntools=["Profile"]\ndisabled_tools=["ProfileDeny"]\n'
         '[profiles.clear]\nagent="copilot"\ntools=[]\ndisabled_tools=[]\n'
     )
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "claude").options.tools == ("Local",)
     assert resolve_profile(config, "claude").options.disabled_tools == ("LocalDeny",)
     assert resolve_profile(config, "work").options.tools == ("Profile",)
@@ -156,7 +157,9 @@ def test_tool_arrays_replace_all_four_layers_and_keep_winning_origins(tmp_path: 
     assert option_origins(config, "work")["tools"].label == f"{local}: profiles.work.tools"
     assert option_origins(config, "work", cli)["disabled_tools"].code == "invalid_arguments"
     local.unlink()
-    assert resolve_profile(load_config(), "claude").options.tools == ("Global",)
+    assert resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "claude").options.tools == (
+        "Global",
+    )
 
 
 @pytest.mark.parametrize("field", ["tools", "disabled_tools"])
@@ -167,7 +170,7 @@ def test_tool_config_requires_array_of_nonempty_names(
     path = tmp_path / ".pratfile"
     path.write_text(f"version=1\n[defaults]\n{field}={value}\n")
     with pytest.raises(PratError, match=rf"defaults.{field}"):
-        load_config()
+        load_config(cwd=Path.cwd(), env=os.environ)
 
 
 @pytest.mark.parametrize(
@@ -204,7 +207,7 @@ def test_empty_disabled_tools_neutral_for_every_agent(agent: str, tmp_path: Path
     (tmp_path / ".pratfile").write_text(
         f'version=1\n[defaults]\ndisabled_tools=["Write"]\n[profiles.clear]\nagent="{agent}"\ndisabled_tools=[]\n'
     )
-    resolved = resolve_profile(load_config(), "clear")
+    resolved = resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "clear")
     assert resolved.options.disabled_tools == ()
     ADAPTERS[agent].validate(resolved)
 

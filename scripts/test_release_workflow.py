@@ -7,9 +7,13 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from release_workflow import TagFacts
 
 SCRIPT = Path(__file__).with_name("release_workflow.py")
 SPEC = importlib.util.spec_from_file_location("release_workflow", SCRIPT)
@@ -70,12 +74,43 @@ def release_repository(tmp_path: Path) -> tuple[Path, str]:
     return repository, git(repository, "rev-parse", "v1.2.3^{commit}")
 
 
+def facts(**changes: object) -> "TagFacts":
+    values: dict[str, object] = {
+        "object_type": "tag",
+        "release_commit": "a" * 40,
+        "event_commit": None,
+        "origin_main": "b" * 40,
+        "on_origin_main": True,
+    } | changes
+    built: TagFacts = release_workflow.TagFacts(**values)
+    return built
+
+
+def test_check_tag_accepts_annotated_tag_contained_in_origin_main() -> None:
+    assert release_workflow.check_tag("v1.2.3", "a" * 40, facts(event_commit="a" * 40)) == "a" * 40
+
+
+@pytest.mark.parametrize(
+    ("tag", "changes", "error"),
+    [
+        ("v1.2", {}, "Invalid release tag: 'v1.2'"),
+        ("v1.2.3", {"object_type": "commit"}, "must be an annotated tag, got 'commit'"),
+        ("v1.2.3", {"event_commit": "c" * 40}, "does not identify v1.2.3 commit a{40}"),
+        ("v1.2.3", {"on_origin_main": False}, r"not contained in fetched origin/main \(b{40}\)"),
+    ],
+)
+def test_check_tag_rejects_each_release_identity_rule(
+    tag: str, changes: dict[str, object], error: str
+) -> None:
+    with pytest.raises(release_workflow.WorkflowError, match=error):
+        release_workflow.check_tag(tag, "event", facts(**changes))
+
+
 def test_validate_tag_requires_annotated_tag_for_event_commit_on_origin_main(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     repository, event_sha = release_repository(tmp_path)
-    monkeypatch.chdir(repository)
-    assert release_workflow.validate_tag("v1.2.3", event_sha) == git(
+    assert release_workflow.validate_tag(repository, "v1.2.3", event_sha) == git(
         repository, "rev-parse", "HEAD"
     )
 
@@ -111,46 +146,37 @@ def test_retry_resolves_original_tag_after_main_advances(tmp_path: Path) -> None
     assert completed.stdout.strip() == release_commit
 
 
-def test_validate_tag_rejects_mismatched_event_commit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_validate_tag_rejects_mismatched_event_commit(tmp_path: Path) -> None:
     repository, _event_sha = release_repository(tmp_path)
     (repository / "source").write_text("later\n", encoding="utf-8")
     git(repository, "add", "source")
     git(repository, "commit", "-m", "fix: later")
     git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
-    monkeypatch.chdir(repository)
     with pytest.raises(release_workflow.WorkflowError, match="does not identify"):
-        release_workflow.validate_tag("v1.2.3", git(repository, "rev-parse", "HEAD"))
+        release_workflow.validate_tag(repository, "v1.2.3", git(repository, "rev-parse", "HEAD"))
 
 
 @pytest.mark.parametrize("check_event", [True, False])
-def test_validate_tag_rejects_lightweight_tag(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check_event: bool
-) -> None:
+def test_validate_tag_rejects_lightweight_tag(tmp_path: Path, check_event: bool) -> None:
     repository, _event_sha = release_repository(tmp_path)
     git(repository, "tag", "v1.2.4")
-    monkeypatch.chdir(repository)
     with pytest.raises(release_workflow.WorkflowError, match="annotated tag"):
         release_workflow.validate_tag(
-            "v1.2.4", git(repository, "rev-parse", "v1.2.4") if check_event else None
+            repository, "v1.2.4", git(repository, "rev-parse", "v1.2.4") if check_event else None
         )
 
 
 @pytest.mark.parametrize("check_event", [True, False])
-def test_validate_tag_rejects_commit_outside_origin_main(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check_event: bool
-) -> None:
+def test_validate_tag_rejects_commit_outside_origin_main(tmp_path: Path, check_event: bool) -> None:
     repository, _event_sha = release_repository(tmp_path)
     git(repository, "checkout", "--orphan", "unmerged")
     (repository / "source").write_text("unmerged\n", encoding="utf-8")
     git(repository, "add", "source")
     git(repository, "commit", "-m", "feat: unmerged")
     git(repository, "tag", "-a", "v2.0.0", "-m", "Release v2.0.0")
-    monkeypatch.chdir(repository)
     with pytest.raises(release_workflow.WorkflowError, match="not contained"):
         release_workflow.validate_tag(
-            "v2.0.0", git(repository, "rev-parse", "v2.0.0") if check_event else None
+            repository, "v2.0.0", git(repository, "rev-parse", "v2.0.0") if check_event else None
         )
 
 

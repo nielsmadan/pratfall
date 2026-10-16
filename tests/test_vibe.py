@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -93,7 +94,9 @@ def test_vibe_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
 )
 def test_vibe_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "vibe", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "vibe", options
+        )
 
 
 def test_vibe_independent_native_contract(

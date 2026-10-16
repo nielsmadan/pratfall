@@ -74,17 +74,11 @@ def render_template(
 ) -> bytes:
     values = dict(parameters or {})
     lengths = {name: len(value.encode("utf-8")) for name, value in values.items()}
-    size = len(prompt.encode("utf-8"))
-    interpolated = False
-    for match in _matches(prompt):
-        identifier = _identifier(match)
-        if match.group("escaped") is not None:
-            size -= 1
-        elif identifier == _INPUT:
-            interpolated = True
-            size += len(base) - len(match.group().encode("utf-8"))
-        elif identifier is not None:
-            size += lengths[identifier] - len(match.group().encode("utf-8"))
+    matches = list(_matches(prompt))
+    interpolated = any(_identifier(match) == _INPUT for match in matches)
+    size = len(prompt.encode("utf-8")) + sum(
+        _size_change(match, len(base), lengths) for match in matches
+    )
     if not interpolated and base:
         size += 2 + len(base)
     if size > PROMPT_LIMIT:
@@ -96,6 +90,16 @@ def render_template(
     if not allow_blank and not rendered.decode("utf-8").strip():
         raise PratError("Prompt must not be empty or whitespace-only.", code="invalid_arguments")
     return rendered
+
+
+def _size_change(match: Match[str], base: int, lengths: Mapping[str, int]) -> int:
+    identifier = _identifier(match)
+    if match.group("escaped") is not None:
+        return -1
+    if identifier is None:
+        return 0
+    replacement = base if identifier == _INPUT else lengths[identifier]
+    return replacement - len(match.group().encode("utf-8"))
 
 
 def _matches(prompt: str) -> Iterator[Match[str]]:

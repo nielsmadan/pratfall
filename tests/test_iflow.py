@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -71,7 +72,9 @@ def test_iflow_rejects_reserved_and_unknown_native_arguments(arguments: tuple[st
 )
 def test_iflow_rejects_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "if", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "if", options
+        )
 
 
 @pytest.mark.parametrize("selector", ["if", "iflow"])

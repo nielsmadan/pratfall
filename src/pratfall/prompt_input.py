@@ -3,7 +3,6 @@ import json
 import os
 import select
 import stat
-import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -34,15 +33,16 @@ class InputInterrupted(Exception):
 def acquire_prompt(
     source: PromptSource | None,
     invocation_cwd: Path,
+    stdin: BinaryIO | TextIO | None,
     *,
     allow_absent: bool = False,
     allow_blank: bool = False,
 ) -> bytes:
     implicit = source is None
     if source is None:
-        if allow_absent and (sys.stdin is None or sys.stdin.closed):
+        if allow_absent and (stdin is None or stdin.closed):
             return b""
-        if _stdin_is_terminal():
+        if _stdin_is_terminal(stdin):
             if allow_absent:
                 return b""
             raise PratError(
@@ -59,26 +59,26 @@ def acquire_prompt(
             value = _read_file(cast(str, source.value), invocation_cwd, state)
             label = "Prompt file"
         else:
-            value = _read_stdin(state)
+            value = _read_stdin(stdin, state)
             if implicit and allow_absent and not value:
                 return b""
             return _validate(value, "Standard input prompt", allow_empty=allow_blank)
         _raise_if_interrupted(state)
         value = _validate(value, label, allow_empty=allow_blank)
-        if sys.stdin is not None and not sys.stdin.closed and not _stdin_is_terminal():
+        if stdin is not None and not stdin.closed and not _stdin_is_terminal(stdin):
             remaining = max(0, PROMPT_LIMIT - len(value) - 2)
-            stdin = _read_stdin(state, limit=remaining)
-            if stdin:
-                _check_size(len(value) + 2 + len(stdin))
+            piped = _read_stdin(stdin, state, limit=remaining)
+            if piped:
+                _check_size(len(value) + 2 + len(piped))
                 value = _validate(
-                    stdin + b"\n\n" + value, "Combined prompt", allow_empty=allow_blank
+                    piped + b"\n\n" + value, "Combined prompt", allow_empty=allow_blank
                 )
         return value
 
 
-def _stdin_is_terminal() -> bool:
+def _stdin_is_terminal(stdin: BinaryIO | TextIO | None) -> bool:
     try:
-        return sys.stdin.isatty()
+        return cast(BinaryIO | TextIO, stdin).isatty()
     except (AttributeError, OSError, ValueError):
         return False
 
@@ -157,8 +157,10 @@ def _read_file(
         os.close(descriptor)
 
 
-def _read_stdin(state: InterruptionState, *, limit: int = PROMPT_LIMIT) -> bytes:
-    stream = cast(BinaryIO | TextIO, getattr(sys.stdin, "buffer", sys.stdin))
+def _read_stdin(
+    stdin: BinaryIO | TextIO | None, state: InterruptionState, *, limit: int = PROMPT_LIMIT
+) -> bytes:
+    stream = cast(BinaryIO | TextIO, getattr(stdin, "buffer", stdin))
     if stream is None:
         raise PratError(
             "Cannot read standard input; provide exactly one prompt another way.",

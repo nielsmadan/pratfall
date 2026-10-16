@@ -1,7 +1,6 @@
 import json
-import shutil
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,11 +11,13 @@ from pratfall.codes import SIGNAL_EXIT_BASE
 from pratfall.config import agent_command
 from pratfall.interruption import InterruptionState, handler_for, handling
 from pratfall.models import Config, Invocation
-from pratfall.runner import OutputLimits, ProcessResult, raw_stdout, run
+from pratfall.runner import ProcessResult, RunLimits, raw_stdout, run
 
 VERSION_TIMEOUT = 3.0
 VERSION_OUTPUT_LIMIT = 64 * 1024
-VERSION_LIMITS = OutputLimits(stdout=VERSION_OUTPUT_LIMIT, stderr=VERSION_OUTPUT_LIMIT)
+VERSION_LIMITS = RunLimits(stdout=VERSION_OUTPUT_LIMIT, stderr=VERSION_OUTPUT_LIMIT)
+
+Which = Callable[[str], str | None]
 
 
 @dataclass
@@ -29,7 +30,7 @@ class _DoctorInterrupted(Exception):
 
 
 def _doctor_inventory(
-    config: Config, interruption: InterruptionState | None = None
+    config: Config, which: Which, interruption: InterruptionState | None = None
 ) -> list[dict[str, object]]:
     records: list[dict[str, object]] = []
     for agent in AGENTS:
@@ -37,7 +38,7 @@ def _doctor_inventory(
             break
         command = config.commands.get(agent.name, agent.command)
         executable = command[0]
-        found = shutil.which(executable)
+        found = which(executable)
         records.append(
             {
                 "agent": agent.name,
@@ -66,10 +67,18 @@ def _track_interruption(state: _DoctorState) -> Iterator[None]:
             raise_immediately = False
 
 
-def _doctor(config: Config, json_mode: bool, *, versions: bool) -> int:
+def _doctor(
+    config: Config,
+    json_mode: bool,
+    *,
+    versions: bool,
+    cwd: Path,
+    which: Which,
+    version_timeout: float = VERSION_TIMEOUT,
+) -> int:
     records: list[dict[str, object]] = []
     if not versions:
-        records = _doctor_inventory(config)
+        records = _doctor_inventory(config, which)
         _emit(
             {"agents": records},
             [_doctor_line(record, versions=False) for record in records],
@@ -81,7 +90,7 @@ def _doctor(config: Config, json_mode: bool, *, versions: bool) -> int:
     try:
         with _track_interruption(interruption):
             try:
-                records = _doctor_inventory(config, interruption)
+                records = _doctor_inventory(config, which, interruption)
                 for agent, record in zip(AGENTS, records, strict=True):
                     if interruption.received is not None:
                         break
@@ -89,9 +98,9 @@ def _doctor(config: Config, json_mode: bool, *, versions: bool) -> int:
                         continue
                     process = run(
                         Invocation((*agent_command(config, agent), *agent.version_args), b""),
-                        Path.cwd(),
-                        VERSION_TIMEOUT,
-                        output_limits=VERSION_LIMITS,
+                        cwd,
+                        version_timeout,
+                        limits=VERSION_LIMITS,
                     )
                     version, version_error = _version_result(process)
                     record["version"] = version

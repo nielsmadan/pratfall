@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from pratfall.adapters.accounting import cost as native_cost
 from pratfall.adapters.accounting import model as native_model
 from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
@@ -10,50 +13,56 @@ from pratfall.consumer import (
 from pratfall.errors import PratError
 from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
-_ALLOWED = {
-    name: Flag(1)
-    for name in (
-        "--provider",
-        "--system-prompt",
-        "--append-system-prompt",
-        "--tools",
-        "-t",
-        "--exclude-tools",
-        "-xt",
-    )
-} | {
-    name: Flag(0)
-    for name in (
-        "--no-tools",
-        "-nt",
-        "--no-builtin-tools",
-        "-nbt",
-        "--no-extensions",
-        "-ne",
-        "--no-skills",
-        "-ns",
-        "--no-prompt-templates",
-        "-np",
-        "--no-context-files",
-        "-nc",
-        "--no-session",
-        "--offline",
-    )
-}
-_RESERVED = {name: Flag(0) for name in ("--print", "-p", "--continue", "-c", "--resume", "-r")} | {
-    name: Flag(1)
-    for name in (
-        "--mode",
-        "--model",
-        "--thinking",
-        "--session",
-        "--session-id",
-        "--session-dir",
-        "--fork",
-        "--export",
-        "--models",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(1)
+        for name in (
+            "--provider",
+            "--system-prompt",
+            "--append-system-prompt",
+            "--tools",
+            "-t",
+            "--exclude-tools",
+            "-xt",
+        )
+    }
+    | {
+        name: Flag(0)
+        for name in (
+            "--no-tools",
+            "-nt",
+            "--no-builtin-tools",
+            "-nbt",
+            "--no-extensions",
+            "-ne",
+            "--no-skills",
+            "-ns",
+            "--no-prompt-templates",
+            "-np",
+            "--no-context-files",
+            "-nc",
+            "--no-session",
+            "--offline",
+        )
+    }
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {name: Flag(0) for name in ("--print", "-p", "--continue", "-c", "--resume", "-r")}
+    | {
+        name: Flag(1)
+        for name in (
+            "--mode",
+            "--model",
+            "--thinking",
+            "--session",
+            "--session-id",
+            "--session-dir",
+            "--fork",
+            "--export",
+            "--models",
+        )
+    }
+)
 _IGNORED = frozenset(
     {
         "session",
@@ -106,7 +115,7 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 def validate(resolved: ResolvedProfile) -> None:
     options = resolved.options
-    reserved = _RESERVED.copy()
+    reserved = dict(_RESERVED)
     validate_tool_values(options.tools, "tools", comma=True, trim=True)
     validate_tool_values(options.disabled_tools, "disabled_tools", comma=True, trim=True)
     for path in options.attachments or ():

@@ -1,6 +1,9 @@
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 
+from pratfall.adapters.accounting import split_error
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
@@ -10,32 +13,38 @@ from pratfall.consumer import (
 )
 from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
-_ALLOWED = {
-    name: Flag(0)
-    for name in (
-        "--dangerously-skip-permissions",
-        "--disable-slash-commands",
-        "--new-project",
-        "--sandbox",
-    )
-} | {name: Flag(1) for name in ("--add-dir", "--agent", "--log-file", "--mode", "--project")}
-_RESERVED = {
-    name: Flag(0, joined=name in {"-c", "-i", "-p"})
-    for name in ("-c", "--continue", "-i", "--print", "-p")
-} | {
-    name: Flag(1)
-    for name in (
-        "--conversation",
-        "--effort",
-        "--input-format",
-        "--json-schema",
-        "--model",
-        "--output-format",
-        "--print-timeout",
-        "--prompt",
-        "--prompt-interactive",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--dangerously-skip-permissions",
+            "--disable-slash-commands",
+            "--new-project",
+            "--sandbox",
+        )
+    }
+    | {name: Flag(1) for name in ("--add-dir", "--agent", "--log-file", "--mode", "--project")}
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0, joined=name in {"-c", "-i", "-p"})
+        for name in ("-c", "--continue", "-i", "--print", "-p")
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--conversation",
+            "--effort",
+            "--input-format",
+            "--json-schema",
+            "--model",
+            "--output-format",
+            "--print-timeout",
+            "--prompt",
+            "--prompt-interactive",
+        )
+    }
+)
 
 
 @dataclass
@@ -177,13 +186,7 @@ def _decode_result(value: dict[str, object]) -> DecodedOutput:
         "RUNNING",
     }:
         return _protocol(f"Antigravity result has unknown status {status!r}.")
-    decoded_usage = _usage(value.get("usage"))
-    if isinstance(decoded_usage, ResultError):
-        usage_error: ResultError | None = decoded_usage
-        usage: Usage | None = None
-    else:
-        usage_error = None
-        usage = decoded_usage
+    usage, usage_error = split_error(_usage(value.get("usage")))
     if status != "SUCCESS":
         message = value.get("error")
         if message is not None and not isinstance(message, str):

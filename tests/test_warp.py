@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -94,7 +95,9 @@ def test_warp_accepts_verified_name_grammar(arguments: tuple[str, ...]) -> None:
 )
 def test_warp_rejects_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "warp", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "warp", options
+        )
 
 
 def test_warp_cli_satisfies_independent_native_contract(

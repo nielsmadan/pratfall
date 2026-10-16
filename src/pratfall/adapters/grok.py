@@ -1,83 +1,91 @@
 import math
+from collections.abc import Mapping
+from types import MappingProxyType
 
 from pratfall.adapters.accounting import cost, model_map
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.adapters.whole_json import document_error, encoding_error, parse, session_text
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
-_ALLOWED = {
-    name: Flag(0)
-    for name in (
-        "--always-approve",
-        "--dangerously-skip-permissions",
-        "--disable-web-search",
-        "--experimental-memory",
-        "--no-memory",
-        "--no-plan",
-        "--no-subagents",
-        "--no-wait-for-background",
-        "--verbatim",
-        "--yolo",
-    )
-} | {
-    name: Flag(1)
-    for name in (
-        "--agent",
-        "--agents",
-        "--allow",
-        "--allowedTools",
-        "--append-system-prompt",
-        "--background-wait-timeout",
-        "--deny",
-        "--disallowed-tools",
-        "--disallowedTools",
-        "--json-schema",
-        "--permission-mode",
-        "--rules",
-        "--sandbox",
-        "--system-prompt",
-        "--system-prompt-override",
-        "--tools",
-    )
-}
-_RESERVED = {
-    name: Flag(0, joined=name in {"-c", "-p", "-v", "-V"})
-    for name in (
-        "-c",
-        "--continue",
-        "--fork-session",
-        "--include-partial-messages",
-        "--no-auto-update",
-        "-p",
-        "--print",
-        "--single",
-        "-v",
-        "-V",
-        "--version",
-    )
-} | {
-    name: Flag(1, joined=name in {"-m", "-r", "-s", "-w"})
-    for name in (
-        "--cwd",
-        "--effort",
-        "--load",
-        "-m",
-        "--max-turns",
-        "--model",
-        "--output-format",
-        "--prompt-file",
-        "--prompt-json",
-        "--reasoning-effort",
-        "-r",
-        "--ref",
-        "--resume",
-        "-s",
-        "--session-id",
-        "-w",
-        "--worktree",
-        "--worktree-ref",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--always-approve",
+            "--dangerously-skip-permissions",
+            "--disable-web-search",
+            "--experimental-memory",
+            "--no-memory",
+            "--no-plan",
+            "--no-subagents",
+            "--no-wait-for-background",
+            "--verbatim",
+            "--yolo",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--agent",
+            "--agents",
+            "--allow",
+            "--allowedTools",
+            "--append-system-prompt",
+            "--background-wait-timeout",
+            "--deny",
+            "--disallowed-tools",
+            "--disallowedTools",
+            "--json-schema",
+            "--permission-mode",
+            "--rules",
+            "--sandbox",
+            "--system-prompt",
+            "--system-prompt-override",
+            "--tools",
+        )
+    }
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0, joined=name in {"-c", "-p", "-v", "-V"})
+        for name in (
+            "-c",
+            "--continue",
+            "--fork-session",
+            "--include-partial-messages",
+            "--no-auto-update",
+            "-p",
+            "--print",
+            "--single",
+            "-v",
+            "-V",
+            "--version",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-m", "-r", "-s", "-w"})
+        for name in (
+            "--cwd",
+            "--effort",
+            "--load",
+            "-m",
+            "--max-turns",
+            "--model",
+            "--output-format",
+            "--prompt-file",
+            "--prompt-json",
+            "--reasoning-effort",
+            "-r",
+            "--ref",
+            "--resume",
+            "-s",
+            "--session-id",
+            "-w",
+            "--worktree",
+            "--worktree-ref",
+        )
+    }
+)
 _STOP_REASONS = {"end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled"}
 _USAGE_FIELDS = (
     "input_tokens",

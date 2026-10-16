@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -95,7 +96,9 @@ def test_devin_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
 )
 def test_devin_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "dv", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "dv", options
+        )
 
 
 @pytest.mark.parametrize("selector", ["devin", "dv", "devin-review"])

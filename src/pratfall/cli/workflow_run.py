@@ -144,7 +144,8 @@ def _step_timeout(config: Config, name: str, step: WorkflowStep, parsed: RunArgu
 
 
 def _base_input(source: PromptSource | None, invocation_cwd: Path) -> str | None:
-    return acquire_prompt(source, invocation_cwd, allow_absent=True).decode("utf-8") or None
+    prompt = acquire_prompt(source, invocation_cwd, sys.stdin, allow_absent=True)
+    return prompt.decode("utf-8") or None
 
 
 def _passthrough(parsed: RunArguments) -> tuple[str, ...]:

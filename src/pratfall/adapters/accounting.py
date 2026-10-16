@@ -37,6 +37,12 @@ def cost(value: object, label: str) -> tuple[int | float | None, ResultError | N
     return value, None
 
 
+def split_error[T](value: T | ResultError | None) -> tuple[T | None, ResultError | None]:
+    if isinstance(value, ResultError):
+        return None, value
+    return value, None
+
+
 def valid_model(value: object) -> TypeGuard[str]:
     if not isinstance(value, str) or not value:
         return False

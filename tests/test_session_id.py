@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -107,16 +108,19 @@ def test_reported_session_outranks_the_requested_one(
 
 
 def test_session_id_four_layer_precedence_and_provenance(tmp_path: Path) -> None:
-    global_path = config_path()
+    global_path = config_path(cwd=Path.cwd(), env=os.environ)
     global_path.parent.mkdir(parents=True)
     global_path.write_text('version=1\n[defaults]\nsession_id="global"\n')
-    assert resolve_profile(load_config(), "claude").options.session_id == "global"
+    assert (
+        resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "claude").options.session_id
+        == "global"
+    )
     local = tmp_path / ".pratfile"
     local.write_text(
         'version=1\n[defaults]\nsession_id="local"\n'
         '[profiles.work]\nagent="claude"\nsession_id="profile"\n'
     )
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "claude").options.session_id == "local"
     assert resolve_profile(config, "work").options.session_id == "profile"
     resolved = resolve_profile(config, "work", Options(session_id="cli"))

@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -95,7 +96,9 @@ def test_reasonix_reserved_and_unknown_arguments(arguments: tuple[str, ...]) -> 
 )
 def test_reasonix_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "rx", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "rx", options
+        )
 
 
 @pytest.mark.parametrize("selector", ["reasonix", "rx"])

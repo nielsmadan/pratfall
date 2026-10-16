@@ -1,34 +1,42 @@
 import math
+from collections.abc import Mapping
 from dataclasses import replace
+from types import MappingProxyType
 
-from pratfall.adapters.accounting import cost, model
+from pratfall.adapters.accounting import cost, model, split_error
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.adapters.whole_json import document_error, encodable_text, parse
 from pratfall.errors import PratError
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
-_ALLOWED = {
-    name: Flag(0)
-    for name in (
-        "--auth-env-only",
-        "--isolated",
-        "--local-model-lean",
-        "--no-auth-env-only",
-    )
-} | {name: Flag(1) for name in ("--code-mode", "--config", "--fallback")}
-_RESERVED = {name: Flag(0) for name in ("--json",)} | {
-    name: Flag(1)
-    for name in (
-        "--cwd",
-        "--message",
-        "--message-file",
-        "--model",
-        "--state-dir",
-        "--thinking",
-        "--timeout",
-        "-m",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--auth-env-only",
+            "--isolated",
+            "--local-model-lean",
+            "--no-auth-env-only",
+        )
+    }
+    | {name: Flag(1) for name in ("--code-mode", "--config", "--fallback")}
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {name: Flag(0) for name in ("--json",)}
+    | {
+        name: Flag(1)
+        for name in (
+            "--cwd",
+            "--message",
+            "--message-file",
+            "--model",
+            "--state-dir",
+            "--thinking",
+            "--timeout",
+            "-m",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
@@ -89,12 +97,7 @@ def _decode_envelope(value: dict[str, object]) -> DecodedOutput:
     )
     if isinstance(payloads, ResultError):
         return replace(decoded, error=payloads)
-    usage = _usage(value.get("usage")) if "usage" in value else None
-    if isinstance(usage, ResultError):
-        usage_error: ResultError | None = usage
-        usage = None
-    else:
-        usage_error = None
+    usage, usage_error = split_error(_usage(value.get("usage")) if "usage" in value else None)
     decoded = replace(decoded, usage=usage)
     detail_error = usage_error or accounting_error or document_error(value, "OpenClaw")
     native_error = _error(value["error"]) if "error" in value else None
@@ -164,12 +167,9 @@ def _usage(value: object) -> Usage | ResultError:
 def _payloads(value: object) -> tuple[dict[str, object], ...] | ResultError:
     if not isinstance(value, list):
         return ResultError("protocol_error", "OpenClaw payloads are malformed.")
-    payloads: list[dict[str, object]] = []
-    for payload in value:
-        if not isinstance(payload, dict) or not _valid_payload(payload):
-            return ResultError("protocol_error", "OpenClaw payloads are malformed.")
-        payloads.append(payload)
-    return tuple(payloads)
+    if not all(isinstance(payload, dict) and _valid_payload(payload) for payload in value):
+        return ResultError("protocol_error", "OpenClaw payloads are malformed.")
+    return tuple(value)
 
 
 def _valid_payload(payload: dict[object, object]) -> bool:

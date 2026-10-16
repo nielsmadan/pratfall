@@ -56,24 +56,24 @@ def _step_entry() -> int:
             PratError(f"Cannot set up workflow step input: {error}.", code="invalid_arguments")
         )
     with spec:
-        return _step_command(spec, Path.cwd(), _start_parent_watchdog)
+        return _step_command(spec, Path.cwd(), os.environ, _start_parent_watchdog)
 
 
 def _main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     if arguments[:1] == ["__complete"]:
-        return _complete_command(arguments[1:])
+        return _complete_command(arguments[1:], os.environ)
     if arguments[:1] == ["__step"]:
         return _step_entry()
     if not _management_mode(arguments):
-        return _run_command(arguments, Path.cwd())
+        return _run_command(arguments, Path.cwd(), os.environ)
     try:
         parser = build_parser()
         args = parser.parse_args(arguments)
         if args.command is None:
             parser.print_help()
             return 0
-        return _dispatch(args)
+        return _dispatch(args, Path.cwd(), os.environ)
     except PratError as error:
         if _json_requested(arguments):
             _emit(

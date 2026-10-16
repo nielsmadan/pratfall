@@ -1,7 +1,6 @@
 import io
 import os
 import signal
-import sys
 from pathlib import Path
 
 import pytest
@@ -15,9 +14,9 @@ from pratfall.prompt_input import PROMPT_LIMIT, InputInterrupted, PromptSource, 
 def test_combines_stdin_before_inline_prompt_preserving_bytes(
     stdin: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(sys, "stdin", io.BytesIO(stdin))
+    stdin_stream = io.BytesIO(stdin)
     expected = stdin + b"\n\ntimes 5" if stdin else b"times 5"
-    assert acquire_prompt(PromptSource("inline", "times 5"), tmp_path) == expected
+    assert acquire_prompt(PromptSource("inline", "times 5"), tmp_path, stdin_stream) == expected
 
 
 @pytest.mark.parametrize("kind", ["terminal", "closed", "unavailable"])
@@ -29,8 +28,8 @@ def test_inline_prompt_works_without_redirected_stdin(
         monkeypatch.setattr(stream, "isatty", lambda: True)
     elif kind == "closed":
         stream.close()
-    monkeypatch.setattr(sys, "stdin", None if kind == "unavailable" else stream)
-    assert acquire_prompt(PromptSource("inline", "prompt"), tmp_path) == b"prompt"
+    stdin_stream = None if kind == "unavailable" else stream
+    assert acquire_prompt(PromptSource("inline", "prompt"), tmp_path, stdin_stream) == b"prompt"
     if kind == "terminal":
         assert stream.tell() == 0
 
@@ -42,9 +41,9 @@ def test_inline_prompt_works_without_redirected_stdin(
 def test_combined_prompt_rejects_invalid_stdin(
     stdin: bytes, message: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(sys, "stdin", io.BytesIO(stdin))
+    stdin_stream = io.BytesIO(stdin)
     with pytest.raises(PratError, match=message):
-        acquire_prompt(PromptSource("inline", "prompt"), tmp_path)
+        acquire_prompt(PromptSource("inline", "prompt"), tmp_path, stdin_stream)
 
 
 @pytest.mark.parametrize("excess", [0, 1])
@@ -52,12 +51,13 @@ def test_combined_prompt_byte_limit_includes_separator(
     excess: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     stdin = b"x" * (PROMPT_LIMIT - len("é".encode()) - 2 + excess)
-    monkeypatch.setattr(sys, "stdin", io.BytesIO(stdin))
+    stdin_stream = io.BytesIO(stdin)
     if excess:
         with pytest.raises(PratError, match="byte limit"):
-            acquire_prompt(PromptSource("inline", "é"), tmp_path)
+            acquire_prompt(PromptSource("inline", "é"), tmp_path, stdin_stream)
     else:
-        assert acquire_prompt(PromptSource("inline", "é"), tmp_path) == stdin + "\n\né".encode()
+        expected = stdin + "\n\né".encode()
+        assert acquire_prompt(PromptSource("inline", "é"), tmp_path, stdin_stream) == expected
 
 
 def test_named_file_is_opened_nonblocking_and_handlers_are_restored(
@@ -76,7 +76,7 @@ def test_named_file_is_opened_nonblocking_and_handlers_are_restored(
 
     previous = {chosen: signal.getsignal(chosen) for chosen in (signal.SIGINT, signal.SIGTERM)}
     monkeypatch.setattr(os, "open", recording_open)
-    assert acquire_prompt(PromptSource("file", str(prompt_file)), tmp_path) == b"prompt"
+    assert acquire_prompt(PromptSource("file", str(prompt_file)), tmp_path, None) == b"prompt"
     assert opened == [os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)]
     assert {chosen: signal.getsignal(chosen) for chosen in previous} == previous
 
@@ -96,7 +96,7 @@ def test_signal_during_validation_interrupts_and_restores_handlers(
 
     monkeypatch.setattr(prompt_input, "_validate", interrupting_validate)
     with pytest.raises(InputInterrupted, match=f"Interrupted by signal {chosen.value}") as raised:
-        acquire_prompt(PromptSource("inline", "prompt"), tmp_path)
+        acquire_prompt(PromptSource("inline", "prompt"), tmp_path, None)
 
     assert raised.value.signum == chosen
     assert {candidate: signal.getsignal(candidate) for candidate in previous} == previous
@@ -111,17 +111,17 @@ def test_optional_base_accepts_absent_input(
         monkeypatch.setattr(stream, "isatty", lambda: True)
     elif kind == "closed":
         stream.close()
-    monkeypatch.setattr(sys, "stdin", None if kind == "unavailable" else stream)
-    assert acquire_prompt(None, tmp_path, allow_absent=True) == b""
+    stdin_stream = None if kind == "unavailable" else stream
+    assert acquire_prompt(None, tmp_path, stdin_stream, allow_absent=True) == b""
 
 
 @pytest.mark.parametrize("stdin", [b" \n", b"\xff", b"\0"])
 def test_optional_base_still_validates_provided_implicit_input(
     stdin: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(sys, "stdin", io.BytesIO(stdin))
+    stdin_stream = io.BytesIO(stdin)
     with pytest.raises(PratError):
-        acquire_prompt(None, tmp_path, allow_absent=True)
+        acquire_prompt(None, tmp_path, stdin_stream, allow_absent=True)
 
 
 @pytest.mark.parametrize("path", ['notes "one"\\two\n雪😀\x7f.md', "-", "empty.md"])
@@ -160,8 +160,8 @@ def test_file_parent_traversal_follows_directory_symlink(
             b'# Context: "link/../notes.md"\n\ntarget notes\n\ntask'
         )
     else:
-        monkeypatch.setattr(sys, "stdin", io.BytesIO(b""))
-        assert acquire_prompt(PromptSource("file", path), tmp_path) == b"target notes"
+        stdin_stream = io.BytesIO(b"")
+        assert acquire_prompt(PromptSource("file", path), tmp_path, stdin_stream) == b"target notes"
 
 
 @pytest.mark.parametrize("content", [b"\xff", b"a\0b"])
@@ -226,9 +226,9 @@ def test_combined_prompt_reads_only_remaining_budget(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     stream = io.BytesIO(b"x" * PROMPT_LIMIT)
-    monkeypatch.setattr(sys, "stdin", stream)
+    stdin_stream = stream
     with pytest.raises(PratError, match="byte limit"):
-        acquire_prompt(PromptSource("inline", "y" * (PROMPT_LIMIT - 3)), tmp_path)
+        acquire_prompt(PromptSource("inline", "y" * (PROMPT_LIMIT - 3)), tmp_path, stdin_stream)
     assert stream.tell() == 2
 
 
@@ -255,16 +255,16 @@ def test_context_signal_interrupts_read_and_restores_handlers(
 
 @pytest.mark.parametrize("value", [b"", b" \n\t"])
 @pytest.mark.parametrize("kind", ["stdin", "inline", "file"])
-def test_edit_draft_allows_blank_sources(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: bytes, kind: str
-) -> None:
+def test_edit_draft_allows_blank_sources(tmp_path: Path, value: bytes, kind: str) -> None:
     source: PromptSource
+    stdin_stream = io.BytesIO(value if kind == "stdin" else b"")
     if kind == "stdin":
         source = PromptSource("stdin")
-        monkeypatch.setattr(sys, "stdin", io.BytesIO(value))
     elif kind == "file":
         (tmp_path / "draft.md").write_bytes(value)
         source = PromptSource("file", "draft.md")
     else:
         source = PromptSource("inline", value.decode())
-    assert acquire_prompt(source, tmp_path, allow_absent=True, allow_blank=True) == value
+    assert (
+        acquire_prompt(source, tmp_path, stdin_stream, allow_absent=True, allow_blank=True) == value
+    )

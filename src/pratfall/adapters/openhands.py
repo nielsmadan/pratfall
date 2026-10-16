@@ -1,6 +1,8 @@
 import json
 import math
 import re
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import NoReturn
 
 from pratfall.adapters.native_args import Flag, validate_flags
@@ -15,35 +17,38 @@ from pratfall.consumer import (
 )
 from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError
 
-_ALLOWED = {"--override-with-envs": Flag(0)}
-_RESERVED = {
-    name: Flag(0)
-    for name in (
-        "--headless",
-        "--json",
-        "--last",
-        "--always-approve",
-        "--yolo",
-        "--llm-approve",
-        "--exit-without-confirmation",
-    )
-} | {
-    name: Flag(1, joined=name in {"-t", "-f"})
-    for name in (
-        "--task",
-        "-t",
-        "--file",
-        "-f",
-        "--resume",
-        "--model",
-        "--effort",
-        "--config",
-        "--cwd",
-        "--session",
-        "--output-format",
-        "--executor",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType({"--override-with-envs": Flag(0)})
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--headless",
+            "--json",
+            "--last",
+            "--always-approve",
+            "--yolo",
+            "--llm-approve",
+            "--exit-without-confirmation",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-t", "-f"})
+        for name in (
+            "--task",
+            "-t",
+            "--file",
+            "-f",
+            "--resume",
+            "--model",
+            "--effort",
+            "--config",
+            "--cwd",
+            "--session",
+            "--output-format",
+            "--executor",
+        )
+    }
+)
 _IGNORED = frozenset(
     {
         "ACPToolCallEvent",

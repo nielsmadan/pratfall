@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -92,7 +93,9 @@ def test_amp_reserved_and_unknown_arguments(arguments: tuple[str, ...]) -> None:
 )
 def test_amp_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "amp", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "amp", options
+        )
 
 
 def test_amp_independent_native_contract(

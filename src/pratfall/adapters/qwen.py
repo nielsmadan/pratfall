@@ -1,4 +1,6 @@
+from collections.abc import Mapping
 from dataclasses import replace
+from types import MappingProxyType
 
 from pratfall.adapters.accounting import model
 from pratfall.adapters.native_args import (
@@ -27,46 +29,52 @@ from pratfall.models import (
 )
 from pratfall.schema import StructuredAnswer, parse_json, retain_answer
 
-_ALLOWED = {name: Flag(0) for name in ("--debug", "-d")} | {
-    name: Flag(1)
-    for name in (
-        "--approval-mode",
-        "--system-prompt",
-        "--append-system-prompt",
-        "--include-directories",
-        "--add-dir",
-    )
-}
-_RESERVED = {
-    name: Flag(0, joined=name in {"-c"})
-    for name in ("--continue", "-c", "--acp", "--experimental-acp", "--fork-session")
-} | {
-    name: Flag(1, joined=name in {"-p", "-i", "-m", "-o", "-r", "-w"})
-    for name in (
-        "--prompt",
-        "-p",
-        "--prompt-interactive",
-        "-i",
-        "--input-format",
-        "--output-format",
-        "-o",
-        "--model",
-        "-m",
-        "--max-session-turns",
-        "--max-wall-time",
-        "--max-tool-calls",
-        "--resume",
-        "-r",
-        "--session-id",
-        "--worktree",
-        "-w",
-        "--cwd",
-        "--config",
-        "--fallback-model",
-        "--effort",
-        "--json-schema",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {name: Flag(0) for name in ("--debug", "-d")}
+    | {
+        name: Flag(1)
+        for name in (
+            "--approval-mode",
+            "--system-prompt",
+            "--append-system-prompt",
+            "--include-directories",
+            "--add-dir",
+        )
+    }
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0, joined=name in {"-c"})
+        for name in ("--continue", "-c", "--acp", "--experimental-acp", "--fork-session")
+    }
+    | {
+        name: Flag(1, joined=name in {"-p", "-i", "-m", "-o", "-r", "-w"})
+        for name in (
+            "--prompt",
+            "-p",
+            "--prompt-interactive",
+            "-i",
+            "--input-format",
+            "--output-format",
+            "-o",
+            "--model",
+            "-m",
+            "--max-session-turns",
+            "--max-wall-time",
+            "--max-tool-calls",
+            "--resume",
+            "-r",
+            "--session-id",
+            "--worktree",
+            "-w",
+            "--cwd",
+            "--config",
+            "--fallback-model",
+            "--effort",
+            "--json-schema",
+        )
+    }
+)
 _QWEN_RESULT_ERRORS = {"error_during_execution", "error_max_turns"}
 
 
@@ -81,10 +89,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--max-session-turns", str(resolved.options.max_turns)))
     for directory in resolved.options.add_dirs or ():
         argv.extend(("--include-directories", directory))
-    for tool in resolved.options.tools or ():
-        argv.append(f"--core-tools={tool}")
-    for tool in resolved.options.disabled_tools or ():
-        argv.append(f"--exclude-tools={tool}")
+    argv.extend(f"--core-tools={tool}" for tool in resolved.options.tools or ())
+    argv.extend(f"--exclude-tools={tool}" for tool in resolved.options.disabled_tools or ())
     if resolved.prepared_schema is not None:
         if resolved.prepared_schema.path is None:
             raise ValueError("Prepared schema requires a file snapshot.")
@@ -94,7 +100,7 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 def validate(resolved: ResolvedProfile) -> None:
     validate_directory_values(resolved.options.add_dirs or ())
-    reserved = _RESERVED | (
+    reserved = dict(_RESERVED) | (
         {
             "--include-directories": _ALLOWED["--include-directories"],
             "--add-dir": _ALLOWED["--add-dir"],

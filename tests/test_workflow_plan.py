@@ -1,3 +1,4 @@
+import os
 from collections.abc import Collection, Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -77,7 +78,7 @@ def test_parameters_use_prompt_inherited_through_extends(tmp_path: Path) -> None
         '[workflows.w]\nsteps=[{name="x",profile="child"}]\n',
         encoding="utf-8",
     )
-    config = load_config(path)
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
     prompt = config.profiles["child"].prompt
     assert prompt is not None
     assert workflow_parameters(config.workflows["w"], {"child": prompt.prompt}) == ("thing",)

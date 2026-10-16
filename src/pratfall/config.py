@@ -47,22 +47,26 @@ effort = "low"
 """
 
 
-def config_path(explicit: str | Path | None = None, *, cwd: Path | None = None) -> Path:
-    base = Path.cwd() if cwd is None else cwd
+def config_path(explicit: str | Path | None = None, *, cwd: Path, env: Mapping[str, str]) -> Path:
+    xdg = env.get("XDG_CONFIG_HOME")
     try:
         if explicit is not None:
             path = Path(explicit).expanduser()
         else:
-            xdg = os.environ.get("XDG_CONFIG_HOME")
-            root = Path(xdg).expanduser() if xdg else Path.home() / ".config"
+            root = Path(xdg).expanduser() if xdg else _home(env) / ".config"
             path = root / "pratfall" / "config.toml"
     except RuntimeError as error:
-        requested = explicit if explicit is not None else os.environ.get("XDG_CONFIG_HOME", "")
+        requested = explicit if explicit is not None else xdg
         raise PratError(
             f"{requested or 'config path'}: cannot expand user path ({error}); "
             "use an absolute path or a valid ~user path."
         ) from error
-    return Path(os.path.abspath(base / path))
+    return Path(os.path.abspath(cwd / path))
+
+
+def _home(env: Mapping[str, str]) -> Path:
+    home = env.get("HOME")
+    return Path(home) if home else Path.home()
 
 
 def _table(value: object, label: str) -> dict[str, object]:
@@ -254,16 +258,22 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
 def merge_options(*layers: Options) -> Options:
     values: dict[str, object] = {}
     for layer in layers:
-        _clear_instruction_peer(values, layer)
-        values.update({key: value for key, value in asdict(layer).items() if value is not None})
+        values = _without_instruction_peer(values, layer) | {
+            key: value for key, value in asdict(layer).items() if value is not None
+        }
     return parse_options(values, "options")
 
 
-def _clear_instruction_peer[T](values: dict[str, T], layer: Options) -> None:
-    if layer.instructions is not None:
-        values.pop("instructions_file", None)
-    if layer.instructions_file is not None:
-        values.pop("instructions", None)
+def _without_instruction_peer[T](values: Mapping[str, T], layer: Options) -> dict[str, T]:
+    replaced = {
+        peer
+        for field, peer in (
+            ("instructions", "instructions_file"),
+            ("instructions_file", "instructions"),
+        )
+        if getattr(layer, field) is not None
+    }
+    return {key: value for key, value in values.items() if key not in replaced}
 
 
 def _rejected(origin: OptionOrigin, message: str) -> PratError:
@@ -343,25 +353,17 @@ def option_origins(
     profile = config.profiles.get(selector)
     if profile is not None:
         for layer in profile.layers:
-            _clear_instruction_peer(origins, layer.options)
-            origins.update(
-                {
-                    name: _layer_origin(layer, selector, name)
-                    for name, value in asdict(layer.options).items()
-                    if value is not None
-                }
-            )
-    if overrides is not None:
-        _clear_instruction_peer(origins, overrides)
-        origins.update(
-            {
-                name: OptionOrigin(
-                    f"command line: selector {selector!r}.{name}", "invalid_arguments"
-                )
-                for name, value in asdict(overrides).items()
+            origins = _without_instruction_peer(origins, layer.options) | {
+                name: _layer_origin(layer, selector, name)
+                for name, value in asdict(layer.options).items()
                 if value is not None
             }
-        )
+    if overrides is not None:
+        origins = _without_instruction_peer(origins, overrides) | {
+            name: OptionOrigin(f"command line: selector {selector!r}.{name}", "invalid_arguments")
+            for name, value in asdict(overrides).items()
+            if value is not None
+        }
     return origins
 
 
@@ -840,9 +842,9 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
         f"{local_config.path}: workflow {name!r} replaces the workflow from {global_config.path}."
         for name in workflow_collisions
     )
-    default_sources = dict(global_config.default_sources)
-    _clear_instruction_peer(default_sources, local_config.defaults)
-    default_sources.update(local_config.default_sources)
+    default_sources = _without_instruction_peer(
+        global_config.default_sources, local_config.defaults
+    ) | dict(local_config.default_sources)
     return Config(
         path=local_config.path,
         exists=True,
@@ -871,9 +873,9 @@ def _same_file(first: Path, second: Path) -> bool:
         return False
 
 
-def load_config(explicit: str | Path | None = None, *, cwd: Path | None = None) -> Config:
-    global_path = config_path(cwd=cwd)
-    local_path = config_path(explicit if explicit is not None else ".pratfile", cwd=cwd)
+def load_config(explicit: str | Path | None = None, *, cwd: Path, env: Mapping[str, str]) -> Config:
+    global_path = config_path(cwd=cwd, env=env)
+    local_path = config_path(explicit if explicit is not None else ".pratfile", cwd=cwd, env=env)
     if _same_file(global_path, local_path):
         config = _load_file(local_path, required=explicit is not None)
     else:
@@ -938,8 +940,8 @@ def agent_command(config: Config, agent: AgentSpec) -> tuple[str, ...]:
     return (*(prefix or ()), *config.commands.get(agent.name, agent.command))
 
 
-def init_config(explicit: str | Path | None = None, *, cwd: Path | None = None) -> Path:
-    path = config_path(explicit, cwd=cwd)
+def init_config(explicit: str | Path | None = None, *, cwd: Path, env: Mapping[str, str]) -> Path:
+    path = config_path(explicit, cwd=cwd, env=env)
     try:
         missing = []
         parent = path.parent

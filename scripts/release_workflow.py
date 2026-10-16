@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tomllib
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 SEMVER_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
@@ -13,6 +14,15 @@ SEMVER_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 class WorkflowError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class TagFacts:
+    object_type: str
+    release_commit: str
+    event_commit: str | None
+    origin_main: str
+    on_origin_main: bool
 
 
 def version(tag: str) -> tuple[int, int, int] | None:
@@ -35,38 +45,65 @@ def previous_tag(current: str, tags: Sequence[str]) -> str | None:
     return max(candidates)[1] if candidates else None
 
 
-def command(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    result = subprocess.run(args, text=True, capture_output=True, check=False)
+def command(
+    *args: str, check: bool = True, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(args, cwd=cwd, text=True, capture_output=True, check=False)
     if check and result.returncode:
         detail = (result.stderr or result.stdout).strip()
         raise WorkflowError(f"{' '.join(args)} failed ({result.returncode}). {detail}")
     return result
 
 
-def validate_tag(tag: str, event_sha: str | None = None) -> str:
+def tag_facts(repository: Path, tag: str, event_sha: str | None) -> TagFacts:
+    def git(*args: str) -> str:
+        return command("git", *args, cwd=repository).stdout.strip()
+
+    ref = f"refs/tags/{tag}"
+    object_type = git("cat-file", "-t", ref)
+    release_commit = git("rev-parse", f"{ref}^{{commit}}")
+    event_commit = None if event_sha is None else git("rev-parse", f"{event_sha}^{{commit}}")
+    origin_main = git("rev-parse", "refs/remotes/origin/main^{commit}")
+    ancestry = command(
+        "git",
+        "merge-base",
+        "--is-ancestor",
+        release_commit,
+        origin_main,
+        check=False,
+        cwd=repository,
+    )
+    return TagFacts(
+        object_type, release_commit, event_commit, origin_main, ancestry.returncode == 0
+    )
+
+
+def check_tag_name(tag: str) -> None:
     if version(tag) is None:
         raise WorkflowError(f"Invalid release tag: {tag!r}")
-    ref = f"refs/tags/{tag}"
-    object_type = command("git", "cat-file", "-t", ref).stdout.strip()
-    if object_type != "tag":
-        raise WorkflowError(f"Release ref {tag} must be an annotated tag, got {object_type!r}.")
-    release_commit = command("git", "rev-parse", f"{ref}^{{commit}}").stdout.strip()
-    if event_sha is not None:
-        event_commit = command("git", "rev-parse", f"{event_sha}^{{commit}}").stdout.strip()
-        if release_commit != event_commit:
-            raise WorkflowError(
-                f"Release event SHA {event_sha} does not identify {tag} commit {release_commit}."
-            )
-    origin_main = command("git", "rev-parse", "refs/remotes/origin/main^{commit}").stdout.strip()
-    ancestry = command(
-        "git", "merge-base", "--is-ancestor", release_commit, origin_main, check=False
-    )
-    if ancestry.returncode != 0:
+
+
+def check_tag(tag: str, event_sha: str | None, facts: TagFacts) -> str:
+    check_tag_name(tag)
+    if facts.object_type != "tag":
         raise WorkflowError(
-            f"Release commit {release_commit} is not contained in fetched origin/main "
-            f"({origin_main})."
+            f"Release ref {tag} must be an annotated tag, got {facts.object_type!r}."
         )
-    return release_commit
+    if facts.event_commit is not None and facts.release_commit != facts.event_commit:
+        raise WorkflowError(
+            f"Release event SHA {event_sha} does not identify {tag} commit {facts.release_commit}."
+        )
+    if not facts.on_origin_main:
+        raise WorkflowError(
+            f"Release commit {facts.release_commit} is not contained in fetched origin/main "
+            f"({facts.origin_main})."
+        )
+    return facts.release_commit
+
+
+def validate_tag(repository: Path, tag: str, event_sha: str | None = None) -> str:
+    check_tag_name(tag)
+    return check_tag(tag, event_sha, tag_facts(repository, tag, event_sha))
 
 
 def verify_remote_tag(tag: str, target: str) -> None:
@@ -231,7 +268,7 @@ def main() -> None:
             print(selected)
         return
     if args.operation == "validate-tag":
-        print(validate_tag(args.tag, args.event_sha))
+        print(validate_tag(Path.cwd(), args.tag, args.event_sha))
         return
     if args.operation == "project-metadata":
         print(f"version={project_metadata(args.tag, args.project)}")

@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -15,10 +16,13 @@ from pratfall.cli.shell_completion import (
     _DIR_FLAGS,
     _FILE_FLAGS,
     _TEMPLATE_FLAGS,
+    Loader,
     _complete,
     _rejoin_wordbreaks,
     _run_flags,
 )
+from pratfall.config import load_config
+from pratfall.models import Config, Profile
 
 PRATFILE = """version=1
 [profiles.simple]
@@ -35,8 +39,12 @@ prompt="Move $source to $target"
 """
 
 
+def loader(cwd: Path) -> Loader:
+    return lambda explicit: load_config(explicit, cwd=cwd, env=os.environ)
+
+
 def words(arguments: list[str], cwd: Path) -> list[str]:
-    result = _complete(arguments, cwd)
+    result = _complete(arguments, loader(cwd))
     assert result.mode == "words"
     return [word for word, _ in result.candidates]
 
@@ -257,10 +265,10 @@ def test_selector_slot_offers_agents_aliases_and_management(tmp_path: Path) -> N
 
 def test_selector_descriptions(tmp_path: Path) -> None:
     (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
-    candidates = dict(_complete(["c"], tmp_path).candidates)
+    candidates = dict(_complete(["c"], loader(tmp_path)).candidates)
     assert candidates["cc"] == "Claude Code"
     assert candidates["config"] == "Manage TOML configuration."
-    assert dict(_complete(["s"], tmp_path).candidates) == {"simple": "profile: claude"}
+    assert dict(_complete(["s"], loader(tmp_path)).candidates) == {"simple": "profile: claude"}
 
 
 def test_prefix_filters_and_sorts(tmp_path: Path) -> None:
@@ -334,7 +342,7 @@ def test_effort_without_selector_offers_every_known_value(tmp_path: Path) -> Non
 @pytest.mark.parametrize("flag", sorted(_DIR_FLAGS | _FILE_FLAGS))
 def test_path_flags_delegate_to_shell(flag: str, tmp_path: Path) -> None:
     expected = "dirs" if flag in _DIR_FLAGS else "files"
-    assert _complete(["cc", flag, ""], tmp_path).mode == expected
+    assert _complete(["cc", flag, ""], loader(tmp_path)).mode == expected
 
 
 @pytest.mark.parametrize("flag", ["--model", "--timeout"])
@@ -347,7 +355,7 @@ def test_equals_form_is_not_completed(tmp_path: Path) -> None:
 
 
 def test_native_arguments_delegate_to_shell(tmp_path: Path) -> None:
-    assert _complete(["cc", "hi", "--", "--x"], tmp_path).mode == "files"
+    assert _complete(["cc", "hi", "--", "--x"], loader(tmp_path)).mode == "files"
 
 
 @pytest.mark.parametrize(
@@ -455,7 +463,7 @@ def test_every_help_run_flag_is_completed_with_a_description() -> None:
 
 
 def candidates(arguments: list[str], cwd: Path) -> list[tuple[str, str]]:
-    result = _complete(arguments, cwd)
+    result = _complete(arguments, loader(cwd))
     assert result.mode == "words"
     return list(result.candidates)
 
@@ -482,12 +490,11 @@ def test_param_skips_names_bound_by_position(tmp_path: Path) -> None:
 
 def test_positional_after_all_parameters_bound_offers_nothing(tmp_path: Path) -> None:
     (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
-    assert _complete(["cleaner", "x", "sr"], tmp_path).mode == "files"
-    assert _complete(["cleaner", "x", "--param", "keep=y", "sr"], tmp_path).mode == "words"
-    assert _complete(["cleaner", "x", "y", "sr"], tmp_path).mode == "words"
-    assert _complete(["cleaner", "--param", "folder=x", "--param=keep=y", "sr"], tmp_path).mode == (
-        "words"
-    )
+    assert _complete(["cleaner", "x", "sr"], loader(tmp_path)).mode == "files"
+    assert _complete(["cleaner", "x", "--param", "keep=y", "sr"], loader(tmp_path)).mode == "words"
+    assert _complete(["cleaner", "x", "y", "sr"], loader(tmp_path)).mode == "words"
+    named = ["cleaner", "--param", "folder=x", "--param=keep=y", "sr"]
+    assert _complete(named, loader(tmp_path)).mode == "words"
 
 
 def test_param_offers_template_parameters_over_profile(tmp_path: Path) -> None:
@@ -513,9 +520,9 @@ def test_param_value_part_is_not_completed(tmp_path: Path) -> None:
 
 def test_positional_value_in_parameter_mode_completes_paths(tmp_path: Path) -> None:
     (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
-    assert _complete(["cleaner", "sr"], tmp_path).mode == "files"
-    assert _complete(["cc", "-t", "move", "sr"], tmp_path).mode == "files"
-    assert _complete(["cc", "-t", "review", "sr"], tmp_path).mode == "words"
+    assert _complete(["cleaner", "sr"], loader(tmp_path)).mode == "files"
+    assert _complete(["cc", "-t", "move", "sr"], loader(tmp_path)).mode == "files"
+    assert _complete(["cc", "-t", "review", "sr"], loader(tmp_path)).mode == "words"
 
 
 def test_bash_split_param_words_resolve_the_selector(tmp_path: Path) -> None:
@@ -610,5 +617,17 @@ steps = [
 
 def test_workflow_positional_slots_complete_files_while_unbound(tmp_path: Path) -> None:
     (tmp_path / ".pratfile").write_text(WORKFLOW_PRATFILE, encoding="utf-8")
-    assert _complete(["tidy", "sr"], tmp_path).mode == "files"
-    assert _complete(["tidy", "x", "sr"], tmp_path).mode == "words"
+    assert _complete(["tidy", "sr"], loader(tmp_path)).mode == "files"
+    assert _complete(["tidy", "x", "sr"], loader(tmp_path)).mode == "words"
+
+
+def test_completion_reads_profiles_and_config_path_through_the_loader() -> None:
+    requested: list[str | None] = []
+
+    def load(explicit: str | None) -> Config:
+        requested.append(explicit)
+        return Config(Path("x.toml"), profiles={"night": Profile("claude")})
+
+    result = _complete(["--config", "~/team.toml", "ni"], load)
+    assert result.candidates == (("night", "profile: claude"),)
+    assert requested == [str(Path("~/team.toml").expanduser())]

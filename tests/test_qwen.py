@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -111,7 +112,9 @@ def test_qwen_reserved_and_unknown_arguments(arguments: tuple[str, ...]) -> None
 )
 def test_qwen_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "qwen", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "qwen", options
+        )
 
 
 def test_qwen_independent_native_contract(

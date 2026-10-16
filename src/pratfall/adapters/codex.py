@@ -1,6 +1,7 @@
 import json
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from pratfall.adapters.native_args import Flag, fail_native_argument, validate_flags
 from pratfall.adapters.whole_json import session_text
@@ -18,50 +19,56 @@ from pratfall.schema import StructuredAnswer, parse_json, retain_answer
 
 _TURN_SLOTS = ("answer", "join", "answer_id", "turn")
 
-_ALLOWED = {
-    name: Flag(0)
-    for name in (
-        "--approve-for-me",
-        "--dangerously-bypass-approvals-and-sandbox",
-        "--dangerously-bypass-hook-trust",
-        "--ephemeral",
-        "--ignore-rules",
-        "--ignore-user-config",
-        "--oss",
-        "--skip-git-repo-check",
-        "--strict-config",
-    )
-} | {
-    name: Flag(1, joined=name in {"-c", "-i", "-p", "-s"})
-    for name in (
-        "--add-dir",
-        "--config",
-        "-c",
-        "--disable",
-        "--enable",
-        "--image",
-        "-i",
-        "--local-provider",
-        "--output-schema",
-        "--profile",
-        "-p",
-        "--sandbox",
-        "-s",
-        "--thread-source",
-    )
-}
-_RESERVED = {name: Flag(0) for name in ("--json",)} | {
-    name: Flag(1, joined=name in {"-C", "-m", "-o"})
-    for name in (
-        "--cd",
-        "-C",
-        "--color",
-        "--model",
-        "-m",
-        "--output-last-message",
-        "-o",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--approve-for-me",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "--dangerously-bypass-hook-trust",
+            "--ephemeral",
+            "--ignore-rules",
+            "--ignore-user-config",
+            "--oss",
+            "--skip-git-repo-check",
+            "--strict-config",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-c", "-i", "-p", "-s"})
+        for name in (
+            "--add-dir",
+            "--config",
+            "-c",
+            "--disable",
+            "--enable",
+            "--image",
+            "-i",
+            "--local-provider",
+            "--output-schema",
+            "--profile",
+            "-p",
+            "--sandbox",
+            "-s",
+            "--thread-source",
+        )
+    }
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {name: Flag(0) for name in ("--json",)}
+    | {
+        name: Flag(1, joined=name in {"-C", "-m", "-o"})
+        for name in (
+            "--cd",
+            "-C",
+            "--color",
+            "--model",
+            "-m",
+            "--output-last-message",
+            "-o",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
@@ -80,8 +87,7 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("-c", f"service_tier={json.dumps(service_tier)}"))
     for directory in resolved.options.add_dirs or ():
         argv.extend(("--add-dir", directory))
-    for attachment in resolved.options.attachments or ():
-        argv.append(f"--image={attachment}")
+    argv.extend(f"--image={attachment}" for attachment in resolved.options.attachments or ())
     if resolved.prepared_schema is not None:
         if resolved.prepared_schema.path is None:
             raise ValueError("Prepared schema requires a file snapshot.")
@@ -94,7 +100,7 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    reserved = _RESERVED | (
+    reserved = dict(_RESERVED) | (
         {"--add-dir": _ALLOWED["--add-dir"]} if resolved.options.add_dirs else {}
     )
     if resolved.options.schema is not None:

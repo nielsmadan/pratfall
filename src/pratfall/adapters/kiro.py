@@ -1,39 +1,48 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile
 
-_ALLOWED = {
-    name: Flag(0)
-    for name in (
-        "--require-mcp-startup",
-        "--trust-all-tools",
-        "--verbose",
-        "-v",
-        "-vv",
-        "-vvv",
-    )
-} | {name: Flag(1) for name in ("--agent", "--trust-tools")}
-_RESERVED = {
-    name: Flag(0)
-    for name in (
-        "--list-models",
-        "--list-sessions",
-        "--no-interactive",
-        "--resume",
-        "--resume-picker",
-        "-r",
-    )
-} | {
-    name: Flag(1)
-    for name in (
-        "--delete-session",
-        "--effort",
-        "--engine",
-        "--model",
-        "--output-format",
-        "--resume-id",
-        "--wrap",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--require-mcp-startup",
+            "--trust-all-tools",
+            "--verbose",
+            "-v",
+            "-vv",
+            "-vvv",
+        )
+    }
+    | {name: Flag(1) for name in ("--agent", "--trust-tools")}
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--list-models",
+            "--list-sessions",
+            "--no-interactive",
+            "--resume",
+            "--resume-picker",
+            "-r",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--delete-session",
+            "--effort",
+            "--engine",
+            "--model",
+            "--output-format",
+            "--resume-id",
+            "--wrap",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:

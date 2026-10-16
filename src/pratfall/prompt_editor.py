@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import termios
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
@@ -15,11 +15,11 @@ from pratfall.limits import FINAL_DRAIN_GRACE, TERMINATE_GRACE
 from pratfall.prompt_input import InputInterrupted, read_edited_prompt
 
 
-def edit_prompt(draft: bytes, invocation_cwd: Path) -> bytes:
+def edit_prompt(draft: bytes, invocation_cwd: Path, environ: Mapping[str, str]) -> bytes:
     state = InterruptionState()
     with handling(handler_for(state)):
         try:
-            command = _editor_command()
+            command = _editor_command(environ)
             with tempfile.TemporaryDirectory(prefix="prat-edit-") as directory:
                 with tempfile.NamedTemporaryFile(dir=directory, suffix=".md", delete=False) as file:
                     file.write(draft)
@@ -33,9 +33,9 @@ def edit_prompt(draft: bytes, invocation_cwd: Path) -> bytes:
                 raise InputInterrupted(state.received)
 
 
-def _editor_command() -> list[str]:
+def _editor_command(environ: Mapping[str, str]) -> list[str]:
     value = next(
-        (value for name in ("VISUAL", "EDITOR") if (value := os.environ.get(name, "")).strip()),
+        (value for name in ("VISUAL", "EDITOR") if (value := environ.get(name, "")).strip()),
         "vi",
     )
     command = shlex.split(value)

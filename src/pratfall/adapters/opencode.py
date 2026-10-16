@@ -1,6 +1,7 @@
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from pratfall.adapters.accounting import cost
 from pratfall.adapters.native_args import Flag, validate_flags
@@ -15,42 +16,48 @@ from pratfall.consumer import (
 from pratfall.limits import NUMERIC_BYTES
 from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
-_ALLOWED = {
-    name: Flag(0)
-    for name in (
-        "--auto",
-        "--dangerously-skip-permissions",
-        "--print-logs",
-        "--pure",
-        "--thinking",
-        "--yolo",
-    )
-} | {
-    name: Flag(1, joined=name == "-f")
-    for name in ("--agent", "--file", "-f", "--log-level", "--title")
-}
-_RESERVED = {
-    name: Flag(0, joined=name in {"-c", "-i"})
-    for name in ("--continue", "-c", "--fork", "--interactive", "-i", "--share")
-} | {
-    name: Flag(1, joined=name in {"-m", "-p", "-s", "-u"})
-    for name in (
-        "--attach",
-        "--command",
-        "--dir",
-        "--format",
-        "-m",
-        "--model",
-        "-p",
-        "--password",
-        "--port",
-        "-s",
-        "--session",
-        "-u",
-        "--username",
-        "--variant",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--auto",
+            "--dangerously-skip-permissions",
+            "--print-logs",
+            "--pure",
+            "--thinking",
+            "--yolo",
+        )
+    }
+    | {
+        name: Flag(1, joined=name == "-f")
+        for name in ("--agent", "--file", "-f", "--log-level", "--title")
+    }
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0, joined=name in {"-c", "-i"})
+        for name in ("--continue", "-c", "--fork", "--interactive", "-i", "--share")
+    }
+    | {
+        name: Flag(1, joined=name in {"-m", "-p", "-s", "-u"})
+        for name in (
+            "--attach",
+            "--command",
+            "--dir",
+            "--format",
+            "-m",
+            "--model",
+            "-p",
+            "--password",
+            "--port",
+            "-s",
+            "--session",
+            "-u",
+            "--username",
+            "--variant",
+        )
+    }
+)
 _FAILURE_REASONS = frozenset({"length", "content-filter", "error", "unknown"})
 _MESSAGELESS_ERRORS = frozenset({"MessageOutputLengthError"})
 
@@ -62,14 +69,13 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--model", resolved.options.model))
     if resolved.options.effort is not None:
         argv.extend(("--variant", resolved.options.effort))
-    for attachment in resolved.options.attachments or ():
-        argv.append(f"--file={attachment}")
+    argv.extend(f"--file={attachment}" for attachment in resolved.options.attachments or ())
     argv.extend(arguments)
     return Invocation(tuple(argv), prompt)
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    reserved = _RESERVED | (
+    reserved = dict(_RESERVED) | (
         {name: _ALLOWED[name] for name in ("--file", "-f")} if resolved.options.attachments else {}
     )
     validate_flags("OpenCode", resolved.options.native_args or (), _ALLOWED, reserved)

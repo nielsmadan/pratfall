@@ -1,4 +1,3 @@
-import fcntl
 import json
 import os
 import shlex
@@ -126,23 +125,13 @@ class _ProgressDiagnostics:
     def __init__(self) -> None:
         self.failed = False
         self.fd: int | None = None
-        self.flags = 0
 
     def open(self) -> None:
-        if self.fd is not None:
-            return
-        descriptor = sys.stderr.fileno()
-        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
-        fcntl.fcntl(descriptor, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-        self.fd = descriptor
-        self.flags = flags
+        if self.fd is None:
+            self.fd = sys.stderr.fileno()
 
     def close(self) -> None:
-        descriptor, self.fd = self.fd, None
-        if descriptor is None:
-            return
-        with suppress(OSError):
-            fcntl.fcntl(descriptor, fcntl.F_SETFL, self.flags)
+        self.fd = None
 
     def progress_callback(self) -> Callable[[int, Activity], None] | None:
         return self.progress

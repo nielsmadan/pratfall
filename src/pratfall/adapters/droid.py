@@ -1,41 +1,47 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
 from pratfall.adapters.whole_json import document_error, encoding_error, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
 
-_ALLOWED = {"--auto": Flag(1)}
-_RESERVED = {
-    name: Flag(0)
-    for name in ("--use-spec", "--mission", "--list-tools", "--skip-permissions-unsafe")
-} | {
-    name: Flag(1, joined=name in {"-o", "-f", "-s", "-m", "-r", "-w"})
-    for name in (
-        "--prompt",
-        "--file",
-        "-f",
-        "--input-format",
-        "--output-format",
-        "-o",
-        "--model",
-        "-m",
-        "--reasoning-effort",
-        "-r",
-        "--spec-model",
-        "--spec-reasoning-effort",
-        "--session-id",
-        "-s",
-        "--fork",
-        "--cwd",
-        "--config",
-        "--worktree",
-        "-w",
-        "--worktree-dir",
-        "--worker-model",
-        "--worker-reasoning-effort",
-        "--validator-model",
-        "--validator-reasoning-effort",
-        "--remote",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType({"--auto": Flag(1)})
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in ("--use-spec", "--mission", "--list-tools", "--skip-permissions-unsafe")
+    }
+    | {
+        name: Flag(1, joined=name in {"-o", "-f", "-s", "-m", "-r", "-w"})
+        for name in (
+            "--prompt",
+            "--file",
+            "-f",
+            "--input-format",
+            "--output-format",
+            "-o",
+            "--model",
+            "-m",
+            "--reasoning-effort",
+            "-r",
+            "--spec-model",
+            "--spec-reasoning-effort",
+            "--session-id",
+            "-s",
+            "--fork",
+            "--cwd",
+            "--config",
+            "--worktree",
+            "-w",
+            "--worktree-dir",
+            "--worker-model",
+            "--worker-reasoning-effort",
+            "--validator-model",
+            "--validator-reasoning-effort",
+            "--remote",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
@@ -55,7 +61,7 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    reserved = _RESERVED.copy()
+    reserved = dict(_RESERVED)
     if resolved.options.instructions is not None or resolved.options.instructions_file is not None:
         reserved |= {"--append-system-prompt": Flag(1), "--append-system-prompt-file": Flag(1)}
     validate_tool_values(resolved.options.tools, "tools", comma=True, whitespace=True, trim=True)

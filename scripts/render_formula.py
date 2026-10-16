@@ -11,15 +11,14 @@ FORMULA_VERSION_PATTERN = re.compile(
 )
 
 
-def render(version: str, sha256: str, template: Path) -> str:
+def render(version: str, sha256: str, template: str) -> str:
     if not VERSION_PATTERN.fullmatch(version):
         raise ValueError(f"Invalid release version: {version!r}")
     if not SHA256_PATTERN.fullmatch(sha256):
         raise ValueError("Source SHA256 must be 64 lowercase hexadecimal characters.")
-    content = template.read_text()
-    if content.count("{{VERSION}}") != 1 or content.count("{{SHA256}}") != 1:
+    if template.count("{{VERSION}}") != 1 or template.count("{{SHA256}}") != 1:
         raise ValueError("Formula template must contain one version and one SHA256 placeholder.")
-    return content.replace("{{VERSION}}", version).replace("{{SHA256}}", sha256)
+    return template.replace("{{VERSION}}", version).replace("{{SHA256}}", sha256)
 
 
 def installed_version(content: str) -> tuple[int, int, int]:
@@ -30,7 +29,7 @@ def installed_version(content: str) -> tuple[int, int, int]:
     return int(major), int(minor), int(patch)
 
 
-def render_file(version: str, sha256: str, template: Path, output: Path) -> bool:
+def render_file(version: str, sha256: str, template: str, output: Path) -> bool:
     if not VERSION_PATTERN.fullmatch(version):
         raise ValueError(f"Invalid release version: {version!r}")
     if not SHA256_PATTERN.fullmatch(sha256):
@@ -52,7 +51,7 @@ def main() -> None:
     rendered = render_file(
         sys.argv[1],
         sys.argv[2],
-        root / "packaging/homebrew/pratfall.rb.tmpl",
+        (root / "packaging/homebrew/pratfall.rb.tmpl").read_text(),
         output,
     )
     print("rendered" if rendered else "skipped-newer")

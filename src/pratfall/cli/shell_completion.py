@@ -2,9 +2,10 @@ import os
 import re
 import shlex
 import sys
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal
 
 from pratfall.catalog import AGENTS, BY_NAME, BY_SELECTOR, MANAGEMENT_COMMANDS
@@ -76,20 +77,25 @@ _FILE_FLAGS = frozenset(
     {"-f", "--file", "--context", "--schema", "--attach", "--instructions-file", "--config"}
 )
 _TEMPLATE_FLAGS = frozenset({"-t", "--template"})
-_TOP_LEVEL_FLAGS = {
-    "-h": "Show help and exit.",
-    "--help": "Show help and exit.",
-    "--version": "Show the version and exit.",
-}
-_MANAGEMENT_FLAGS = {
-    "--config": "Merge PATH over global config instead of .pratfile.",
-    "--json": "Print a JSON management result.",
-    "-h": "Show help and exit.",
-    "--help": "Show help and exit.",
-}
+_TOP_LEVEL_FLAGS: Mapping[str, str] = MappingProxyType(
+    {
+        "-h": "Show help and exit.",
+        "--help": "Show help and exit.",
+        "--version": "Show the version and exit.",
+    }
+)
+_MANAGEMENT_FLAGS: Mapping[str, str] = MappingProxyType(
+    {
+        "--config": "Merge PATH over global config instead of .pratfile.",
+        "--json": "Print a JSON management result.",
+        "-h": "Show help and exit.",
+        "--help": "Show help and exit.",
+    }
+)
 
 Mode = Literal["words", "files", "dirs"]
 Candidate = tuple[str, str]
+Loader = Callable[[str | None], Config]
 
 
 @dataclass(frozen=True)
@@ -110,9 +116,12 @@ def _completion_script(shell: str | None, environ: Mapping[str, str]) -> str:
     )
 
 
-def _complete_command(words: Sequence[str]) -> int:
+def _complete_command(words: Sequence[str], environ: Mapping[str, str]) -> int:
+    def load(explicit: str | None) -> Config:
+        return load_config(explicit, cwd=Path.cwd(), env=environ)
+
     try:
-        result = _complete(words, Path.cwd())
+        result = _complete(words, load)
     except Exception:  # noqa: BLE001 - completion must stay silent and never fail the shell
         result = _Completion("words")
     lines = [
@@ -123,14 +132,14 @@ def _complete_command(words: Sequence[str]) -> int:
     return 0
 
 
-def _complete(words: Sequence[str], cwd: Path) -> _Completion:
+def _complete(words: Sequence[str], load: Loader) -> _Completion:
     *preceding, current = _rejoin_wordbreaks(words) or [""]
     scan = _scan_run(preceding)
     if scan.native_arguments is not None:
         return _Completion("files")
     last = scan.tokens[-1] if scan.tokens else None
     if last is not None and last.name in _RUN_VALUE_FLAGS and last.value is None:
-        return _value_slot(last.name, preceding, current, cwd)
+        return _value_slot(last.name, preceding, current, load)
     if current.startswith("-") and "=" in current:
         return _Completion("words")
     positionals = _positionals(preceding)
@@ -138,12 +147,12 @@ def _complete(words: Sequence[str], cwd: Path) -> _Completion:
         if current.startswith("-"):
             return _words(current, {**_run_flags(), **_TOP_LEVEL_FLAGS}.items())
         management = _management_mode(preceding)
-        return _words(current, _selectors(preceding, cwd, management=management))
+        return _words(current, _selectors(preceding, load, management=management))
     if positionals[0] in MANAGEMENT_COMMANDS and _management_mode(preceding):
         return _management(positionals[0], positionals[1:], current)
     if current.startswith("-"):
         return _words(current, _run_flags().items())
-    return _Completion("files" if _unbound_parameters(preceding, cwd) else "words")
+    return _Completion("files" if _unbound_parameters(preceding, load) else "words")
 
 
 def _rejoin_wordbreaks(words: Sequence[str]) -> list[str]:
@@ -176,26 +185,26 @@ def _positionals(arguments: list[str]) -> list[str]:
     ]
 
 
-def _value_slot(flag: str, preceding: list[str], current: str, cwd: Path) -> _Completion:
+def _value_slot(flag: str, preceding: list[str], current: str, load: Loader) -> _Completion:
     if flag in _DIR_FLAGS:
         return _Completion("dirs")
     if flag in _FILE_FLAGS:
         return _Completion("files")
     if flag in _TEMPLATE_FLAGS:
-        config = _load(preceding, cwd)
+        config = _config_for(preceding, load)
         templates = config.templates if config is not None else {}
         return _words(current, ((name, "template") for name in templates))
     if flag == "--param":
         if "=" in current:
             return _Completion("words")
-        names = _unbound_parameters(preceding, cwd)
+        names = _unbound_parameters(preceding, load)
         return _words(current, ((f"{name}=", "parameter") for name in names))
     if flag == "--effort":
-        return _words(current, ((value, "") for value in _efforts(preceding, cwd)))
+        return _words(current, ((value, "") for value in _efforts(preceding, load)))
     return _Completion("words")
 
 
-def _unbound_parameters(preceding: list[str], cwd: Path) -> list[str]:
+def _unbound_parameters(preceding: list[str], load: Loader) -> list[str]:
     by_position = max(len(_positionals(preceding)) - 1, 0)
     by_name = {
         token.value.partition("=")[0]
@@ -203,12 +212,12 @@ def _unbound_parameters(preceding: list[str], cwd: Path) -> list[str]:
         if token.name == "--param" and token.value is not None
     }
     return [
-        name for name in _active_parameters(preceding, cwd)[by_position:] if name not in by_name
+        name for name in _active_parameters(preceding, load)[by_position:] if name not in by_name
     ]
 
 
-def _active_parameters(preceding: list[str], cwd: Path) -> tuple[str, ...]:
-    config = _load(preceding, cwd)
+def _active_parameters(preceding: list[str], load: Loader) -> tuple[str, ...]:
+    config = _config_for(preceding, load)
     if config is None:
         return ()
     names = [
@@ -229,21 +238,21 @@ def _active_parameters(preceding: list[str], cwd: Path) -> tuple[str, ...]:
     return template_parameters(profile.prompt.prompt)
 
 
-def _efforts(preceding: list[str], cwd: Path) -> tuple[str, ...]:
+def _efforts(preceding: list[str], load: Loader) -> tuple[str, ...]:
     positionals = _positionals(preceding)
     if positionals and positionals[0] in BY_SELECTOR:
         return BY_SELECTOR[positionals[0]].capabilities.effort_values
-    config = _load(preceding, cwd) if positionals else None
+    config = _config_for(preceding, load) if positionals else None
     if config is not None and positionals[0] in config.profiles:
         return BY_NAME[config.profiles[positionals[0]].agent].capabilities.effort_values
     return tuple(dict.fromkeys(v for agent in AGENTS for v in agent.capabilities.effort_values))
 
 
-def _selectors(preceding: list[str], cwd: Path, *, management: bool) -> list[Candidate]:
+def _selectors(preceding: list[str], load: Loader, *, management: bool) -> list[Candidate]:
     candidates = [
         (selector, agent.label) for agent in AGENTS for selector in (agent.name, *agent.aliases)
     ]
-    config = _load(preceding, cwd)
+    config = _config_for(preceding, load)
     if config is not None:
         candidates.extend(
             (name, f"profile: {profile.agent}") for name, profile in config.profiles.items()
@@ -256,13 +265,7 @@ def _selectors(preceding: list[str], cwd: Path, *, management: bool) -> list[Can
 
 def _management(command: str, rest: list[str], current: str) -> _Completion:
     if current.startswith("-"):
-        if command == "completion":
-            flags = {key: _MANAGEMENT_FLAGS[key] for key in ("-h", "--help")}
-        elif command == "doctor":
-            flags = {**_MANAGEMENT_FLAGS, "--versions": "Also run each agent's version command."}
-        else:
-            flags = _MANAGEMENT_FLAGS
-        return _words(current, flags.items())
+        return _words(current, _management_flags(command).items())
     if not rest and command == "config":
         return _words(current, _CONFIG_COMMAND_HELP.items())
     if not rest and command == "completion":
@@ -270,15 +273,25 @@ def _management(command: str, rest: list[str], current: str) -> _Completion:
     return _Completion("words")
 
 
-def _load(preceding: list[str], cwd: Path) -> Config | None:
-    explicit = None
-    for token in _scan_run(preceding).tokens:
-        if token.name == "--config" and token.value is not None:
-            explicit = token.value
+def _management_flags(command: str) -> Mapping[str, str]:
+    if command == "completion":
+        return {key: _MANAGEMENT_FLAGS[key] for key in ("-h", "--help")}
+    if command == "doctor":
+        return {**_MANAGEMENT_FLAGS, "--versions": "Also run each agent's version command."}
+    return _MANAGEMENT_FLAGS
+
+
+def _config_for(preceding: list[str], load: Loader) -> Config | None:
+    explicit = next(
+        (
+            token.value
+            for token in reversed(_scan_run(preceding).tokens)
+            if token.name == "--config" and token.value is not None
+        ),
+        None,
+    )
     try:
-        if explicit is not None:
-            explicit = os.path.expanduser(shlex.split(explicit)[0])
-        return load_config(explicit, cwd=cwd)
+        return load(os.path.expanduser(shlex.split(explicit)[0]) if explicit is not None else None)
     except Exception:  # noqa: BLE001 - an unreadable config only hides its names
         return None
 
@@ -291,13 +304,13 @@ def _run_flags() -> dict[str, str]:
 
 def _run_flag_help() -> dict[str, str]:
     section = _EPILOG.split("run options:\n", 1)[1].split("\n\n", 1)[0]
-    help_text: dict[str, str] = {}
-    for line in section.splitlines():
-        match = re.fullmatch(r"  (-\S.*?)\s{2,}(\S.*)", line)
-        if match is not None:
-            for flag in re.findall(r"--?[a-z][\w-]*=?", match[1]):
-                help_text[flag] = match[2]
-    return help_text
+    matches = (re.fullmatch(r"  (-\S.*?)\s{2,}(\S.*)", line) for line in section.splitlines())
+    return {
+        flag: match[2]
+        for match in matches
+        if match is not None
+        for flag in re.findall(r"--?[a-z][\w-]*=?", match[1])
+    }
 
 
 def _words(current: str, candidates: Iterable[Candidate]) -> _Completion:

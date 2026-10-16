@@ -1,54 +1,63 @@
-from pratfall.adapters.accounting import model_map
+from collections.abc import Mapping
+from types import MappingProxyType
+
+from pratfall.adapters.accounting import model_map, split_error
 from pratfall.adapters.native_args import Flag, validate_directory_values, validate_flags
 from pratfall.adapters.whole_json import document_error, encodable_text, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError, Usage
 
-_ALLOWED = {
-    name: Flag(0)
-    for name in (
-        "--debug",
-        "-d",
-        "--sandbox",
-        "-s",
-        "--screen-reader",
-        "--skip-trust",
-        "--yolo",
-        "-y",
-    )
-} | {
-    name: Flag(1)
-    for name in (
-        "--admin-policy",
-        "--allowed-mcp-server-names",
-        "--allowed-tools",
-        "--approval-mode",
-        "--extensions",
-        "-e",
-        "--include-directories",
-        "--policy",
-    )
-}
-_RESERVED = {
-    name: Flag(0, joined=name == "-p")
-    for name in ("--acp", "--experimental-acp", "-p", "--list-sessions")
-} | {
-    name: Flag(1, joined=name in {"-i", "-m", "-o", "-r", "-w"})
-    for name in (
-        "--delete-session",
-        "--input-format",
-        "-i",
-        "-m",
-        "--model",
-        "-o",
-        "--output-format",
-        "--prompt",
-        "--prompt-interactive",
-        "-r",
-        "--resume",
-        "--worktree",
-        "-w",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--debug",
+            "-d",
+            "--sandbox",
+            "-s",
+            "--screen-reader",
+            "--skip-trust",
+            "--yolo",
+            "-y",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--admin-policy",
+            "--allowed-mcp-server-names",
+            "--allowed-tools",
+            "--approval-mode",
+            "--extensions",
+            "-e",
+            "--include-directories",
+            "--policy",
+        )
+    }
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0, joined=name == "-p")
+        for name in ("--acp", "--experimental-acp", "-p", "--list-sessions")
+    }
+    | {
+        name: Flag(1, joined=name in {"-i", "-m", "-o", "-r", "-w"})
+        for name in (
+            "--delete-session",
+            "--input-format",
+            "-i",
+            "-m",
+            "--model",
+            "-o",
+            "--output-format",
+            "--prompt",
+            "--prompt-interactive",
+            "-r",
+            "--resume",
+            "--worktree",
+            "-w",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
@@ -65,7 +74,7 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 def validate(resolved: ResolvedProfile) -> None:
     validate_directory_values(resolved.options.add_dirs or ())
-    reserved = _RESERVED | (
+    reserved = dict(_RESERVED) | (
         {"--include-directories": _ALLOWED["--include-directories"]}
         if resolved.options.add_dirs
         else {}
@@ -89,12 +98,7 @@ def decode(stdout: str) -> DecodedOutput:
             error=ResultError("protocol_error", "Gemini response must be a string when present."),
         )
     output = encodable_text(output) if output is not None else None
-    usage = _usage(stats) if "stats" in value else None
-    if isinstance(usage, ResultError):
-        usage_error: ResultError | None = usage
-        usage = None
-    else:
-        usage_error = None
+    usage, usage_error = split_error(_usage(stats) if "stats" in value else None)
     native_error = value.get("error")
     provider_error = _provider_error(native_error) if "error" in value else None
     if provider_error is not None:

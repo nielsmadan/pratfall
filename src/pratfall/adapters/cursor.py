@@ -1,43 +1,52 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.adapters.whole_json import document_error, encodable_text, parse, session_text
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
 
-_ALLOWED = {
-    name: Flag(0)
-    for name in (
-        "--approve-mcps",
-        "--force",
-        "-f",
-        "--plan",
-        "--skip-worktree-setup",
-        "--trust",
-        "--yolo",
-    )
-} | {
-    name: Flag(1, joined=name == "-H")
-    for name in (
-        "--header",
-        "-H",
-        "--mode",
-        "--plugin-dir",
-        "--sandbox",
-        "--worktree-base",
-    )
-}
-_RESERVED = {
-    name: Flag(0, joined=name == "-p")
-    for name in ("--continue", "-p", "--print", "--stream-partial-output")
-} | {
-    name: Flag(1, joined=name == "-w")
-    for name in (
-        "--model",
-        "--output-format",
-        "--resume",
-        "--workspace",
-        "--worktree",
-        "-w",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in (
+            "--approve-mcps",
+            "--force",
+            "-f",
+            "--plan",
+            "--skip-worktree-setup",
+            "--trust",
+            "--yolo",
+        )
+    }
+    | {
+        name: Flag(1, joined=name == "-H")
+        for name in (
+            "--header",
+            "-H",
+            "--mode",
+            "--plugin-dir",
+            "--sandbox",
+            "--worktree-base",
+        )
+    }
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0, joined=name == "-p")
+        for name in ("--continue", "-p", "--print", "--stream-partial-output")
+    }
+    | {
+        name: Flag(1, joined=name == "-w")
+        for name in (
+            "--model",
+            "--output-format",
+            "--resume",
+            "--workspace",
+            "--worktree",
+            "-w",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:

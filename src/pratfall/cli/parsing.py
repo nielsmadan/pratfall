@@ -1,9 +1,11 @@
 import argparse
 import math
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
+from types import MappingProxyType
 from typing import NoReturn
 
 from pratfall.catalog import MANAGEMENT_COMMANDS
@@ -13,61 +15,72 @@ from pratfall.instructions import validate_instructions
 from pratfall.models import MAX_TURNS, OptionOrigin, Options
 from pratfall.prompt_input import PromptSource
 
-_TRI_STATE_FLAGS = {
-    "--fast": ("fast", True, "--fast and --no-fast"),
-    "--no-fast": ("fast", False, "--fast and --no-fast"),
-    "--notify": ("notify", True, "--notify and --no-notify"),
-    "--no-notify": ("notify", False, "--notify and --no-notify"),
-}
+_TRI_STATE_FLAGS: Mapping[str, tuple[str, bool, str]] = MappingProxyType(
+    {
+        "--fast": ("fast", True, "--fast and --no-fast"),
+        "--no-fast": ("fast", False, "--fast and --no-fast"),
+        "--notify": ("notify", True, "--notify and --no-notify"),
+        "--no-notify": ("notify", False, "--notify and --no-notify"),
+    }
+)
+
 
 _RUN_SWITCHES = frozenset(
     {"--json", "--dry-run", "--progress", "--trace", "-x", "--extract", "-e", "--edit"}
 )
 _RUN_FLAGS_WITHOUT_VALUE = _RUN_SWITCHES | frozenset(_TRI_STATE_FLAGS)
 
-_MANAGEMENT_HELP = {
-    "agents": "List built-in agent selectors and supported settings.",
-    "profiles": "List configured profiles and their resolved settings.",
-    "templates": "List configured prompt templates.",
-    "workflows": "List configured workflows and their steps.",
-    "doctor": "Locate agent executables without running them or checking credentials.",
-    "config": "Manage TOML configuration.",
-    "completion": "Print bash or zsh completion code to eval from a shell rc file.",
-}
+_MANAGEMENT_HELP: Mapping[str, str] = MappingProxyType(
+    {
+        "agents": "List built-in agent selectors and supported settings.",
+        "profiles": "List configured profiles and their resolved settings.",
+        "templates": "List configured prompt templates.",
+        "workflows": "List configured workflows and their steps.",
+        "doctor": "Locate agent executables without running them or checking credentials.",
+        "config": "Manage TOML configuration.",
+        "completion": "Print bash or zsh completion code to eval from a shell rc file.",
+    }
+)
 
-_CONFIG_COMMAND_HELP = {
-    "path": "Print the global config path, or --config PATH.",
-    "init": "Create an example config; fail if the path already exists.",
-    "validate": (
-        "Validate every configured profile, template and workflow without launching an agent."
-    ),
-}
 
-_RUN_VALUE_FLAGS = {
-    "--config": "config",
-    "--cwd": "cwd",
-    "--effort": "effort",
-    "--max-ai-credits": "max_ai_credits",
-    "--max-budget-usd": "max_budget_usd",
-    "--max-turns": "max_turns",
-    "--model": "model",
-    "--schema": "schema",
-    "--native-agent": "native_agent",
-    "--session-id": "session_id",
-    "--timeout": "timeout",
-    "--file": "file",
-    "-f": "file",
-    "--context": "context",
-    "--add-dir": "add_dirs",
-    "--attach": "attachments",
-    "--tools": "tools",
-    "--disable-tools": "disabled_tools",
-    "--instructions": "instructions",
-    "--instructions-file": "instructions_file",
-    "--template": "template",
-    "-t": "template",
-    "--param": "parameters",
-}
+_CONFIG_COMMAND_HELP: Mapping[str, str] = MappingProxyType(
+    {
+        "path": "Print the global config path, or --config PATH.",
+        "init": "Create an example config; fail if the path already exists.",
+        "validate": (
+            "Validate every configured profile, template and workflow without launching an agent."
+        ),
+    }
+)
+
+
+_RUN_VALUE_FLAGS: Mapping[str, str] = MappingProxyType(
+    {
+        "--config": "config",
+        "--cwd": "cwd",
+        "--effort": "effort",
+        "--max-ai-credits": "max_ai_credits",
+        "--max-budget-usd": "max_budget_usd",
+        "--max-turns": "max_turns",
+        "--model": "model",
+        "--schema": "schema",
+        "--native-agent": "native_agent",
+        "--session-id": "session_id",
+        "--timeout": "timeout",
+        "--file": "file",
+        "-f": "file",
+        "--context": "context",
+        "--add-dir": "add_dirs",
+        "--attach": "attachments",
+        "--tools": "tools",
+        "--disable-tools": "disabled_tools",
+        "--instructions": "instructions",
+        "--instructions-file": "instructions_file",
+        "--template": "template",
+        "-t": "template",
+        "--param": "parameters",
+    }
+)
 
 _WORKFLOW_FLAGS = frozenset(
     {
@@ -248,22 +261,13 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     selector: str | None = None
     words: list[str] = []
     prompt_source: PromptSource | None = None
-    json_mode = False
-    dry_run = False
-    progress = False
-    trace = False
-    extract = False
-    edit = False
+    switches = {token.argument for token in scan.tokens} & _RUN_SWITCHES
+    dry_run = "--dry-run" in switches
+    edit = bool(switches & {"-e", "--edit"})
     tri_state: dict[str, bool | None] = {"fast": None, "notify": None}
     for token in scan.tokens:
         argument = token.argument
         if argument in _RUN_SWITCHES:
-            json_mode = json_mode or argument == "--json"
-            dry_run = dry_run or argument == "--dry-run"
-            progress = progress or argument == "--progress"
-            trace = trace or argument == "--trace"
-            extract = extract or argument in {"-x", "--extract"}
-            edit = edit or argument in {"-e", "--edit"}
             continue
         tri_state_flag = _TRI_STATE_FLAGS.get(argument)
         if tri_state_flag is not None:
@@ -311,14 +315,14 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         prompt_source,
         _text_option(values.get("config"), "--config"),
         _text_option(values.get("cwd"), "--cwd"),
-        json_mode,
+        "--json" in switches,
         dry_run,
         options,
-        progress,
-        trace,
+        "--progress" in switches,
+        "--trace" in switches,
         _text_option(values.get("template"), "--template"),
         tuple(contexts),
-        extract,
+        bool(switches & {"-x", "--extract"}),
         edit,
         tuple(words),
         tuple(repeated["parameters"]),

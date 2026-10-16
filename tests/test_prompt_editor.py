@@ -53,7 +53,7 @@ try:
         report['code'] = main(request['args'])
     else:
         try:
-            report['value'] = edit_prompt(request.get('draft', 'draft').encode(), Path.cwd()).decode()
+            report['value'] = edit_prompt(request.get('draft', 'draft').encode(), Path.cwd(), os.environ).decode()
             report['code'] = 0
         except InputInterrupted as error:
             report.update(code=128 + error.signum, error=str(error))
@@ -202,21 +202,18 @@ def test_editor_startup_terminal_read_race(tmp_path: Path) -> None:
         ("", " \n", ["vi"]),
     ],
 )
-def test_editor_environment_precedence(
-    monkeypatch: pytest.MonkeyPatch, visual: str, editor: str, expected: list[str]
-) -> None:
-    monkeypatch.setenv("VISUAL", visual)
-    monkeypatch.setenv("EDITOR", editor)
-    assert prompt_editor._editor_command() == expected
+def test_editor_environment_precedence(visual: str, editor: str, expected: list[str]) -> None:
+    assert prompt_editor._editor_command({"VISUAL": visual, "EDITOR": editor}) == expected
+
+
+def test_editor_defaults_to_vi_without_editor_variables() -> None:
+    assert prompt_editor._editor_command({}) == ["vi"]
 
 
 @pytest.mark.parametrize("command", ['"', "''"])
-def test_invalid_editor_command_is_normalized(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str
-) -> None:
-    monkeypatch.setenv("VISUAL", command)
+def test_invalid_editor_command_is_normalized(tmp_path: Path, command: str) -> None:
     with pytest.raises(PratError):
-        prompt_editor.edit_prompt(b"draft", tmp_path)
+        prompt_editor.edit_prompt(b"draft", tmp_path, {"VISUAL": command})
 
 
 @pytest.mark.parametrize(

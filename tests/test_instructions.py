@@ -93,7 +93,7 @@ def test_instruction_fake_process_receives_literal_argv_and_prompt(
 def test_four_layer_instruction_group_replaces_value_and_origin(
     first_file: bool, tmp_path: Path
 ) -> None:
-    global_path = config_path()
+    global_path = config_path(cwd=Path.cwd(), env=os.environ)
     global_path.parent.mkdir(parents=True)
     local = tmp_path / "local" / "config.toml"
     local.parent.mkdir()
@@ -104,7 +104,7 @@ def test_four_layer_instruction_group_replaces_value_and_origin(
     )
     global_path.write_text(f'version=1\n[defaults]\n{global_field}="global"\n')
     local.write_text(f'version=1\n[defaults]\n{local_field}="local"\n')
-    config = load_config(local)
+    config = load_config(local, cwd=Path.cwd(), env=os.environ)
     resolved = resolve_profile(config, "cx")
     assert getattr(resolved.options, global_field) is None
     expected = str(local.parent / "local") if local_field == "instructions_file" else "local"
@@ -114,7 +114,7 @@ def test_four_layer_instruction_group_replaces_value_and_origin(
     local.write_text(
         local.read_text() + f'[profiles.work]\nagent="codex"\n{global_field}="profile"\n'
     )
-    config = load_config(local)
+    config = load_config(local, cwd=Path.cwd(), env=os.environ)
     resolved = resolve_profile(config, "work")
     assert getattr(resolved.options, local_field) is None
     assert set(option_origins(config, "work")) == {global_field}
@@ -142,7 +142,7 @@ def test_both_instruction_forms_in_one_config_layer_are_rejected(
         f'version=1\n[{scope}]\n{agent}instructions="rules"\ninstructions_file="rules"\n'
     )
     with pytest.raises(PratError, match=f"{scope}.*cannot be used together"):
-        load_config()
+        load_config(cwd=Path.cwd(), env=os.environ)
 
 
 @pytest.mark.parametrize(
@@ -366,7 +366,7 @@ def test_instruction_defaults_validate_unselected_profiles_without_reading_files
 def test_selected_config_instruction_file_uses_its_defining_directory_and_keeps_config(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    global_path = config_path()
+    global_path = config_path(cwd=Path.cwd(), env=os.environ)
     global_path.parent.mkdir(parents=True)
     global_path.write_text('version=1\n[defaults]\ninstructions_file="rules"\n')
     (global_path.parent / "rules").write_text("global rules")
@@ -379,7 +379,7 @@ def test_selected_config_instruction_file_uses_its_defining_directory_and_keeps_
     assert main(["--config", str(local), "work", "task", "--dry-run", "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert result["argv"][-1] == "--append-system-prompt=global rules"
-    config = load_config(local)
+    config = load_config(local, cwd=Path.cwd(), env=os.environ)
     assert config.defaults.instructions is None
     assert config.defaults.instructions_file == str(global_path.parent / "rules")
 

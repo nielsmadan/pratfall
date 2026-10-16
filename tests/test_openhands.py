@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -100,7 +101,9 @@ def test_openhands_rejects_unsupported_controls(
     native_contract_config: Path, options: Options
 ) -> None:
     with pytest.raises(PratError, match="does not support"):
-        resolve_profile(load_config(native_contract_config), "oh", options)
+        resolve_profile(
+            load_config(native_contract_config, cwd=Path.cwd(), env=os.environ), "oh", options
+        )
 
 
 @pytest.mark.parametrize("selector", ["oh", "openhands"])

@@ -23,7 +23,7 @@ from pratfall.models import (
     RawCapture,
     ResultError,
 )
-from pratfall.runner import OutputLimits, ProcessResult, raw_stdout, run
+from pratfall.runner import ProcessResult, RunLimits, raw_stdout, run
 
 
 def consumed(result: ProcessResult) -> DecodedOutput:
@@ -61,10 +61,9 @@ def test_cleanup_reports_persistent_probe_permission_error(
         if chosen == 0:
             raise PermissionError(1, "Operation not permitted")
 
-    monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
-    monkeypatch.setattr(runner_module, "FINAL_DRAIN_GRACE", 0)
     monkeypatch.setattr(os, "killpg", killpg)
-    assert runner_module.cleanup_process_group(123) == (
+    no_grace = RunLimits(terminate_grace=0, final_drain_grace=0)
+    assert runner_module.cleanup_process_group(123, no_grace) == (
         "could not verify owned process-group cleanup before the deadline"
     )
     assert signals == [signal.SIGTERM, 0, signal.SIGKILL, 0]
@@ -82,9 +81,9 @@ def test_cleanup_preserves_signal_permission_failure(
         if chosen in (0, denied):
             raise PermissionError(1, "Operation not permitted")
 
-    monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
     monkeypatch.setattr(os, "killpg", killpg)
-    assert runner_module.cleanup_process_group(123) == "[Errno 1] Operation not permitted"
+    limits = RunLimits(terminate_grace=0)
+    assert runner_module.cleanup_process_group(123, limits) == "[Errno 1] Operation not permitted"
     assert signals == (
         [signal.SIGTERM] if denied == signal.SIGTERM else [signal.SIGTERM, 0, signal.SIGKILL]
     )
@@ -131,10 +130,9 @@ def test_timeout_verifies_cleanup_after_parent_exits_and_pipes_close(
             raise ProcessLookupError
 
     monkeypatch.setattr(runner_module, "_drain", drain_until_timeout)
-    monkeypatch.setattr(runner_module, "TERMINATE_GRACE", 0)
-    monkeypatch.setattr(runner_module, "FINAL_DRAIN_GRACE", 0.15)
     monkeypatch.setattr(os, "killpg", killpg)
-    result = run(python("pass"), tmp_path, 5)
+    limits = RunLimits(terminate_grace=0, final_drain_grace=0.15)
+    result = run(python("pass"), tmp_path, 5, limits=limits)
 
     message = "Agent exceeded the 5 second timeout."
     if cleanup_error is not None:
@@ -210,7 +208,7 @@ def test_runner_accepts_explicit_capture_bounds_without_changing_defaults(tmp_pa
         python("import os;os.write(1,b'12345')"),
         tmp_path,
         5,
-        output_limits=OutputLimits(stdout=4, stderr=7),
+        limits=RunLimits(stdout=4, stderr=7),
     )
     assert limited.capture == RawCapture(b"1234")
     assert limited.error is not None
@@ -566,3 +564,19 @@ def test_timeout_and_interruption_feed_term_cleanup_bytes_to_consumer(
         assert result.interrupted_by == signal.SIGINT
     else:
         assert result.timed_out is True
+
+
+@pytest.mark.parametrize(
+    ("pending", "elapsed", "expected"),
+    [
+        ("tool", 0.5, None),
+        ("tool", 1.0, "tool"),
+        (None, 4.9, None),
+        (None, 5.0, "working"),
+        ("answering", 6.0, "answering"),
+    ],
+)
+def test_progress_category_coalesces_activity_and_emits_idle_heartbeat(
+    pending: Activity | None, elapsed: float, expected: Activity | None
+) -> None:
+    assert runner_module._progress_category(pending, elapsed) == expected

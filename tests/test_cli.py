@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping
+from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
 from types import FrameType
@@ -15,15 +16,16 @@ import pytest
 
 from pratfall import __version__
 from pratfall.catalog import AGENTS
+from pratfall.cli import dispatch as dispatch_module
 from pratfall.cli import doctor as doctor_module
 from pratfall.cli import main
-from pratfall.cli.doctor import _doctor, _doctor_inventory, _doctor_line, _version_result
+from pratfall.cli.doctor import Which, _doctor, _doctor_inventory, _doctor_line, _version_result
 from pratfall.cli.parsing import _parse_run
-from pratfall.config import init_config, load_config
+from pratfall.config import init_config, load_config, resolve_profile
 from pratfall.errors import PratError
 from pratfall.interruption import InterruptionState
-from pratfall.models import Config, Invocation, RawCapture
-from pratfall.runner import OutputLimits, ProcessResult
+from pratfall.models import Config, Invocation, Options, PromptTemplate, RawCapture
+from pratfall.runner import ProcessResult, RunLimits
 from pratfall.runner import run as run_process
 
 
@@ -193,7 +195,7 @@ def test_default_validate_explains_missing_config(capsys: pytest.CaptureFixture[
 def test_management_merges_configs_and_warns_on_stderr(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], command: list[str]
 ) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     local_path = tmp_path / ".pratfile"
     local_path.write_text('version=1\n[profiles.simple]\nagent="cc"\nmodel="local-model"\n')
     assert main([*command, "--json"]) == 0
@@ -221,7 +223,7 @@ def test_management_merges_configs_and_warns_on_stderr(
 def test_validate_text_reports_both_sources(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     local_path = tmp_path / ".pratfile"
     local_path.write_text("version=1\n")
     assert main(["config", "validate"]) == 0
@@ -252,7 +254,7 @@ def test_merged_native_validation_identifies_the_setting_source(
     source_layer: str,
     selector: str,
 ) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     local_path = tmp_path / ".pratfile"
     source, other = (
         (global_path, local_path) if source_layer == "global" else (local_path, global_path)
@@ -277,7 +279,7 @@ def test_inherited_capability_error_identifies_the_setting_source(
     source_layer: str,
     selector: str,
 ) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     local_path = tmp_path / ".pratfile"
     source, other = (
         (global_path, local_path) if source_layer == "global" else (local_path, global_path)
@@ -295,7 +297,7 @@ def test_inherited_capability_error_identifies_the_setting_source(
 
 
 def test_cli_override_error_identifies_command_line(capsys: pytest.CaptureFixture[str]) -> None:
-    path = init_config()
+    path = init_config(cwd=Path.cwd(), env=os.environ)
     path.write_text("version=1\n[defaults]\nfast=true\n")
     assert main(["gm", "prompt", "--no-fast", "--dry-run", "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
@@ -305,7 +307,7 @@ def test_cli_override_error_identifies_command_line(capsys: pytest.CaptureFixtur
 def test_validation_reports_single_source_for_global_file_alias(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    path = init_config()
+    path = init_config(cwd=Path.cwd(), env=os.environ)
     alias = tmp_path / "alias.toml"
     alias.symlink_to(path)
     assert main(["config", "validate", "--config", str(alias), "--json"]) == 0
@@ -317,7 +319,7 @@ def test_validation_reports_single_source_for_global_file_alias(
 def test_local_profile_replaces_global_native_arguments_before_validation(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(
         'version=1\n[profiles.work]\nagent="cc"\nnative_args=["--output-format", "text"]\n'
     )
@@ -356,7 +358,7 @@ def test_profile_native_arguments_replace_invalid_defaults_during_validation(
 
 
 def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[str]) -> None:
-    init_config()
+    init_config(cwd=Path.cwd(), env=os.environ)
     assert main(["profiles"]) == 0
     assert capsys.readouterr().out == "simple: codex model=gpt-5.6-luna effort=low timeout=600.0\n"
     assert main(["profiles", "--json"]) == 0
@@ -480,6 +482,10 @@ def test_doctor_locates_wrappers_without_executing(
     }
     assert main(["doctor", "--config", str(path)]) == 0
     assert f"codex: {wrapper}\n" in capsys.readouterr().out
+
+
+def _absolute_only(executable: str) -> str | None:
+    return shutil.which(executable, path="")
 
 
 def _version_config(tmp_path: Path, commands: dict[str, list[str]]) -> Path:
@@ -617,12 +623,16 @@ def test_doctor_version_timeout_is_diagnostic(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setenv("PATH", "")
-    monkeypatch.setattr(doctor_module, "VERSION_TIMEOUT", 0.05)
     config = _version_config(
         tmp_path, {"codex": [sys.executable, "-c", "import time;time.sleep(30)"]}
     )
-    assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 0
+    loaded = load_config(config, cwd=tmp_path, env=os.environ)
+    assert (
+        _doctor(
+            loaded, True, versions=True, cwd=tmp_path, which=_absolute_only, version_timeout=0.05
+        )
+        == 0
+    )
     codex = next(
         agent
         for agent in json.loads(capsys.readouterr().out)["agents"]
@@ -682,8 +692,6 @@ def test_doctor_version_interruption_during_probe_stops_and_restores_handlers(
     capsys: pytest.CaptureFixture[str],
     chosen: signal.Signals,
 ) -> None:
-    monkeypatch.setenv("PATH", "")
-    monkeypatch.setattr(doctor_module, "VERSION_TIMEOUT", 15.0)
     previous = {
         candidate: signal.getsignal(candidate) for candidate in (signal.SIGINT, signal.SIGTERM)
     }
@@ -713,12 +721,16 @@ def test_doctor_version_interruption_during_probe_stops_and_restores_handlers(
         assert ready.exists()
         os.kill(os.getpid(), chosen)
 
+    loaded = load_config(config, cwd=tmp_path, env=os.environ)
     sender = threading.Thread(target=interrupt)
     sender.start()
     try:
-        assert main(["doctor", "--versions", "--config", str(config), "--json"]) == 128 + chosen
+        exit_code = _doctor(
+            loaded, True, versions=True, cwd=tmp_path, which=_absolute_only, version_timeout=15.0
+        )
     finally:
         sender.join()
+    assert exit_code == 128 + chosen
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "interrupted"
     assert result["exit_code"] == 128 + chosen
@@ -769,11 +781,11 @@ def test_doctor_version_interruption_before_first_inventory_item_is_normalized(
     config = _version_config(tmp_path, {"codex": [sys.executable, "-c", "print('later')"]})
 
     def interrupt_before_inventory(
-        loaded: Config, interruption: InterruptionState | None = None
+        loaded: Config, which: Which, interruption: InterruptionState | None = None
     ) -> list[dict[str, object]]:
         assert interruption is not None
         os.kill(os.getpid(), signal.SIGINT)
-        return _doctor_inventory(loaded, interruption)
+        return _doctor_inventory(loaded, which, interruption)
 
     def fail(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("doctor launched a version probe")
@@ -831,7 +843,7 @@ def test_doctor_version_interruption_during_probe_selection_prevents_launch(
     chosen: signal.Signals,
 ) -> None:
     path = _version_config(tmp_path, {"codex": [sys.executable, "-c", "print('later')"]})
-    loaded = load_config(path)
+    loaded = load_config(path, cwd=Path.cwd(), env=os.environ)
     previous = {
         candidate: signal.getsignal(candidate) for candidate in (signal.SIGINT, signal.SIGTERM)
     }
@@ -861,7 +873,16 @@ def test_doctor_version_interruption_during_probe_selection_prevents_launch(
 
     monkeypatch.setenv("PATH", "")
     monkeypatch.setattr(doctor_module, "run", fail)
-    assert _doctor(replace(loaded, commands=commands), True, versions=True) == 128 + chosen
+    assert (
+        _doctor(
+            replace(loaded, commands=commands),
+            True,
+            versions=True,
+            cwd=tmp_path,
+            which=_absolute_only,
+        )
+        == 128 + chosen
+    )
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "interrupted"
     assert result["exit_code"] == 128 + chosen
@@ -884,11 +905,11 @@ def test_doctor_version_interruption_during_result_preparation_is_normalized(
         cwd: Path,
         timeout: float,
         *,
-        output_limits: OutputLimits,
+        limits: RunLimits,
     ) -> ProcessResult:
         nonlocal launches
         launches += 1
-        return run_process(invocation, cwd, timeout, output_limits=output_limits)
+        return run_process(invocation, cwd, timeout, limits=limits)
 
     def interrupt_first_line(record: dict[str, object], *, versions: bool) -> str:
         nonlocal line_calls
@@ -941,10 +962,10 @@ def test_doctor_version_interruption_after_probe_prevents_next_launch(
         cwd: Path,
         timeout: float,
         *,
-        output_limits: OutputLimits,
+        limits: RunLimits,
     ) -> ProcessResult:
         nonlocal launches
-        process = run_process(invocation, cwd, timeout, output_limits=output_limits)
+        process = run_process(invocation, cwd, timeout, limits=limits)
         launches += 1
         os.kill(os.getpid(), chosen)
         return process
@@ -1343,3 +1364,56 @@ def test_config_validate_reports_workflow_errors(
     )
     assert main(["config", "validate", "--config", str(path)]) != 0
     assert "workflow 'w' step 'x'.profile: unknown selector 'nope'" in capsys.readouterr().err
+
+
+def test_doctor_inventory_reports_paths_from_the_given_lookup() -> None:
+    found = {"codex": "/opt/bin/codex"}
+    records = _doctor_inventory(Config(Path("config.toml")), found.get)
+    codex = next(record for record in records if record["agent"] == "codex")
+    claude = next(record for record in records if record["agent"] == "claude")
+    assert codex["path"] == "/opt/bin/codex"
+    assert codex["available"] is True
+    assert claude["path"] is None
+    assert claude["available"] is False
+
+
+def test_unknown_template_is_rejected_from_config_data() -> None:
+    template = PromptTemplate("Review $input", Path("config.toml"))
+    config = Config(Path("config.toml"), templates={"review": template})
+    assert dispatch_module._active_template(config, _parse_run(["cc", "-t", "review"])) == (
+        "Review $input",
+        "template 'review'",
+    )
+    assert dispatch_module._active_template(config, _parse_run(["cc"])) is None
+    with pytest.raises(PratError, match="Unknown template 'missing'"):
+        dispatch_module._active_template(config, _parse_run(["cc", "-t", "missing"]))
+
+
+def test_prepare_run_rejects_schema_with_extract_before_reading_the_prompt(
+    tmp_path: Path,
+) -> None:
+    parsed = replace(_parse_run(["cc", "task", "--extract"]), options=Options(schema="s.json"))
+    config = Config(tmp_path / "config.toml")
+    resolved = resolve_profile(config, "cc", parsed.options)
+    with ExitStack() as resources, pytest.raises(PratError, match="--schema and --extract"):
+        dispatch_module._prepare_run(parsed, config, resolved, tmp_path, resources)
+
+
+def test_templates_view_lists_sorted_templates_or_a_placeholder() -> None:
+    templates = {
+        "z": PromptTemplate("Last $topic", Path("a.toml")),
+        "a": PromptTemplate("First $input", Path("b.toml")),
+    }
+    payload, lines = dispatch_module._templates_view(
+        Config(Path("config.toml"), templates=templates)
+    )
+    assert payload == {
+        "templates": [
+            {"name": "a", "prompt": "First $input", "source": "b.toml", "parameters": []},
+            {"name": "z", "prompt": "Last $topic", "source": "a.toml", "parameters": ["topic"]},
+        ]
+    }
+    assert lines == ['a: "First $input"', 'z: "Last $topic" parameters=topic']
+    assert dispatch_module._templates_view(Config(Path("config.toml")))[1] == [
+        "No templates configured."
+    ]

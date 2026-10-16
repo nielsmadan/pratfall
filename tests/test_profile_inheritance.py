@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -21,11 +22,11 @@ def _local(tmp_path: Path, contents: str) -> Path:
 
 
 def test_a_local_child_inherits_a_global_base_across_files(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(BASES, encoding="utf-8")
     _local(tmp_path, 'version=1\n[profiles.weekly]\nextends="claude-base"\nmodel="claude-opus-5"\n')
 
-    resolved = resolve_profile(load_config(), "weekly")
+    resolved = resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "weekly")
 
     assert resolved.agent.name == "claude"
     assert resolved.options == Options(
@@ -36,11 +37,11 @@ def test_a_local_child_inherits_a_global_base_across_files(tmp_path: Path) -> No
 def test_a_base_for_another_agent_no_longer_poisons_the_file(tmp_path: Path) -> None:
     """The regression this feature exists for: agent-specific settings live on the
     agent's base profile, so a codex profile in the same file cannot break claude."""
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(BASES, encoding="utf-8")
     _local(tmp_path, 'version=1\n[profiles.weekly]\nextends="claude-base"\n')
 
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
 
     assert resolve_profile(config, "weekly").options.tools == ("Read", "Edit", "Bash")
     assert resolve_profile(config, "codex-base").agent.name == "codex"
@@ -55,7 +56,7 @@ def test_a_chain_resolves_nearest_ancestor_first(tmp_path: Path) -> None:
         '[profiles.leaf]\nextends="middle"\ntimeout=30\n',
     )
 
-    resolved = resolve_profile(load_config(), "leaf")
+    resolved = resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "leaf")
 
     assert resolved.agent.name == "claude"
     assert resolved.options == Options(
@@ -71,7 +72,9 @@ def test_an_inherited_array_is_replaced_not_merged(tmp_path: Path) -> None:
         '[profiles.child]\nextends="base"\ntools=["Skill"]\n',
     )
 
-    assert resolve_profile(load_config(), "child").options.tools == ("Skill",)
+    assert resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "child").options.tools == (
+        "Skill",
+    )
 
 
 def test_an_inherited_value_beats_a_local_default(tmp_path: Path) -> None:
@@ -82,20 +85,20 @@ def test_an_inherited_value_beats_a_local_default(tmp_path: Path) -> None:
         '[profiles.child]\nextends="base"\n'
         '[profiles.plain]\nagent="claude"\n',
     )
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
 
     assert resolve_profile(config, "child").options.timeout == 1800
     assert resolve_profile(config, "plain").options.timeout == 60
 
 
 def test_provenance_names_the_profile_that_defined_the_field(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(BASES, encoding="utf-8")
     local = _local(
         tmp_path, 'version=1\n[profiles.weekly]\nextends="claude-base"\nmodel="claude-opus-5"\n'
     )
 
-    origins = option_origins(load_config(), "weekly")
+    origins = option_origins(load_config(cwd=Path.cwd(), env=os.environ), "weekly")
 
     assert (
         origins["tools"].label == f"{global_path}: profiles.claude-base.tools (selector 'weekly')"
@@ -104,12 +107,12 @@ def test_provenance_names_the_profile_that_defined_the_field(tmp_path: Path) -> 
 
 
 def test_an_inherited_option_the_child_agent_rejects_names_the_parent(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(BASES, encoding="utf-8")
     _local(tmp_path, 'version=1\n[profiles.odd]\nextends="claude-base"\nagent="codex"\n')
 
     with pytest.raises(PratError) as caught:
-        load_config()
+        load_config(cwd=Path.cwd(), env=os.environ)
 
     assert caught.value.args[0] == (
         f"{global_path}: profiles.claude-base.tools (selector 'odd'): "
@@ -122,7 +125,7 @@ def test_a_root_profile_still_requires_an_agent(tmp_path: Path) -> None:
     path = _local(tmp_path, 'version=1\n[profiles.work]\nmodel="m"\n')
 
     with pytest.raises(PratError) as caught:
-        load_config()
+        load_config(cwd=Path.cwd(), env=os.environ)
 
     assert caught.value.args[0] == (
         f"{path}: profiles.work.agent: expected a nonempty string without NUL bytes."
@@ -130,11 +133,11 @@ def test_a_root_profile_still_requires_an_agent(tmp_path: Path) -> None:
 
 
 def test_a_child_may_override_the_inherited_agent(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(BASES, encoding="utf-8")
     _local(tmp_path, 'version=1\n[profiles.swap]\nextends="codex-base"\nagent="claude"\n')
 
-    resolved = resolve_profile(load_config(), "swap")
+    resolved = resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "swap")
 
     assert resolved.agent.name == "claude"
     assert resolved.options.effort == "medium"
@@ -166,7 +169,7 @@ def test_extends_errors_name_their_source_and_field(
     path = _local(tmp_path, "version=1\n" + body)
 
     with pytest.raises(PratError) as caught:
-        load_config()
+        load_config(cwd=Path.cwd(), env=os.environ)
 
     assert str(path) in caught.value.args[0]
     assert message in caught.value.args[0]
@@ -174,7 +177,7 @@ def test_extends_errors_name_their_source_and_field(
 
 
 def test_a_local_base_replaces_the_global_one_for_every_child(tmp_path: Path) -> None:
-    global_path = init_config()
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
     global_path.write_text(
         'version=1\n[profiles.base]\nagent="claude"\nmodel="global"\n'
         '[profiles.from-global]\nextends="base"\n',
@@ -185,7 +188,7 @@ def test_a_local_base_replaces_the_global_one_for_every_child(tmp_path: Path) ->
         'version=1\n[profiles.base]\nagent="claude"\nmodel="local"\n'
         '[profiles.from-local]\nextends="base"\n',
     )
-    config = load_config()
+    config = load_config(cwd=Path.cwd(), env=os.environ)
 
     assert resolve_profile(config, "from-global").options.model == "local"
     assert resolve_profile(config, "from-local").options.model == "local"

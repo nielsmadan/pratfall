@@ -1,36 +1,44 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile
 
-_ALLOWED = {name: Flag(0) for name in ("--thinking", "--plan", "--default")}
-_RESERVED = {name: Flag(0) for name in ("--continue", "-c", "--stream", "--experimental-acp")} | {
-    name: Flag(1, joined=name in {"-p", "-i", "-m", "-r", "-o"})
-    for name in (
-        "--prompt",
-        "-p",
-        "--prompt-interactive",
-        "-i",
-        "--model",
-        "-m",
-        "--resume",
-        "-r",
-        "--output-file",
-        "--output_file",
-        "-o",
-        "--output-format",
-        "--input-format",
-        "--max-turns",
-        "--max_turns",
-        "--max-tokens",
-        "--max_tokens",
-        "--timeout",
-        "--port",
-        "--cwd",
-        "--config",
-        "--file",
-        "--session",
-        "--executor",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {name: Flag(0) for name in ("--thinking", "--plan", "--default")}
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {name: Flag(0) for name in ("--continue", "-c", "--stream", "--experimental-acp")}
+    | {
+        name: Flag(1, joined=name in {"-p", "-i", "-m", "-r", "-o"})
+        for name in (
+            "--prompt",
+            "-p",
+            "--prompt-interactive",
+            "-i",
+            "--model",
+            "-m",
+            "--resume",
+            "-r",
+            "--output-file",
+            "--output_file",
+            "-o",
+            "--output-format",
+            "--input-format",
+            "--max-turns",
+            "--max_turns",
+            "--max-tokens",
+            "--max_tokens",
+            "--timeout",
+            "--port",
+            "--cwd",
+            "--config",
+            "--file",
+            "--session",
+            "--executor",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:

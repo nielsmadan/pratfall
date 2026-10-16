@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
@@ -7,39 +10,44 @@ from pratfall.consumer import (
 )
 from pratfall.models import Activity, DecodedOutput, Invocation, ResolvedProfile
 
-_ALLOWED = {"--strict-mcp-startup": Flag(0)} | {
-    name: Flag(1, joined=name == "-n") for name in ("--name", "-n", "--mcp-startup-timeout")
-}
-_RESERVED = {
-    name: Flag(0) for name in ("--gui", "--share", "--cloud", "--sandboxed", "--skip-initial-turn")
-} | {
-    name: Flag(1, joined=name in {"-p", "-m", "-C", "-e"})
-    for name in (
-        "--prompt",
-        "-p",
-        "--saved-prompt",
-        "--file",
-        "--output-format",
-        "--model",
-        "-m",
-        "--cwd",
-        "-C",
-        "--config",
-        "--config-file",
-        "--profile",
-        "--conversation",
-        "--environment",
-        "-e",
-        "--runner",
-        "--executor",
-        "--harness",
-        "--task-id",
-        "--idle-on-complete",
-        "--idle-on-fail",
-        "--session",
-        "--resume",
-    )
-}
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {"--strict-mcp-startup": Flag(0)}
+    | {name: Flag(1, joined=name == "-n") for name in ("--name", "-n", "--mcp-startup-timeout")}
+)
+_RESERVED: Mapping[str, Flag] = MappingProxyType(
+    {
+        name: Flag(0)
+        for name in ("--gui", "--share", "--cloud", "--sandboxed", "--skip-initial-turn")
+    }
+    | {
+        name: Flag(1, joined=name in {"-p", "-m", "-C", "-e"})
+        for name in (
+            "--prompt",
+            "-p",
+            "--saved-prompt",
+            "--file",
+            "--output-format",
+            "--model",
+            "-m",
+            "--cwd",
+            "-C",
+            "--config",
+            "--config-file",
+            "--profile",
+            "--conversation",
+            "--environment",
+            "-e",
+            "--runner",
+            "--executor",
+            "--harness",
+            "--task-id",
+            "--idle-on-complete",
+            "--idle-on-fail",
+            "--session",
+            "--resume",
+        )
+    }
+)
 _IGNORED = frozenset(
     {
         "tool_result",

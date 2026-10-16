@@ -1,5 +1,4 @@
 import errno
-import fcntl
 import json
 import os
 import selectors
@@ -99,19 +98,9 @@ class _Relay:
         if self.failed:
             return
         try:
-            descriptor = sys.stderr.fileno()
-            flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+            _write_available(sys.stderr.fileno(), data)
         except (AttributeError, OSError, ValueError):
             self.failed = True
-            return
-        try:
-            fcntl.fcntl(descriptor, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-            _write_available(descriptor, data)
-        except OSError:
-            self.failed = True
-        finally:
-            with suppress(OSError):
-                fcntl.fcntl(descriptor, fcntl.F_SETFL, flags)
 
 
 @dataclass
@@ -398,7 +387,7 @@ def _write_available(descriptor: int, data: bytes) -> None:
     offset = write_nonblocking(descriptor, data)
     if 0 < offset < len(data) and data[offset - 1] != ord("\n"):
         with suppress(OSError):
-            os.write(descriptor, b"\n")
+            write_nonblocking(descriptor, b"\n")
 
 
 def _close_stream(state: _Supervision, child: _Child, stream: IO[bytes]) -> None:

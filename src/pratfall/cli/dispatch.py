@@ -1,6 +1,6 @@
 import argparse
 import json
-import os
+import shutil
 import sys
 from collections.abc import Callable, Mapping
 from contextlib import ExitStack, closing, suppress
@@ -62,8 +62,26 @@ from pratfall.runner import ProcessResult, cleanup_process_group, raw_stdout, ru
 from pratfall.schema import prepare_schema
 from pratfall.workflow_plan import workflow_parameter_names
 
+_View = tuple[dict[str, object], list[str]]
 
-def _agents(json_mode: bool) -> None:
+_JSON_RENDERED_OPTIONS = frozenset(
+    {
+        "native_args",
+        "command_prefix",
+        "add_dirs",
+        "attachments",
+        "instructions",
+        "schema",
+        "instructions_file",
+        "tools",
+        "disabled_tools",
+        "native_agent",
+        "session_id",
+    }
+)
+
+
+def _agents_view() -> _View:
     records = []
     lines = []
     for agent in AGENTS:
@@ -120,14 +138,12 @@ def _agents(json_mode: bool) -> None:
             supported.append("attachment_types=" + "/".join(caps.attachment_types))
             if caps.attachment_max_count is not None:
                 supported.append(f"attachment_max_count={caps.attachment_max_count}")
-        selectors = agent.name
-        if agent.aliases:
-            selectors += f" ({', '.join(agent.aliases)})"
+        selectors = f"{agent.name} ({', '.join(agent.aliases)})" if agent.aliases else agent.name
         lines.append(f"{selectors}: {', '.join(supported) or 'none'}")
-    _emit({"agents": records}, lines, json_mode=json_mode)
+    return {"agents": records}, lines
 
 
-def _profiles(config: Config, json_mode: bool) -> None:
+def _profiles_view(config: Config) -> _View:
     records = []
     lines = []
     for name in sorted(config.profiles):
@@ -145,56 +161,66 @@ def _profiles(config: Config, json_mode: bool) -> None:
                 "parameters": list(parameters),
             }
         )
-        description = f"{name}: {resolved.agent.name}"
-        for key, value in options.items():
-            if value is None or (value == () and key != "tools"):
-                continue
-            rendered = (
-                json.dumps(value, ensure_ascii=False)
-                if key
-                in {
-                    "native_args",
-                    "command_prefix",
-                    "add_dirs",
-                    "attachments",
-                    "instructions",
-                    "schema",
-                    "instructions_file",
-                    "tools",
-                    "disabled_tools",
-                    "native_agent",
-                    "session_id",
-                }
-                else value
-            )
-            description += f" {key}={rendered}"
-        if template is not None:
-            description += f" prompt={json.dumps(template.prompt, ensure_ascii=False)}"
-        if parameters:
-            description += f" parameters={','.join(parameters)}"
-        lines.append(description)
-    _emit({"profiles": records}, lines or ["No profiles configured."], json_mode=json_mode)
-
-
-def _templates(config: Config, json_mode: bool) -> None:
-    records = []
-    lines = []
-    for name, template in sorted(config.templates.items()):
-        parameters = template_parameters(template.prompt)
-        records.append(
-            {
-                "name": name,
-                "prompt": template.prompt,
-                "source": str(template.source),
-                "parameters": list(parameters),
-            }
+        rendered = "".join(
+            f" {key}={_rendered_option(key, value)}"
+            for key, value in options.items()
+            if value is not None and (value != () or key == "tools")
         )
-        line = f"{name}: {json.dumps(template.prompt, ensure_ascii=False)}"
-        lines.append(line + (f" parameters={','.join(parameters)}" if parameters else ""))
-    _emit({"templates": records}, lines or ["No templates configured."], json_mode=json_mode)
+        prompt = (
+            "" if template is None else f" prompt={json.dumps(template.prompt, ensure_ascii=False)}"
+        )
+        lines.append(
+            f"{name}: {resolved.agent.name}{rendered}{prompt}{_parameters_text(parameters)}"
+        )
+    return {"profiles": records}, lines or ["No profiles configured."]
 
 
-def _workflows(config: Config, json_mode: bool) -> None:
+def _rendered_option(key: str, value: object) -> object:
+    return json.dumps(value, ensure_ascii=False) if key in _JSON_RENDERED_OPTIONS else value
+
+
+def _parameters_text(parameters: tuple[str, ...]) -> str:
+    return f" parameters={','.join(parameters)}" if parameters else ""
+
+
+def _templates_view(config: Config) -> _View:
+    templates = [
+        (name, template, template_parameters(template.prompt))
+        for name, template in sorted(config.templates.items())
+    ]
+    records: list[dict[str, object]] = [
+        {
+            "name": name,
+            "prompt": template.prompt,
+            "source": str(template.source),
+            "parameters": list(parameters),
+        }
+        for name, template, parameters in templates
+    ]
+    lines = [
+        f"{name}: {json.dumps(template.prompt, ensure_ascii=False)}{_parameters_text(parameters)}"
+        for name, template, parameters in templates
+    ]
+    return {"templates": records}, lines or ["No templates configured."]
+
+
+def _config_view(config: Config) -> _View:
+    return (
+        {
+            "path": str(config.path),
+            "sources": [str(path) for path in config.sources],
+            "exists": config.exists,
+            "valid": True,
+        },
+        [
+            f"Valid config: {', '.join(str(path) for path in config.sources)}"
+            if config.exists
+            else f"No config at {config.path}; using built-in defaults."
+        ],
+    )
+
+
+def _workflows_view(config: Config) -> _View:
     records = []
     lines = []
     for name, workflow in sorted(config.workflows.items()):
@@ -226,9 +252,9 @@ def _workflows(config: Config, json_mode: bool) -> None:
         steps = "; ".join(_workflow_step_text(workflow, i) for i in range(len(workflow.steps)))
         line = f"{name}: {steps}"
         line += "" if workflow.parallel else " parallel=false"
-        line += f" parameters={','.join(parameters)}" if parameters else ""
+        line += _parameters_text(parameters)
         lines.append(f"{line} source={workflow.source}")
-    _emit({"workflows": records}, lines or ["No workflows configured."], json_mode=json_mode)
+    return {"workflows": records}, lines or ["No workflows configured."]
 
 
 def _workflow_step_text(workflow: Workflow, index: int) -> str:
@@ -279,48 +305,33 @@ def _validate_config_native_arguments(config: Config) -> None:
         _validate_native_arguments(resolved, label, option_origins(config, name))
 
 
-def _dispatch(args: argparse.Namespace) -> int:
+def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -> int:
     if args.command == "completion":
         if args.json:
             raise PratError(
                 "completion prints shell code; --json is not supported.", code="invalid_arguments"
             )
-        sys.stdout.write(_completion_script(args.shell, os.environ))
+        sys.stdout.write(_completion_script(args.shell, environ))
     elif args.command == "config" and args.config_command == "path":
-        path = config_path(args.config)
+        path = config_path(args.config, cwd=cwd, env=environ)
         _emit({"path": str(path)}, [str(path)], json_mode=args.json)
     elif args.command == "config" and args.config_command == "init":
-        path = init_config(args.config)
+        path = init_config(args.config, cwd=cwd, env=environ)
         _emit({"path": str(path), "created": True}, [f"Created {path}"], json_mode=args.json)
     else:
-        config = load_config(args.config)
+        config = load_config(args.config, cwd=cwd, env=environ)
         _validate_config_native_arguments(config)
         _config_warnings(config, _StreamDiagnostics())
-        if args.command == "agents":
-            _agents(args.json)
-        elif args.command == "profiles":
-            _profiles(config, args.json)
-        elif args.command == "templates":
-            _templates(config, args.json)
-        elif args.command == "workflows":
-            _workflows(config, args.json)
-        elif args.command == "doctor":
-            return _doctor(config, args.json, versions=args.versions)
-        else:
-            _emit(
-                {
-                    "path": str(config.path),
-                    "sources": [str(path) for path in config.sources],
-                    "exists": config.exists,
-                    "valid": True,
-                },
-                [
-                    f"Valid config: {', '.join(str(path) for path in config.sources)}"
-                    if config.exists
-                    else f"No config at {config.path}; using built-in defaults."
-                ],
-                json_mode=args.json,
-            )
+        if args.command == "doctor":
+            return _doctor(config, args.json, versions=args.versions, cwd=cwd, which=shutil.which)
+        views: dict[str, Callable[[], _View]] = {
+            "agents": _agents_view,
+            "profiles": lambda: _profiles_view(config),
+            "templates": lambda: _templates_view(config),
+            "workflows": lambda: _workflows_view(config),
+        }
+        payload, lines = views.get(args.command, lambda: _config_view(config))()
+        _emit(payload, lines, json_mode=args.json)
     return 0
 
 
@@ -336,7 +347,7 @@ def _decode(resolved: ResolvedProfile, stdout: str) -> DecodedOutput:
 
 def _decode_process(
     resolved: ResolvedProfile, process: ProcessResult
-) -> tuple[ProcessResult, DecodedOutput, str]:
+) -> tuple[DecodedOutput, str, ResultError | None]:
     capture = process.capture
     decoded = capture.decoded if isinstance(capture, ConsumedCapture) else None
     stdout: str | None = None
@@ -353,39 +364,43 @@ def _decode_process(
         encoding_error = encoding_error or ResultError(
             "output_encoding", "Agent stderr is not valid UTF-8."
         )
-    if encoding_error is not None and process.error is None:
-        process = _after_run_failure(process, encoding_error)
     if decoded is None:
         decoded = _decode(resolved, stdout) if stdout is not None else DecodedOutput()
-    if resolved.options.schema is not None and decoded.error is not None:
-        cleanup_error = (
-            cleanup_process_group(process.process_group)
-            if process.process_group is not None
-            else None
+    return decoded, stderr, encoding_error
+
+
+def _with_decode_cleanup_failure(
+    decoded: DecodedOutput, stderr: str, cleanup_error: str | None
+) -> tuple[DecodedOutput, str]:
+    if cleanup_error is None or decoded.error is None:
+        return decoded, stderr
+    failure = decoded.error
+    message = f"{failure.message} Process-group cleanup failed: {cleanup_error}."
+    return (
+        replace(decoded, error=ResultError(failure.code, message)),
+        f"{stderr}\nprat: Process-group cleanup failed: {cleanup_error}.\n",
+    )
+
+
+def _cleanup_group(process: ProcessResult | None) -> str | None:
+    if process is None or process.process_group is None:
+        return None
+    return cleanup_process_group(process.process_group)
+
+
+def _with_failure(
+    process: ProcessResult, failure: ResultError, cleanup_error: str | None
+) -> ProcessResult:
+    chosen = process.error or failure
+    if cleanup_error is not None:
+        chosen = ResultError(
+            chosen.code, f"{chosen.message} Process-group cleanup failed: {cleanup_error}."
         )
-        if cleanup_error is not None:
-            stderr += f"\nprat: Process-group cleanup failed: {cleanup_error}.\n"
-            failure = decoded.error
-            decoded = replace(
-                decoded,
-                error=ResultError(
-                    failure.code,
-                    f"{failure.message} Process-group cleanup failed: {cleanup_error}.",
-                ),
-            )
-    return process, decoded, stderr
+    return replace(process, error=chosen)
 
 
 def _after_run_failure(process: ProcessResult, failure: ResultError) -> ProcessResult:
-    cleanup_error = None
-    if process.process_group is not None:
-        cleanup_error = cleanup_process_group(process.process_group)
-    failure = process.error or failure
-    if cleanup_error is not None:
-        failure = ResultError(
-            failure.code, f"{failure.message} Process-group cleanup failed: {cleanup_error}."
-        )
-    return replace(process, error=failure)
+    return _with_failure(process, failure, _cleanup_group(process))
 
 
 def _after_run_presentation_failure(process: ProcessResult, error: Exception) -> ProcessResult:
@@ -437,7 +452,13 @@ def _present_run(
     plan: _RunPlan, diagnostics: _Diagnostics, process: ProcessResult
 ) -> tuple[ProcessResult, DecodedOutput]:
     resolved = plan.resolved
-    process, decoded, native_stderr = _decode_process(resolved, process)
+    decoded, native_stderr, encoding_error = _decode_process(resolved, process)
+    if encoding_error is not None and process.error is None:
+        process = _after_run_failure(process, encoding_error)
+    if resolved.options.schema is not None and decoded.error is not None:
+        decoded, native_stderr = _with_decode_cleanup_failure(
+            decoded, native_stderr, _cleanup_group(process)
+        )
     result = normalize(resolved, process, decoded)
     native_stdout = _trace_stdout(plan, process)
     if native_stdout:
@@ -489,21 +510,21 @@ class _StepRun:
     input: str | None
 
 
-def _run_command(arguments: list[str], invocation_cwd: Path, step: _StepRun | None = None) -> int:
+def _run_command(
+    arguments: list[str],
+    invocation_cwd: Path,
+    environ: Mapping[str, str],
+    step: _StepRun | None = None,
+) -> int:
     state = _RunState(json_mode=step is not None or _json_requested(arguments))
     return _guard(
-        lambda: _run_selected(arguments, invocation_cwd, state, step),
+        lambda: _run_selected(arguments, invocation_cwd, environ, state, step),
         lambda error: _internal_failure(error, state),
     )
 
 
-def _cleanup_after(process: ProcessResult | None) -> None:
-    if process is not None and process.process_group is not None:
-        cleanup_process_group(process.process_group)
-
-
 def _internal_failure(error: Exception, state: _RunState) -> int:
-    _cleanup_after(state.process)
+    _cleanup_group(state.process)
     message = _internal_message(error)
     with suppress(OSError, ValueError):
         if state.json_mode and not state.stdout.emitted:
@@ -602,20 +623,27 @@ def _prepare_run_schema(
     return replace(resolved, prepared_schema=prepared)
 
 
-def _notify_after_run(resolved: ResolvedProfile, result: NormalizedResult) -> None:
+def _notify_after_run(
+    resolved: ResolvedProfile, result: NormalizedResult, environ: Mapping[str, str]
+) -> None:
     if not should_notify(
         resolved.options, result.status, result.duration_ms, stderr_is_tty=_stderr_is_tty()
     ):
         return
     notification = notification_for(resolved.agent.label, result.status, result.duration_ms)
     method = resolved.options.notify_method or "auto"
-    send(encode(notification, method, os.environ))
+    send(encode(notification, method, environ))
 
 
-def _finish_run(resolved: ResolvedProfile, result: NormalizedResult, state: _RunState) -> None:
+def _finish_run(
+    resolved: ResolvedProfile,
+    result: NormalizedResult,
+    state: _RunState,
+    environ: Mapping[str, str],
+) -> None:
     payload = result_dict(result)
     _emit_result(payload, state.stdout, json_mode=state.json_mode)
-    _guard(lambda: _notify_after_run(resolved, result), lambda _: None)
+    _guard(lambda: _notify_after_run(resolved, result, environ), lambda _: None)
 
 
 def _active_template(config: Config, parsed: RunArguments) -> tuple[str, str] | None:
@@ -640,20 +668,6 @@ def _bind_run_input(config: Config, parsed: RunArguments) -> tuple[str | None, B
     return template, bound
 
 
-def _render_run_prompt(
-    parsed: RunArguments, template: str | None, bound: BoundInput, invocation_cwd: Path
-) -> bytes:
-    prompt = acquire_prompt(
-        bound.source,
-        invocation_cwd,
-        allow_absent=template is not None or parsed.edit,
-        allow_blank=parsed.edit,
-    )
-    if template is None:
-        return prompt
-    return render_template(template, prompt, parameters=bound.parameters, allow_blank=parsed.edit)
-
-
 def _with_step(parsed: RunArguments, step: _StepRun | None) -> RunArguments:
     if step is None:
         return parsed
@@ -665,8 +679,81 @@ def _with_step(parsed: RunArguments, step: _StepRun | None) -> RunArguments:
     return replace(parsed, prompt_source=PromptSource("inline", step.input))
 
 
+@dataclass(frozen=True)
+class _PreparedRun:
+    resolved: ResolvedProfile
+    template: str | None
+    bound: BoundInput
+    cwd: Path
+
+
+def _prepare_run(
+    parsed: RunArguments,
+    config: Config,
+    resolved: ResolvedProfile,
+    invocation_cwd: Path,
+    resources: ExitStack,
+) -> _PreparedRun:
+    _validate_schema_extraction(resolved, parsed.extract)
+    fallback = OptionOrigin(f"selector {parsed.selector!r}.native_args")
+    origins = option_origins(config, parsed.selector, parsed.options)
+    label = origins.get("native_args", fallback).label
+    resolved = _prepare_run_paths(resolved, origins, label)
+    cwd = _run_cwd(parsed.cwd, invocation_cwd)
+    template, bound = _bind_run_input(config, parsed)
+    resolved = _prepare_run_schema(resolved, origins, resources)
+    resolved = _prepare_run_instructions(resolved, origins)
+    return _PreparedRun(resolved, template, bound, cwd)
+
+
+def _run_prompt(
+    parsed: RunArguments,
+    prepared: _PreparedRun,
+    invocation_cwd: Path,
+    environ: Mapping[str, str],
+) -> bytes:
+    template = prepared.template
+    prompt = acquire_prompt(
+        prepared.bound.source,
+        invocation_cwd,
+        sys.stdin,
+        allow_absent=template is not None or parsed.edit,
+        allow_blank=parsed.edit,
+    )
+    if template is not None:
+        prompt = render_template(
+            template, prompt, parameters=prepared.bound.parameters, allow_blank=parsed.edit
+        )
+    prompt = prepend_contexts(parsed.contexts, prompt, invocation_cwd)
+    return edit_prompt(prompt, invocation_cwd, environ) if parsed.edit else prompt
+
+
+def _run_plan(
+    parsed: RunArguments, prepared: _PreparedRun, invocation: Invocation, *, json_mode: bool
+) -> _RunPlan:
+    resolved = prepared.resolved
+    timeout = resolved.options.timeout
+    if timeout is None:
+        raise PratError("Resolved timeout is missing.", code="invalid_arguments")
+    adapter = ADAPTERS[resolved.agent.name].for_schema(resolved.options.schema is not None)
+    consumer = adapter.consumer() if adapter.consumer is not None else None
+    return _RunPlan(
+        resolved=resolved,
+        invocation=invocation,
+        cwd=prepared.cwd,
+        timeout=timeout,
+        consumer=CapturingConsumer(consumer) if parsed.trace and consumer is not None else consumer,
+        json_mode=json_mode,
+        trace=parsed.trace,
+    )
+
+
 def _run_selected(
-    arguments: list[str], invocation_cwd: Path, state: _RunState, step: _StepRun | None = None
+    arguments: list[str],
+    invocation_cwd: Path,
+    environ: Mapping[str, str],
+    state: _RunState,
+    step: _StepRun | None = None,
 ) -> int:
     resolved: ResolvedProfile | None = None
     try:
@@ -677,7 +764,7 @@ def _run_selected(
             closing(_diagnostics_for(progress=parsed.progress)) as diagnostics,
         ):
             parsed = _resolve_run_paths(parsed, invocation_cwd)
-            config = load_config(parsed.config, cwd=invocation_cwd)
+            config = load_config(parsed.config, cwd=invocation_cwd, env=environ)
             _validate_config_native_arguments(config)
             if step is None:
                 _config_warnings(config, diagnostics)
@@ -686,45 +773,25 @@ def _run_selected(
                     return run_workflow(arguments, parsed, config, invocation_cwd, state.stdout)
             resolved = resolve_profile(config, parsed.selector, parsed.options)
             state.resolved = resolved
-            _validate_schema_extraction(resolved, parsed.extract)
-            fallback = OptionOrigin(f"selector {parsed.selector!r}.native_args")
-            origins = option_origins(config, parsed.selector, parsed.options)
-            label = origins.get("native_args", fallback).label
-            resolved = _prepare_run_paths(resolved, origins, label)
-            cwd = _run_cwd(parsed.cwd, invocation_cwd)
-            template, bound = _bind_run_input(config, parsed)
-            resolved = _prepare_run_schema(resolved, origins, resources)
-            resolved = _prepare_run_instructions(resolved, origins)
-            prompt = _render_run_prompt(parsed, template, bound, invocation_cwd)
-            prompt = prepend_contexts(parsed.contexts, prompt, invocation_cwd)
-            if parsed.edit:
-                prompt = edit_prompt(prompt, invocation_cwd)
-            invocation = _build_invocation(resolved, prompt)
+            prepared = _prepare_run(parsed, config, resolved, invocation_cwd, resources)
+            prompt = _run_prompt(parsed, prepared, invocation_cwd, environ)
+            invocation = _build_invocation(prepared.resolved, prompt)
             if parsed.dry_run:
-                _preview(resolved, invocation, cwd, state.stdout, json_mode=state.json_mode)
+                _preview(
+                    prepared.resolved,
+                    invocation,
+                    prepared.cwd,
+                    state.stdout,
+                    json_mode=state.json_mode,
+                )
                 return 0
-            timeout = resolved.options.timeout
-            if timeout is None:
-                raise PratError("Resolved timeout is missing.", code="invalid_arguments")
-            adapter = ADAPTERS[resolved.agent.name].for_schema(resolved.options.schema is not None)
-            consumer = adapter.consumer() if adapter.consumer is not None else None
-            if parsed.trace and consumer is not None:
-                consumer = CapturingConsumer(consumer)
-            plan = _RunPlan(
-                resolved=resolved,
-                invocation=invocation,
-                cwd=cwd,
-                timeout=timeout,
-                consumer=consumer,
-                json_mode=state.json_mode,
-                trace=parsed.trace,
-            )
+            plan = _run_plan(parsed, prepared, invocation, json_mode=state.json_mode)
             process, decoded = _execute(plan, diagnostics)
             state.process = process
-        result = normalize(resolved, process, decoded)
+        result = normalize(plan.resolved, process, decoded)
         if parsed.extract:
             result = replace(result, output=extract_code(result.output))
-        _finish_run(resolved, result, state)
+        _finish_run(plan.resolved, result, state, environ)
         return result.exit_code
     except InputInterrupted as error:
         exit_code = SIGNAL_EXIT_BASE + error.signum
@@ -808,6 +875,7 @@ def _step_failure(error: PratError) -> int:
 def _step_command(
     stdin: BinaryIO,
     invocation_cwd: Path,
+    environ: Mapping[str, str],
     watch_parent: Callable[[int], None] = lambda _: None,
 ) -> int:
     try:
@@ -818,6 +886,6 @@ def _step_command(
     previous = sys.stdin
     sys.stdin = None
     try:
-        return _run_command(arguments, invocation_cwd, step)
+        return _run_command(arguments, invocation_cwd, environ, step)
     finally:
         sys.stdin = previous
