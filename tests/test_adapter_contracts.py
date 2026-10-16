@@ -23,6 +23,7 @@ from pratfall.adapters import (
     cursor,
     droid,
     gemini,
+    grok,
     hermes,
     kiro,
     openclaw,
@@ -964,6 +965,11 @@ _WHOLE_JSON_DECODERS: dict[str, tuple[AdapterModule, str, str]] = {
         '{"type":"result","subtype":"success","is_error":false,"result":"answer","unused":null}',
     ),
     "gemini": (gemini, "Gemini", '{"response":"answer","unused":null}'),
+    "grok": (
+        grok,
+        "Grok",
+        '{"text":"answer","stopReason":"end_turn","sessionId":"session","requestId":"request","unused":null}',
+    ),
     "openclaw": (
         openclaw,
         "OpenClaw",
@@ -1049,6 +1055,14 @@ _WHOLE_JSON_FIELD_GUARDS: tuple[tuple[str, str, str, Code, str], ...] = (
         "Agent output contains invalid Unicode text.",
     ),
 )
+
+
+def test_whole_json_cases_cover_every_nontext_document_adapter() -> None:
+    text_adapters = {"cortex", "crush", "devin", "hermes", "iflow", "kiro"}
+    assert set(_WHOLE_JSON_DECODERS) | text_adapters == {
+        name for name, adapter in ADAPTERS.items() if adapter.whole_document is not None
+    }
+    assert set(_WHOLE_JSON_DECODERS).isdisjoint(text_adapters)
 
 
 def _whole_json_document(agent: str, extra: str) -> str:

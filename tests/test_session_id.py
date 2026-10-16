@@ -177,7 +177,7 @@ def test_unsupported_session_id_rejected_before_input_or_editor(
 
 @pytest.mark.parametrize("native", [["--session-id=other"], ["--session-id", "other"]])
 def test_native_session_id_stays_reserved(
-    native: list[str], capsys: pytest.CaptureFixture[str]
+    native: list[str], capsys: pytest.CaptureFixture[str], no_process_spawn: None
 ) -> None:
     assert main(["claude", "task", "--json", "--", *native]) == 2
     error = json.loads(capsys.readouterr().out)["error"]

@@ -1,3 +1,4 @@
+import json
 import os
 from collections.abc import Collection, Mapping
 from dataclasses import replace
@@ -413,6 +414,21 @@ def test_usage_and_cost_sum_reported_values() -> None:
     assert result["cost_usd"] == 0.75
 
 
+@pytest.mark.parametrize("costs, expected", [((1e308, 1e308), None), ((1e308, None), 1e308)])
+def test_workflow_cost_aggregation_stays_json_serializable(
+    costs: tuple[float | None, float | None], expected: float | None
+) -> None:
+    outcomes = (
+        outcome("a", child("A", cost_usd=costs[0])),
+        outcome("b", child("B", cost_usd=costs[1])),
+        outcome("c", child("C")),
+    )
+    result = workflow_result("chain", CHAIN, outcomes, 1, None, {})
+    assert (result["status"], result["output"], result["cost_usd"]) == ("success", "C", expected)
+    assert result["steps"] == [{"step": entry.step, **entry.result.payload} for entry in outcomes]
+    assert json.loads(json.dumps(result, allow_nan=False)) == result
+
+
 def test_cost_sums_in_declared_order_whatever_the_completion_order() -> None:
     costs = {"a": 0.1, "b": 0.2, "c": 0.3}
     forward = tuple(outcome(name, child(cost_usd=costs[name])) for name in ("a", "b", "c"))
@@ -775,6 +791,26 @@ def test_each_result_joins_outputs_in_item_order_with_labelled_headings() -> Non
         45,
         0.75,
     )
+
+
+@pytest.mark.parametrize("costs, expected", [((1e308, 1e308), None), ((1e308, None), 1e308)])
+def test_each_cost_aggregation_stays_json_serializable(
+    costs: tuple[float | None, float | None], expected: float | None
+) -> None:
+    instances = tuple(
+        instance(index, child("answer", cost_usd=cost)) for index, cost in enumerate(costs)
+    )
+    result = each_result(fan("fix", "list"), ("a", "b"), instances, True, 0)
+    assert (result.status, result.output, result.cost_usd) == (
+        "success",
+        "## fix[a]\n\nanswer\n\n## fix[b]\n\nanswer",
+        expected,
+    )
+    assert result.payload["items"] == [
+        {"item": name, "label": name, **entry.result.payload}
+        for name, entry in zip(("a", "b"), instances, strict=True)
+    ]
+    assert json.loads(json.dumps(result.payload, allow_nan=False)) == result.payload
 
 
 def test_each_result_with_one_item_is_its_bare_output() -> None:

@@ -121,7 +121,9 @@ Amp, OpenHands, and Vibe have no generic model override.
 
 `output` is the joined output of the final steps, and `""` on failure or interruption. `usage` sums
 each counter over the steps that report it, with a counter null when none does, and is null when
-no step reports usage. `cost_usd` is likewise summed. `duration_ms` is the workflow's wall time.
+no step reports usage. `cost_usd` is likewise summed; if the aggregate overflows to a nonfinite
+number, it is null while individual costs remain intact. This also applies to `each` aggregates.
+`duration_ms` is the workflow's wall time.
 
 Every declared step appears in `steps`, in declared order. A step that ran carries its
 [run result](#run-results) fields after `step`; a step that never started is

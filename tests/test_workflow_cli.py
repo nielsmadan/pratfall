@@ -22,7 +22,7 @@ from pratfall.cli import workflow_run as workflow_module
 from pratfall.codes import STDOUT_LIMIT_EXCEEDED, exit_code_for
 from pratfall.errors import PratError
 from pratfall.prompt_input import InputInterrupted
-from test_run_cli import isolate_notify_env, write_agent
+from test_run_cli import _lock_is_available, isolate_notify_env, write_agent
 
 FAKE = """import json, os, sys, time
 from pathlib import Path
@@ -930,6 +930,55 @@ def assert_gone(pid: int, timeout: float = 10.0) -> None:
             return
         assert time.monotonic() < deadline, f"process {pid} is still alive"
         time.sleep(0.05)
+
+
+def test_workflow_parent_death_stops_step_and_releases_native_lock(tmp_path: Path) -> None:
+    ready = tmp_path / "orphan.ready"
+    lock = tmp_path / "orphan.lock"
+    native = (
+        "import fcntl,json,os,signal\n"
+        "from pathlib import Path\n"
+        f"lock = open({str(lock)!r}, 'wb')\n"
+        "fcntl.flock(lock, fcntl.LOCK_EX)\n"
+        f"ready = Path({str(ready)!r})\n"
+        "temporary = ready.with_suffix('.tmp')\n"
+        "temporary.write_text(json.dumps({'native': os.getpid(), 'step': os.getppid()}))\n"
+        "temporary.replace(ready)\n"
+        "signal.pause()\n"
+    )
+    config = write_agent(tmp_path, "claude", native)
+    with config.open("a") as stream:
+        stream.write(
+            '\n[profiles.hold]\nagent="claude"\nprompt="hold"\n'
+            '[workflows.orphan]\nsteps=[{name="hold", profile="hold"}]\n'
+        )
+    parent = subprocess.Popen(
+        [sys.executable, "-P", "-m", "pratfall", "orphan", "--json", "--config", str(config)],
+        cwd=tmp_path,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    cleaned = False
+    try:
+        wait_for(ready)
+        owned = json.loads(ready.read_text())
+        assert not _lock_is_available(lock)
+        parent.kill()
+        assert parent.wait(timeout=10) == -signal.SIGKILL
+        assert_gone(owned["native"])
+        assert_gone(owned["step"])
+        assert _lock_is_available(lock)
+        cleaned = True
+    finally:
+        if parent.poll() is None:
+            parent.kill()
+            parent.wait(timeout=10)
+        if not cleaned and ready.exists():
+            for pid in json.loads(ready.read_text()).values():
+                with suppress(ProcessLookupError):
+                    os.killpg(pid, signal.SIGKILL)
 
 
 def hanging_chain(tmp_path: Path) -> tuple[Path, Path]:

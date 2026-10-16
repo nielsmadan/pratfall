@@ -212,7 +212,7 @@ def test_amp_error_strings_retain_root_text(event_type: str, subtype: str) -> No
     ],
 )
 def test_amp_malformed_records_keep_partial_text(suffix: str) -> None:
-    decoded = amp.decode(stream(assistant()) + suffix)
+    decoded = amp.decode(stream(assistant()) + suffix + "\n" + stream(result(result="partial")))
     assert decoded.output == "partial"
     assert decoded.error is not None and decoded.error.code == "protocol_error"
 

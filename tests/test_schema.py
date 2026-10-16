@@ -5,7 +5,7 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 from typing import Literal
@@ -125,19 +125,21 @@ def test_snapshot_lifetime_bytes_permissions_and_exception_propagation(
     source.write_bytes(data)
     snapshot: Path | None = None
     exception = OSError("execution body failed")
-    try:
-        with prepare_schema(str(source), ORIGIN, "file") as prepared:
-            assert prepared.path is not None
-            snapshot = Path(prepared.path)
-            assert snapshot.read_bytes() == data
-            assert snapshot.stat().st_mode & 0o777 == 0o600
-            assert snapshot.parent.stat().st_mode & 0o777 == 0o700
-            source.write_text("false")
-            assert snapshot.read_bytes() == data
-            if failure:
-                raise exception
-    except OSError as error:
-        assert failure and error is exception
+    with (
+        pytest.raises(OSError) if failure else nullcontext() as caught,
+        prepare_schema(str(source), ORIGIN, "file") as prepared,
+    ):
+        assert prepared.path is not None
+        snapshot = Path(prepared.path)
+        assert snapshot.read_bytes() == data
+        assert snapshot.stat().st_mode & 0o777 == 0o600
+        assert snapshot.parent.stat().st_mode & 0o777 == 0o700
+        source.write_text("false")
+        assert snapshot.read_bytes() == data
+        if failure:
+            raise exception
+    if failure:
+        assert caught is not None and caught.value is exception
     assert snapshot is not None
     assert not snapshot.parent.exists()
 

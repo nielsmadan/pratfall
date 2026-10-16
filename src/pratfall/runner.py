@@ -156,6 +156,11 @@ def run(
                 failure,
                 interrupted_by=signal_state.received,
             )
+    except BaseException:
+        if process is not None:
+            cleanup_process_group(process.pid, limits)
+            _force_cleanup(process, limits)
+        raise
     finally:
         restore(previous)
 

@@ -231,7 +231,7 @@ def test_qwen_final_failure_retains_partial_text_and_usage(subtype: str) -> None
     ],
 )
 def test_qwen_malformed_records_keep_prior_text(suffix: str) -> None:
-    decoded = qwen.decode(stream(assistant()) + suffix)
+    decoded = qwen.decode(stream(assistant()) + suffix + "\n" + stream(result(result="partial")))
     assert decoded.output == "partial"
     assert decoded.error is not None and decoded.error.code == "protocol_error"
 

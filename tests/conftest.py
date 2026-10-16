@@ -1,5 +1,7 @@
 import io
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -8,6 +10,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", os.defpath)
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.setenv("EDITOR", "/nonexistent/prat-test-editor")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config-home"))
@@ -15,6 +18,14 @@ def isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     stdin = io.StringIO("")
     monkeypatch.setattr(stdin, "isatty", lambda: True)
     monkeypatch.setattr(sys, "stdin", stdin)
+
+
+@pytest.fixture
+def no_process_spawn(monkeypatch: pytest.MonkeyPatch) -> None:
+    def forbidden(*args: object, **kwargs: object) -> None:
+        pytest.fail("validation must not launch a process")
+
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
 
 
 @pytest.fixture

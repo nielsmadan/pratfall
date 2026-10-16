@@ -587,4 +587,5 @@ def _summed_usage(results: tuple[StepResult, ...]) -> dict[str, int | None] | No
 
 def _sum_present[T: (int, float)](values: Iterable[T | None]) -> T | None:
     present = tuple(value for value in values if value is not None)
-    return sum(present[1:], present[0]) if present else None
+    total = sum(present[1:], present[0]) if present else None
+    return None if isinstance(total, float) and not math.isfinite(total) else total

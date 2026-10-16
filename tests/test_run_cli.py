@@ -8,6 +8,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
@@ -1422,12 +1423,12 @@ def _progress_env(tmp_path: Path) -> dict[str, str]:
     }
 
 
-def _fill_pipe(write_descriptor: int) -> None:
+def _fill_pipe(write_descriptor: int, padding: bytes = b"x") -> None:
     flags = fcntl.fcntl(write_descriptor, fcntl.F_GETFL)
     fcntl.fcntl(write_descriptor, fcntl.F_SETFL, flags | os.O_NONBLOCK)
     try:
         while True:
-            os.write(write_descriptor, b"x" * 4096)
+            os.write(write_descriptor, padding * 4096)
     except BlockingIOError:
         pass
     finally:
@@ -2179,7 +2180,7 @@ def test_missing_and_nonexecutable_agents_map_to_shell_exit_codes(
     ],
 )
 def test_run_argument_errors_use_full_json_contract_when_requested(
-    arguments: list[str], message: str, capsys: pytest.CaptureFixture[str]
+    arguments: list[str], message: str, capsys: pytest.CaptureFixture[str], no_process_spawn: None
 ) -> None:
     assert main(["--json", *arguments]) == 2
     result = json.loads(capsys.readouterr().out)
@@ -2355,13 +2356,29 @@ def _colliding_profiles(tmp_path: Path, count: int) -> Path:
     return local_path
 
 
-def _drain(descriptor: int) -> bytes:
+def _drain(descriptor: int, timeout: float = 10) -> bytes:
     chunks: list[bytes] = []
-    while True:
-        data = os.read(descriptor, 1 << 20)
-        if not data:
-            return b"".join(chunks)
-        chunks.append(data)
+    deadline = time.monotonic() + timeout
+    with selectors.DefaultSelector() as selector:
+        selector.register(descriptor, selectors.EVENT_READ)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not selector.select(remaining):
+                raise TimeoutError("shared output stream did not close")
+            data = os.read(descriptor, 1 << 20)
+            if not data:
+                return b"".join(chunks)
+            chunks.append(data)
+
+
+def test_shared_stream_drain_has_its_own_deadline() -> None:
+    reader, writer = os.pipe()
+    try:
+        with pytest.raises(TimeoutError, match="shared output stream did not close"):
+            _drain(reader, timeout=0.01)
+    finally:
+        os.close(reader)
+        os.close(writer)
 
 
 def test_progress_dry_run_preview_waits_for_full_shared_stream_instead_of_failing(
@@ -2369,59 +2386,94 @@ def test_progress_dry_run_preview_waits_for_full_shared_stream_instead_of_failin
 ) -> None:
     local_path = _colliding_profiles(tmp_path, 1000)
     read_descriptor, write_descriptor = os.pipe()
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "pratfall",
-            "p0000",
-            "-",
-            "--progress",
-            "--dry-run",
-            "--json",
-            "--config",
-            str(local_path),
-        ],
-        cwd=tmp_path,
-        env=_progress_env(tmp_path),
-        stdin=subprocess.PIPE,
-        stdout=write_descriptor,
-        stderr=write_descriptor,
-        start_new_session=True,
+    ready_read, ready_write = os.pipe()
+    _fill_pipe(write_descriptor, b"\n")
+    shim = (
+        "import os,sys\n"
+        "from pratfall.cli import main\n"
+        "original = sys.stdout\n"
+        "class ObservedOutput:\n"
+        "    def write(self, text):\n"
+        f"        os.write({ready_write}, b'1')\n"
+        "        return original.write(text)\n"
+        "    def flush(self):\n"
+        "        original.flush()\n"
+        "sys.stdout = ObservedOutput()\n"
+        "sys.exit(main(sys.argv[1:]))\n"
     )
-    os.close(write_descriptor)
+    process: subprocess.Popen[bytes] | None = None
     try:
-        assert process.stdin is not None
-        process.stdin.write(b"Z" * 200_000)
-        process.stdin.close()
-        time.sleep(1.0)
+        with tempfile.TemporaryFile() as prompt:
+            prompt.write(b"Z" * 200_000)
+            prompt.seek(0)
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    shim,
+                    "p0000",
+                    "-",
+                    "--progress",
+                    "--dry-run",
+                    "--json",
+                    "--config",
+                    str(local_path),
+                ],
+                cwd=tmp_path,
+                env=_progress_env(tmp_path),
+                stdin=prompt,
+                stdout=write_descriptor,
+                stderr=write_descriptor,
+                pass_fds=(ready_write,),
+                start_new_session=True,
+            )
+        os.close(write_descriptor)
+        write_descriptor = -1
+        with selectors.DefaultSelector() as selector:
+            selector.register(ready_read, selectors.EVENT_READ)
+            assert selector.select(timeout=10), "preview write did not begin"
+        assert os.read(ready_read, 1) == b"1"
         assert process.poll() is None
         output = _drain(read_descriptor)
         assert process.wait(timeout=10) == 0
         preview = json.loads(output.splitlines()[-1])
         assert preview["dry_run"] is True
         assert any("Z" * 200_000 in arg for arg in preview["argv"])
-        assert b"prat: warning:" in output
     finally:
-        if process.poll() is None:
+        if process is not None and process.poll() is None:
             process.kill()
-            process.wait()
-        os.close(read_descriptor)
+            process.wait(timeout=10)
+        for descriptor in (read_descriptor, write_descriptor, ready_read, ready_write):
+            if descriptor >= 0:
+                os.close(descriptor)
 
 
-def _decoder_failure_shim(config: Path) -> str:
+def _decoder_failure_shim(config: Path, incremental: bool) -> str:
+    patch = (
+        "class ExplodingConsumer:\n"
+        "    def feed(self, data):\n"
+        "        return None\n"
+        "    def finish(self):\n"
+        "        return boom(None)\n"
+        'object.__setattr__(ADAPTERS["gemini"], "consumer", ExplodingConsumer)\n'
+        if incremental
+        else 'object.__setattr__(ADAPTERS["gemini"], "decode", boom)\n'
+    )
     return (
         "import sys\n"
         "from pratfall.adapters.registry import ADAPTERS\n"
         "from pratfall.cli import main\n"
         "def boom(_stdout):\n"
         "    raise KeyError('decoder blew up')\n"
-        'object.__setattr__(ADAPTERS["gemini"], "decode", boom)\n'
+        f"{patch}"
         f"sys.exit(main(['gm', 'prompt', '--json', '--config', {str(config)!r}]))\n"
     )
 
 
-def test_decoder_exception_normalizes_result_and_cleans_owned_descendant(tmp_path: Path) -> None:
+@pytest.mark.parametrize("incremental", [False, True])
+def test_decoder_exception_normalizes_result_and_cleans_owned_descendant(
+    tmp_path: Path, incremental: bool
+) -> None:
     lock_path = tmp_path / "decoder-failure.lock"
     group_path = tmp_path / "decoder-failure.group"
     descendant = (
@@ -2442,7 +2494,7 @@ print(json.dumps({{"response": "KEEP"}}), flush=True)
     config = write_agent(tmp_path, "gemini", fixture)
     cleaned = False
     process = subprocess.Popen(
-        [sys.executable, "-c", _decoder_failure_shim(config)],
+        [sys.executable, "-c", _decoder_failure_shim(config, incremental)],
         cwd=tmp_path,
         env=_progress_env(tmp_path),
         stdout=subprocess.PIPE,
@@ -2455,7 +2507,7 @@ print(json.dumps({{"response": "KEEP"}}), flush=True)
         assert process.returncode == 1
         assert stdout.count(b"\n") == 1
         assert result["status"] == "error"
-        assert result["native_exit_code"] == 0
+        assert result["native_exit_code"] == (None if incremental else 0)
         assert result["error"] == {
             "code": "internal_error",
             "message": "Unexpected failure: KeyError: 'decoder blew up'",

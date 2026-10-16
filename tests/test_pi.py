@@ -344,6 +344,30 @@ def test_pi_bounds_replacements_and_models() -> None:
     assert failure.value.decoded is not None and failure.value.decoded.output == "partial"
 
 
+@pytest.mark.parametrize("overflow", [False, True])
+def test_pi_bounds_distinct_model_records(overflow: bool) -> None:
+    record_limit = 3
+    consumer = pi.consumer(ConsumerLimits(records=record_limit))
+    consumer.feed(stream(end(message("first", model="first-model"))).encode())
+    consumer.feed(stream(end(message("second", model="second-model"))).encode())
+    if overflow:
+        with pytest.raises(ConsumerFailure) as caught:
+            consumer.feed(stream(end(message("third", model="third-model"))).encode())
+        assert caught.value.error == ResultError(
+            "stdout_limit_exceeded", f"Agent retained output records exceeded {record_limit}."
+        )
+        with pytest.raises(ConsumerFailure) as finished:
+            consumer.finish()
+        decoded = finished.value.decoded
+        assert decoded is not None
+    else:
+        consumer.feed(stream(SETTLED).encode())
+        decoded = consumer.finish()
+        assert decoded.error is None
+    assert decoded.output == "second"
+    assert decoded.reported_models == ("first-model", "second-model")
+
+
 def test_pi_invalid_unicode_preserves_prior_answer() -> None:
     decoded = pi.decode(stream(end(message("partial")), end(message("\ud800")), SETTLED))
     assert decoded.output == "partial"

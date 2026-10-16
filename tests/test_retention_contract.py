@@ -13,9 +13,11 @@ from pratfall.adapters import (
     kimi,
     opencode,
     openhands,
+    pi,
     qwen,
     warp,
 )
+from pratfall.adapters.registry import ADAPTERS
 from pratfall.consumer import (
     ByteConsumer,
     CapturingConsumer,
@@ -713,6 +715,25 @@ _OPENHANDS = _Canonical(
     1,
     DecodedOutput(output="hi"),
 )
+_PI = _Canonical(
+    "pi",
+    pi.consumer,
+    _stream(
+        {
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "hi"}],
+                "stopReason": "stop",
+                "model": "g",
+            },
+        },
+        {"type": "agent_settled"},
+    ),
+    len(b"hi") + len(b"g"),
+    2,
+    DecodedOutput(output="hi", reported_models=("g",)),
+)
 _QWEN = _Canonical(
     "qwen",
     qwen.consumer,
@@ -738,10 +759,17 @@ _CANONICAL = (
     _KIMI,
     _OPENCODE,
     _OPENHANDS,
+    _PI,
     _QWEN,
     _WARP,
 )
 _WITH_RECORDS = tuple(case for case in _CANONICAL if case.records > 0)
+
+
+def test_canonical_retention_cases_cover_every_consumer_adapter() -> None:
+    assert {case.name for case in _CANONICAL} == {
+        name for name, adapter in ADAPTERS.items() if adapter.consumer is not None
+    }
 
 
 def _ids(cases: tuple[_Canonical, ...]) -> list[str]:

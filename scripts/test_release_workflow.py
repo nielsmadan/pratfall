@@ -361,6 +361,25 @@ def test_partial_publication_uploads_only_missing_asset_without_clobber(tmp_path
     assert runner.call_args_list[2].args == (("gh", "release", "upload", "v1.2.3", assets[1]),)
 
 
+def test_immutable_release_with_missing_assets_is_rejected_without_mutation(tmp_path: Path) -> None:
+    notes, assets, target = publication_files(tmp_path)
+    release = metadata(notes, assets[:1], target)
+    release["isImmutable"] = True
+    with (
+        patch.object(
+            release_workflow.subprocess,
+            "run",
+            side_effect=[remote_tag(target), result(stdout=json.dumps(release))],
+        ) as runner,
+        pytest.raises(release_workflow.WorkflowError, match="immutable and is missing"),
+    ):
+        release_workflow.publish("v1.2.3", "pratfall 1.2.3", notes, target, assets)
+    assert [call.args[0][:3] for call in runner.call_args_list] == [
+        ("git", "ls-remote", "--exit-code"),
+        ("gh", "release", "view"),
+    ]
+
+
 def test_matching_draft_is_published_after_missing_assets_upload(tmp_path: Path) -> None:
     notes, assets, target = publication_files(tmp_path)
     responses = [

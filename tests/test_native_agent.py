@@ -185,7 +185,9 @@ def test_native_only_agent_stays_accepted(agent: str, capsys: pytest.CaptureFixt
     ]
 
 
-def test_vibe_native_agent_remains_reserved(capsys: pytest.CaptureFixture[str]) -> None:
+def test_vibe_native_agent_remains_reserved(
+    capsys: pytest.CaptureFixture[str], no_process_spawn: None
+) -> None:
     assert main(["vibe", "task", "--json", "--", "--agent=ask"]) == 2
     assert "controlled by prat" in json.loads(capsys.readouterr().out)["error"]["message"]
 

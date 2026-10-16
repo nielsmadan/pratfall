@@ -303,7 +303,9 @@ Encoding and presentation errors discovered after parent exit still invoke group
 [`_after_run_failure`](../src/pratfall/cli/dispatch.py): descendants can survive after closing the
 pipes. An unexpected exception is handled twice for the same reason: once where the process result
 is still bound, so cleanup runs, and once around the whole run as the last resort; both paths
-report `internal_error` rather than a traceback. Both ordinary and progress diagnostics preserve the
+report `internal_error` rather than a traceback. The runner cleans its owned process group before
+re-raising unexpected execution or consumer exceptions, even after the native parent exits.
+Both ordinary and progress diagnostics preserve the
 decoded answer and accounting when stderr fails. Ordinary
 diagnostics flush before final result emission; a failed stream is redirected to prevent another
 flush at interpreter shutdown from replacing the normalized exit code. The progress sink is
@@ -344,15 +346,8 @@ the catalog owns probe arguments.
 - The last-resort `internal_error` guard covers run dispatch. Management dispatch catches only
   `PratError`, so unexpected management errors can still produce tracebacks. The final stdout
   flush in `main()` handles `BrokenPipeError`; other flush failures can escape normalization.
-- If the runner raises before returning a `ProcessResult`, dispatch has no process group to clean.
-  The runner's collection `finally` kills the group only while the parent is alive, so an unexpected
-  consumer exception after parent exit can leave owned descendants behind.
 - Runner signal-handler installation precedes its restoring `try/finally`. A failure partway
   through installation can leave a changed handler installed.
-- Whole-document conformance membership in
-  [test_adapter_contracts.py](../tests/test_adapter_contracts.py) is maintained manually. Its shared
-  decoder matrix currently omits Grok, although Grok uses the shared strict parser. This is a gap in
-  shared conformance coverage, not evidence of a Grok decoding defect.
 
 ## Extending an adapter
 
@@ -376,7 +371,9 @@ Run repository checks from the repository root; pytest's configured cache and te
 relative to that directory. `just check`, `just coverage` and `just build` are separate gates.
 
 Parser and consumer probes need explicit fake executable prefixes, isolated config/XDG paths,
-and a restricted PATH. Calling the real parser can reach execution or `config init`; a parser-only
+and a restricted PATH. The source-test fixture defaults to the system-only PATH; rejection tests
+can also use `no_process_spawn` to fail at the external process boundary. Calling the real parser
+can reach execution or `config init`; a parser-only
 test intent does not isolate those effects. Specify expected argv and output independently of
 production builders. Give the harness its own deadline and cleanup.
 
@@ -392,7 +389,9 @@ typing and linting cannot detect retained payloads that bypass the budget.
 
 When mutation-testing these contracts, confirm the source edit landed and clear the relevant
 bytecode caches between runs. Same-size edits and reversions within one timestamp second can
-otherwise reuse stale `.pyc` files and make the test result misleading.
+otherwise reuse stale `.pyc` files and make the test result misleading. Retention and whole-document
+conformance matrices check their membership against the adapter registry, so adding an adapter
+requires a matching conformance case or an explicit text-only classification.
 
 [Installed-package checks](release.md#check-installed-packages-locally) exercise the wheel's shared
 Q/E scenarios and both wheel and sdist adapter and W01–W07 workflow scenarios. The workflow

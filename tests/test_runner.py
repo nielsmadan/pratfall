@@ -4,7 +4,6 @@ import selectors
 import signal
 import subprocess
 import sys
-import threading
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -538,26 +537,16 @@ def test_timeout_and_interruption_feed_term_cleanup_bytes_to_consumer(
         f"payload={payload!r};"
         "signal.signal(signal.SIGTERM,lambda *_:(os.write(1,payload),os._exit(0)));"
         f"open({str(ready)!r},'w').write('ready');"
+        f"{'os.kill(os.getppid(),signal.SIGINT);' if interrupt else ''}"
         "time.sleep(30)"
     )
-    sender: threading.Thread | None = None
-    if interrupt:
-
-        def send() -> None:
-            while not ready.exists():
-                time.sleep(0.01)
-            os.kill(os.getpid(), signal.SIGINT)
-
-        sender = threading.Thread(target=send)
-        sender.start()
     result = run(
         python(code),
         tmp_path,
-        5 if interrupt else 0.2,
+        5 if interrupt else 1,
         consumer=codex.consumer(),
     )
-    if sender is not None:
-        sender.join()
+    assert ready.read_text() == "ready"
     assert consumed(result).output == "cleanup answer"
     assert consumed(result).error is None
     if interrupt:
