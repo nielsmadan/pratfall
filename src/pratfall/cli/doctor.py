@@ -1,12 +1,11 @@
 import json
-import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from pratfall.catalog import AGENTS
-from pratfall.cli.presentation import _emit
+from pratfall.cli.presentation import _emit, _print_diagnostic
 from pratfall.codes import SIGNAL_EXIT_BASE
 from pratfall.config import agent_command
 from pratfall.interruption import InterruptionState, handler_for, handling
@@ -119,7 +118,7 @@ def _doctor(
     payload, lines, exit_code, message = prepared
     _emit(payload, lines, json_mode=json_mode)
     if message is not None and not json_mode:
-        print(f"prat: {message}", file=sys.stderr)
+        _print_diagnostic(message)
     return exit_code
 
 

@@ -118,7 +118,7 @@ def _completion_script(shell: str | None, environ: Mapping[str, str]) -> str:
 
 def _complete_command(words: Sequence[str], environ: Mapping[str, str]) -> int:
     def load(explicit: str | None) -> Config:
-        return load_config(explicit, cwd=Path.cwd(), env=environ)
+        return load_config(explicit, cwd=Path.cwd(), env=environ, skip_untrusted=True)
 
     try:
         result = _complete(words, load)

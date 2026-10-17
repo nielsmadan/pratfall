@@ -32,7 +32,11 @@ the [agent references](reference/overview.md).
   native options, and the child working directory before acquiring the prompt.
   [config.py](../src/pratfall/config.py) merges
   the global file with the invocation directory's `.pratfile`, or the local file selected by
-  `--config`. Local profiles replace global profiles by name. A profile naming a parent with
+  `--config`. Each file is read once as a regular file of at most `CONFIG_BYTES`; those exact bytes
+  are parsed and hashed. An automatically discovered `.pratfile` loads only when
+  [local_trust.py](../src/pratfall/local_trust.py) finds its path recorded with the same SHA-256 in
+  the trust store written by `config trust`; otherwise loading fails, except in shell completion,
+  which skips it. Local profiles replace global profiles by name. A profile naming a parent with
   `extends` is flattened once after that merge, so a `.pratfile` child can extend a base defined
   in the global config; chains resolve nearest-ancestor-first and a cycle is an error. Invocation
   options override profile options, the profile's inherited options, local defaults, global
@@ -168,8 +172,11 @@ adapter or the runner itself.
   instance starts.
 - **The `__step` protocol.** The hidden `__step` command is intercepted like `__complete`. The
   parent writes a JSON spec to an unlinked temporary file that becomes the child's stdin: `version`
-  (1), `parent` (the workflow process's pid), `arguments` (a list of strings) and `input` (a string
-  or null). The spec is bounded by `WORKFLOW_SPEC_BYTES`. The child moves the spec off fd 0, points
+  (1), `parent` (the workflow process's pid), `arguments` (a list of strings), `input` (a string
+  or null) and `config_digest` (the SHA-256 of the local config the parent loaded, or null). A
+  child whose loaded local config has a different digest fails with `invalid_config` before
+  validating native options; a rewritten `.pratfile` fails the trust check first, with its
+  "changed since it was trusted" message. The spec is bounded by `WORKFLOW_SPEC_BYTES`. The child moves the spec off fd 0, points
   fd 0 and `sys.stdin` at nothing, runs the ordinary run path with the step's input as its base
   prompt, and writes its usual `--json` result to stdout. Arguments start with the selector,
   then `--json` and `--no-notify`, then the parent's `--config`, `--cwd`, `--timeout`, `--progress`
@@ -189,8 +196,13 @@ adapter or the runner itself.
   TERM again, then KILL while any is alive. It does not use `runner.cleanup_process_group`, which
   probes a group after reaping. A child terminates itself with SIGTERM when its parent pid no
   longer matches the spec's `parent`.
-- **Bounds.** Spec size, result size (`WORKFLOW_RESULT_BYTES`), relayed line length and bound-output
-  size are bounded; the prompt limit applies to each step's input plus bound values before launch.
+- **Bounds.** Spec size, relayed line length and bound-output size are bounded; the prompt limit
+  applies to each step's input plus bound values before launch. `WORKFLOW_RESULT_BYTES` is one
+  budget over the stdout of every child in the workflow, buffered or retained, so parent memory and
+  the emitted result stay a constant multiple of it whatever the instance count: each text can
+  appear in `items[]`, the `each` step's joined output and the top-level output. The child whose
+  read crosses it fails with `stdout_limit_exceeded`, and the `each` and final-output joins are
+  checked against the same constant.
 
 [ADR 0006](decisions/0006-run-workflows-as-one-prat-process-per-step.md) records why steps are
 separate processes, and how it relates to [ADR 0004](decisions/0004-no-retries-fallback-or-implicit-install.md).
@@ -322,6 +334,10 @@ stdout contains final text or one JSON result. Native stderr and Pratfall diagno
 One execution path emits the launch line, native stderr and the completion line through the
 invocation's diagnostics writer, so progress is a choice of writer rather than a second run path.
 Trace mode replays captured native stdout on stderr before the completion line.
+Native stderr and trace replay pass through unchanged, but every `prat:` line, including native
+error messages, workflow failure lines and progress, escapes C0, DEL and C1 control characters
+other than tab (`\x1b`, `\r`, `\n`), so agent-supplied text cannot inject terminal sequences or
+forge a Pratfall line.
 The presentation layer's `_StdoutLatch` records whether a result may have been written and never
 resets that state. It observes the actual `print` operation because stdout may use an encoding
 other than UTF-8. `UnicodeEncodeError` means no bytes were committed; other write failures may be

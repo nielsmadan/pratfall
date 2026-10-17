@@ -12,7 +12,7 @@ LAYERS: tuple[tuple[str, ...], ...] = (
     ("__init__", "codes", "limits", "interruption", "nonblocking"),
     ("errors", "models"),
     ("catalog", "consumer", "notify", "prompt_input", "option_paths"),
-    ("prompt_templates", "prompt_editor", "instructions", "schema", "fences"),
+    ("prompt_templates", "prompt_editor", "instructions", "schema", "fences", "local_trust"),
     ("adapters", "config"),
     ("workflow_plan",),
     ("runner",),
@@ -44,6 +44,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
     "schema": frozenset({"consumer", "errors", "limits", "models", "prompt_input"}),
     "instructions": frozenset({"errors", "models", "prompt_input"}),
     "prompt_templates": frozenset({"errors", "prompt_input"}),
+    "local_trust": frozenset({"errors", "limits", "prompt_input"}),
     "adapters": frozenset({"consumer", "errors", "limits", "models", "schema"}),
     "config": frozenset(
         {
@@ -51,6 +52,7 @@ IMPORTS_ALLOWED: Mapping[str, frozenset[str]] = {
             "errors",
             "instructions",
             "limits",
+            "local_trust",
             "models",
             "option_paths",
             "prompt_templates",

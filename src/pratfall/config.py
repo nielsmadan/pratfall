@@ -1,6 +1,7 @@
 import math
 import os
 import re
+import stat
 import tomllib
 from collections.abc import Mapping
 from dataclasses import asdict, replace
@@ -11,7 +12,13 @@ from typing import Literal, NamedTuple
 from pratfall.catalog import BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent
 from pratfall.errors import PratError
 from pratfall.instructions import validate_instructions
-from pratfall.limits import DEFAULT_MAX_PARALLEL, MAX_PARALLEL_LIMIT, WORKFLOW_EACH_ITEMS
+from pratfall.limits import (
+    CONFIG_BYTES,
+    DEFAULT_MAX_PARALLEL,
+    MAX_PARALLEL_LIMIT,
+    WORKFLOW_EACH_ITEMS,
+)
+from pratfall.local_trust import TrustState, digest, trust, trust_state
 from pratfall.models import (
     MAX_TURNS,
     NOTIFY_METHODS,
@@ -53,7 +60,8 @@ def config_path(explicit: str | Path | None = None, *, cwd: Path, env: Mapping[s
         if explicit is not None:
             path = Path(explicit).expanduser()
         else:
-            root = Path(xdg).expanduser() if xdg else _home(env) / ".config"
+            xdg_root = Path(xdg or "").expanduser()
+            root = xdg_root if xdg_root.is_absolute() else _home(env) / ".config"
             path = root / "pratfall" / "config.toml"
     except RuntimeError as error:
         requested = explicit if explicit is not None else xdg
@@ -779,19 +787,46 @@ def _validate_workflows(config: Config) -> None:
             _validate_workflow_step(config, workflow, step, label)
 
 
-def _load_file(path: Path, *, required: bool) -> Config:
+def _read_config(path: Path, *, required: bool) -> bytes | None:
+    flags = os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
     try:
-        contents = path.read_text(encoding="utf-8")
+        descriptor = os.open(path, flags)
     except FileNotFoundError as error:
         if not required:
-            return Config(path=path)
+            return None
         raise PratError(f"{path}: config file does not exist.") from error
-    except (OSError, UnicodeError) as error:
+    except OSError as error:
+        raise PratError(f"{path}: cannot read config: {error}.") from error
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise PratError(f"{path}: cannot read config: not a regular file.")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            contents = stream.read(CONFIG_BYTES + 1)
+    except OSError as error:
+        raise PratError(f"{path}: cannot read config: {error}.") from error
+    finally:
+        os.close(descriptor)
+    if len(contents) > CONFIG_BYTES:
+        raise PratError(f"{path}: config exceeds the {CONFIG_BYTES} byte limit.")
+    return contents
+
+
+def _load_file(path: Path, *, required: bool) -> Config:
+    contents = _read_config(path, required=required)
+    return Config(path=path) if contents is None else _parse_file(path, contents)
+
+
+def _parse_file(path: Path, raw: bytes) -> Config:
+    try:
+        contents = raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    except UnicodeError as error:
         raise PratError(f"{path}: cannot read config: {error}.") from error
     try:
         table = tomllib.loads(contents)
     except (tomllib.TOMLDecodeError, ValueError) as error:
         raise PratError(f"{path}: invalid TOML: {error}.") from error
+    except RecursionError as error:
+        raise PratError(f"{path}: invalid TOML: nesting is too deep.") from error
     _known_keys(
         table,
         frozenset({"version", "defaults", "agents", "profiles", "templates", "workflows"}),
@@ -873,15 +908,28 @@ def _same_file(first: Path, second: Path) -> bool:
         return False
 
 
-def load_config(explicit: str | Path | None = None, *, cwd: Path, env: Mapping[str, str]) -> Config:
+def load_config(
+    explicit: str | Path | None = None,
+    *,
+    cwd: Path,
+    env: Mapping[str, str],
+    skip_untrusted: bool = False,
+) -> Config:
     global_path = config_path(cwd=cwd, env=env)
     local_path = config_path(explicit if explicit is not None else ".pratfile", cwd=cwd, env=env)
     if _same_file(global_path, local_path):
         config = _load_file(local_path, required=explicit is not None)
     else:
-        config = _merge_configs(
-            _load_file(global_path, required=False),
-            _load_file(local_path, required=explicit is not None),
+        contents = _read_config(local_path, required=explicit is not None)
+        if contents is not None and explicit is None:
+            state = trust_state(local_path, contents, env)
+            if state != "trusted" and not skip_untrusted:
+                raise PratError(_untrusted_message(local_path, state))
+            contents = contents if state == "trusted" else None
+        local = Config(path=local_path) if contents is None else _parse_file(local_path, contents)
+        config = replace(
+            _merge_configs(_load_file(global_path, required=False), local),
+            local_digest=None if contents is None else digest(contents),
         )
     config = replace(config, profiles=MappingProxyType(_resolve_layers(config.profile_layers)))
     for name, profile in config.profiles.items():
@@ -893,6 +941,21 @@ def load_config(explicit: str | Path | None = None, *, cwd: Path, env: Mapping[s
         )
     _validate_workflows(config)
     return config
+
+
+def _untrusted_message(path: Path, state: TrustState) -> str:
+    reason = "changed since it was trusted" if state == "changed" else "is not trusted"
+    return f"{path}: local config {reason}; review it, then run 'prat config trust'."
+
+
+def trust_local_config(
+    explicit: str | Path | None = None, *, cwd: Path, env: Mapping[str, str]
+) -> tuple[Path, str]:
+    path = config_path(explicit if explicit is not None else ".pratfile", cwd=cwd, env=env)
+    contents = _read_config(path, required=True) or b""
+    _parse_file(path, contents)
+    trust(path, contents, env)
+    return path, digest(contents)
 
 
 def resolve_profile(

@@ -17,6 +17,7 @@ import pytest
 
 from pratfall import prompt_editor
 from pratfall.errors import PratError
+from pratfall.local_trust import trust
 
 _CONTROLLER = """
 import fcntl, json, os, signal, sys, termios
@@ -342,6 +343,7 @@ print(json.dumps(dict(type='turn.completed', usage=dict(input_tokens=1, cached_i
         + json.dumps([sys.executable, str(agent)])
         + '\n[templates.review]\nprompt="Review $input"\n'
     )
+    trust(tmp_path / ".pratfile", (tmp_path / ".pratfile").read_bytes(), os.environ)
     code = """
 os.write(1, b'EDITING\\n')
 addition = os.read(0, 100)
@@ -396,6 +398,7 @@ def test_edit_cli_allows_absent_or_blank_draft(tmp_path: Path, arguments: list[s
         + json.dumps([sys.executable, str(agent)])
         + '\n[templates.blank]\nprompt="$input"\n'
     )
+    trust(tmp_path / ".pratfile", (tmp_path / ".pratfile").read_bytes(), os.environ)
     with editor_session(
         tmp_path,
         "path.write_text('final prompt')",

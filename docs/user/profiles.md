@@ -99,7 +99,7 @@ one run. The prompt is validated like a template, even for unused profiles.
 
 | Scope | Path |
 | --- | --- |
-| Global | `$XDG_CONFIG_HOME/pratfall/config.toml`, or `~/.config/pratfall/config.toml` when `XDG_CONFIG_HOME` is absent or empty. |
+| Global | `$XDG_CONFIG_HOME/pratfall/config.toml`, or `~/.config/pratfall/config.toml` when `XDG_CONFIG_HOME` is absent, empty or relative. |
 | Local | `.pratfile` in the directory where you invoke Prat. |
 | Explicit local | `--config PATH`, which replaces automatic `.pratfile` discovery. |
 
@@ -108,7 +108,30 @@ and `--cwd` does not affect config discovery. Relative `--config` paths resolve 
 directory.
 
 Missing global and automatic local files are allowed. A missing file explicitly selected with
-`--config` is an error. Every existing file requires `version = 1`.
+`--config` is an error. Every existing file requires `version = 1` and must be a regular file of
+at most 4 MiB.
+
+### Trust a `.pratfile`
+
+A `.pratfile` can set agent commands, command prefixes and native arguments, so cloning a
+repository and running `prat` in it would otherwise execute whatever that repository chose. Prat
+therefore loads an automatically discovered `.pratfile` only after you trust it:
+
+```sh
+prat config trust
+```
+
+This records the file's absolute path and SHA-256 digest in
+`$XDG_STATE_HOME/pratfall/trusted.json` (default `~/.local/state/pratfall/trusted.json`, also used
+when `XDG_STATE_HOME` is relative). Any
+later edit changes the digest, and every command then fails with
+`.pratfile: local config changed since it was trusted` until you review the file and run
+`prat config trust` again. An untrusted `.pratfile` fails the same way with `is not trusted`.
+Shell completion skips an untrusted `.pratfile` and still offers names from the global config.
+
+The global config and a file passed with `--config PATH` are trusted because you selected them.
+`prat --config PATH config trust` records a trust entry for that path; it is only needed when the
+same file is later discovered automatically as `.pratfile`.
 
 Create a local file with:
 
@@ -267,7 +290,10 @@ prat --config custom.toml config validate
 ```
 
 `config path` and `config init` target the global file unless `--config PATH` is supplied.
-`config validate` checks the merged configuration and lists the loaded files.
+`config validate` checks the merged configuration and lists the loaded files. `config trust`
+targets the invocation directory's `.pratfile` unless `--config PATH` is supplied, and checks that
+the file is valid TOML before trusting it; with `--json` it prints `path`, `sha256` and
+`trusted`.
 
 All files are checked for syntax, schema, and field types before merging. Every effective profile
 is then validated with its defaults. Defaults are checked against a built-in agent's capabilities

@@ -11,9 +11,11 @@ from pratfall.cli.parsing import _WORKFLOW_FLAGS, RunArguments, _run_cwd, _scan_
 from pratfall.cli.presentation import (
     _emit_result,
     _emit_stdout,
+    _escape_controls,
     _guard,
     _internal_message,
     _limit_text,
+    _print_diagnostic,
     _stderr_is_tty,
     _StdoutLatch,
 )
@@ -113,7 +115,14 @@ def _prepare(
     _run_cwd(parsed.cwd, invocation_cwd)
     base = _base_input(bound.source, invocation_cwd) if consumes else None
     return PreparedWorkflow(
-        name, workflow, prompts, bound.parameters, timeouts, base, _passthrough(parsed)
+        name,
+        workflow,
+        prompts,
+        bound.parameters,
+        timeouts,
+        base,
+        _passthrough(parsed),
+        config.local_digest,
     )
 
 
@@ -166,7 +175,7 @@ def _emit_early(payload: dict[str, object], latch: _StdoutLatch, *, json_mode: b
     if json_mode:
         _emit_stdout(json.dumps(payload, ensure_ascii=False), latch)
     else:
-        print(f"prat: {cast(dict[str, str], payload['error'])['message']}", file=sys.stderr)
+        _print_diagnostic(cast(dict[str, str], payload["error"])["message"])
     return cast(int, payload["exit_code"])
 
 
@@ -178,7 +187,7 @@ def _internal_failure(parsed: RunArguments, latch: _StdoutLatch, error: Exceptio
         if parsed.json and not latch.emitted:
             print(json.dumps(payload, ensure_ascii=False))
         else:
-            print(f"prat: {message}", file=sys.stderr)
+            _print_diagnostic(message)
     return exit_code
 
 
@@ -249,7 +258,7 @@ def _emit_workflow(payload: dict[str, object], latch: _StdoutLatch, *, json_mode
     _emit_result(payload, latch, json_mode=json_mode)
     if json_mode or payload["status"] == "success":
         return
-    print(_failure_line(payload), file=sys.stderr)
+    print(_escape_controls(_failure_line(payload)), file=sys.stderr)
 
 
 def _failure_line(payload: Mapping[str, object]) -> str:

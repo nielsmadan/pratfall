@@ -145,6 +145,7 @@ class Config:
     default_sources: Mapping[str, Path] = field(default_factory=lambda: MappingProxyType({}))
     templates: Mapping[str, PromptTemplate] = field(default_factory=lambda: MappingProxyType({}))
     workflows: Mapping[str, Workflow] = field(default_factory=lambda: MappingProxyType({}))
+    local_digest: str | None = None
 
 
 @dataclass(frozen=True)

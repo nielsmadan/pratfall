@@ -23,6 +23,7 @@ from pratfall.cli import dispatch as dispatch_module
 from pratfall.cli import main
 from pratfall.cli.presentation import _presentation_error
 from pratfall.config import init_config
+from pratfall.local_trust import digest
 from pratfall.models import ConsumedCapture, DecodedOutput, RawCapture, ResultError, Usage
 from pratfall.prompt_input import PROMPT_LIMIT
 from pratfall.runner import ProcessResult, RunLimits
@@ -2532,6 +2533,22 @@ class PartialStdout(io.StringIO):
         return super().write(value)
 
 
+HOSTILE_ERROR = "\x1b]52;c;ZWNobyBoaQ==\x07\x1b[31mfake\x9b\r\nprat: all good\tok"
+CLAUDE_HOSTILE_ERROR = f"""import json
+print(json.dumps({{"type": "result", "subtype": "success", "is_error": True, "result": {HOSTILE_ERROR!r}}}))
+"""
+
+
+def test_native_error_diagnostic_escapes_terminal_controls(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "claude", CLAUDE_HOSTILE_ERROR)
+    assert main(["--config", str(config), "cc", "hello"]) == 1
+    assert capsys.readouterr().err.splitlines()[-1] == (
+        "prat: \\x1b]52;c;ZWNobyBoaQ==\\x07\\x1b[31mfake\\x9b\\r\\nprat: all good\tok"
+    )
+
+
 def test_failure_after_emitted_output_adds_no_second_stdout_object(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -3632,8 +3649,20 @@ def test_unknown_selector_wins_over_extra_prompt_words(
 def step_spec(
     arguments: list[str], text: str | None, *, version: object = 1, parent: object = 4242
 ) -> io.BytesIO:
-    spec = {"version": version, "arguments": arguments, "input": text, "parent": parent}
+    spec = {
+        "version": version,
+        "arguments": arguments,
+        "input": text,
+        "parent": parent,
+        "config_digest": config_digest(arguments),
+    }
     return io.BytesIO(json.dumps(spec, ensure_ascii=False).encode("utf-8"))
+
+
+def config_digest(arguments: list[str]) -> str | None:
+    if "--config" not in arguments:
+        return None
+    return digest(Path(arguments[arguments.index("--config") + 1]).read_bytes())
 
 
 def step_result(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
@@ -3927,6 +3956,7 @@ def test_step_entry_end_to_end_with_non_ascii(tmp_path: Path) -> None:
         "version": 1,
         "arguments": ["move", "ä", "ö", "--config", str(config)],
         "input": "ü",
+        "config_digest": digest(config.read_bytes()),
         "parent": os.getpid(),
     }
     completed = subprocess.run(

@@ -9,7 +9,7 @@ from typing import BinaryIO
 
 from pratfall.cli.dispatch import _dispatch, _run_command, _step_command, _step_failure
 from pratfall.cli.parsing import _json_requested, _management_mode, build_parser
-from pratfall.cli.presentation import _emit, _silence_broken_stream
+from pratfall.cli.presentation import _emit, _print_diagnostic, _silence_broken_stream
 from pratfall.cli.shell_completion import _complete_command
 from pratfall.errors import PratError
 from pratfall.limits import WORKFLOW_WATCHDOG_INTERVAL
@@ -86,7 +86,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
                 json_mode=True,
             )
         else:
-            print(f"prat: {error}", file=sys.stderr)
+            _print_diagnostic(error)
         return error.exit_code
 
 

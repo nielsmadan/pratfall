@@ -23,6 +23,7 @@ from pratfall.cli.presentation import (
     _limit_text,
     _presentation_error,
     _preview,
+    _print_diagnostic,
     _stderr_is_tty,
     _StdoutLatch,
     _StreamDiagnostics,
@@ -30,7 +31,14 @@ from pratfall.cli.presentation import (
 from pratfall.cli.shell_completion import _completion_script
 from pratfall.cli.workflow_run import run_workflow
 from pratfall.codes import INTERNAL_ERROR, SIGNAL_EXIT_BASE, exit_code_for
-from pratfall.config import config_path, init_config, load_config, option_origins, resolve_profile
+from pratfall.config import (
+    config_path,
+    init_config,
+    load_config,
+    option_origins,
+    resolve_profile,
+    trust_local_config,
+)
 from pratfall.consumer import ByteConsumer, CapturingConsumer
 from pratfall.errors import PratError
 from pratfall.instructions import read_instructions
@@ -318,6 +326,13 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
     elif args.command == "config" and args.config_command == "init":
         path = init_config(args.config, cwd=cwd, env=environ)
         _emit({"path": str(path), "created": True}, [f"Created {path}"], json_mode=args.json)
+    elif args.command == "config" and args.config_command == "trust":
+        path, sha256 = trust_local_config(args.config, cwd=cwd, env=environ)
+        _emit(
+            {"path": str(path), "sha256": sha256, "trusted": True},
+            [f"Trusted {path} (sha256 {sha256})"],
+            json_mode=args.json,
+        )
     else:
         config = load_config(args.config, cwd=cwd, env=environ)
         _validate_config_native_arguments(config)
@@ -508,6 +523,7 @@ class _RunState:
 @dataclass(frozen=True)
 class _StepRun:
     input: str | None
+    config_digest: str | None
 
 
 def _run_command(
@@ -530,7 +546,7 @@ def _internal_failure(error: Exception, state: _RunState) -> int:
         if state.json_mode and not state.stdout.emitted:
             print(json.dumps(_internal_payload(message, state.resolved), ensure_ascii=False))
         else:
-            print(f"prat: {message}", file=sys.stderr)
+            _print_diagnostic(message)
     return exit_code_for(INTERNAL_ERROR)
 
 
@@ -765,6 +781,11 @@ def _run_selected(
         ):
             parsed = _resolve_run_paths(parsed, invocation_cwd)
             config = load_config(parsed.config, cwd=invocation_cwd, env=environ)
+            if step is not None and config.local_digest != step.config_digest:
+                raise PratError(
+                    f"{parsed.config or '.pratfile'}: local config changed since the workflow "
+                    "started."
+                )
             _validate_config_native_arguments(config)
             if step is None:
                 _config_warnings(config, diagnostics)
@@ -801,7 +822,7 @@ def _run_selected(
         if state.json_mode:
             print(json.dumps(payload, ensure_ascii=False))
         else:
-            print(f"prat: {error}", file=sys.stderr)
+            _print_diagnostic(error)
         return exit_code
     except PratError as error:
         payload = validation_error(
@@ -810,7 +831,7 @@ def _run_selected(
         if state.json_mode:
             print(json.dumps(payload, ensure_ascii=False))
         else:
-            print(f"prat: {error}", file=sys.stderr)
+            _print_diagnostic(error)
         return error.exit_code
 
 
@@ -863,7 +884,12 @@ def _validated_step_spec(spec: object) -> tuple[list[str], _StepRun, int]:
         raise PratError(
             "Workflow step spec input must be a string or null.", code="invalid_arguments"
         )
-    return list(arguments), _StepRun(text), parent
+    digest = spec.get("config_digest")
+    if digest is not None and not isinstance(digest, str):
+        raise PratError(
+            "Workflow step spec config_digest must be a string or null.", code="invalid_arguments"
+        )
+    return list(arguments), _StepRun(text, digest), parent
 
 
 def _step_failure(error: PratError) -> int:

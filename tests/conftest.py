@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from pratfall import local_trust
+
 
 @pytest.fixture(autouse=True)
 def isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -14,6 +16,8 @@ def isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("VISUAL", raising=False)
     monkeypatch.setenv("EDITOR", "/nonexistent/prat-test-editor")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config-home"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state-home"))
+    monkeypatch.setattr("pratfall.config.trust_state", lambda _path, _contents, _env: "trusted")
     monkeypatch.chdir(tmp_path)
     stdin = io.StringIO("")
     monkeypatch.setattr(stdin, "isatty", lambda: True)
@@ -26,6 +30,11 @@ def no_process_spawn(monkeypatch: pytest.MonkeyPatch) -> None:
         pytest.fail("validation must not launch a process")
 
     monkeypatch.setattr(subprocess, "Popen", forbidden)
+
+
+@pytest.fixture
+def real_trust(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pratfall.config.trust_state", local_trust.trust_state)
 
 
 @pytest.fixture

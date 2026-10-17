@@ -42,7 +42,6 @@ _MANAGEMENT_HELP: Mapping[str, str] = MappingProxyType(
     }
 )
 
-
 _CONFIG_COMMAND_HELP: Mapping[str, str] = MappingProxyType(
     {
         "path": "Print the global config path, or --config PATH.",
@@ -50,6 +49,7 @@ _CONFIG_COMMAND_HELP: Mapping[str, str] = MappingProxyType(
         "validate": (
             "Validate every configured profile, template and workflow without launching an agent."
         ),
+        "trust": "Trust the current .pratfile, or --config PATH, exactly as it is now.",
     }
 )
 

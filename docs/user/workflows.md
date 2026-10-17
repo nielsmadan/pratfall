@@ -252,6 +252,11 @@ never started are reported as `skipped`. The workflow reports the first failed s
 exit code, and its error is `step 'NAME': MESSAGE`. There is no retry and no fallback, as for a
 single run.
 
+The JSON results returned by all steps and instances of one workflow share a 64 MiB budget. The
+step or instance whose result crosses it fails with `stdout_limit_exceeded`, which stops new
+launches like any failure. Because the budget is shared, a large `each` step cannot keep growing
+Prat's memory or the workflow result with every instance.
+
 `--timeout` applies to each step, not to the workflow. A step that is still running after its
 timeout plus twice the termination grace plus 10 seconds is torn down and reported as `timeout`.
 
@@ -264,8 +269,9 @@ terminate themselves.
 ## Output and JSON
 
 Text mode writes the combined output of the final steps, the steps no other step comes after, to
-stdout, joined as above when there are several. On failure stdout is empty and one line goes to
-stderr:
+stdout, joined as above when there are several. If that joined output exceeds 64 MiB, the
+workflow fails with `stdout_limit_exceeded` and the error `final output: joined output exceeds the
+67108864 byte limit.` On failure stdout is empty and one line goes to stderr:
 
 ```text
 prat: workflow 'write' failed at step 'critique': Codex exited with status 3.
@@ -319,6 +325,11 @@ never notify themselves.
 
 ## Configuration changes during a run
 
-Each step is a fresh `prat` process that loads configuration from disk when it starts. Editing a
-profile or `.pratfile` while a workflow runs changes steps that have not started yet. Parameters,
-timeouts and the step list were resolved at launch and do not change.
+Each step is a fresh `prat` process that loads configuration from disk when it starts. Editing
+the global config while a workflow runs changes steps that have not started yet. The local file
+(`.pratfile` or `--config PATH`) is pinned to the SHA-256 digest seen at launch: if a step's agent
+or anything else rewrites it, every later step fails with `invalid_config`, so a step cannot plant
+a command for the next one. A rewritten `.pratfile` reports `local config changed since it was
+trusted`, because the trust check runs first; a rewritten `--config` file reports `local config
+changed since the workflow started`.
+Parameters, timeouts and the step list were resolved at launch and do not change.

@@ -7,6 +7,7 @@ from typing import Literal
 
 import pytest
 
+from pratfall import workflow_plan as plan_module
 from pratfall.config import load_config
 from pratfall.errors import PratError
 from pratfall.limits import STDOUT_BYTES, WORKFLOW_EACH_ITEMS, WORKFLOW_RESULT_BYTES
@@ -1080,6 +1081,32 @@ def test_workflow_result_reports_the_output_cap_as_the_each_step_failure() -> No
         {"item": label, "label": label, **child("x" * STDOUT_BYTES)} for label in "abcdefgh"
     ]
     assert steps[2] == {"step": "merge", "status": "skipped"}
+
+
+def test_workflow_result_fails_when_the_joined_final_output_exceeds_the_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(plan_module, "WORKFLOW_RESULT_BYTES", 20)
+    outcomes = (outcome("a", child("A" * 10)), outcome("b", child("B" * 10)))
+    result = workflow_result("pair", graph(node("a"), node("b")), outcomes, 1, None, {})
+    assert (result["status"], result["exit_code"], result["output"]) == ("error", 1, "")
+    assert result["error"] == {
+        "code": "stdout_limit_exceeded",
+        "message": "final output: joined output exceeds the 20 byte limit.",
+    }
+    steps = result["steps"]
+    assert isinstance(steps, list)
+    assert [entry["output"] for entry in steps] == ["A" * 10, "B" * 10]
+
+
+def test_workflow_result_at_the_joined_final_output_cap_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    joined = "## a\n\nAA\n\n## b\n\nBB"
+    monkeypatch.setattr(plan_module, "WORKFLOW_RESULT_BYTES", len(joined))
+    outcomes = (outcome("a", child("AA")), outcome("b", child("BB")))
+    result = workflow_result("pair", graph(node("a"), node("b")), outcomes, 1, None, {})
+    assert (result["status"], result["output"], result["error"]) == ("success", joined, None)
 
 
 def test_workflow_result_reports_a_never_started_each_step_with_an_empty_item_list() -> None:

@@ -135,7 +135,11 @@ unusable result carries a synthesized result with `output: ""`, null `usage` and
 an `error`. A workflow `status` and `exit_code` are the first failed step's; on interruption they
 are `interrupted` and `128 + signal`, with error code `interrupted`. An error that stops the
 workflow before any step launches, such as a bad parameter, reports `steps: []` and
-`duration_ms: 0`. `error.message` names the failing step as `step 'NAME': MESSAGE`.
+`duration_ms: 0`. `error.message` names the failing step as `step 'NAME': MESSAGE`. A result that
+crosses the shared 64 MiB [workflow result budget](workflows.md#failure-and-interruption) is a
+synthesized `stdout_limit_exceeded` failure of that step or instance. When only the joined final
+output exceeds 64 MiB, the workflow fails with `stdout_limit_exceeded`, every step keeps its
+result, and the message is `final output: MESSAGE`.
 
 A step with [`each`](workflows.md#fan-out-over-items) reports only `step`, `status`, `exit_code`,
 `output`, `duration_ms`, `usage`, `cost_usd`, `error`, `items` and `dropped`, in that order, with

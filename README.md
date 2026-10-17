@@ -188,7 +188,11 @@ prat simple --effort high "investigate this failure"
 | Global | `~/.config/pratfall/config.toml`¹ | `prat config init` |
 | Local | `.pratfile` in the invocation directory | `prat --config .pratfile config init` |
 
-¹ Uses `$XDG_CONFIG_HOME/pratfall/config.toml` when `XDG_CONFIG_HOME` is set and nonempty.
+¹ Uses `$XDG_CONFIG_HOME/pratfall/config.toml` when `XDG_CONFIG_HOME` is set to an absolute path.
+
+A `.pratfile` can replace agent commands, so Prat refuses to load one until you review it and run
+`prat config trust` in its directory. Editing the file revokes that trust. A file passed with
+`--config` is trusted because you selected it.
 
 Local configuration merges over global, and a local profile replaces a global one of the same
 name. Settings resolve in this order: **command-line flags → profile → its `extends` chain → local

@@ -142,4 +142,5 @@ def test_goose_startup_error_reaches_cli(
         assert payload["native_exit_code"] == 1
         assert payload["output"] == ""
     else:
-        assert diagnostic in captured.err
+        escaped = diagnostic.replace("\n", "\\n")
+        assert captured.err.splitlines()[-1] == f"prat: Goose exited with status 1.\\n{escaped}"

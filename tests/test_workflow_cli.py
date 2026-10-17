@@ -21,6 +21,7 @@ from pratfall.cli import main
 from pratfall.cli import workflow_run as workflow_module
 from pratfall.codes import STDOUT_LIMIT_EXCEEDED, exit_code_for
 from pratfall.errors import PratError
+from pratfall.local_trust import digest, trust
 from pratfall.prompt_input import InputInterrupted
 from test_run_cli import _lock_is_available, isolate_notify_env, write_agent
 
@@ -30,6 +31,7 @@ from pathlib import Path
 prompt = sys.stdin.buffer.read().decode()
 lines = []
 structured = None
+failure = None
 for line in prompt.split("\\n"):
     command, _, argument = line.partition(" ")
     if command == "@touch":
@@ -49,6 +51,9 @@ for line in prompt.split("\\n"):
     elif command == "@log":
         with open(argument, "a") as stream:
             stream.write("called\\n")
+    elif command == "@plant":
+        with open(argument, "a") as stream:
+            stream.write("# planted\\n")
     elif command == "@exists":
         lines.append("marker=" + ("present" if Path(argument).exists() else "absent"))
     elif command == "@blank":
@@ -57,6 +62,8 @@ for line in prompt.split("\\n"):
         lines.append("a" * int(argument))
     elif command == "@structured":
         structured = json.loads(argument)
+    elif command == "@fail":
+        failure = argument
     elif command == "@enter":
         running, starts, name = argument.split(" ")
         lines.append(f"others={len(os.listdir(running))}")
@@ -71,6 +78,8 @@ usage = {"input_tokens": 2, "output_tokens": 3}
 result = {"type": "result", "subtype": "success", "is_error": False, "result": answer, "usage": usage}
 if structured is not None:
     result["structured_output"] = structured
+if failure is not None:
+    result.update(is_error=True, result=failure)
 print(json.dumps(result))
 """
 
@@ -202,6 +211,50 @@ def test_chain_passes_step_output_to_next_input(
     config = chain_config(tmp_path)
     assert main(["chain", "--prompt=hello", "--config", str(config)]) == 0
     assert capsys.readouterr().out == "second: first: hello\n"
+
+
+def test_step_refuses_a_config_rewritten_during_the_workflow(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = chain_config(tmp_path)
+    prompt = f"--prompt=hello\n@plant {config}"
+    assert main(["chain", prompt, "--config", str(config), "--json"]) == 2
+    result = json_result(capsys)
+    assert [step["status"] for step in steps_of(result)] == ["success", "error"]
+    assert steps_of(result)[1]["error"] == {
+        "code": "invalid_config",
+        "message": f"{config}: local config changed since the workflow started.",
+    }
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_step_refuses_a_pratfile_rewritten_during_the_workflow(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pratfile = tmp_path / ".pratfile"
+    chain_config(tmp_path).rename(pratfile)
+    trust(pratfile, pratfile.read_bytes(), os.environ)
+    assert main(["chain", f"--prompt=hello\n@plant {pratfile}", "--json"]) == 2
+    result = json_result(capsys)
+    assert [step["status"] for step in steps_of(result)] == ["success", "error"]
+    assert steps_of(result)[1]["error"] == {
+        "code": "invalid_config",
+        "message": (
+            f"{pratfile}: local config changed since it was trusted; "
+            "review it, then run 'prat config trust'."
+        ),
+    }
+
+
+def test_failed_step_message_escapes_terminal_controls(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = chain_config(tmp_path)
+    hostile = "\x1b]0;owned\x07\rprat: all good"
+    assert main(["chain", f"--prompt=x\n@fail {hostile}", "--config", str(config)]) == 1
+    assert capsys.readouterr().err.splitlines()[-1] == (
+        "prat: workflow 'chain' failed at step 'a': \\x1b]0;owned\\x07\\rprat: all good"
+    )
 
 
 def test_file_base_input_reaches_root_step(
@@ -606,6 +659,7 @@ def test_children_receive_spec_with_parent_and_passthrough(
             "folder=ünï",
         ],
         "input": "bäse",
+        "config_digest": digest(config.read_bytes()),
     }
 
 
@@ -621,7 +675,6 @@ def test_children_receive_spec_with_parent_and_passthrough(
             "exited with status 0 without a valid result: field 'exit_code' is missing or has the wrong type",
         ),
         ("mismatch", "exited with status 3 but reported exit code 0."),
-        ("oversized", "result exceeded 1024 bytes."),
     ],
 )
 def test_bad_child_results_are_internal_errors(
@@ -631,7 +684,6 @@ def test_bad_child_results_are_internal_errors(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(supervisor_module, "WORKFLOW_RESULT_BYTES", 1024)
     config = chain_config(tmp_path)
     with_launcher(monkeypatch, tmp_path, mode)
     assert main(["chain", "--prompt=x", "--json", "--config", str(config)]) == 1
@@ -641,6 +693,54 @@ def test_bad_child_results_are_internal_errors(
         failed_step("a", "error", 1, "internal_error", message),
         {"step": "b", "status": "skipped"},
     ]
+
+
+def test_oversized_child_result_exceeds_the_workflow_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(supervisor_module, "WORKFLOW_RESULT_BYTES", 1024)
+    config = chain_config(tmp_path)
+    with_launcher(monkeypatch, tmp_path, "oversized")
+    exit_code = exit_code_for(STDOUT_LIMIT_EXCEEDED)
+    assert main(["chain", "--prompt=x", "--json", "--config", str(config)]) == exit_code
+    result = json_result(capsys)
+    message = "step results exceeded the workflow budget of 1024 bytes."
+    assert result["error"] == {"code": STDOUT_LIMIT_EXCEEDED, "message": f"step 'a': {message}"}
+    assert steps_of(result) == [
+        failed_step("a", "error", exit_code, STDOUT_LIMIT_EXCEEDED, message),
+        {"step": "b", "status": "skipped"},
+    ]
+
+
+def test_each_instances_share_one_workflow_result_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(supervisor_module, "WORKFLOW_RESULT_BYTES", 6000)
+    log = tmp_path / "calls.log"
+    config = workflow_config(
+        tmp_path,
+        {"list": "a\nb\nc\nd\ne", "work": f"@log {log}\n@big 2000\n$file"},
+        "[workflows.fan]\nparallel = false\nsteps = [\n"
+        '  {name="l", profile="list"},\n'
+        '  {name="w", profile="work", each="l", as="file"},\n]\n',
+    )
+    exit_code = exit_code_for(STDOUT_LIMIT_EXCEEDED)
+    assert main(["fan", "--json", "--config", str(config)]) == exit_code
+    result = json_result(capsys)
+    message = "step results exceeded the workflow budget of 6000 bytes."
+    assert result["error"] == {
+        "code": STDOUT_LIMIT_EXCEEDED,
+        "message": f"step 'w': item 'c': {message}",
+    }
+    items = items_of(steps_of(result)[1])
+    assert [(item["item"], item["status"]) for item in items] == [
+        ("a", "success"),
+        ("b", "success"),
+        ("c", "error"),
+        ("d", "skipped"),
+        ("e", "skipped"),
+    ]
+    assert log.read_text() == "called\n" * 3
 
 
 def test_child_without_a_result_reports_its_exit_status() -> None:

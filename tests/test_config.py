@@ -13,9 +13,12 @@ from pratfall.config import (
     merge_options,
     parse_options,
     resolve_profile,
+    trust_local_config,
     validate_capabilities,
 )
 from pratfall.errors import PratError
+from pratfall.limits import CONFIG_BYTES
+from pratfall.local_trust import digest
 from pratfall.models import Options, PromptTemplate, WorkflowStep
 
 
@@ -51,16 +54,22 @@ def test_explicit_missing_file_fails(tmp_path: Path) -> None:
         load_config(path, cwd=Path.cwd(), env=os.environ)
 
 
-@pytest.mark.parametrize("xdg", [{}, {"XDG_CONFIG_HOME": ""}])
-def test_absent_or_empty_xdg_uses_home(tmp_path: Path, xdg: dict[str, str]) -> None:
+@pytest.mark.parametrize(
+    "xdg",
+    [
+        {},
+        {"XDG_CONFIG_HOME": ""},
+        {"XDG_CONFIG_HOME": "settings"},
+        {"XDG_CONFIG_HOME": "./settings"},
+    ],
+)
+def test_absent_empty_or_relative_xdg_uses_home(tmp_path: Path, xdg: dict[str, str]) -> None:
     env = {"HOME": str(tmp_path), **xdg}
     assert config_path(cwd=Path("/elsewhere"), env=env) == tmp_path / ".config/pratfall/config.toml"
 
 
-def test_relative_paths_use_invocation_cwd(tmp_path: Path) -> None:
-    env = {"XDG_CONFIG_HOME": "settings"}
-    assert config_path(cwd=tmp_path, env=env) == tmp_path / "settings/pratfall/config.toml"
-    assert config_path("other.toml", cwd=tmp_path, env=env) == tmp_path / "other.toml"
+def test_relative_explicit_path_uses_invocation_cwd(tmp_path: Path) -> None:
+    assert config_path("other.toml", cwd=tmp_path, env={}) == tmp_path / "other.toml"
 
 
 def test_load_config_reads_global_config_from_the_given_environment(tmp_path: Path) -> None:
@@ -72,6 +81,22 @@ def test_load_config_reads_global_config_from_the_given_environment(tmp_path: Pa
     config = load_config(cwd=project, env={"HOME": str(home)})
     assert global_path == home / ".config/pratfall/config.toml"
     assert config.sources == (global_path, project / ".pratfile")
+
+
+def test_tilde_xdg_expands_to_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", "~/xdg")
+    assert config_path(cwd=Path.cwd(), env=os.environ) == tmp_path / "xdg/pratfall/config.toml"
+
+
+def test_relative_xdg_cannot_make_a_repo_config_global(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", "settings")
+    (tmp_path / "settings/pratfall").mkdir(parents=True)
+    (tmp_path / "settings/pratfall/config.toml").write_text(LOCAL_COMMAND, encoding="utf-8")
+    assert load_config(cwd=tmp_path, env=os.environ).commands == {}
 
 
 def test_explicit_file_merges_over_global_and_replaces_automatic_local(tmp_path: Path) -> None:
@@ -183,6 +208,97 @@ def test_automatic_local_read_errors_are_reported(tmp_path: Path) -> None:
     (tmp_path / ".pratfile").mkdir()
     with pytest.raises(PratError, match=r"\.pratfile: cannot read config"):
         load_config(cwd=Path.cwd(), env=os.environ)
+
+
+LOCAL_COMMAND = 'version=1\n[agents.claude]\ncommand=["./tools/claude"]\n'
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_untrusted_automatic_local_config_is_refused(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(LOCAL_COMMAND, encoding="utf-8")
+    with pytest.raises(PratError) as caught:
+        load_config(cwd=Path.cwd(), env=os.environ)
+    assert str(caught.value) == (
+        f"{tmp_path / '.pratfile'}: local config is not trusted; "
+        "review it, then run 'prat config trust'."
+    )
+    assert caught.value.code == "invalid_config"
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_trusted_local_config_loads_until_it_changes(tmp_path: Path) -> None:
+    local = tmp_path / ".pratfile"
+    local.write_text(LOCAL_COMMAND, encoding="utf-8")
+    assert trust_local_config(cwd=Path.cwd(), env=os.environ) == (
+        local,
+        digest(LOCAL_COMMAND.encode()),
+    )
+    config = load_config(cwd=Path.cwd(), env=os.environ)
+    assert config.commands["claude"] == (str(tmp_path / "tools" / "claude"),)
+    assert config.local_digest == digest(LOCAL_COMMAND.encode())
+    local.write_text(LOCAL_COMMAND + "# edited\n", encoding="utf-8")
+    with pytest.raises(PratError, match="local config changed since it was trusted"):
+        load_config(cwd=Path.cwd(), env=os.environ)
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_skip_untrusted_keeps_the_global_config(tmp_path: Path) -> None:
+    home = tmp_path / "config-home" / "pratfall"
+    home.mkdir(parents=True)
+    write_config(home, 'version=1\n[profiles.home]\nagent="cx"\n')
+    (tmp_path / ".pratfile").write_text(LOCAL_COMMAND, encoding="utf-8")
+    config = load_config(skip_untrusted=True, cwd=Path.cwd(), env=os.environ)
+    assert list(config.profiles) == ["home"]
+    assert config.commands == {}
+    assert config.local_digest is None
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_explicit_local_config_is_trusted_by_selection(tmp_path: Path) -> None:
+    local = tmp_path / "project.toml"
+    local.write_text(LOCAL_COMMAND, encoding="utf-8")
+    config = load_config(local, cwd=Path.cwd(), env=os.environ)
+    assert config.commands["claude"] == (str(tmp_path / "tools" / "claude"),)
+    assert config.local_digest == digest(LOCAL_COMMAND.encode())
+
+
+def test_trusting_requires_a_valid_existing_config(tmp_path: Path) -> None:
+    with pytest.raises(PratError, match="config file does not exist"):
+        trust_local_config(cwd=Path.cwd(), env=os.environ)
+    (tmp_path / ".pratfile").write_text("not toml [", encoding="utf-8")
+    with pytest.raises(PratError, match="invalid TOML"):
+        trust_local_config(cwd=Path.cwd(), env=os.environ)
+
+
+def test_special_files_are_not_read_as_config(tmp_path: Path) -> None:
+    os.mkfifo(tmp_path / ".pratfile")
+    with pytest.raises(PratError, match=r"\.pratfile: cannot read config: not a regular file"):
+        load_config(cwd=Path.cwd(), env=os.environ)
+    (tmp_path / ".pratfile").unlink()
+    (tmp_path / ".pratfile").symlink_to("/dev/zero")
+    with pytest.raises(PratError, match=r"\.pratfile: cannot read config: not a regular file"):
+        load_config(cwd=Path.cwd(), env=os.environ)
+
+
+def test_config_size_is_bounded(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_bytes(b"version=1\n" + b"#" * CONFIG_BYTES)
+    with pytest.raises(PratError, match=f"config exceeds the {CONFIG_BYTES} byte limit"):
+        load_config(cwd=Path.cwd(), env=os.environ)
+
+
+def test_deeply_nested_toml_is_a_config_error(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text("x = " + "[" * 5000 + "]" * 5000, encoding="utf-8")
+    with pytest.raises(PratError, match="invalid TOML: nesting is too deep"):
+        load_config(cwd=Path.cwd(), env=os.environ)
+
+
+def test_crlf_config_values_keep_unix_newlines(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_bytes(
+        b'version=1\r\n[templates.review]\r\nprompt="""Review\r\n$input"""\r\n'
+    )
+    assert (
+        load_config(cwd=Path.cwd(), env=os.environ).templates["review"].prompt == "Review\n$input"
+    )
 
 
 def test_selecting_global_explicitly_loads_it_once() -> None:

@@ -423,12 +423,19 @@ def _succeeded(result: StepResult) -> bool:
 
 
 def _joined(aggregate: StepResult, output: str) -> StepResult:
-    if len(output.encode("utf-8")) <= WORKFLOW_RESULT_BYTES:
+    if not _oversized(output):
         return replace(aggregate, output=output)
-    message = f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit."
-    error = ResultError(STDOUT_LIMIT_EXCEEDED, message)
+    error = ResultError(STDOUT_LIMIT_EXCEEDED, _join_limit_message())
     exit_code = exit_code_for(STDOUT_LIMIT_EXCEEDED)
     return replace(aggregate, status="error", exit_code=exit_code, error=error)
+
+
+def _oversized(output: str) -> bool:
+    return len(output.encode("utf-8")) > WORKFLOW_RESULT_BYTES
+
+
+def _join_limit_message() -> str:
+    return f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit."
 
 
 def _skipped_entry(step: WorkflowStep) -> dict[str, object]:
@@ -569,7 +576,11 @@ def _summary(
     blocks = tuple(
         (step, results[step].output) for step in final_steps(workflow) if step in results
     )
-    return "success", 0, join_outputs(blocks) or "", None
+    output = join_outputs(blocks) or ""
+    if _oversized(output):
+        error = {"code": STDOUT_LIMIT_EXCEEDED, "message": f"final output: {_join_limit_message()}"}
+        return "error", exit_code_for(STDOUT_LIMIT_EXCEEDED), "", error
+    return "success", 0, output, None
 
 
 def _error_fields(error: ResultError | None) -> tuple[Code, str]:

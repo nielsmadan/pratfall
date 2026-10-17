@@ -22,6 +22,7 @@ from pratfall.cli.shell_completion import (
     _run_flags,
 )
 from pratfall.config import load_config
+from pratfall.local_trust import trust
 from pratfall.models import Config, Profile
 
 PRATFILE = """version=1
@@ -280,6 +281,22 @@ def test_local_pratfile_profiles_are_offered(tmp_path: Path) -> None:
     assert words(["qu"], tmp_path) == ["quick"]
 
 
+@pytest.mark.usefixtures("real_trust")
+def test_untrusted_pratfile_names_are_hidden_until_trusted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = tmp_path / "config-home" / "pratfall"
+    home.mkdir(parents=True)
+    (home / "config.toml").write_text(
+        'version=1\n[profiles.quiet]\nagent="codex"\n', encoding="utf-8"
+    )
+    pratfile = tmp_path / ".pratfile"
+    pratfile.write_text(PRATFILE, encoding="utf-8")
+    assert callback(["qu"], capsys) == ["words", "quiet\tprofile: codex"]
+    trust(pratfile, pratfile.read_bytes(), os.environ)
+    assert callback(["qu"], capsys) == ["words", "quick\tprofile: gemini", "quiet\tprofile: codex"]
+
+
 def test_explicit_config_flag_is_honored(tmp_path: Path) -> None:
     (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
     (tmp_path / "other.toml").write_text(
@@ -361,7 +378,7 @@ def test_native_arguments_delegate_to_shell(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("arguments", "expected"),
     [
-        (["config", ""], ["init", "path", "validate"]),
+        (["config", ""], ["init", "path", "trust", "validate"]),
         (["config", "path", ""], []),
         (["completion", ""], ["bash", "zsh"]),
         (["completion", "--"], ["--help"]),
@@ -562,7 +579,9 @@ def test_bash_glue_completes_params(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    pratfile = tmp_path / ".pratfile"
+    pratfile.write_text(PRATFILE, encoding="utf-8")
+    trust(pratfile, pratfile.read_bytes(), os.environ)
     path = tmp_path / "prat.bash"
     path.write_text(script("bash", capsys), encoding="utf-8")
     driver = tmp_path / "driver.bash"
@@ -573,7 +592,11 @@ def test_bash_glue_completes_params(
         text=True,
         check=True,
         cwd=tmp_path,
-        env={"PATH": f"{shim}:/usr/bin:/bin", "XDG_CONFIG_HOME": str(tmp_path / "config-home")},
+        env={
+            "PATH": f"{shim}:/usr/bin:/bin",
+            "XDG_CONFIG_HOME": str(tmp_path / "config-home"),
+            "XDG_STATE_HOME": str(tmp_path / "state-home"),
+        },
     )
     assert sorted(result.stdout.split()) == expected
 

@@ -23,6 +23,7 @@ from pratfall.codes import (
     INVALID_ARGUMENTS,
     PROCESS_IO_ERROR,
     SIGNAL_EXIT_BASE,
+    STDOUT_LIMIT_EXCEEDED,
     TIMEOUT,
 )
 from pratfall.errors import PratError
@@ -63,6 +64,7 @@ class PreparedWorkflow:
     timeouts: Mapping[str, float]
     base: str | None
     passthrough: tuple[str, ...]
+    config_digest: str | None = None
 
 
 class Supervised(NamedTuple):
@@ -121,6 +123,7 @@ class _Supervision:
     active: Counter[str] = field(default_factory=Counter)
     instances: dict[str, list[StepOutcome]] = field(default_factory=dict)
     failed: bool = False
+    collected: int = 0
     relay: _Relay = field(default_factory=_Relay)
 
 
@@ -205,7 +208,13 @@ def _start(state: _Supervision, step: WorkflowStep, item: int | None) -> None:
     if problem is not None:
         _record(state, step, item, synthesized_result("error", INVALID_ARGUMENTS, problem))
         return
-    spec = {"version": 1, "parent": os.getpid(), "arguments": list(arguments), "input": text}
+    spec = {
+        "version": 1,
+        "parent": os.getpid(),
+        "arguments": list(arguments),
+        "input": text,
+        "config_digest": prepared.config_digest,
+    }
     try:
         process = _spawn(state.launcher, spec, state.cwd)
     except OSError as error:
@@ -349,17 +358,19 @@ def _read(state: _Supervision, key: selectors.SelectorKey) -> None:
             child.line.clear()
         return
     if is_stdout:
-        _collect(child, chunk)
+        _collect(state, child, chunk)
         return
     child.line.extend(chunk)
     _relay_lines(state, child)
 
 
-def _collect(child: _Child, chunk: bytes) -> None:
-    if child.overflow or len(child.stdout) + len(chunk) > WORKFLOW_RESULT_BYTES:
+def _collect(state: _Supervision, child: _Child, chunk: bytes) -> None:
+    if child.overflow or state.collected + len(chunk) > WORKFLOW_RESULT_BYTES:
+        state.collected -= len(child.stdout)
         child.overflow = True
         child.stdout.clear()
         return
+    state.collected += len(chunk)
     child.stdout.extend(chunk)
 
 
@@ -449,8 +460,8 @@ def _child_result(
     overflow: bool, stdout: bytes, returncode: int, interrupting: int | None
 ) -> StepResult:
     if overflow:
-        message = f"result exceeded {WORKFLOW_RESULT_BYTES} bytes."
-        return synthesized_result("error", INTERNAL_ERROR, message)
+        message = f"step results exceeded the workflow budget of {WORKFLOW_RESULT_BYTES} bytes."
+        return synthesized_result("error", STDOUT_LIMIT_EXCEEDED, message)
     try:
         result = _parse_result(stdout)
     except ValueError as error:

@@ -52,6 +52,19 @@ def _limit_text(step: WorkflowStep) -> str:
     return text + (" overflow=truncate" if step.overflow == "truncate" else "")
 
 
+_CONTROL_ESCAPES = {
+    code: f"\\x{code:02x}" for code in (*range(0x20), *range(0x7F, 0xA0)) if code != ord("\t")
+} | {ord("\n"): "\\n", ord("\r"): "\\r"}
+
+
+def _escape_controls(text: str) -> str:
+    return text.translate(_CONTROL_ESCAPES)
+
+
+def _print_diagnostic(message: object) -> None:
+    print(f"prat: {_escape_controls(str(message))}", file=sys.stderr)
+
+
 class _Diagnostics(Protocol):
     start_errors: ClassVar[tuple[type[Exception], ...]]
     write_errors: ClassVar[tuple[type[Exception], ...]]
@@ -96,7 +109,7 @@ class _StreamDiagnostics:
     def line(self, value: str) -> None:
         if self.failed:
             return
-        print(value, file=sys.stderr)
+        print(_escape_controls(value), file=sys.stderr)
 
     def text(self, value: str) -> None:
         if self.failed:
@@ -140,7 +153,7 @@ class _ProgressDiagnostics:
         self.failed = True
 
     def line(self, value: str) -> None:
-        self.text(value + "\n")
+        self.text(_escape_controls(value) + "\n")
 
     def text(self, value: str) -> None:
         self.bytes(value.encode("utf-8", errors="replace"))

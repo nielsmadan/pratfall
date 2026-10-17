@@ -24,9 +24,11 @@ from pratfall.cli.parsing import _parse_run
 from pratfall.config import init_config, load_config, resolve_profile
 from pratfall.errors import PratError
 from pratfall.interruption import InterruptionState
+from pratfall.local_trust import digest
 from pratfall.models import Config, Invocation, Options, PromptTemplate, RawCapture
 from pratfall.runner import ProcessResult, RunLimits
 from pratfall.runner import run as run_process
+from test_run_cli import CLAUDE_SUCCESS, write_agent
 
 
 @pytest.mark.parametrize(
@@ -183,6 +185,43 @@ def test_init_and_validate_management(tmp_path: Path, capsys: pytest.CaptureFixt
     }
     assert main(["config", "validate", "--config", str(path)]) == 0
     assert capsys.readouterr().out == f"Valid config: {path}\n"
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_local_config_runs_only_after_config_trust(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    local = tmp_path / ".pratfile"
+    write_agent(tmp_path, "claude", CLAUDE_SUCCESS).rename(local)
+    assert main(["cc", "hello", "--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == {
+        "code": "invalid_config",
+        "message": (
+            f"{local}: local config is not trusted; review it, then run 'prat config trust'."
+        ),
+    }
+    assert main(["config", "trust", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "schema_version": 1,
+        "path": str(local),
+        "sha256": digest(local.read_bytes()),
+        "trusted": True,
+    }
+    assert main(["cc", "hello", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "success"
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_management_commands_refuse_untrusted_local_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / ".pratfile").write_text('version=1\n[profiles.work]\nagent="cx"\n')
+    assert main(["profiles"]) == 2
+    assert "local config is not trusted" in capsys.readouterr().err
+    assert main(["config", "trust"]) == 0
+    sha256 = digest((tmp_path / ".pratfile").read_bytes())
+    assert capsys.readouterr().out == f"Trusted {tmp_path / '.pratfile'} (sha256 {sha256})\n"
+    assert main(["profiles"]) == 0
 
 
 def test_default_validate_explains_missing_config(capsys: pytest.CaptureFixture[str]) -> None:
