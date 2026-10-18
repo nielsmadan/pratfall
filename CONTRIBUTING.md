@@ -17,7 +17,7 @@ just build
 `just setup` installs repository dependencies and Lefthook hooks. It does not install `prat` as a
 global command. Tests use fake executables and must not invoke paid agent inference.
 
-Runtime code lives in `src/pratfall/`; tests mirror its modules under `tests/`. Release helper tests
+Runtime code lives in `src/pratfall/`; tests mirror its modules under `tests/`. Release script tests
 live under `scripts/` and are part of `just test` and `just check`. Keep the runtime standard-library
 only unless a dependency has a demonstrated need.
 

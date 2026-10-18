@@ -1,8 +1,10 @@
 # Release and distribution
 
-The [release helper](../scripts/release.py) prepares an annotated tag, atomically pushes `main`
-and that tag, then prints workflow and release links through `report_publication` and finishes.
-Publication runs asynchronously; local success confirms the Git push. The
+Releases use [curtains](https://github.com/nielsmadan/curtaincall); install it first with
+`brew install nielsmadan/tap/curtaincall`. `just release` runs it with the
+[release policy](../scripts/release.json): it prepares an annotated tag, atomically pushes `main`
+and that tag, then prints workflow and release links and finishes. Publication runs
+asynchronously; local success confirms the Git push. The
 [workflow](../.github/workflows/release.yml) attaches the wheel and sdist and updates
 `nielsmadan/homebrew-tap`. Pratfall is not published to PyPI.
 
@@ -15,15 +17,13 @@ Publication runs asynchronously; local success confirms the Git push. The
 
 ## Prerequisites
 
-Run from a clean `main` checkout with full history, one matching fetch/push destination, matching
-local and remote release tags, and all remote commits incorporated. The repository and `origin/main`
-must already exist. Publish a new repository's initial branch as a separate explicit action; retain
-the helper's remote-branch and ancestry checks. The local helper uses Git for remote inspection and
-publication of the branch and tag, with Git push access to the repository.
-
-Check that origin's actual host is `github.com`: the repository check in the helper's
-[`check_release`](../scripts/release.py) matches a URL substring rather than parsing its host.
-This validation limitation was deferred in the 2026-09-09 review.
+Run from a clean `main` checkout with full history, Git 2.45+, and one matching fetch/push
+destination whose GitHub repository matches the policy. The repository and `origin/main` must
+already exist; publish a new repository's initial branch as a separate explicit action. Curtains
+uses Git for remote inspection and publication of the branch and tag, with Git push access to the
+repository. It never fetches: the fetched `origin/main` must be an ancestor of `HEAD`, so fetch or
+pull first. Every historical `vMAJOR.MINOR.PATCH` tag, not just the latest, must exist both locally
+and on origin and peel to the same commit.
 
 The workflow needs `HOMEBREW_TAP_TOKEN` as a repository Actions secret: a fine-grained PAT
 restricted to write access on `nielsmadan/homebrew-tap`. The workflow can create an absent
@@ -39,16 +39,17 @@ just release patch
 just release 0.2.0
 ```
 
-`--dry-run` performs read-only Git and remote inspection and prints the planned checks. A real
-release runs the [configured checks](../scripts/release.json) before interactive confirmation or
-explicit `--yes`, then verifies HEAD, checkout and remote state still match the reviewed state.
+`--dry-run` performs read-only Git and remote inspection. It skips the tool check and every policy
+command, including the checks and the git-cliff version suggestion, so its proposal is a labelled
+conventional-commit estimate. A real release runs the [configured checks](../scripts/release.json)
+before interactive confirmation or explicit `--yes`, then verifies HEAD, checkout and remote state
+still match the reviewed state.
 
-[`prepare`](../scripts/release.py) runs the configured stages in
-[release.json](../scripts/release.json): they update `pyproject.toml`, run `uv lock`, and generate
-`CHANGELOG.md` with the pinned git-cliff version. Only those three files may change. It creates a
-`chore: release VERSION` commit, after which `main` tags the annotated `vVERSION` tag and pushes
-both atomically with `--no-follow-tags`. Failures preserve local state for inspection; never
-replace a published tag. Check the linked workflow for publication success or failure. A failed
+Curtains runs the configured stages in [release.json](../scripts/release.json): they update
+`pyproject.toml`, run `uv lock`, and generate `CHANGELOG.md` with the pinned git-cliff version.
+Only those three files may change. It creates a `chore: release VERSION` commit, tags it with the
+annotated `vVERSION` tag and pushes `main` and the tag atomically. Failures preserve local state
+for inspection; never replace a published tag. Check the linked workflow for publication success or failure. A failed
 workflow leaves the remote tag in place for a retry after fixing its cause.
 
 Every publication is a regular GitHub release carrying the wheel, sdist and Homebrew formula.
