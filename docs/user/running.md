@@ -293,6 +293,8 @@ prat cx "review this change" --dry-run
 ```
 
 `--dry-run` reads and validates the prompt, then prints the resolved command without launching it.
+For OpenCode the preview still runs `opencode --version`, because its command depends on the
+installed major version; a probe that fails stops the preview the same way it stops a run.
 Prompts sent through stdin appear as a byte count; prompts sent as command arguments appear in
 full. Add `--json` for a machine-readable preview. When an adapter overrides child environment
 variables, JSON includes an `env` object containing only those overrides; the text preview shows
@@ -602,7 +604,8 @@ opens each nonblocking, checks its descriptor type, and reads at most one byte t
 Binary data is not decoded and Prat imposes no attachment payload-size cap. Native agents read the
 original canonical paths later: files may change between validation and use. Native format,
 image-capable model and payload limits remain authoritative; a recognized filename extension does
-not establish valid content. `--dry-run` performs these same local checks without launching an agent.
+not establish valid content. `--dry-run` performs these same local checks without launching an agent;
+only OpenCode's version probe runs.
 
 Native equivalents after `--` remain accepted when the public attachment array is absent or empty.
 An active public list rejects equivalent native options, including Codex `-i` and OpenCode/Kilo `-f`.

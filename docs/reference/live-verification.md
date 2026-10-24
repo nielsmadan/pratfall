@@ -30,6 +30,21 @@ destinations `/opt/homebrew/bin` and `~/.local/bin` have read-only grants in thi
 The user will perform all installations, authentication and real examples in their own terminal.
 These historical agent-side failures do not block that workflow.
 
+## OpenCode 2.0.32 runs, 2026-10-18 to 2026-10-21
+
+The user ran these in their own terminal with `command_prefix = ["sops-exec"]`, where `opencode`
+resolved to 2.0.32.
+
+| Command | Result |
+| --- | --- |
+| `prat oc 'Reply with exactly PRAT_OK.' --model openrouter/xiaomi/mimo-v2.6-pro --effort high --dry-run` | Probe selected 2.x: `sops-exec opencode run --standalone --format json --model 'openrouter/xiaomi/mimo-v2.6-pro#high'` |
+| The same with `--json` instead of `--dry-run` | `native_exit`: `Variant unavailable for openrouter/xiaomi/mimo-v2.6-pro: high`; the model offers no `high` variant |
+| The same without `--effort`, before the dropped-finish handling | `protocol_error` with output `PRAT_OK`, native exit 0, no `step_finish` ([anomalyco/opencode#53207](https://github.com/anomalyco/opencode/issues/53207)) |
+| The same after the dropped-finish handling | `status: "success"`, output `PRAT_OK`, `usage` and `cost_usd` null |
+
+1.x and an effort-capable 2.x model were not rerun. `prat doctor --versions` keeps its three-second
+probe, which timed out for OpenCode in the audit above; runs use a 15-second probe.
+
 ## Repeatable example
 
 Use a disposable empty directory and a bounded prompt after completing the native agent's setup:

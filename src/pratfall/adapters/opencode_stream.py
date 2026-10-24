@@ -16,6 +16,8 @@ from pratfall.models import Activity, DecodedOutput, ResultError, Usage
 
 _FAILURE_REASONS = frozenset({"length", "content-filter", "error", "unknown"})
 _MESSAGELESS_ERRORS = frozenset({"MessageOutputLengthError"})
+_MALFORMED_ERROR = "OpenCode error event is malformed."
+_GENERIC_ERROR = "OpenCode reported an error."
 
 
 @dataclass
@@ -25,6 +27,7 @@ class _State:
     usage_parts: dict[str, Usage] = field(default_factory=dict)
     cost_parts: dict[str, int | float | None] = field(default_factory=dict)
     completed: bool = False
+    text_since_finish: bool = False
     provider_error: ResultError | None = None
     recognized: bool = False
 
@@ -34,13 +37,20 @@ def decode(stdout: str) -> DecodedOutput:
 
 
 def consumer(limits: ConsumerLimits = DEFAULT_CONSUMER_LIMITS) -> JsonlConsumer:
-    return _Consumer(limits)
+    return _Consumer(limits, final_finish_optional=False)
+
+
+def unfinished_final_step_consumer(
+    limits: ConsumerLimits = DEFAULT_CONSUMER_LIMITS,
+) -> JsonlConsumer:
+    return _Consumer(limits, final_finish_optional=True)
 
 
 class _Consumer(JsonlConsumer):
-    def __init__(self, limits: ConsumerLimits) -> None:
+    def __init__(self, limits: ConsumerLimits, *, final_finish_optional: bool) -> None:
         super().__init__("OpenCode", limits)
         self.state = _State()
+        self.final_finish_optional = final_finish_optional
 
     def apply(self, event: dict[str, object]) -> Activity | None:
         return _apply_event(self, event)
@@ -71,6 +81,8 @@ class _Consumer(JsonlConsumer):
         if failure is not None:
             return DecodedOutput(output=output, usage=usage, cost_usd=cost_usd, error=failure)
         if not state.completed:
+            if self.final_finish_optional and state.text_since_finish:
+                return DecodedOutput(output=output)
             if self.failed:
                 return DecodedOutput(output=output, usage=usage, cost_usd=cost_usd)
             suffix = "" if state.recognized else " (only unknown events were received)"
@@ -99,17 +111,20 @@ def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | No
     event_type = event["type"]
     if event_type == "text":
         state.recognized = True
+        state.text_since_finish = True
         _text(consumer, event)
         return "answering"
     elif event_type == "step_finish":
         state.recognized = True
+        state.text_since_finish = False
         _finish(consumer, event)
         return "finishing"
     elif event_type == "error":
         state.recognized = True
         _error(consumer, event.get("error"))
         return "finishing"
-    if event_type in {"tool_call", "tool_result"}:
+    if event_type in {"tool_use", "tool_call", "tool_result"}:
+        state.text_since_finish = False
         return "tool"
     if event_type == "reasoning":
         return "reasoning"
@@ -190,8 +205,22 @@ def _finish(consumer: _Consumer, event: dict[str, object]) -> None:
 
 def _error(consumer: _Consumer, value: object) -> None:
     if not isinstance(value, dict):
-        consumer.malformed("OpenCode error event is malformed.")
+        consumer.malformed(_MALFORMED_ERROR)
+    elif "name" not in value and isinstance(value.get("type"), str):
+        _typed_error(consumer, value)
+    else:
+        _named_error(consumer, value)
+
+
+def _typed_error(consumer: _Consumer, value: dict[str, object]) -> None:
+    message = value.get("message")
+    if not isinstance(message, str):
+        consumer.malformed(_MALFORMED_ERROR)
         return
+    _provider(consumer, message or _GENERIC_ERROR)
+
+
+def _named_error(consumer: _Consumer, value: dict[str, object]) -> None:
     name = value.get("name")
     data = value.get("data")
     message = data.get("message") if isinstance(data, dict) else None
@@ -201,10 +230,9 @@ def _error(consumer: _Consumer, value: object) -> None:
         or (message is None and name not in _MESSAGELESS_ERRORS)
         or (message is not None and not isinstance(message, str))
     ):
-        consumer.malformed("OpenCode error event is malformed.")
+        consumer.malformed(_MALFORMED_ERROR)
         return
-    diagnostic = name if message is None else message or "OpenCode reported an error."
-    _provider(consumer, diagnostic)
+    _provider(consumer, name if message is None else message or _GENERIC_ERROR)
 
 
 def _usage(value: object) -> Usage | ResultError:

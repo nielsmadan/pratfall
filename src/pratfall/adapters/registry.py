@@ -50,6 +50,7 @@ class Adapter:
     schema_whole_document: Callable[[str], DecodedOutput] | None = None
     schema_consumer: ConsumerFactory | None = None
     validate_schema: Callable[[PreparedSchema], None] | None = None
+    for_version: Callable[[str], "Adapter"] | None = None
     decode: Callable[[str], DecodedOutput] = field(init=False)
 
     def for_schema(self, enabled: bool) -> Self:
@@ -68,6 +69,23 @@ class Adapter:
             object.__setattr__(self, "decode", _whole_document(self.consumer))
         else:
             raise TypeError("Adapter needs exactly one of whole_document or consumer.")
+
+
+def _opencode_for_version(version: str) -> Adapter:
+    return _OPENCODE_V2 if opencode.major_version(version) >= opencode.V2_MAJOR else _OPENCODE
+
+
+_OPENCODE_V2 = Adapter(
+    build=opencode.build_v2,
+    validate=opencode.validate_v2,
+    consumer=opencode.v2_consumer,
+)
+_OPENCODE = Adapter(
+    build=opencode.build,
+    validate=opencode.validate,
+    consumer=opencode.consumer,
+    for_version=_opencode_for_version,
+)
 
 
 ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
@@ -121,11 +139,7 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
             validate=hermes.validate,
             whole_document=hermes.decode,
         ),
-        "opencode": Adapter(
-            build=opencode.build,
-            validate=opencode.validate,
-            consumer=opencode.consumer,
-        ),
+        "opencode": _OPENCODE,
         "kimi": Adapter(build=kimi.build, validate=kimi.validate, consumer=kimi.consumer),
         "goose": Adapter(build=goose.build, validate=goose.validate, whole_document=goose.decode),
         "kilo": Adapter(build=kilo.build, validate=kilo.validate, consumer=kilo.consumer),
@@ -156,4 +170,8 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
         ),
         "grok": Adapter(build=grok.build, validate=grok.validate, whole_document=grok.decode),
     }
+)
+
+ADAPTER_VARIANTS: Mapping[str, Mapping[str, Adapter]] = MappingProxyType(
+    {"opencode": MappingProxyType({"2": _OPENCODE_V2})}
 )

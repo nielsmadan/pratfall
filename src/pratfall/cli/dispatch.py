@@ -8,9 +8,9 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO
 
-from pratfall.adapters.registry import ADAPTERS
+from pratfall.adapters.registry import ADAPTERS, Adapter
 from pratfall.catalog import AGENTS
-from pratfall.cli.doctor import _doctor
+from pratfall.cli.doctor import RUN_VERSION_TIMEOUT, _doctor, probe_version
 from pratfall.cli.parsing import RunArguments, _json_requested, _parse_run, _run_cwd
 from pratfall.cli.presentation import (
     _config_warnings,
@@ -292,8 +292,13 @@ def _validate_native_arguments(
     resolved: ResolvedProfile, label: str, origins: Mapping[str, OptionOrigin]
 ) -> None:
     adapter = ADAPTERS.get(resolved.agent.name)
-    if adapter is None:
-        return
+    if adapter is not None:
+        _validate_adapter_arguments(adapter, resolved, label, origins)
+
+
+def _validate_adapter_arguments(
+    adapter: Adapter, resolved: ResolvedProfile, label: str, origins: Mapping[str, OptionOrigin]
+) -> None:
     try:
         adapter.validate(resolved)
     except PratError as error:
@@ -350,18 +355,33 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
     return 0
 
 
-def _build_invocation(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
-    return ADAPTERS[resolved.agent.name].build(resolved, prompt)
+def _run_adapter(
+    resolved: ResolvedProfile, cwd: Path, label: str, origins: Mapping[str, OptionOrigin]
+) -> Adapter:
+    adapter = ADAPTERS[resolved.agent.name]
+    if adapter.for_version is None:
+        return adapter
+    selected = adapter.for_version(_native_version(resolved, cwd))
+    _validate_adapter_arguments(selected, resolved, label, origins)
+    return selected
 
 
-def _decode(resolved: ResolvedProfile, stdout: str) -> DecodedOutput:
-    return (
-        ADAPTERS[resolved.agent.name].for_schema(resolved.options.schema is not None).decode(stdout)
+def _native_version(resolved: ResolvedProfile, cwd: Path) -> str:
+    process, version, error = probe_version(
+        resolved.command, resolved.agent, cwd, RUN_VERSION_TIMEOUT
     )
+    if process.interrupted_by is not None:
+        raise InputInterrupted(process.interrupted_by)
+    if version is None:
+        raise PratError(
+            f"{resolved.agent.label} version probe failed: {error}",
+            code=process.error.code if process.error is not None else "native_exit",
+        )
+    return version
 
 
 def _decode_process(
-    resolved: ResolvedProfile, process: ProcessResult
+    adapter: Adapter, process: ProcessResult
 ) -> tuple[DecodedOutput, str, ResultError | None]:
     capture = process.capture
     decoded = capture.decoded if isinstance(capture, ConsumedCapture) else None
@@ -380,7 +400,7 @@ def _decode_process(
             "output_encoding", "Agent stderr is not valid UTF-8."
         )
     if decoded is None:
-        decoded = _decode(resolved, stdout) if stdout is not None else DecodedOutput()
+        decoded = adapter.decode(stdout) if stdout is not None else DecodedOutput()
     return decoded, stderr, encoding_error
 
 
@@ -425,6 +445,7 @@ def _after_run_presentation_failure(process: ProcessResult, error: Exception) ->
 @dataclass(frozen=True)
 class _RunPlan:
     resolved: ResolvedProfile
+    adapter: Adapter
     invocation: Invocation
     cwd: Path
     timeout: float
@@ -467,7 +488,7 @@ def _present_run(
     plan: _RunPlan, diagnostics: _Diagnostics, process: ProcessResult
 ) -> tuple[ProcessResult, DecodedOutput]:
     resolved = plan.resolved
-    decoded, native_stderr, encoding_error = _decode_process(resolved, process)
+    decoded, native_stderr, encoding_error = _decode_process(plan.adapter, process)
     if encoding_error is not None and process.error is None:
         process = _after_run_failure(process, encoding_error)
     if resolved.options.schema is not None and decoded.error is not None:
@@ -621,11 +642,13 @@ def _validate_schema_extraction(resolved: ResolvedProfile, extract: bool) -> Non
 
 
 def _prepare_run_schema(
-    resolved: ResolvedProfile, origins: Mapping[str, OptionOrigin], resources: ExitStack
+    adapter: Adapter,
+    resolved: ResolvedProfile,
+    origins: Mapping[str, OptionOrigin],
+    resources: ExitStack,
 ) -> ResolvedProfile:
     if resolved.options.schema is None:
         return resolved
-    adapter = ADAPTERS[resolved.agent.name]
     transport = adapter.schema_transport
     if transport is None:
         raise PratError("Agent does not support schema output.", code="invalid_arguments")
@@ -698,6 +721,7 @@ def _with_step(parsed: RunArguments, step: _StepRun | None) -> RunArguments:
 @dataclass(frozen=True)
 class _PreparedRun:
     resolved: ResolvedProfile
+    adapter: Adapter
     template: str | None
     bound: BoundInput
     cwd: Path
@@ -717,9 +741,10 @@ def _prepare_run(
     resolved = _prepare_run_paths(resolved, origins, label)
     cwd = _run_cwd(parsed.cwd, invocation_cwd)
     template, bound = _bind_run_input(config, parsed)
-    resolved = _prepare_run_schema(resolved, origins, resources)
+    adapter = _run_adapter(resolved, cwd, label, origins)
+    resolved = _prepare_run_schema(adapter, resolved, origins, resources)
     resolved = _prepare_run_instructions(resolved, origins)
-    return _PreparedRun(resolved, template, bound, cwd)
+    return _PreparedRun(resolved, adapter, template, bound, cwd)
 
 
 def _run_prompt(
@@ -751,10 +776,11 @@ def _run_plan(
     timeout = resolved.options.timeout
     if timeout is None:
         raise PratError("Resolved timeout is missing.", code="invalid_arguments")
-    adapter = ADAPTERS[resolved.agent.name].for_schema(resolved.options.schema is not None)
+    adapter = prepared.adapter.for_schema(resolved.options.schema is not None)
     consumer = adapter.consumer() if adapter.consumer is not None else None
     return _RunPlan(
         resolved=resolved,
+        adapter=adapter,
         invocation=invocation,
         cwd=prepared.cwd,
         timeout=timeout,
@@ -796,7 +822,7 @@ def _run_selected(
             state.resolved = resolved
             prepared = _prepare_run(parsed, config, resolved, invocation_cwd, resources)
             prompt = _run_prompt(parsed, prepared, invocation_cwd, environ)
-            invocation = _build_invocation(prepared.resolved, prompt)
+            invocation = prepared.adapter.build(prepared.resolved, prompt)
             if parsed.dry_run:
                 _preview(
                     prepared.resolved,

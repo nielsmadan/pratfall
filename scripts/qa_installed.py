@@ -1771,6 +1771,10 @@ def _calls(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
+def _agent_calls(path: Path) -> list[dict[str, object]]:
+    return [call for call in _calls(path) if not call.get("version_probe")]
+
+
 def _available(lock_path: Path) -> bool:
     with lock_path.open("a+b") as stream:
         try:
@@ -3240,10 +3244,10 @@ def _exercise_routes(prat: Path, root: Path, config: Path) -> dict[str, object]:
     routes = {agent: agent for agent in AGENTS} | ALIASES
     routed: dict[str, str] = {}
     for selector, agent in routes.items():
-        before = len(_calls(log))
+        before = len(_agent_calls(log))
         completed = _run(prat, root, [selector, f"route {selector}", "--json"], config=config)
         result = _json_result(completed)
-        calls = _calls(log)[before:]
+        calls = _agent_calls(log)[before:]
         assert len(calls) == 1
         call = calls[0]
         assert completed.returncode == result["exit_code"] == result["native_exit_code"] == 0

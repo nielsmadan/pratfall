@@ -77,6 +77,7 @@ def test_attachment_fake_receives_binary_file_path_and_prompt(
     outputs["kilo"] = outputs["opencode"]
     script.write_text(
         "import json, pathlib, sys\n"
+        "if sys.argv[1:] == ['--version']: raise SystemExit(print('1.19.3'))\n"
         f"pathlib.Path({str(log)!r}).write_text(json.dumps([sys.argv[1:], sys.stdin.read()]))\n"
         f"print({outputs[agent]!r})\n"
     )
@@ -131,8 +132,12 @@ def test_attachments_four_layer_path_origins_and_clearing(tmp_path: Path) -> Non
 
 @pytest.mark.parametrize("agent", PREFIXES)
 @pytest.mark.parametrize("from_config", [False, True])
+@pytest.mark.usefixtures("opencode_one_on_path")
 def test_selected_attachment_preserves_symlink_parent_target_and_origin(
-    agent: str, from_config: bool, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    agent: str,
+    from_config: bool,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     config_dir = tmp_path / "config"
     config_dir.mkdir()
@@ -255,6 +260,7 @@ def test_invalid_attachment_fails_before_input(
         ("kilo", ["-fx"]),
     ],
 )
+@pytest.mark.usefixtures("opencode_one_on_path")
 def test_attachment_collision_and_native_only_compatibility(
     agent: str,
     native: list[str],

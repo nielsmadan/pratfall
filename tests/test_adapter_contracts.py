@@ -33,7 +33,7 @@ from pratfall.adapters import (
     vibe,
 )
 from pratfall.adapters.native_args import Flag
-from pratfall.adapters.registry import ADAPTERS, Adapter
+from pratfall.adapters.registry import ADAPTER_VARIANTS, ADAPTERS, Adapter
 from pratfall.catalog import BY_NAME
 from pratfall.cli.presentation import ACTIVITY_LABELS
 from pratfall.codes import Code
@@ -140,8 +140,16 @@ def _owning_flag(variant: tuple[str, ...], index: int) -> str:
     return variant[index - 1] if index else argument
 
 
+_NAMED_ADAPTERS: Mapping[str, tuple[str, Adapter]] = {
+    **{agent: (agent, adapter) for agent, adapter in ADAPTERS.items()},
+    **{
+        f"{agent}@{version}": (agent, adapter)
+        for agent, variants in ADAPTER_VARIANTS.items()
+        for version, adapter in variants.items()
+    },
+}
 _RESERVED_CASES: tuple[tuple[str, str], ...] = tuple(
-    (agent, flag) for agent in sorted(ADAPTERS) for flag in _reserved(agent)
+    (name, flag) for name in sorted(_NAMED_ADAPTERS) for flag in _reserved(_NAMED_ADAPTERS[name][0])
 )
 
 
@@ -157,12 +165,19 @@ def test_adapter_requires_exactly_one_whole_document_or_consumer() -> None:
         )
 
 
-@pytest.mark.parametrize("agent", sorted(ADAPTERS))
+@pytest.mark.parametrize("name", sorted(_NAMED_ADAPTERS))
 @pytest.mark.parametrize(("option", "options", "marker"), _CAPABILITY_CASES)
 def test_build_emits_exactly_the_capabilities_the_catalog_declares(
-    agent: str, option: str, options: Options, marker: str | Mapping[str, str]
+    name: str, option: str, options: Options, marker: str | Mapping[str, str]
 ) -> None:
-    build = ADAPTERS[agent].build
+    agent, adapter = _NAMED_ADAPTERS[name]
+    try:
+        adapter.validate(resolved(agent, options))
+    except PratError as rejected:
+        assert _declares(BY_NAME[agent].capabilities, option)
+        assert rejected.option == option
+        return
+    build = adapter.build
     baseline = build(resolved(agent, Options(timeout=_TIMEOUT)), b"prompt").argv
     variant = build(resolved(agent, options), b"prompt").argv
     if not _declares(BY_NAME[agent].capabilities, option):
@@ -181,12 +196,13 @@ def test_build_emits_exactly_the_capabilities_the_catalog_declares(
             continue
         supplied = replace(options, native_args=(flag, variant[index]))
         with pytest.raises(PratError, match="controlled by prat"):
-            ADAPTERS[agent].validate(resolved(agent, supplied))
+            adapter.validate(resolved(agent, supplied))
 
 
-@pytest.mark.parametrize("agent", sorted(ADAPTERS))
-def test_build_ignores_undeclared_capabilities_when_every_option_is_set(agent: str) -> None:
-    build = ADAPTERS[agent].build
+@pytest.mark.parametrize("name", sorted(_NAMED_ADAPTERS))
+def test_build_ignores_undeclared_capabilities_when_every_option_is_set(name: str) -> None:
+    agent, adapter = _NAMED_ADAPTERS[name]
+    build = adapter.build
     capabilities = BY_NAME[agent].capabilities
     everything = build(resolved(agent, _EVERY_CAPABILITY), b"prompt").argv
     for option, _, marker in _CAPABILITY_CASES:
@@ -198,18 +214,20 @@ def test_build_ignores_undeclared_capabilities_when_every_option_is_set(agent: s
             assert not any(text in argument for argument in everything)
 
 
-@pytest.mark.parametrize(("agent", "flag"), _RESERVED_CASES)
-def test_validate_rejects_owned_native_arguments(agent: str, flag: str) -> None:
+@pytest.mark.parametrize(("name", "flag"), _RESERVED_CASES)
+def test_validate_rejects_owned_native_arguments(name: str, flag: str) -> None:
+    agent, adapter = _NAMED_ADAPTERS[name]
     with pytest.raises(PratError, match="controlled by prat") as owned:
-        ADAPTERS[agent].validate(resolved(agent, Options(native_args=(flag,))))
+        adapter.validate(resolved(agent, Options(native_args=(flag,))))
     assert owned.value.code == "invalid_arguments"
 
 
-@pytest.mark.parametrize("agent", sorted(ADAPTERS))
-def test_validate_rejects_unknown_native_arguments(agent: str) -> None:
+@pytest.mark.parametrize("name", sorted(_NAMED_ADAPTERS))
+def test_validate_rejects_unknown_native_arguments(name: str) -> None:
+    agent, adapter = _NAMED_ADAPTERS[name]
     probe = Options(native_args=("--prat-conformance-probe",))
     with pytest.raises(PratError, match="unknown native option") as unknown:
-        ADAPTERS[agent].validate(resolved(agent, probe))
+        adapter.validate(resolved(agent, probe))
     assert unknown.value.code == "invalid_arguments"
 
 
@@ -864,14 +882,18 @@ _RETENTION_STREAMS: Mapping[str, Callable[[str], str]] = {
     "kimi": lambda answer: codex_stream({"role": "assistant", "content": answer}),
     "warp": lambda answer: codex_stream({"type": "agent", "text": answer}),
 }
-_RETENTION_STREAMS = {**_RETENTION_STREAMS, "kilo": _RETENTION_STREAMS["opencode"]}
+_RETENTION_STREAMS = {
+    **_RETENTION_STREAMS,
+    "kilo": _RETENTION_STREAMS["opencode"],
+    "opencode@2": _RETENTION_STREAMS["opencode"],
+}
 _CONSUMER_AGENTS = sorted(
-    name for name, adapter in ADAPTERS.items() if adapter.consumer is not None
+    name for name, (_, adapter) in _NAMED_ADAPTERS.items() if adapter.consumer is not None
 )
 
 
 def _consumer_factory(agent: str) -> ConsumerFactory:
-    factory = ADAPTERS[agent].consumer
+    factory = _NAMED_ADAPTERS[agent][1].consumer
     assert factory is not None
     return factory
 

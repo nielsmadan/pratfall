@@ -311,7 +311,10 @@ def test_schema_failure_cleanup_preserves_native_precedence(
     decoded = DecodedOutput(error=ResultError("protocol_error", "missing structured answer"))
     capture = ConsumedCapture(decoded) if consumed else RawCapture(b"{}")
     process = ProcessResult(capture, b"", native_exit, 0, process_group=123)
-    plan = dispatch._RunPlan(resolved, Invocation(("fake",), b""), Path(), 1, None, True, False)
+    adapter = ADAPTERS["claude"].for_schema(True)
+    plan = dispatch._RunPlan(
+        resolved, adapter, Invocation(("fake",), b""), Path(), 1, None, True, False
+    )
     process, result = dispatch._present_run(plan, _StreamDiagnostics(), process)
     assert groups == [123]
     error = normalize(resolved, process, result).error
@@ -324,7 +327,7 @@ def test_schema_failure_cleanup_preserves_native_precedence(
 def test_schema_cleanup_failure_is_observable_with_native_exit() -> None:
     resolved = ResolvedProfile(BY_NAME["claude"], None, ("fake",), Options(schema="source"))
     process = ProcessResult(RawCapture(b"{}"), b"", 7, 0, process_group=123)
-    decoded, stderr, _ = dispatch._decode_process(resolved, process)
+    decoded, stderr, _ = dispatch._decode_process(ADAPTERS["claude"].for_schema(True), process)
     decoded, stderr = dispatch._with_decode_cleanup_failure(decoded, stderr, "test cleanup denied")
     assert stderr == "\nprat: Process-group cleanup failed: test cleanup denied.\n"
     assert decoded.error is not None
@@ -449,7 +452,7 @@ def test_schema_protocol_failure_never_overrides_timeout_or_interruption(
         interrupted_by=interruption,
         process_group=123,
     )
-    decoded, _, _ = dispatch._decode_process(resolved, process)
+    decoded, _, _ = dispatch._decode_process(ADAPTERS["claude"].for_schema(True), process)
     result = normalize(resolved, process, decoded)
     assert result.status == ("timeout" if timeout else "interrupted")
     assert result.exit_code == (124 if timeout else 130)

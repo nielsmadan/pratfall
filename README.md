@@ -105,7 +105,7 @@ printf 'summarize this checkout\n' | prat gm
 | `--progress` | Show live activity on stderr. |
 | `--trace` | Copy captured native stdout to stderr. |
 | `--notify` / `--no-notify` | Show or suppress the completion notification for this run. |
-| `--dry-run` | Preview the resolved invocation without launching the agent. |
+| `--dry-run` | Preview the resolved invocation without launching the agent; OpenCode still runs `opencode --version`. |
 
 Budgets are available through `--max-budget-usd`, `--max-turns` and `--max-ai-credits` where the
 agent supports them. Support for each setting varies by agent, and unsupported settings are

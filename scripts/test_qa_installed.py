@@ -782,7 +782,7 @@ def test_accounting_controls_through_fake_dispatch_and_source_entry_point(
     assert result["output"] == "ACCOUNT_OK"
     assert {field: result[field] for field in accounting} == accounting
     record = {"agent": agent, "argv": arguments, "stdin": stdin.decode(), "prompt": prompt}
-    assert qa._calls(log) == [
+    assert qa._agent_calls(log) == [
         {**record, "cwd": os.getcwd()},
         {**record, "cwd": str(tmp_path / "consumer")},
     ]

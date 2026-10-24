@@ -355,7 +355,16 @@ result handling.
 
 [`_doctor`](../src/pratfall/cli/doctor.py) reuses the runner with a three-second deadline and
 64 KiB per-stream bounds. The CLI selects opaque text and records per-agent probe errors;
-the catalog owns probe arguments.
+the catalog owns probe arguments. An adapter that sets `for_version` gets the same probe
+(`probe_version`) before every run and dry run, with a 15-second deadline that does not count
+against `--timeout`, and returns the adapter whose `validate`, `build` and consumer serve that
+version; OpenCode uses it to choose between its 1.x and 2.x argv and stream rules. Dispatch probes
+after the cheap configuration checks and before reading the prompt, then validates the selected
+adapter through the same option-origin labelling, so version-dependent rejections never consume
+input. The selected adapter then serves the build, the consumer and the decode fallback for that
+run. Probe failures raise before launch with the probe's error code, and an interrupted probe exits
+like an interrupted prompt read. Nothing is cached: each workflow step is its own `prat __step`
+process and probes again, which costs one short native start per OpenCode step.
 
 ## Known limitations
 
@@ -372,6 +381,8 @@ an [`Adapter`](../src/pratfall/adapters/registry.py) record with exactly one of 
 `consumer`; supplying both or neither raises at import.
 `validate` takes the resolved profile, so cross-field native rules stay in the adapter that owns
 them; `build` assumes the CLI already validated at the trust boundary and never revalidates.
+A version-specific record returned by `for_version` must also be listed in `ADAPTER_VARIANTS`, so
+the cross-adapter contract and retention suites exercise it alongside the base records.
 Use [`validate_flags`](../src/pratfall/adapters/native_args.py) with a finite flag set and known
 arity. Reserve Pratfall-owned fields and transports; response files, positional arguments and
 subcommands are rejected. Trusted executable wrappers cover unsupported options.

@@ -28,7 +28,7 @@ it does not maintain a fixed model catalog.
 | Cursor | `cursor` | `cu` | Validated JSON result envelope; usage unknown; no effort override |
 | OpenClaw | `openclaw` | `claw` | Embedded `agent exec`; optional token usage, model identity, and native USD cost |
 | Hermes | `hermes` | `hm` | Quiet text mode; usage unknown |
-| OpenCode | `opencode` | `oc` | Structured stream, token usage, and per-step native USD cost; model IDs unavailable |
+| OpenCode | `opencode` | `oc` | Structured stream, token usage, and per-step native USD cost (usually unknown on 2.x); model IDs unavailable |
 | Warp | `warp` | none | Legacy executable `oz`; NDJSON agent text; model override, no effort or accounting |
 | Qwen Code | `qwen` | none | JSONL final result, token counts and root-message model IDs; model and native session-turn limit |
 | Amp | `amp` | none | JSONL final result and optional token counts; no generic model, effort or budget override |
@@ -232,6 +232,18 @@ select an already-configured provider with native `--provider NAME` after `--`.
 
 Prat returns the last assistant text from completed JSON history and native USD cost when present.
 Token usage remains unknown. Native permissions remain active. See the [Goose contract](../reference/goose.md).
+
+### OpenCode
+
+Prat supports OpenCode 1.x and 2.x. Each run first calls `opencode --version` through the
+configured prefix and builds the matching command; a probe that fails stops the run before launch.
+1.x receives `run --format json` with effort as `--variant`. 2.x receives
+`run --standalone --format json`, so the session runs in a private server that ends with the
+process instead of the shared background service, and effort is appended to the model as
+`provider/model#EFFORT`. On 2.x, effort therefore needs a model, and the model must not already
+name a `#variant`. 2.x usually omits the final step's token and cost record, so its results often
+report `usage` and `cost_usd` as `null`. Authentication and permissions remain native. See the
+[OpenCode contract](../reference/opencode.md#opencode-2-verified-2026-10-18).
 
 ### Kilo
 

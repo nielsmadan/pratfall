@@ -2,8 +2,54 @@ import pytest
 
 from adapter_helpers import codex_stream, opencode_usage, resolved
 from pratfall.adapters import opencode
-from pratfall.consumer import ConsumerFailure, ConsumerLimits
-from pratfall.models import Options, ResultError, Usage
+from pratfall.adapters.registry import ADAPTERS, Adapter
+from pratfall.consumer import ConsumerFactory, ConsumerFailure, ConsumerLimits, decode_with
+from pratfall.errors import PratError
+from pratfall.models import Invocation, Options, ResultError, Usage
+
+
+def _versioned(version: str) -> Adapter:
+    for_version = ADAPTERS["opencode"].for_version
+    assert for_version is not None
+    return for_version(version)
+
+
+def _versioned_build(options: Options, version: str) -> Invocation:
+    return _versioned(version).build(resolved("opencode", options), b"task")
+
+
+_TOOL: dict[str, object] = {"type": "tool_use", "part": {"id": "tool", "type": "tool"}}
+_PREAMBLE: dict[str, object] = {
+    "type": "text",
+    "part": {"id": "preamble", "type": "text", "text": "Let me check.", "time": {"end": 1}},
+}
+
+
+def _unfinished_final_step(
+    *final: dict[str, object], first: tuple[dict[str, object], ...] = (_TOOL,)
+) -> str:
+    return codex_stream(
+        {"type": "step_start", "part": {"id": "s1", "type": "step-start"}},
+        *first,
+        {
+            "type": "step_finish",
+            "part": {
+                "id": "f1",
+                "type": "step-finish",
+                "reason": "tool-calls",
+                "cost": 0.5,
+                "tokens": opencode_usage(output=3),
+            },
+        },
+        {"type": "step_start", "part": {"id": "s2", "type": "step-start"}},
+        *final,
+    )
+
+
+_FINAL_TEXT: dict[str, object] = {
+    "type": "text",
+    "part": {"id": "answer", "type": "text", "text": "PRAT_OK", "time": {"end": 1}},
+}
 
 
 def test_opencode_builds_verified_stdin_invocation() -> None:
@@ -27,6 +73,186 @@ def test_opencode_builds_verified_stdin_invocation() -> None:
         "--pure",
     )
     assert invocation.stdin == b"-leading prompt"
+
+
+@pytest.mark.parametrize("version", ["1.19.3", "opencode opaque version 1.0"])
+def test_opencode_one_keeps_variant_flag_invocation(version: str) -> None:
+    options = Options(model="provider/model", effort="high", attachments=("/a.txt",))
+    assert _versioned_build(options, version).argv == (
+        "opencode-wrapper",
+        "native",
+        "run",
+        "--format",
+        "json",
+        "--model",
+        "provider/model",
+        "--variant",
+        "high",
+        "--file=/a.txt",
+    )
+
+
+def test_opencode_two_runs_standalone_with_effort_as_model_variant() -> None:
+    options = Options(
+        model="provider/model",
+        effort="high",
+        attachments=("/a.txt",),
+        native_args=("--auto",),
+    )
+    invocation = _versioned_build(options, "opencode v2.0.32")
+    assert invocation.argv == (
+        "opencode-wrapper",
+        "native",
+        "run",
+        "--standalone",
+        "--format",
+        "json",
+        "--model",
+        "provider/model#high",
+        "--file=/a.txt",
+        "--auto",
+    )
+    assert invocation.stdin == b"task"
+
+
+@pytest.mark.parametrize(
+    ("options", "argv"),
+    [
+        (Options(), ()),
+        (Options(model="provider/model#max"), ("--model", "provider/model#max")),
+    ],
+)
+def test_opencode_two_passes_model_without_effort_unchanged(
+    options: Options, argv: tuple[str, ...]
+) -> None:
+    invocation = _versioned_build(options, "2.1.0")
+    assert invocation.argv[2:] == ("run", "--standalone", "--format", "json", *argv)
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        (Options(effort="high"), "set a model as well"),
+        (Options(model="provider/model#max", effort="high"), "already names a #variant"),
+    ],
+)
+def test_opencode_two_rejects_effort_it_cannot_express(options: Options, message: str) -> None:
+    with pytest.raises(PratError, match=message) as error:
+        _versioned("2.0.32").validate(resolved("opencode", options))
+    assert (error.value.code, error.value.option) == ("invalid_arguments", "effort")
+
+
+@pytest.mark.parametrize("flag", ["--pure", "--log-level=DEBUG"])
+def test_opencode_two_rejects_flags_only_one_accepts(flag: str) -> None:
+    options = Options(native_args=(flag,))
+    _versioned("1.19.3").validate(resolved("opencode", options))
+    with pytest.raises(PratError, match="unknown native option"):
+        _versioned("2.0.32").validate(resolved("opencode", options))
+
+
+@pytest.mark.parametrize("version", ["opencode dev", "build 20261018", "build .5.3"])
+def test_opencode_rejects_unrecognized_version_text(version: str) -> None:
+    with pytest.raises(PratError, match="version output is not recognized") as error:
+        _versioned(version)
+    assert error.value.code == "protocol_error"
+
+
+@pytest.mark.parametrize("flag", ["--standalone", "--server=http://127.0.0.1:4096"])
+def test_opencode_reserves_server_selection(flag: str) -> None:
+    with pytest.raises(PratError, match="controlled by prat"):
+        opencode.validate(resolved("opencode", Options(native_args=(flag,))))
+
+
+def test_opencode_two_error_reports_native_message() -> None:
+    decoded = opencode.decode(
+        codex_stream(
+            {
+                "type": "text",
+                "part": {"id": "one", "type": "text", "text": "partial", "time": {"end": 1}},
+            },
+            {
+                "type": "error",
+                "timestamp": 1792361711501,
+                "sessionID": "",
+                "error": {"type": "unknown", "message": "UnexpectedStatus: 500"},
+            },
+        )
+    )
+    assert decoded.output == "partial"
+    assert decoded.error == ResultError("provider_error", "UnexpectedStatus: 500")
+
+
+def test_opencode_two_error_with_empty_message_uses_generic_text() -> None:
+    decoded = opencode.decode(
+        codex_stream({"type": "error", "error": {"type": "aborted", "message": ""}})
+    )
+    assert decoded.error == ResultError("provider_error", "OpenCode reported an error.")
+
+
+@pytest.mark.parametrize("error", [{"type": "unknown"}, {"type": "unknown", "message": 5}])
+def test_opencode_two_error_without_string_message_is_malformed(error: dict[str, object]) -> None:
+    decoded = opencode.decode(codex_stream({"type": "error", "error": error}))
+    assert decoded.error == ResultError("protocol_error", "OpenCode error event is malformed.")
+
+
+def test_opencode_two_accepts_answer_whose_final_step_finish_was_dropped() -> None:
+    decoded = decode_with(opencode.v2_consumer, _unfinished_final_step(_FINAL_TEXT))
+    assert decoded.output == "PRAT_OK"
+    assert decoded.error is None
+    assert decoded.usage is None
+    assert decoded.cost_usd is None
+
+
+def test_opencode_two_reports_usage_when_final_step_finish_arrives() -> None:
+    final: dict[str, object] = {
+        "type": "step_finish",
+        "part": {
+            "id": "f2",
+            "type": "step-finish",
+            "reason": "stop",
+            "cost": 0.25,
+            "tokens": opencode_usage(output=4),
+        },
+    }
+    decoded = decode_with(opencode.v2_consumer, _unfinished_final_step(_FINAL_TEXT, final))
+    assert decoded.error is None
+    assert decoded.usage is not None
+    assert decoded.usage.output_tokens == 7
+    assert decoded.cost_usd == 0.75
+
+
+@pytest.mark.parametrize(
+    ("factory", "first", "final"),
+    [
+        (opencode.v2_consumer, (_TOOL,), ()),
+        (opencode.v2_consumer, (_TOOL, _PREAMBLE), ()),
+        (opencode.v2_consumer, (_TOOL,), (_FINAL_TEXT, _TOOL)),
+        (opencode.consumer, (_TOOL,), (_FINAL_TEXT,)),
+    ],
+)
+def test_opencode_unfinished_final_step_is_incomplete(
+    factory: ConsumerFactory,
+    first: tuple[dict[str, object], ...],
+    final: tuple[dict[str, object], ...],
+) -> None:
+    decoded = decode_with(factory, _unfinished_final_step(*final, first=first))
+    assert decoded.error == ResultError(
+        "protocol_error", "OpenCode stream ended without a stop finish."
+    )
+
+
+def test_opencode_two_provider_error_outranks_dropped_final_step_finish() -> None:
+    error: dict[str, object] = {
+        "type": "error",
+        "error": {"type": "unknown", "message": "UnexpectedStatus: 500"},
+    }
+    decoded = decode_with(opencode.v2_consumer, _unfinished_final_step(_FINAL_TEXT, error))
+    assert decoded.output == "PRAT_OK"
+    assert decoded.error == ResultError("provider_error", "UnexpectedStatus: 500")
+
+
+def test_opencode_tool_use_reports_tool_activity() -> None:
+    assert opencode.consumer().apply({"type": "tool_use", "part": {}}) == "tool"
 
 
 def test_opencode_deduplicates_parts_aggregates_steps_and_omits_other_events() -> None:

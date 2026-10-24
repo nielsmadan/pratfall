@@ -9,10 +9,11 @@ from pratfall.cli.presentation import _emit, _print_diagnostic
 from pratfall.codes import SIGNAL_EXIT_BASE
 from pratfall.config import agent_command
 from pratfall.interruption import InterruptionState, handler_for, handling
-from pratfall.models import Config, Invocation
+from pratfall.models import AgentSpec, Config, Invocation
 from pratfall.runner import ProcessResult, RunLimits, raw_stdout, run
 
 VERSION_TIMEOUT = 3.0
+RUN_VERSION_TIMEOUT = 15.0
 VERSION_OUTPUT_LIMIT = 64 * 1024
 VERSION_LIMITS = RunLimits(stdout=VERSION_OUTPUT_LIMIT, stderr=VERSION_OUTPUT_LIMIT)
 
@@ -95,13 +96,9 @@ def _doctor(
                         break
                     if not record["available"]:
                         continue
-                    process = run(
-                        Invocation((*agent_command(config, agent), *agent.version_args), b""),
-                        cwd,
-                        version_timeout,
-                        limits=VERSION_LIMITS,
+                    process, version, version_error = probe_version(
+                        agent_command(config, agent), agent, cwd, version_timeout
                     )
-                    version, version_error = _version_result(process)
                     record["version"] = version
                     record["version_error"] = version_error
                     if process.interrupted_by is not None:
@@ -136,6 +133,16 @@ def _doctor_result(
         )
         return payload, lines, SIGNAL_EXIT_BASE + interrupted, message
     return payload, lines, 0, None
+
+
+def probe_version(
+    command: tuple[str, ...], agent: AgentSpec, cwd: Path, timeout: float
+) -> tuple[ProcessResult, str | None, str | None]:
+    process = run(
+        Invocation((*command, *agent.version_args), b""), cwd, timeout, limits=VERSION_LIMITS
+    )
+    version, error = _version_result(process)
+    return process, version, error
 
 
 def _version_result(process: ProcessResult) -> tuple[str | None, str | None]:

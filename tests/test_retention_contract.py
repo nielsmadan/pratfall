@@ -17,7 +17,7 @@ from pratfall.adapters import (
     qwen,
     warp,
 )
-from pratfall.adapters.registry import ADAPTERS
+from pratfall.adapters.registry import ADAPTER_VARIANTS, ADAPTERS
 from pratfall.consumer import (
     ByteConsumer,
     CapturingConsumer,
@@ -641,6 +641,7 @@ _OPENCODE = _Canonical(
     1,
     DecodedOutput(output="hi", usage=Usage(1, 4, 5, 2, 3), cost_usd=0),
 )
+_OPENCODE_V2 = replace(_OPENCODE, name="opencode@2", factory=opencode.v2_consumer)
 _KILO = replace(_OPENCODE, name="kilo", factory=kilo.consumer)
 _KIMI = _Canonical(
     "kimi",
@@ -697,6 +698,7 @@ _CANONICAL = (
     _KILO,
     _KIMI,
     _OPENCODE,
+    _OPENCODE_V2,
     _PI,
     _QWEN,
     _WARP,
@@ -707,6 +709,11 @@ _WITH_RECORDS = tuple(case for case in _CANONICAL if case.records > 0)
 def test_canonical_retention_cases_cover_every_consumer_adapter() -> None:
     assert {case.name for case in _CANONICAL} == {
         name for name, adapter in ADAPTERS.items() if adapter.consumer is not None
+    } | {
+        f"{agent}@{version}"
+        for agent, variants in ADAPTER_VARIANTS.items()
+        for version, adapter in variants.items()
+        if adapter.consumer is not None
     }
 
 

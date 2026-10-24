@@ -32,6 +32,20 @@ def no_process_spawn(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(subprocess, "Popen", forbidden)
 
 
+@pytest.fixture(scope="session")
+def opencode_one_bin(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    directory = tmp_path_factory.mktemp("opencode-bin")
+    executable = directory / "opencode"
+    executable.write_text("#!/bin/sh\necho 1.19.3\n")
+    executable.chmod(0o755)
+    return directory
+
+
+@pytest.fixture
+def opencode_one_on_path(opencode_one_bin: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", f"{opencode_one_bin}{os.pathsep}{os.defpath}")
+
+
 @pytest.fixture
 def real_trust(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pratfall.config.trust_state", local_trust.trust_state)

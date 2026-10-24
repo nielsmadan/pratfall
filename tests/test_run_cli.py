@@ -12,6 +12,7 @@ import tempfile
 import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
+from dataclasses import replace
 from itertools import pairwise
 from pathlib import Path
 
@@ -19,7 +20,9 @@ import pytest
 
 from pratfall import cli as cli_module
 from pratfall import runner as runner_module
+from pratfall.adapters.registry import ADAPTERS
 from pratfall.cli import dispatch as dispatch_module
+from pratfall.cli import doctor as doctor_module
 from pratfall.cli import main
 from pratfall.cli.presentation import _presentation_error
 from pratfall.config import init_config
@@ -2582,12 +2585,13 @@ def test_unrepresentable_result_text_emits_a_normalized_object_with_resolved_ide
 def test_decoder_exception_is_normalized_with_process_group_cleanup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def boom(_resolved: object, _stdout: str) -> DecodedOutput:
+    def boom(_stdout: str) -> DecodedOutput:
         raise KeyError("decoder blew up")
 
     config = write_agent(tmp_path, "gemini", 'print("{\\"response\\": \\"KEEP\\"}")')
     cleaned: list[int] = []
-    monkeypatch.setattr(dispatch_module, "_decode", boom)
+    gemini = replace(ADAPTERS["gemini"], whole_document=boom)
+    monkeypatch.setattr(dispatch_module, "ADAPTERS", {**ADAPTERS, "gemini": gemini})
     monkeypatch.setattr(dispatch_module, "cleanup_process_group", cleaned.append)
     assert main(["gm", "prompt", "--json", "--config", str(config)]) == 1
     result = json.loads(capsys.readouterr().out)
@@ -3979,3 +3983,167 @@ def test_step_entry_end_to_end_with_non_ascii(tmp_path: Path) -> None:
     result = json.loads(completed.stdout.decode("utf-8"))
     assert result["status"] == "success"
     assert json.loads(result["output"])["prompt"] == "Move ä to ö: ü"
+
+
+_OPENCODE_FAKE = """
+import json, os, pathlib, sys
+log = pathlib.Path(sys.argv[0]).with_suffix(".jsonl")
+with log.open("a") as stream:
+    stream.write(json.dumps([sys.argv[1:], sys.stdin.read(), os.getcwd()]) + "\\n")
+if sys.argv[1:] == ["--version"]:
+    print({version!r})
+    raise SystemExit({status})
+print(json.dumps({{"type": "text", "part": {{"type": "text", "id": "1", "text": "ok", "time": {{"end": 1}}}}}}))
+{finish}
+"""
+_OPENCODE_STOP = (
+    'print(json.dumps({"type": "step_finish", "part": {"type": "step-finish", "id": "2", '
+    '"reason": "stop", "cost": 0, "tokens": {"input": 1, "output": 1, "reasoning": 0, '
+    '"cache": {"read": 0, "write": 0}}}}))'
+)
+
+
+def _opencode_fake(version: str, *, status: int = 0, finish: str = _OPENCODE_STOP) -> str:
+    return _OPENCODE_FAKE.format(version=version, status=status, finish=finish)
+
+
+def _opencode_log(tmp_path: Path) -> list[list[object]]:
+    log = tmp_path / "opencode_fake.jsonl"
+    return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+
+def _opencode_calls(tmp_path: Path) -> list[list[object]]:
+    return [entry[:2] for entry in _opencode_log(tmp_path)]
+
+
+@pytest.mark.parametrize(
+    ("version", "head"),
+    [
+        ("1.19.3", ["run", "--format", "json", "--model", "p/m", "--variant", "high"]),
+        ("opencode v2.0.32", ["run", "--standalone", "--format", "json", "--model", "p/m#high"]),
+    ],
+)
+def test_opencode_run_probes_version_before_choosing_native_argv(
+    version: str, head: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "opencode", _opencode_fake(version))
+    arguments = ["oc", "task", "--model=p/m", "--effort=high", "--config", str(config), "--json"]
+    assert main(arguments) == 0
+    assert json.loads(capsys.readouterr().out)["output"] == "ok"
+    assert _opencode_calls(tmp_path) == [[["--version"], ""], [head, "task"]]
+
+
+def test_opencode_version_probe_runs_in_the_run_cwd(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    config = write_agent(tmp_path, "opencode", _opencode_fake("2.0.32"))
+    assert main(["oc", "task", "--cwd", str(workdir), "--config", str(config), "--json"]) == 0
+    capsys.readouterr()
+    assert [Path(str(entry[2])).resolve() for entry in _opencode_log(tmp_path)] == [
+        workdir.resolve(),
+        workdir.resolve(),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("version", "exit_code", "status", "error"),
+    [
+        ("2.0.32", 0, "success", None),
+        (
+            "1.19.3",
+            1,
+            "error",
+            {"code": "protocol_error", "message": "OpenCode stream ended without a stop finish."},
+        ),
+    ],
+)
+def test_opencode_run_decodes_dropped_final_step_finish_by_version(
+    version: str,
+    exit_code: int,
+    status: str,
+    error: dict[str, str] | None,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "opencode", _opencode_fake(version, finish=""))
+    assert main(["oc", "task", "--config", str(config), "--json"]) == exit_code
+    payload = json.loads(capsys.readouterr().out)
+    assert (payload["status"], payload["output"], payload["error"]) == (status, "ok", error)
+    assert payload["usage"] is None
+
+
+def test_opencode_dry_run_previews_probed_argv(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "opencode", _opencode_fake("2.0.32"))
+    assert main(["oc", "task", "--config", str(config), "--dry-run", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["argv"][2:] == [
+        "run",
+        "--standalone",
+        "--format",
+        "json",
+    ]
+    assert _opencode_calls(tmp_path) == [[["--version"], ""]]
+
+
+def test_opencode_failed_version_probe_stops_before_launch(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "opencode", _opencode_fake("2.0.32", status=3))
+    assert main(["oc", "task", "--config", str(config), "--json"]) == 1
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error == {
+        "code": "native_exit",
+        "message": "OpenCode version probe failed: Version probe exited with status 3.",
+    }
+    assert _opencode_calls(tmp_path) == [[["--version"], ""]]
+
+
+def test_opencode_missing_executable_reports_not_found(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["oc", "task", "--json"]) == 127
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "executable_not_found"
+    assert error["message"].startswith("OpenCode version probe failed: ")
+
+
+@pytest.mark.parametrize(
+    ("arguments", "settings", "expected"),
+    [
+        (["oc", "--effort=high"], "", ("invalid_arguments", "selector 'oc'.effort")),
+        (["work"], 'effort = "high"', ("invalid_config", "profiles.work.effort")),
+        (["oc", "--", "--pure"], "", ("invalid_arguments", "--pure")),
+    ],
+)
+def test_opencode_two_rejects_unsupported_options_before_reading_input(
+    arguments: list[str],
+    settings: str,
+    expected: tuple[str, str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def forbidden(*args: object, **kwargs: object) -> bytes:
+        pytest.fail("prompt must not be acquired")
+
+    monkeypatch.setattr(dispatch_module, "acquire_prompt", forbidden)
+    config = write_agent(
+        tmp_path, "opencode", _opencode_fake("2.0.32"), profile="work", settings=settings
+    )
+    selector, *rest = arguments
+    assert main([selector, "--config", str(config), "--json", *rest]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    code, label = expected
+    assert error["code"] == code
+    assert label in error["message"]
+    assert _opencode_calls(tmp_path) == [[["--version"], ""]]
+
+
+def test_opencode_interrupted_version_probe_reports_signal(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    interrupted = ProcessResult(RawCapture(), b"", None, 0, interrupted_by=signal.SIGINT)
+    monkeypatch.setattr(doctor_module, "run", lambda *_args, **_kwargs: interrupted)
+    assert main(["oc", "task", "--json"]) == 128 + signal.SIGINT
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == "interrupted"

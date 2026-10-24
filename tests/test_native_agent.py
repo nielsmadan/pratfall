@@ -173,6 +173,7 @@ def test_native_agent_collision_rejected_before_input(
 
 
 @pytest.mark.parametrize("agent", ["claude", "copilot", "opencode"])
+@pytest.mark.usefixtures("opencode_one_on_path")
 def test_native_only_agent_stays_accepted(agent: str, capsys: pytest.CaptureFixture[str]) -> None:
     assert main([agent, "task", "--dry-run", "--json", "--", "--agent=native"]) == 0
     preview = json.loads(capsys.readouterr().out)
