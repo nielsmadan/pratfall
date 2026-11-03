@@ -86,6 +86,9 @@ prat cc --template summary
 prat templates
 ```
 
+A template is a prompt for any agent or profile, chosen per run with `-t`. For a saved task, or to give a workflow step a prompt, use a
+[profile with its own prompt](profiles.md#give-a-profile-its-own-prompt) instead.
+
 Use `-t NAME`, `--template NAME`, or `--template=NAME` once, before or after the selector.
 Everything after `--` still belongs to the native agent. Unknown template names fail before stdin
 is read. `prat templates` lists names in sorted order with JSON-quoted prompt strings.

@@ -147,6 +147,8 @@ git diff | prat cc -t review
 prat templates
 ```
 
+A template is a prompt for any agent or profile, chosen per run with `-t`. A profile with a `prompt` is a saved task, and the way to give a workflow step a prompt.
+
 A template or profile `prompt` can also take named parameters, filled by position or `--param`:
 
 ```toml
@@ -209,6 +211,9 @@ tools = ["Read", "Edit", "Bash"]
 extends = "claude-base"
 model   = "claude-opus-5"
 ```
+
+A child profile that `extends` a profile with a `prompt` and sets a different `agent` reuses that
+prompt, so one saved task runs on several agents.
 
 `prat profiles` shows resolved profiles and `prat config validate` checks them. See
 [profiles and configuration](docs/user/profiles.md) for defaults, command wrappers and merging

@@ -51,6 +51,10 @@ prat write "tide pools"
 prat workflows
 ```
 
+Each step names a profile, so a step's prompt is that
+[profile's own prompt](profiles.md#give-a-profile-its-own-prompt); `-t` is not supported for
+workflows.
+
 `[workflows.NAME]` takes `steps`, a nonempty array of step tables, and `parallel`, a boolean that
 defaults to `true`. A step takes:
 

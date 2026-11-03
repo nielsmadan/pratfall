@@ -76,9 +76,13 @@ meanings; case variants of `input` such as `$Input` are rejected, and any other 
 Malformed placeholders fail configuration loading even in unused templates.
 See [applying templates](running.md#apply-a-template) for input composition and limits.
 
+A template is a prompt for any agent or profile, chosen per run with `-t`. To keep a prompt together with an agent and its settings, or to give a workflow step a
+prompt, [give a profile its own prompt](#give-a-profile-its-own-prompt) instead.
+
 ## Give a profile its own prompt
 
-A profile can carry a `prompt` that uses the template syntax, so a saved task runs by name:
+A profile can carry a `prompt` that uses the template syntax. A profile with a `prompt` is a saved
+task that runs by name, and it is the way to give a [workflow step](workflows.md) a prompt:
 
 ```toml
 [profiles.remove-empty]
@@ -92,6 +96,18 @@ one run. The prompt is validated like a template, even for unused profiles.
 
 - A profile inherits `prompt` through `extends`; the nearest ancestor that sets one wins. A child
   can replace it but cannot clear it.
+- A child that `extends` a profile and sets a different `agent` reuses that prompt, so one prompt
+  runs on several agents without copying it:
+
+  ```toml
+  [profiles.review]
+  agent = "claude"
+  prompt = "Review this change:\n\n$input"
+
+  [profiles.review-cx]
+  extends = "review"
+  agent = "codex"
+  ```
 - `[defaults]` does not accept `prompt`.
 - `prat profiles` shows the prompt and its parameters.
 
