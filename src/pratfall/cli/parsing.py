@@ -236,12 +236,22 @@ def build_parser() -> Parser:
         child = config_commands.add_parser(name, help=help_text, allow_abbrev=False)
         _common_flags(child)
     trust = subparsers.add_parser("trust", help=_MANAGEMENT_HELP["trust"], allow_abbrev=False)
-    _common_flags(trust)
+    trust.add_argument("--config", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    trust.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Print a JSON management result.",
+    )
     trust.add_argument(
         "directory",
         nargs="?",
         metavar="DIR",
-        help="Folder to trust; default: the invocation directory.",
+        help="Folder to trust or revoke; default: the invocation directory.",
+    )
+    trust.add_argument("--list", action="store_true", help="List trusted folders.")
+    trust.add_argument(
+        "--revoke", action="store_true", help="Remove DIR's trust entry; DIR need not exist."
     )
     completion = subparsers.add_parser(
         "completion", help=_MANAGEMENT_HELP["completion"], allow_abbrev=False

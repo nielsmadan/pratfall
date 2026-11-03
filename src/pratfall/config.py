@@ -19,7 +19,14 @@ from pratfall.limits import (
     MAX_PARALLEL_LIMIT,
     WORKFLOW_EACH_ITEMS,
 )
-from pratfall.local_trust import digest, is_trusted, trust
+from pratfall.local_trust import (
+    digest,
+    is_trusted,
+    revoke,
+    trust,
+    trusted_directories,
+    trusted_through,
+)
 from pratfall.models import (
     MAX_TURNS,
     NOTIFY_METHODS,
@@ -967,19 +974,41 @@ def _untrusted_message(path: Path) -> str:
 
 
 def trust_folder(directory: str | Path, *, cwd: Path, env: Mapping[str, str]) -> Path:
+    path = _trust_path(directory, cwd)
+    if not path.is_dir():
+        raise PratError(f"{path}: not a directory.", code="invalid_arguments")
+    real = Path(os.path.realpath(path))
+    trust(real, env)
+    return real
+
+
+def revoke_folder(directory: str | Path, *, cwd: Path, env: Mapping[str, str]) -> tuple[Path, bool]:
+    real = Path(os.path.realpath(_trust_path(directory, cwd)))
+    if revoke(real, env):
+        return real, True
+    through = trusted_through(real, env)
+    if through is not None:
+        raise PratError(
+            f"{real} is trusted through {through}; revoke that with "
+            f"prat trust --revoke {shlex.quote(str(through))}",
+            code="invalid_arguments",
+        )
+    return real, False
+
+
+def trusted_folders(env: Mapping[str, str]) -> tuple[tuple[Path, bool], ...]:
+    return tuple((path, path.is_dir()) for path in trusted_directories(env))
+
+
+def _trust_path(directory: str | Path, cwd: Path) -> Path:
     try:
-        path = Path(os.path.abspath(cwd / Path(directory).expanduser()))
+        return Path(os.path.abspath(cwd / Path(directory).expanduser()))
     except RuntimeError as error:
         raise PratError(
             f"{directory}: cannot expand user path ({error}); "
             "use an absolute path or a valid ~user path.",
             code="invalid_arguments",
         ) from error
-    if not path.is_dir():
-        raise PratError(f"{path}: not a directory.", code="invalid_arguments")
-    real = Path(os.path.realpath(path))
-    trust(real, env)
-    return real
 
 
 def resolve_profile(

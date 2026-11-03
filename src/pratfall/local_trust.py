@@ -31,18 +31,41 @@ def store_path(env: Mapping[str, str]) -> Path:
 
 
 def is_trusted(directory: Path, env: Mapping[str, str]) -> bool:
+    return trusted_through(directory, env) is not None
+
+
+def trusted_through(directory: Path, env: Mapping[str, str]) -> Path | None:
     real = Path(os.path.realpath(directory))
-    return any(real.is_relative_to(trusted) for trusted in _trusted_directories(store_path(env)))
+    return next(
+        (trusted for trusted in trusted_directories(env) if real.is_relative_to(trusted)), None
+    )
+
+
+def trusted_directories(env: Mapping[str, str]) -> tuple[Path, ...]:
+    return tuple(sorted(_trusted_directories(store_path(env)), key=str))
 
 
 def trust(directory: Path, env: Mapping[str, str]) -> Path:
     store = store_path(env)
-    directories = {*_trusted_directories(store), Path(os.path.realpath(directory))}
+    _save(store, {*_trusted_directories(store), Path(os.path.realpath(directory))})
+    return store
+
+
+def revoke(directory: Path, env: Mapping[str, str]) -> bool:
+    store = store_path(env)
+    directories = set(_trusted_directories(store))
+    real = Path(os.path.realpath(directory))
+    if real not in directories:
+        return False
+    _save(store, directories - {real})
+    return True
+
+
+def _save(store: Path, directories: set[Path]) -> None:
     _write_store(
         store,
         {"version": STORE_VERSION, "directories": sorted(str(path) for path in directories)},
     )
-    return store
 
 
 def _trusted_directories(store: Path) -> tuple[Path, ...]:

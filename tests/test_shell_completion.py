@@ -384,7 +384,7 @@ def test_native_arguments_delegate_to_shell(tmp_path: Path) -> None:
     ("arguments", "expected"),
     [
         (["config", ""], ["init", "path", "validate"]),
-        (["trust", "--"], ["--config", "--help", "--json"]),
+        (["trust", "--"], ["--help", "--json", "--list", "--revoke"]),
         (["config", "path", ""], []),
         (["completion", ""], ["bash", "zsh"]),
         (["completion", "--"], ["--help"]),

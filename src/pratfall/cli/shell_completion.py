@@ -280,6 +280,12 @@ def _management_flags(command: str) -> Mapping[str, str]:
         return {key: _MANAGEMENT_FLAGS[key] for key in ("-h", "--help")}
     if command == "doctor":
         return {**_MANAGEMENT_FLAGS, "--versions": "Also run each agent's version command."}
+    if command == "trust":
+        return {
+            **{key: value for key, value in _MANAGEMENT_FLAGS.items() if key != "--config"},
+            "--list": "List trusted folders.",
+            "--revoke": "Remove DIR's trust entry.",
+        }
     return _MANAGEMENT_FLAGS
 
 

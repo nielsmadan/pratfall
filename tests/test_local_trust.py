@@ -6,7 +6,14 @@ from pathlib import Path
 import pytest
 
 from pratfall.errors import PratError
-from pratfall.local_trust import is_trusted, store_path, trust
+from pratfall.local_trust import (
+    is_trusted,
+    revoke,
+    store_path,
+    trust,
+    trusted_directories,
+    trusted_through,
+)
 
 
 def test_trust_records_the_real_directory(tmp_path: Path) -> None:
@@ -52,6 +59,36 @@ def test_trust_keeps_other_entries_once_each(tmp_path: Path) -> None:
         os.path.realpath(first),
         os.path.realpath(second),
     ]
+
+
+def test_directories_list_sorted_by_path_text(tmp_path: Path) -> None:
+    for name in ("b", "a-b", "a/b"):
+        (tmp_path / name).mkdir(parents=True, exist_ok=True)
+        trust(tmp_path / name, os.environ)
+    real = Path(os.path.realpath(tmp_path))
+    assert trusted_directories(os.environ) == (real / "a-b", real / "a" / "b", real / "b")
+
+
+def test_trusted_through_names_the_covering_folder(tmp_path: Path) -> None:
+    (tmp_path / "repo" / "a").mkdir(parents=True)
+    trust(tmp_path / "repo", os.environ)
+    repo = Path(os.path.realpath(tmp_path / "repo"))
+    assert trusted_through(tmp_path / "repo" / "a" / "gone", os.environ) == repo
+
+
+def test_revoke_removes_only_the_exact_entry(tmp_path: Path) -> None:
+    (tmp_path / "repo" / "a").mkdir(parents=True)
+    (tmp_path / "other").mkdir()
+    trust(tmp_path / "repo", os.environ)
+    trust(tmp_path / "other", os.environ)
+    assert revoke(tmp_path / "repo" / "a", os.environ) is False
+    assert revoke(tmp_path / "repo", os.environ) is True
+    assert trusted_directories(os.environ) == (Path(os.path.realpath(tmp_path / "other")),)
+
+
+def test_revoke_without_a_store_creates_none(tmp_path: Path) -> None:
+    assert revoke(tmp_path, os.environ) is False
+    assert store_path(os.environ).parent.exists() is False
 
 
 def test_per_file_store_from_version_one_is_dropped(tmp_path: Path) -> None:

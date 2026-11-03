@@ -194,7 +194,8 @@ prat simple --effort high "investigate this failure"
 
 A `.pratfile` can replace agent commands, so Prat refuses to load one until you review it and
 trust its folder with `prat trust [DIR]`. Trust covers that folder and everything under it, and
-later edits to the file keep it trusted. A file passed with `--config` is trusted because you
+later edits to the file keep it trusted. `prat trust --list` shows trusted folders and
+`prat trust --revoke [DIR]` removes one. A file passed with `--config` is trusted because you
 selected it.
 
 Local configuration merges over global, and a local profile replaces a global one of the same

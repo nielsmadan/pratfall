@@ -154,9 +154,27 @@ prat: /src/team-repo/.pratfile: local config is not trusted; review it, then tru
 
 Shell completion skips an untrusted `.pratfile` and still offers names from the global config.
 
-The global config and a file passed with `--config PATH` are trusted because you selected them.
-`prat trust --config PATH` trusts the folder that holds PATH; it cannot be combined with `DIR`.
-With `--json`, `prat trust` prints the trusted `path` and `"trusted": true`.
+List and revoke trusted folders with:
+
+```sh
+prat trust --list
+prat trust --revoke ~/src/old-clone
+```
+
+`--list` prints one trusted folder per line, sorted, and marks a folder that no longer exists with
+` (missing)`; with an empty store it prints nothing. `--revoke [DIR]` removes the entry for DIR
+(default: the invocation directory), resolved like `prat trust DIR`. DIR need not exist, so a
+`(missing)` entry can be removed by the path `--list` printed. Revoking a folder that was never
+trusted reports `DIR was not trusted` and succeeds. A folder that is trusted only through a
+trusted parent cannot be revoked on its own: Prat exits 2, names the parent and leaves the store
+unchanged. `--list`, `--revoke` and a bare `DIR` cannot be combined.
+
+With `--json`, `prat trust` prints the folder's `path` and `"trusted": true`, `--revoke` prints
+`path` and `"trusted": false`, and `--list` prints `trusted`, an array of `path` and `exists`
+records.
+
+The global config and a file passed with `--config PATH` are trusted because you selected them,
+so `prat trust` rejects `--config` with exit 2; trust a folder with `prat trust DIR` instead.
 
 Create a local file with:
 

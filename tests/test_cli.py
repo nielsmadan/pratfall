@@ -254,14 +254,72 @@ def test_untrusted_ancestor_local_config_refuses_from_a_subdirectory(
     )
 
 
-def test_trust_with_config_trusts_that_files_folder(
+@pytest.mark.parametrize(
+    "arguments", [["trust", "--config", "team.toml"], ["--config", "team.toml", "trust", "--list"]]
+)
+def test_trust_rejects_config(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(arguments) == 2
+    assert capsys.readouterr().err == (
+        "prat: a --config file is already trusted; trust a folder with prat trust DIR\n"
+    )
+
+
+def test_trust_list_shows_sorted_folders_and_marks_missing_ones(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    (tmp_path / "team").mkdir()
-    assert main(["trust", "--config", "team/project.toml", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)["path"] == os.path.realpath(tmp_path / "team")
-    assert main(["trust", "team", "--config", "team/project.toml"]) == 2
-    assert capsys.readouterr().err == "prat: trust takes DIR or --config PATH, not both.\n"
+    assert main(["trust", "--list"]) == 0
+    assert capsys.readouterr().out == ""
+    for name in ("repo", "gone"):
+        (tmp_path / name).mkdir()
+        assert main(["trust", name]) == 0
+    (tmp_path / "gone").rmdir()
+    capsys.readouterr()
+    real = os.path.realpath(tmp_path)
+    assert main(["trust", "--list"]) == 0
+    assert capsys.readouterr().out == f"{real}/gone (missing)\n{real}/repo\n"
+    assert main(["trust", "--list", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "schema_version": 1,
+        "trusted": [
+            {"path": f"{real}/gone", "exists": False},
+            {"path": f"{real}/repo", "exists": True},
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "arguments", [["trust", "--list", "repo"], ["trust", "--list", "--revoke"]]
+)
+def test_trust_list_takes_no_other_target(
+    arguments: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(arguments) == 2
+    assert capsys.readouterr().err == "prat: --list cannot be combined with --revoke or DIR.\n"
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_trust_revoke_outcomes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (tmp_path / "repo" / "a").mkdir(parents=True)
+    (tmp_path / "repo" / ".pratfile").write_text('version=1\n[profiles.triage]\nagent="cx"\n')
+    repo = os.path.realpath(tmp_path / "repo")
+    assert main(["trust", "repo"]) == 0
+    capsys.readouterr()
+    assert main(["trust", "--revoke", "repo/a"]) == 2
+    assert capsys.readouterr().err == (
+        f"prat: {repo}/a is trusted through {repo}; revoke that with prat trust --revoke {repo}\n"
+    )
+    assert main(["trust", "--revoke", str(tmp_path / "elsewhere"), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "schema_version": 1,
+        "path": f"{os.path.realpath(tmp_path)}/elsewhere",
+        "trusted": False,
+    }
+    os.chdir(tmp_path / "repo")
+    assert main(["trust", "--revoke"]) == 0
+    assert capsys.readouterr().out == f"Revoked {repo}\n"
+    os.chdir(tmp_path / "repo" / "a")
+    assert main(["triage", "prompt", "--dry-run"]) == 2
+    assert "local config is not trusted" in capsys.readouterr().err
 
 
 def test_trust_moved_out_of_config(capsys: pytest.CaptureFixture[str]) -> None:

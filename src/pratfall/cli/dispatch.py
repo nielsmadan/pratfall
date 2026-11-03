@@ -37,7 +37,9 @@ from pratfall.config import (
     load_config,
     option_origins,
     resolve_profile,
+    revoke_folder,
     trust_folder,
+    trusted_folders,
 )
 from pratfall.consumer import ByteConsumer, CapturingConsumer
 from pratfall.errors import PratError
@@ -332,12 +334,7 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
         path = init_config(args.config, cwd=cwd, env=environ)
         _emit({"path": str(path), "created": True}, [f"Created {path}"], json_mode=args.json)
     elif args.command == "trust":
-        path = trust_folder(_trust_target(args, cwd, environ), cwd=cwd, env=environ)
-        _emit(
-            {"path": str(path), "trusted": True},
-            [f"Trusted {path} and everything under it"],
-            json_mode=args.json,
-        )
+        _trust(args, cwd, environ)
     else:
         config = load_config(args.config, cwd=cwd, env=environ)
         _validate_config_native_arguments(config)
@@ -355,12 +352,35 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
     return 0
 
 
-def _trust_target(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -> Path:
-    if args.config is None:
-        return Path(args.directory or ".")
-    if args.directory is not None:
-        raise PratError("trust takes DIR or --config PATH, not both.", code="invalid_arguments")
-    return config_path(args.config, cwd=cwd, env=environ).parent
+def _trust(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -> None:
+    if args.config is not None:
+        raise PratError(
+            "a --config file is already trusted; trust a folder with prat trust DIR",
+            code="invalid_arguments",
+        )
+    if args.list and (args.revoke or args.directory is not None):
+        raise PratError("--list cannot be combined with --revoke or DIR.", code="invalid_arguments")
+    if args.list:
+        folders = trusted_folders(environ)
+        _emit(
+            {"trusted": [{"path": str(path), "exists": exists} for path, exists in folders]},
+            [f"{path}{'' if exists else ' (missing)'}" for path, exists in folders],
+            json_mode=args.json,
+        )
+    elif args.revoke:
+        path, revoked = revoke_folder(args.directory or ".", cwd=cwd, env=environ)
+        _emit(
+            {"path": str(path), "trusted": False},
+            [f"Revoked {path}" if revoked else f"{path} was not trusted"],
+            json_mode=args.json,
+        )
+    else:
+        path = trust_folder(args.directory or ".", cwd=cwd, env=environ)
+        _emit(
+            {"path": str(path), "trusted": True},
+            [f"Trusted {path} and everything under it"],
+            json_mode=args.json,
+        )
 
 
 def _run_adapter(
