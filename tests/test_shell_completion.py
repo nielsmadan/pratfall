@@ -293,7 +293,7 @@ def test_untrusted_pratfile_names_are_hidden_until_trusted(
     pratfile = tmp_path / ".pratfile"
     pratfile.write_text(PRATFILE, encoding="utf-8")
     assert callback(["qu"], capsys) == ["words", "quiet\tprofile: codex"]
-    trust(pratfile, pratfile.read_bytes(), os.environ)
+    trust(tmp_path, os.environ)
     assert callback(["qu"], capsys) == ["words", "quick\tprofile: gemini", "quiet\tprofile: codex"]
 
 
@@ -371,6 +371,11 @@ def test_equals_form_is_not_completed(tmp_path: Path) -> None:
     assert words(["cc", "--model=gp"], tmp_path) == []
 
 
+def test_trust_is_offered_and_completes_a_directory(tmp_path: Path) -> None:
+    assert words(["tr"], tmp_path) == ["trust"]
+    assert _complete(["trust", ""], loader(tmp_path)).mode == "dirs"
+
+
 def test_native_arguments_delegate_to_shell(tmp_path: Path) -> None:
     assert _complete(["cc", "hi", "--", "--x"], loader(tmp_path)).mode == "files"
 
@@ -378,7 +383,8 @@ def test_native_arguments_delegate_to_shell(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("arguments", "expected"),
     [
-        (["config", ""], ["init", "path", "trust", "validate"]),
+        (["config", ""], ["init", "path", "validate"]),
+        (["trust", "--"], ["--config", "--help", "--json"]),
         (["config", "path", ""], []),
         (["completion", ""], ["bash", "zsh"]),
         (["completion", "--"], ["--help"]),
@@ -581,7 +587,7 @@ def test_bash_glue_completes_params(
 ) -> None:
     pratfile = tmp_path / ".pratfile"
     pratfile.write_text(PRATFILE, encoding="utf-8")
-    trust(pratfile, pratfile.read_bytes(), os.environ)
+    trust(tmp_path, os.environ)
     path = tmp_path / "prat.bash"
     path.write_text(script("bash", capsys), encoding="utf-8")
     driver = tmp_path / "driver.bash"

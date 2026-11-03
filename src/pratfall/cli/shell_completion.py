@@ -268,6 +268,8 @@ def _management(command: str, rest: list[str], current: str) -> _Completion:
         return _words(current, _management_flags(command).items())
     if not rest and command == "config":
         return _words(current, _CONFIG_COMMAND_HELP.items())
+    if not rest and command == "trust":
+        return _Completion("dirs")
     if not rest and command == "completion":
         return _words(current, ((shell, "") for shell in SHELLS))
     return _Completion("words")

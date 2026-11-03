@@ -100,12 +100,13 @@ one run. The prompt is validated like a template, even for unused profiles.
 | Scope | Path |
 | --- | --- |
 | Global | `$XDG_CONFIG_HOME/pratfall/config.toml`, or `~/.config/pratfall/config.toml` when `XDG_CONFIG_HOME` is absent, empty or relative. |
-| Local | `.pratfile` in the directory where you invoke Prat. |
+| Local | The nearest `.pratfile` in the directory where you invoke Prat or one of its parents. |
 | Explicit local | `--config PATH`, which replaces automatic `.pratfile` discovery. |
 
-Prat merges the selected local file over the global config. It does not search parent directories,
-and `--cwd` does not affect config discovery. Relative `--config` paths resolve from the invocation
-directory.
+Prat searches the invocation directory, then each parent up to the filesystem root, and uses the
+first `.pratfile` it finds; it never merges several local files. It merges that file over the
+global config. `--cwd` does not affect config discovery. Relative `--config` paths resolve from
+the invocation directory.
 
 Missing global and automatic local files are allowed. A missing file explicitly selected with
 `--config` is an error. Every existing file requires `version = 1` and must be a regular file of
@@ -115,23 +116,31 @@ at most 4 MiB.
 
 A `.pratfile` can set agent commands, command prefixes and native arguments, so cloning a
 repository and running `prat` in it would otherwise execute whatever that repository chose. Prat
-therefore loads an automatically discovered `.pratfile` only after you trust it:
+therefore loads an automatically discovered `.pratfile` only when its folder, or a folder above
+it, is trusted. Review the file, then trust its folder:
 
 ```sh
-prat config trust
+prat trust            # the invocation directory
+prat trust ~/src/team-repo
 ```
 
-This records the file's absolute path and SHA-256 digest in
-`$XDG_STATE_HOME/pratfall/trusted.json` (default `~/.local/state/pratfall/trusted.json`, also used
-when `XDG_STATE_HOME` is relative). Any
-later edit changes the digest, and every command then fails with
-`.pratfile: local config changed since it was trusted` until you review the file and run
-`prat config trust` again. An untrusted `.pratfile` fails the same way with `is not trusted`.
+Trust covers the folder and everything under it, so trusting a repository root also covers
+running Prat from its subdirectories, and trusting `~/src` covers every repository below it. Edits
+to a trusted `.pratfile`, such as a teammate's change arriving with `git pull`, keep it trusted.
+Prat records the folder's resolved real path in `$XDG_STATE_HOME/pratfall/trusted.json` (default
+`~/.local/state/pratfall/trusted.json`, also used when `XDG_STATE_HOME` is relative).
+
+An untrusted `.pratfile` fails every command, naming the file and the folder to trust:
+
+```text
+prat: /src/team-repo/.pratfile: local config is not trusted; review it, then trust its folder and everything under it with: prat trust /src/team-repo
+```
+
 Shell completion skips an untrusted `.pratfile` and still offers names from the global config.
 
 The global config and a file passed with `--config PATH` are trusted because you selected them.
-`prat --config PATH config trust` records a trust entry for that path; it is only needed when the
-same file is later discovered automatically as `.pratfile`.
+`prat trust --config PATH` trusts the folder that holds PATH; it cannot be combined with `DIR`.
+With `--json`, `prat trust` prints the trusted `path` and `"trusted": true`.
 
 Create a local file with:
 
@@ -290,10 +299,7 @@ prat --config custom.toml config validate
 ```
 
 `config path` and `config init` target the global file unless `--config PATH` is supplied.
-`config validate` checks the merged configuration and lists the loaded files. `config trust`
-targets the invocation directory's `.pratfile` unless `--config PATH` is supplied, and checks that
-the file is valid TOML before trusting it; with `--json` it prints `path`, `sha256` and
-`trusted`.
+`config validate` checks the merged configuration and lists the loaded files.
 
 All files are checked for syntax, schema, and field types before merging. Every effective profile
 is then validated with its defaults. Defaults are checked against a built-in agent's capabilities
@@ -362,6 +368,14 @@ retaining its built-in guidance. See [content bounds and native mappings](runnin
 Built-in names, aliases, and management commands are reserved profile names. When an upgrade
 introduces a collision, rename your profile, update commands that use it, and run
 `prat config validate`.
+
+`prat trust` is now a management command, so `trust` is a reserved name: rename a
+`[profiles.trust]` or `[workflows.trust]`, for example to `[profiles.my-trust]`.
+
+`.pratfile` discovery now searches parent directories. In a subdirectory below an untrusted
+`.pratfile`, Prat used to run with the global config only; it now refuses until you review that
+file and run `prat trust` on its folder. A `.pratfile` in a parent folder also now applies to
+every subdirectory that has none of its own.
 
 The new built-ins reserve `goose` and `kilo`. Rename colliding profiles, for example
 `[profiles.goose]` to `[profiles.my-goose]`, keeping its agent and settings.

@@ -17,7 +17,7 @@ def isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EDITOR", "/nonexistent/prat-test-editor")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config-home"))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state-home"))
-    monkeypatch.setattr("pratfall.config.trust_state", lambda _path, _contents, _env: "trusted")
+    monkeypatch.setattr("pratfall.config.is_trusted", lambda _directory, _env: True)
     monkeypatch.chdir(tmp_path)
     stdin = io.StringIO("")
     monkeypatch.setattr(stdin, "isatty", lambda: True)
@@ -48,7 +48,7 @@ def opencode_one_on_path(opencode_one_bin: Path, monkeypatch: pytest.MonkeyPatch
 
 @pytest.fixture
 def real_trust(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("pratfall.config.trust_state", local_trust.trust_state)
+    monkeypatch.setattr("pratfall.config.is_trusted", local_trust.is_trusted)
 
 
 @pytest.fixture

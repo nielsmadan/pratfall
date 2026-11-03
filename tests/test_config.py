@@ -13,12 +13,12 @@ from pratfall.config import (
     merge_options,
     parse_options,
     resolve_profile,
-    trust_local_config,
+    trust_folder,
     validate_capabilities,
 )
 from pratfall.errors import PratError
 from pratfall.limits import CONFIG_BYTES
-from pratfall.local_trust import digest
+from pratfall.local_trust import digest, trust
 from pratfall.models import Options, PromptTemplate, WorkflowStep
 
 
@@ -108,17 +108,43 @@ def test_explicit_file_merges_over_global_and_replaces_automatic_local(tmp_path:
     assert config_path(cwd=Path.cwd(), env=os.environ) == default
 
 
-def test_local_config_works_without_global_and_does_not_search_parents(tmp_path: Path) -> None:
+def test_local_config_works_without_global_and_is_found_from_subdirectories(
+    tmp_path: Path,
+) -> None:
     local = tmp_path / ".pratfile"
     local.write_text('version=1\n[profiles.local]\nagent="cc"\n')
-    config = load_config(cwd=tmp_path, env=os.environ)
-    assert config.path == local
-    assert config.sources == (local,)
-    assert config.exists is True
-    assert resolve_profile(config, "local").agent.name == "claude"
-    child = tmp_path / "child"
-    child.mkdir()
-    assert load_config(cwd=child, env=os.environ).exists is False
+    child = tmp_path / "a" / "b"
+    child.mkdir(parents=True)
+    for cwd in (tmp_path, child):
+        config = load_config(cwd=cwd, env=os.environ)
+        assert config.path == local
+        assert config.sources == (local,)
+        assert resolve_profile(config, "local").agent.name == "claude"
+
+
+def test_nearest_local_config_wins_without_merging_ancestors(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text('version=1\n[profiles.root]\nagent="cc"\n')
+    nearer = tmp_path / "a" / ".pratfile"
+    (tmp_path / "a" / "b").mkdir(parents=True)
+    nearer.write_text('version=1\n[profiles.near]\nagent="cx"\n')
+    config = load_config(cwd=tmp_path / "a" / "b", env=os.environ)
+    assert config.sources == (nearer,)
+    assert list(config.profiles) == ["near"]
+
+
+def test_ancestor_local_config_paths_resolve_from_its_own_directory(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text('version=1\n[agents.claude]\ncommand=["./tools/claude"]\n')
+    (tmp_path / "a").mkdir()
+    config = load_config(cwd=tmp_path / "a", env=os.environ)
+    assert config.commands["claude"] == (str(tmp_path / "tools" / "claude"),)
+
+
+def test_explicit_config_skips_discovery(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text('version=1\n[profiles.root]\nagent="cc"\n')
+    (tmp_path / "a").mkdir()
+    explicit = write_config(tmp_path / "a", 'version=1\n[profiles.chosen]\nagent="cx"\n')
+    config = load_config(explicit, cwd=tmp_path / "a", env=os.environ)
+    assert list(config.profiles) == ["chosen"]
 
 
 def test_local_defaults_commands_and_profiles_merge_by_their_boundaries(tmp_path: Path) -> None:
@@ -219,26 +245,49 @@ def test_untrusted_automatic_local_config_is_refused(tmp_path: Path) -> None:
     with pytest.raises(PratError) as caught:
         load_config(cwd=Path.cwd(), env=os.environ)
     assert str(caught.value) == (
-        f"{tmp_path / '.pratfile'}: local config is not trusted; "
-        "review it, then run 'prat config trust'."
+        f"{tmp_path / '.pratfile'}: local config is not trusted; review it, then trust its "
+        f"folder and everything under it with: prat trust {tmp_path}"
     )
     assert caught.value.code == "invalid_config"
 
 
 @pytest.mark.usefixtures("real_trust")
-def test_trusted_local_config_loads_until_it_changes(tmp_path: Path) -> None:
+def test_untrusted_ancestor_local_config_is_refused_from_a_subdirectory(tmp_path: Path) -> None:
+    repo = tmp_path / "my repo"
+    (repo / "a" / "b").mkdir(parents=True)
+    (repo / ".pratfile").write_text(LOCAL_COMMAND, encoding="utf-8")
+    trust(repo / "a", os.environ)
+    with pytest.raises(PratError) as caught:
+        load_config(cwd=repo / "a" / "b", env=os.environ)
+    assert str(caught.value) == (
+        f"{repo / '.pratfile'}: local config is not trusted; review it, then trust its "
+        f"folder and everything under it with: prat trust '{repo}'"
+    )
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_trusted_folder_loads_its_local_config_after_edits(tmp_path: Path) -> None:
     local = tmp_path / ".pratfile"
     local.write_text(LOCAL_COMMAND, encoding="utf-8")
-    assert trust_local_config(cwd=Path.cwd(), env=os.environ) == (
-        local,
-        digest(LOCAL_COMMAND.encode()),
-    )
+    assert trust_folder(".", cwd=tmp_path, env=os.environ) == Path(os.path.realpath(tmp_path))
     config = load_config(cwd=Path.cwd(), env=os.environ)
     assert config.commands["claude"] == (str(tmp_path / "tools" / "claude"),)
     assert config.local_digest == digest(LOCAL_COMMAND.encode())
-    local.write_text(LOCAL_COMMAND + "# edited\n", encoding="utf-8")
-    with pytest.raises(PratError, match="local config changed since it was trusted"):
-        load_config(cwd=Path.cwd(), env=os.environ)
+    edited = LOCAL_COMMAND + '[profiles.added]\nagent="cx"\n'
+    local.write_text(edited, encoding="utf-8")
+    config = load_config(cwd=Path.cwd(), env=os.environ)
+    assert list(config.profiles) == ["added"]
+    assert config.local_digest == digest(edited.encode())
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_trusted_parent_folder_covers_a_nested_local_config(tmp_path: Path) -> None:
+    nested = tmp_path / "work" / "repo"
+    (nested / "src").mkdir(parents=True)
+    (nested / ".pratfile").write_text(LOCAL_COMMAND, encoding="utf-8")
+    trust_folder(tmp_path / "work", cwd=tmp_path, env=os.environ)
+    config = load_config(cwd=nested / "src", env=os.environ)
+    assert config.commands["claude"] == (str(nested / "tools" / "claude"),)
 
 
 @pytest.mark.usefixtures("real_trust")
@@ -262,12 +311,15 @@ def test_explicit_local_config_is_trusted_by_selection(tmp_path: Path) -> None:
     assert config.local_digest == digest(LOCAL_COMMAND.encode())
 
 
-def test_trusting_requires_a_valid_existing_config(tmp_path: Path) -> None:
-    with pytest.raises(PratError, match="config file does not exist"):
-        trust_local_config(cwd=Path.cwd(), env=os.environ)
-    (tmp_path / ".pratfile").write_text("not toml [", encoding="utf-8")
-    with pytest.raises(PratError, match="invalid TOML"):
-        trust_local_config(cwd=Path.cwd(), env=os.environ)
+def test_trusting_requires_an_existing_directory(tmp_path: Path) -> None:
+    (tmp_path / "file").write_text("", encoding="utf-8")
+    for target in ("missing", "file"):
+        with pytest.raises(PratError) as caught:
+            trust_folder(target, cwd=tmp_path, env=os.environ)
+        assert (str(caught.value), caught.value.code) == (
+            f"{tmp_path / target}: not a directory.",
+            "invalid_arguments",
+        )
 
 
 def test_special_files_are_not_read_as_config(tmp_path: Path) -> None:
@@ -487,6 +539,7 @@ native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", 
         ('version=1\n[profiles.cc]\nagent="codex"', "name is reserved"),
         ('version=1\n[profiles.config]\nagent="codex"', "name is reserved"),
         ('version=1\n[profiles.completion]\nagent="codex"', "name is reserved"),
+        ('version=1\n[profiles.trust]\nagent="codex"', "name is reserved"),
         ('version=1\n[profiles."-bad"]\nagent="codex"', "profile names"),
         ('version=1\n[profiles."two words"]\nagent="codex"', "profile names"),
         ("version=1\n[profiles]\nwork=[]", "profiles.work: expected a TOML table"),

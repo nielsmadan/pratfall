@@ -4,13 +4,12 @@ import os
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Literal
 
 from pratfall.errors import PratError
 from pratfall.limits import TRUST_STORE_BYTES
 from pratfall.prompt_input import read_bounded_file
 
-TrustState = Literal["trusted", "changed", "untrusted"]
+STORE_VERSION = 2
 
 
 def digest(contents: bytes) -> str:
@@ -31,23 +30,24 @@ def store_path(env: Mapping[str, str]) -> Path:
     return Path(os.path.abspath(root / "pratfall" / "trusted.json"))
 
 
-def trust_state(path: Path, contents: bytes, env: Mapping[str, str]) -> TrustState:
-    recorded = _trusted_files(store_path(env)).get(str(path))
-    if recorded is None:
-        return "untrusted"
-    return "trusted" if recorded == digest(contents) else "changed"
+def is_trusted(directory: Path, env: Mapping[str, str]) -> bool:
+    real = Path(os.path.realpath(directory))
+    return any(real.is_relative_to(trusted) for trusted in _trusted_directories(store_path(env)))
 
 
-def trust(path: Path, contents: bytes, env: Mapping[str, str]) -> Path:
+def trust(directory: Path, env: Mapping[str, str]) -> Path:
     store = store_path(env)
-    files = _trusted_files(store) | {str(path): digest(contents)}
-    _write_store(store, {"version": 1, "files": dict(sorted(files.items()))})
+    directories = {*_trusted_directories(store), Path(os.path.realpath(directory))}
+    _write_store(
+        store,
+        {"version": STORE_VERSION, "directories": sorted(str(path) for path in directories)},
+    )
     return store
 
 
-def _trusted_files(store: Path) -> dict[str, str]:
+def _trusted_directories(store: Path) -> tuple[Path, ...]:
     if not store.exists():
-        return {}
+        return ()
     raw = read_bounded_file(store, limit=TRUST_STORE_BYTES, label="trust store")
     if len(raw) > TRUST_STORE_BYTES:
         raise PratError(f"{store}: trust store exceeds the {TRUST_STORE_BYTES} byte limit.")
@@ -55,12 +55,18 @@ def _trusted_files(store: Path) -> dict[str, str]:
         value = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError, RecursionError) as error:
         raise PratError(f"{store}: invalid trust store: {error}; delete it to reset.") from error
-    files = value.get("files") if isinstance(value, dict) and value.get("version") == 1 else None
-    if not isinstance(files, dict) or not all(
-        isinstance(key, str) and isinstance(item, str) for key, item in files.items()
+    if isinstance(value, dict) and value.get("version") == 1:
+        return ()
+    directories = (
+        value.get("directories")
+        if isinstance(value, dict) and value.get("version") == STORE_VERSION
+        else None
+    )
+    if not isinstance(directories, list) or not all(
+        isinstance(item, str) and Path(item).is_absolute() for item in directories
     ):
         raise PratError(f"{store}: invalid trust store; delete it to reset.")
-    return files
+    return tuple(Path(item) for item in directories)
 
 
 def _write_store(store: Path, value: dict[str, object]) -> None:

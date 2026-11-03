@@ -38,6 +38,7 @@ _MANAGEMENT_HELP: Mapping[str, str] = MappingProxyType(
         "workflows": "List configured workflows and their steps.",
         "doctor": "Locate agent executables without running them or checking credentials.",
         "config": "Manage TOML configuration.",
+        "trust": "Trust a folder, and everything under it, to load its .pratfile.",
         "completion": "Print bash or zsh completion code to eval from a shell rc file.",
     }
 )
@@ -49,7 +50,6 @@ _CONFIG_COMMAND_HELP: Mapping[str, str] = MappingProxyType(
         "validate": (
             "Validate every configured profile, template and workflow without launching an agent."
         ),
-        "trust": "Trust the current .pratfile, or --config PATH, exactly as it is now.",
     }
 )
 
@@ -235,6 +235,14 @@ def build_parser() -> Parser:
     for name, help_text in _CONFIG_COMMAND_HELP.items():
         child = config_commands.add_parser(name, help=help_text, allow_abbrev=False)
         _common_flags(child)
+    trust = subparsers.add_parser("trust", help=_MANAGEMENT_HELP["trust"], allow_abbrev=False)
+    _common_flags(trust)
+    trust.add_argument(
+        "directory",
+        nargs="?",
+        metavar="DIR",
+        help="Folder to trust; default: the invocation directory.",
+    )
     completion = subparsers.add_parser(
         "completion", help=_MANAGEMENT_HELP["completion"], allow_abbrev=False
     )

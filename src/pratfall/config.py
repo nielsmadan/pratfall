@@ -1,6 +1,7 @@
 import math
 import os
 import re
+import shlex
 import stat
 import tomllib
 from collections.abc import Mapping
@@ -18,7 +19,7 @@ from pratfall.limits import (
     MAX_PARALLEL_LIMIT,
     WORKFLOW_EACH_ITEMS,
 )
-from pratfall.local_trust import TrustState, digest, trust, trust_state
+from pratfall.local_trust import digest, is_trusted, trust
 from pratfall.models import (
     MAX_TURNS,
     NOTIFY_METHODS,
@@ -38,6 +39,7 @@ from pratfall.option_paths import resolve_path
 from pratfall.prompt_templates import template_parameters, validate_template
 
 DEFAULT_TIMEOUT = 600.0
+LOCAL_CONFIG_NAME = ".pratfile"
 OPTION_FIELDS = frozenset(Options.__dataclass_fields__)
 SAMPLE_CONFIG = """version = 1
 
@@ -908,6 +910,17 @@ def _same_file(first: Path, second: Path) -> bool:
         return False
 
 
+def discover_local_config(cwd: Path) -> Path | None:
+    return next(
+        (
+            candidate
+            for directory in (cwd, *cwd.parents)
+            if (candidate := directory / LOCAL_CONFIG_NAME).exists()
+        ),
+        None,
+    )
+
+
 def load_config(
     explicit: str | Path | None = None,
     *,
@@ -916,16 +929,18 @@ def load_config(
     skip_untrusted: bool = False,
 ) -> Config:
     global_path = config_path(cwd=cwd, env=env)
-    local_path = config_path(explicit if explicit is not None else ".pratfile", cwd=cwd, env=env)
+    discovered = discover_local_config(cwd) if explicit is None else None
+    local_path = config_path(
+        explicit if explicit is not None else discovered or LOCAL_CONFIG_NAME, cwd=cwd, env=env
+    )
     if _same_file(global_path, local_path):
         config = _load_file(local_path, required=explicit is not None)
     else:
         contents = _read_config(local_path, required=explicit is not None)
-        if contents is not None and explicit is None:
-            state = trust_state(local_path, contents, env)
-            if state != "trusted" and not skip_untrusted:
-                raise PratError(_untrusted_message(local_path, state))
-            contents = contents if state == "trusted" else None
+        if contents is not None and explicit is None and not is_trusted(local_path.parent, env):
+            if not skip_untrusted:
+                raise PratError(_untrusted_message(local_path))
+            contents = None
         local = Config(path=local_path) if contents is None else _parse_file(local_path, contents)
         config = replace(
             _merge_configs(_load_file(global_path, required=False), local),
@@ -943,19 +958,28 @@ def load_config(
     return config
 
 
-def _untrusted_message(path: Path, state: TrustState) -> str:
-    reason = "changed since it was trusted" if state == "changed" else "is not trusted"
-    return f"{path}: local config {reason}; review it, then run 'prat config trust'."
+def _untrusted_message(path: Path) -> str:
+    folder = shlex.quote(str(path.parent))
+    return (
+        f"{path}: local config is not trusted; review it, then trust its folder and everything "
+        f"under it with: prat trust {folder}"
+    )
 
 
-def trust_local_config(
-    explicit: str | Path | None = None, *, cwd: Path, env: Mapping[str, str]
-) -> tuple[Path, str]:
-    path = config_path(explicit if explicit is not None else ".pratfile", cwd=cwd, env=env)
-    contents = _read_config(path, required=True) or b""
-    _parse_file(path, contents)
-    trust(path, contents, env)
-    return path, digest(contents)
+def trust_folder(directory: str | Path, *, cwd: Path, env: Mapping[str, str]) -> Path:
+    try:
+        path = Path(os.path.abspath(cwd / Path(directory).expanduser()))
+    except RuntimeError as error:
+        raise PratError(
+            f"{directory}: cannot expand user path ({error}); "
+            "use an absolute path or a valid ~user path.",
+            code="invalid_arguments",
+        ) from error
+    if not path.is_dir():
+        raise PratError(f"{path}: not a directory.", code="invalid_arguments")
+    real = Path(os.path.realpath(path))
+    trust(real, env)
+    return real
 
 
 def resolve_profile(

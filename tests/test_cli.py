@@ -24,7 +24,6 @@ from pratfall.cli.parsing import _parse_run
 from pratfall.config import init_config, load_config, resolve_profile
 from pratfall.errors import PratError
 from pratfall.interruption import InterruptionState
-from pratfall.local_trust import digest
 from pratfall.models import Config, Invocation, Options, PromptTemplate, RawCapture
 from pratfall.runner import ProcessResult, RunLimits
 from pratfall.runner import run as run_process
@@ -188,7 +187,7 @@ def test_init_and_validate_management(tmp_path: Path, capsys: pytest.CaptureFixt
 
 
 @pytest.mark.usefixtures("real_trust")
-def test_local_config_runs_only_after_config_trust(
+def test_local_config_runs_only_after_trust(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     local = tmp_path / ".pratfile"
@@ -197,14 +196,14 @@ def test_local_config_runs_only_after_config_trust(
     assert json.loads(capsys.readouterr().out)["error"] == {
         "code": "invalid_config",
         "message": (
-            f"{local}: local config is not trusted; review it, then run 'prat config trust'."
+            f"{local}: local config is not trusted; review it, then trust its folder and "
+            f"everything under it with: prat trust {tmp_path}"
         ),
     }
-    assert main(["config", "trust", "--json"]) == 0
+    assert main(["trust", "--json"]) == 0
     assert json.loads(capsys.readouterr().out) == {
         "schema_version": 1,
-        "path": str(local),
-        "sha256": digest(local.read_bytes()),
+        "path": os.path.realpath(tmp_path),
         "trusted": True,
     }
     assert main(["cc", "hello", "--json"]) == 0
@@ -218,10 +217,56 @@ def test_management_commands_refuse_untrusted_local_config(
     (tmp_path / ".pratfile").write_text('version=1\n[profiles.work]\nagent="cx"\n')
     assert main(["profiles"]) == 2
     assert "local config is not trusted" in capsys.readouterr().err
-    assert main(["config", "trust"]) == 0
-    sha256 = digest((tmp_path / ".pratfile").read_bytes())
-    assert capsys.readouterr().out == f"Trusted {tmp_path / '.pratfile'} (sha256 {sha256})\n"
+    assert main(["trust"]) == 0
+    assert capsys.readouterr().out == (
+        f"Trusted {os.path.realpath(tmp_path)} and everything under it\n"
+    )
     assert main(["profiles"]) == 0
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_trusted_repo_root_runs_from_subdirectories_and_ignores_cwd_flag(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, elsewhere = tmp_path / "repo", tmp_path / "elsewhere"
+    (repo / "a" / "b").mkdir(parents=True)
+    elsewhere.mkdir()
+    (repo / ".pratfile").write_text('version=1\n[profiles.triage]\nagent="cx"\n')
+    assert main(["trust", str(repo)]) == 0
+    capsys.readouterr()
+    os.chdir(repo / "a" / "b")
+    for extra in ([], ["--cwd", str(elsewhere)]):
+        assert main(["triage", "prompt", *extra, "--dry-run", "--json"]) == 0
+        assert json.loads(capsys.readouterr().out)["profile"] == "triage"
+
+
+@pytest.mark.usefixtures("real_trust")
+def test_untrusted_ancestor_local_config_refuses_from_a_subdirectory(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "a" / "b").mkdir(parents=True)
+    (tmp_path / ".pratfile").write_text('version=1\n[profiles.triage]\nagent="cx"\n')
+    os.chdir(tmp_path / "a" / "b")
+    assert main(["triage", "prompt", "--dry-run"]) == 2
+    assert capsys.readouterr().err == (
+        f"prat: {tmp_path / '.pratfile'}: local config is not trusted; review it, then trust "
+        f"its folder and everything under it with: prat trust {tmp_path}\n"
+    )
+
+
+def test_trust_with_config_trusts_that_files_folder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "team").mkdir()
+    assert main(["trust", "--config", "team/project.toml", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["path"] == os.path.realpath(tmp_path / "team")
+    assert main(["trust", "team", "--config", "team/project.toml"]) == 2
+    assert capsys.readouterr().err == "prat: trust takes DIR or --config PATH, not both.\n"
+
+
+def test_trust_moved_out_of_config(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["config", "trust"]) == 2
+    assert "invalid choice: 'trust'" in capsys.readouterr().err
 
 
 def test_default_validate_explains_missing_config(capsys: pytest.CaptureFixture[str]) -> None:

@@ -31,12 +31,12 @@ the [agent references](reference/overview.md).
   [dispatch.py](../src/pratfall/cli/dispatch.py) validates configuration, selected
   native options, and the child working directory before acquiring the prompt.
   [config.py](../src/pratfall/config.py) merges
-  the global file with the invocation directory's `.pratfile`, or the local file selected by
-  `--config`. Each file is read once as a regular file of at most `CONFIG_BYTES`; those exact bytes
-  are parsed and hashed. An automatically discovered `.pratfile` loads only when
-  [local_trust.py](../src/pratfall/local_trust.py) finds its path recorded with the same SHA-256 in
-  the trust store written by `config trust`; otherwise loading fails, except in shell completion,
-  which skips it. Local profiles replace global profiles by name. A profile naming a parent with
+  the global file with the nearest `.pratfile` in the invocation directory or a parent, or the
+  local file selected by `--config`. Each file is read once as a regular file of at most
+  `CONFIG_BYTES`; those exact bytes are parsed and hashed. An automatically discovered `.pratfile`
+  loads only when [local_trust.py](../src/pratfall/local_trust.py) finds the real path of its
+  folder, or of a folder above it, in the trust store written by `prat trust`; otherwise loading
+  fails, except in shell completion, which skips it. Local profiles replace global profiles by name. A profile naming a parent with
   `extends` is flattened once after that merge, so a `.pratfile` child can extend a base defined
   in the global config; chains resolve nearest-ancestor-first and a cycle is an error. Invocation
   options override profile options, the profile's inherited options, local defaults, global
@@ -175,8 +175,7 @@ adapter or the runner itself.
   (1), `parent` (the workflow process's pid), `arguments` (a list of strings), `input` (a string
   or null) and `config_digest` (the SHA-256 of the local config the parent loaded, or null). A
   child whose loaded local config has a different digest fails with `invalid_config` before
-  validating native options; a rewritten `.pratfile` fails the trust check first, with its
-  "changed since it was trusted" message. The spec is bounded by `WORKFLOW_SPEC_BYTES`. The child moves the spec off fd 0, points
+  validating native options. The spec is bounded by `WORKFLOW_SPEC_BYTES`. The child moves the spec off fd 0, points
   fd 0 and `sys.stdin` at nothing, runs the ordinary run path with the step's input as its base
   prompt, and writes its usual `--json` result to stdout. Arguments start with the selector,
   then `--json` and `--no-notify`, then the parent's `--config`, `--cwd`, `--timeout`, `--progress`

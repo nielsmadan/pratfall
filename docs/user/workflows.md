@@ -329,7 +329,7 @@ Each step is a fresh `prat` process that loads configuration from disk when it s
 the global config while a workflow runs changes steps that have not started yet. The local file
 (`.pratfile` or `--config PATH`) is pinned to the SHA-256 digest seen at launch: if a step's agent
 or anything else rewrites it, every later step fails with `invalid_config`, so a step cannot plant
-a command for the next one. A rewritten `.pratfile` reports `local config changed since it was
-trusted`, because the trust check runs first; a rewritten `--config` file reports `local config
-changed since the workflow started`.
+a command for the next one. The step reports `local config changed since the workflow started`.
+This pin is independent of [folder trust](profiles.md#trust-a-pratfile): edits keep a trusted
+`.pratfile` loadable between runs, but never within one.
 Parameters, timeouts and the step list were resolved at launch and do not change.

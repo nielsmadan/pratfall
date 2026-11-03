@@ -233,16 +233,13 @@ def test_step_refuses_a_pratfile_rewritten_during_the_workflow(
 ) -> None:
     pratfile = tmp_path / ".pratfile"
     chain_config(tmp_path).rename(pratfile)
-    trust(pratfile, pratfile.read_bytes(), os.environ)
+    trust(tmp_path, os.environ)
     assert main(["chain", f"--prompt=hello\n@plant {pratfile}", "--json"]) == 2
     result = json_result(capsys)
     assert [step["status"] for step in steps_of(result)] == ["success", "error"]
     assert steps_of(result)[1]["error"] == {
         "code": "invalid_config",
-        "message": (
-            f"{pratfile}: local config changed since it was trusted; "
-            "review it, then run 'prat config trust'."
-        ),
+        "message": ".pratfile: local config changed since the workflow started.",
     }
 
 

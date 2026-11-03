@@ -37,7 +37,7 @@ from pratfall.config import (
     load_config,
     option_origins,
     resolve_profile,
-    trust_local_config,
+    trust_folder,
 )
 from pratfall.consumer import ByteConsumer, CapturingConsumer
 from pratfall.errors import PratError
@@ -331,11 +331,11 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
     elif args.command == "config" and args.config_command == "init":
         path = init_config(args.config, cwd=cwd, env=environ)
         _emit({"path": str(path), "created": True}, [f"Created {path}"], json_mode=args.json)
-    elif args.command == "config" and args.config_command == "trust":
-        path, sha256 = trust_local_config(args.config, cwd=cwd, env=environ)
+    elif args.command == "trust":
+        path = trust_folder(_trust_target(args, cwd, environ), cwd=cwd, env=environ)
         _emit(
-            {"path": str(path), "sha256": sha256, "trusted": True},
-            [f"Trusted {path} (sha256 {sha256})"],
+            {"path": str(path), "trusted": True},
+            [f"Trusted {path} and everything under it"],
             json_mode=args.json,
         )
     else:
@@ -353,6 +353,14 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
         payload, lines = views.get(args.command, lambda: _config_view(config))()
         _emit(payload, lines, json_mode=args.json)
     return 0
+
+
+def _trust_target(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -> Path:
+    if args.config is None:
+        return Path(args.directory or ".")
+    if args.directory is not None:
+        raise PratError("trust takes DIR or --config PATH, not both.", code="invalid_arguments")
+    return config_path(args.config, cwd=cwd, env=environ).parent
 
 
 def _run_adapter(

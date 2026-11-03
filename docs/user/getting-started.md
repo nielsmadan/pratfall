@@ -39,7 +39,8 @@ Here, `cx` is the alias for Codex. Run `prat agents` to see all supported agents
 `-t`, `--param` names for the selected profile, template or workflow, effort levels for the
 selected agent, flags, and file or directory paths for options that take one. In zsh, each name
 shows a short description. Profiles, workflows and templates come from the global config and the
-current directory's `.pratfile`, or from a `--config` typed earlier on the line.
+nearest trusted `.pratfile` in the current directory or a parent, or from a `--config` typed
+earlier on the line.
 
 The Homebrew formula installs the completion files. Zsh loads them when Homebrew's
 `share/zsh/site-functions` is on `FPATH` before `compinit` runs; bash needs the `bash-completion@2`
