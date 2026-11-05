@@ -69,7 +69,7 @@ def test_directories_list_sorted_by_path_text(tmp_path: Path) -> None:
     assert trusted_directories(os.environ) == (real / "a-b", real / "a" / "b", real / "b")
 
 
-def test_trusted_through_names_the_covering_folder(tmp_path: Path) -> None:
+def test_trusted_through_names_the_covering_directory(tmp_path: Path) -> None:
     (tmp_path / "repo" / "a").mkdir(parents=True)
     trust(tmp_path / "repo", os.environ)
     repo = Path(os.path.realpath(tmp_path / "repo"))

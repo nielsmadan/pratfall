@@ -35,8 +35,8 @@ the [agent references](reference/overview.md).
   local file selected by `--config`. Each file is read once as a regular file of at most
   `CONFIG_BYTES`; those exact bytes are parsed and hashed. An automatically discovered `.pratfile`
   loads only when [local_trust.py](../src/pratfall/local_trust.py) finds the real path of its
-  folder, or of a folder above it, in the trust store written by `prat trust`; otherwise loading
-  fails, except in shell completion, which skips it. Local profiles replace global profiles by name. A profile naming a parent with
+  directory, or of a directory above it, in the trust store written by `prat trust`; otherwise
+  loading fails, except in shell completion, which skips it. Local profiles replace global profiles by name. A profile naming a parent with
   `extends` is flattened once after that merge, so a `.pratfile` child can extend a base defined
   in the global config; chains resolve nearest-ancestor-first and a cycle is an error. Invocation
   options override profile options, the profile's inherited options, local defaults, global

@@ -9,13 +9,13 @@ from pratfall.config import (
     SAMPLE_CONFIG,
     config_path,
     init_config,
+    list_trusted_directories,
     load_config,
     merge_options,
     parse_options,
     resolve_profile,
-    revoke_folder,
-    trust_folder,
-    trusted_folders,
+    revoke_directory,
+    trust_directory,
     validate_capabilities,
 )
 from pratfall.errors import PratError
@@ -248,7 +248,7 @@ def test_untrusted_automatic_local_config_is_refused(tmp_path: Path) -> None:
         load_config(cwd=Path.cwd(), env=os.environ)
     assert str(caught.value) == (
         f"{tmp_path / '.pratfile'}: local config is not trusted; review it, then trust its "
-        f"folder and everything under it with: prat trust {tmp_path}"
+        f"directory and everything under it with: prat trust {tmp_path}"
     )
     assert caught.value.code == "invalid_config"
 
@@ -263,15 +263,15 @@ def test_untrusted_ancestor_local_config_is_refused_from_a_subdirectory(tmp_path
         load_config(cwd=repo / "a" / "b", env=os.environ)
     assert str(caught.value) == (
         f"{repo / '.pratfile'}: local config is not trusted; review it, then trust its "
-        f"folder and everything under it with: prat trust '{repo}'"
+        f"directory and everything under it with: prat trust '{repo}'"
     )
 
 
 @pytest.mark.usefixtures("real_trust")
-def test_trusted_folder_loads_its_local_config_after_edits(tmp_path: Path) -> None:
+def test_trusted_directory_loads_its_local_config_after_edits(tmp_path: Path) -> None:
     local = tmp_path / ".pratfile"
     local.write_text(LOCAL_COMMAND, encoding="utf-8")
-    assert trust_folder(".", cwd=tmp_path, env=os.environ) == Path(os.path.realpath(tmp_path))
+    assert trust_directory(".", cwd=tmp_path, env=os.environ) == Path(os.path.realpath(tmp_path))
     config = load_config(cwd=Path.cwd(), env=os.environ)
     assert config.commands["claude"] == (str(tmp_path / "tools" / "claude"),)
     assert config.local_digest == digest(LOCAL_COMMAND.encode())
@@ -283,11 +283,11 @@ def test_trusted_folder_loads_its_local_config_after_edits(tmp_path: Path) -> No
 
 
 @pytest.mark.usefixtures("real_trust")
-def test_trusted_parent_folder_covers_a_nested_local_config(tmp_path: Path) -> None:
+def test_trusted_parent_directory_covers_a_nested_local_config(tmp_path: Path) -> None:
     nested = tmp_path / "work" / "repo"
     (nested / "src").mkdir(parents=True)
     (nested / ".pratfile").write_text(LOCAL_COMMAND, encoding="utf-8")
-    trust_folder(tmp_path / "work", cwd=tmp_path, env=os.environ)
+    trust_directory(tmp_path / "work", cwd=tmp_path, env=os.environ)
     config = load_config(cwd=nested / "src", env=os.environ)
     assert config.commands["claude"] == (str(nested / "tools" / "claude"),)
 
@@ -313,37 +313,37 @@ def test_explicit_local_config_is_trusted_by_selection(tmp_path: Path) -> None:
     assert config.local_digest == digest(LOCAL_COMMAND.encode())
 
 
-def test_revoke_folder_reports_each_outcome(tmp_path: Path) -> None:
+def test_revoke_directory_reports_each_outcome(tmp_path: Path) -> None:
     (tmp_path / "repo" / "a").mkdir(parents=True)
-    repo = trust_folder("repo", cwd=tmp_path, env=os.environ)
-    assert revoke_folder(tmp_path / "elsewhere", cwd=tmp_path, env=os.environ) == (
+    repo = trust_directory("repo", cwd=tmp_path, env=os.environ)
+    assert revoke_directory(tmp_path / "elsewhere", cwd=tmp_path, env=os.environ) == (
         Path(os.path.realpath(tmp_path)) / "elsewhere",
         False,
     )
     with pytest.raises(PratError) as caught:
-        revoke_folder("repo/a", cwd=tmp_path, env=os.environ)
+        revoke_directory("repo/a", cwd=tmp_path, env=os.environ)
     assert (str(caught.value), caught.value.code) == (
         f"{repo / 'a'} is trusted through {repo}; revoke that with prat trust --revoke {repo}",
         "invalid_arguments",
     )
-    assert trusted_folders(os.environ) == ((repo, True),)
-    assert revoke_folder("repo", cwd=tmp_path, env=os.environ) == (repo, True)
-    assert trusted_folders(os.environ) == ()
+    assert list_trusted_directories(os.environ) == ((repo, True),)
+    assert revoke_directory("repo", cwd=tmp_path, env=os.environ) == (repo, True)
+    assert list_trusted_directories(os.environ) == ()
 
 
-def test_revoke_folder_accepts_a_deleted_folder(tmp_path: Path) -> None:
+def test_revoke_directory_accepts_a_deleted_directory(tmp_path: Path) -> None:
     (tmp_path / "gone").mkdir()
-    gone = trust_folder("gone", cwd=tmp_path, env=os.environ)
+    gone = trust_directory("gone", cwd=tmp_path, env=os.environ)
     (tmp_path / "gone").rmdir()
-    assert trusted_folders(os.environ) == ((gone, False),)
-    assert revoke_folder(gone, cwd=tmp_path, env=os.environ) == (gone, True)
+    assert list_trusted_directories(os.environ) == ((gone, False),)
+    assert revoke_directory(gone, cwd=tmp_path, env=os.environ) == (gone, True)
 
 
 def test_trusting_requires_an_existing_directory(tmp_path: Path) -> None:
     (tmp_path / "file").write_text("", encoding="utf-8")
     for target in ("missing", "file"):
         with pytest.raises(PratError) as caught:
-            trust_folder(target, cwd=tmp_path, env=os.environ)
+            trust_directory(target, cwd=tmp_path, env=os.environ)
         assert (str(caught.value), caught.value.code) == (
             f"{tmp_path / target}: not a directory.",
             "invalid_arguments",

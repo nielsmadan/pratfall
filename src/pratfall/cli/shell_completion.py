@@ -283,7 +283,7 @@ def _management_flags(command: str) -> Mapping[str, str]:
     if command == "trust":
         return {
             **{key: value for key, value in _MANAGEMENT_FLAGS.items() if key != "--config"},
-            "--list": "List trusted folders.",
+            "--list": "List trusted directories.",
             "--revoke": "Remove DIR's trust entry.",
         }
     return _MANAGEMENT_FLAGS

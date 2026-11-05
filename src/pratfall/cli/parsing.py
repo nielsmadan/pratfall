@@ -38,7 +38,7 @@ _MANAGEMENT_HELP: Mapping[str, str] = MappingProxyType(
         "workflows": "List configured workflows and their steps.",
         "doctor": "Locate agent executables without running them or checking credentials.",
         "config": "Manage TOML configuration.",
-        "trust": "Trust a folder, and everything under it, to load its .pratfile.",
+        "trust": "Trust a directory, and everything under it, to load its .pratfile.",
         "completion": "Print bash or zsh completion code to eval from a shell rc file.",
     }
 )
@@ -247,9 +247,9 @@ def build_parser() -> Parser:
         "directory",
         nargs="?",
         metavar="DIR",
-        help="Folder to trust or revoke; default: the invocation directory.",
+        help="Directory to trust or revoke; default: the invocation directory.",
     )
-    trust.add_argument("--list", action="store_true", help="List trusted folders.")
+    trust.add_argument("--list", action="store_true", help="List trusted directories.")
     trust.add_argument(
         "--revoke", action="store_true", help="Remove DIR's trust entry; DIR need not exist."
     )

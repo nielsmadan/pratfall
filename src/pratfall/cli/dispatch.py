@@ -34,12 +34,12 @@ from pratfall.codes import INTERNAL_ERROR, SIGNAL_EXIT_BASE, exit_code_for
 from pratfall.config import (
     config_path,
     init_config,
+    list_trusted_directories,
     load_config,
     option_origins,
     resolve_profile,
-    revoke_folder,
-    trust_folder,
-    trusted_folders,
+    revoke_directory,
+    trust_directory,
 )
 from pratfall.consumer import ByteConsumer, CapturingConsumer
 from pratfall.errors import PratError
@@ -355,27 +355,31 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
 def _trust(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -> None:
     if args.config is not None:
         raise PratError(
-            "a --config file is already trusted; trust a folder with prat trust DIR",
+            "a --config file is already trusted; trust a directory with prat trust DIR",
             code="invalid_arguments",
         )
     if args.list and (args.revoke or args.directory is not None):
         raise PratError("--list cannot be combined with --revoke or DIR.", code="invalid_arguments")
     if args.list:
-        folders = trusted_folders(environ)
+        directories = list_trusted_directories(environ)
         _emit(
-            {"directories": [{"path": str(path), "exists": exists} for path, exists in folders]},
-            [f"{path}{'' if exists else ' (missing)'}" for path, exists in folders],
+            {
+                "directories": [
+                    {"path": str(path), "exists": exists} for path, exists in directories
+                ]
+            },
+            [f"{path}{'' if exists else ' (missing)'}" for path, exists in directories],
             json_mode=args.json,
         )
     elif args.revoke:
-        path, revoked = revoke_folder(args.directory or ".", cwd=cwd, env=environ)
+        path, revoked = revoke_directory(args.directory or ".", cwd=cwd, env=environ)
         _emit(
             {"path": str(path), "trusted": False},
             [f"Revoked {path}" if revoked else f"{path} was not trusted"],
             json_mode=args.json,
         )
     else:
-        path = trust_folder(args.directory or ".", cwd=cwd, env=environ)
+        path = trust_directory(args.directory or ".", cwd=cwd, env=environ)
         _emit(
             {"path": str(path), "trusted": True},
             [f"Trusted {path} and everything under it"],

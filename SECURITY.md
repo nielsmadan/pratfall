@@ -15,8 +15,8 @@ directory, authentication, configuration, network access, and permission default
 `[agents.NAME].command` prefix and `native_args` are trusted executable argv. Only use wrappers and
 arguments you trust. The global config and a file passed with `--config` are trusted because you
 selected them; an automatically discovered `.pratfile` is loaded only when `prat trust` recorded
-its folder or a folder above it, and a workflow step refuses a local config that changed after
-launch.
+its directory or a directory above it, and a workflow step refuses a local config that changed
+after launch.
 
 Prompts are passed as argv or stdin data without a shell. In-scope vulnerabilities include shell or
 argument injection across that boundary, permission changes that were not explicitly requested,

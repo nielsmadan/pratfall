@@ -966,14 +966,14 @@ def load_config(
 
 
 def _untrusted_message(path: Path) -> str:
-    folder = shlex.quote(str(path.parent))
+    directory = shlex.quote(str(path.parent))
     return (
-        f"{path}: local config is not trusted; review it, then trust its folder and everything "
-        f"under it with: prat trust {folder}"
+        f"{path}: local config is not trusted; review it, then trust its directory and everything "
+        f"under it with: prat trust {directory}"
     )
 
 
-def trust_folder(directory: str | Path, *, cwd: Path, env: Mapping[str, str]) -> Path:
+def trust_directory(directory: str | Path, *, cwd: Path, env: Mapping[str, str]) -> Path:
     path = _trust_path(directory, cwd)
     if not path.is_dir():
         raise PratError(f"{path}: not a directory.", code="invalid_arguments")
@@ -982,7 +982,9 @@ def trust_folder(directory: str | Path, *, cwd: Path, env: Mapping[str, str]) ->
     return real
 
 
-def revoke_folder(directory: str | Path, *, cwd: Path, env: Mapping[str, str]) -> tuple[Path, bool]:
+def revoke_directory(
+    directory: str | Path, *, cwd: Path, env: Mapping[str, str]
+) -> tuple[Path, bool]:
     real = Path(os.path.realpath(_trust_path(directory, cwd)))
     if revoke(real, env):
         return real, True
@@ -996,7 +998,7 @@ def revoke_folder(directory: str | Path, *, cwd: Path, env: Mapping[str, str]) -
     return real, False
 
 
-def trusted_folders(env: Mapping[str, str]) -> tuple[tuple[Path, bool], ...]:
+def list_trusted_directories(env: Mapping[str, str]) -> tuple[tuple[Path, bool], ...]:
     return tuple((path, path.is_dir()) for path in trusted_directories(env))
 
 

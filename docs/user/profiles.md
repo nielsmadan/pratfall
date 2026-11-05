@@ -132,49 +132,49 @@ at most 4 MiB.
 
 A `.pratfile` can set agent commands, command prefixes and native arguments, so cloning a
 repository and running `prat` in it would otherwise execute whatever that repository chose. Prat
-therefore loads an automatically discovered `.pratfile` only when its folder, or a folder above
-it, is trusted. Review the file, then trust its folder:
+therefore loads an automatically discovered `.pratfile` only when its directory, or a directory
+above it, is trusted. Review the file, then trust its directory:
 
 ```sh
 prat trust            # the invocation directory
 prat trust ~/src/team-repo
 ```
 
-Trust covers the folder and everything under it, so trusting a repository root also covers
+Trust covers the directory and everything under it, so trusting a repository root also covers
 running Prat from its subdirectories, and trusting `~/src` covers every repository below it. Edits
 to a trusted `.pratfile`, such as a teammate's change arriving with `git pull`, keep it trusted.
-Prat records the folder's resolved real path in `$XDG_STATE_HOME/pratfall/trusted.json` (default
+Prat records the directory's resolved real path in `$XDG_STATE_HOME/pratfall/trusted.json` (default
 `~/.local/state/pratfall/trusted.json`, also used when `XDG_STATE_HOME` is relative).
 
-An untrusted `.pratfile` fails every command, naming the file and the folder to trust:
+An untrusted `.pratfile` fails every command, naming the file and the directory to trust:
 
 ```text
-prat: /src/team-repo/.pratfile: local config is not trusted; review it, then trust its folder and everything under it with: prat trust /src/team-repo
+prat: /src/team-repo/.pratfile: local config is not trusted; review it, then trust its directory and everything under it with: prat trust /src/team-repo
 ```
 
 Shell completion skips an untrusted `.pratfile` and still offers names from the global config.
 
-List and revoke trusted folders with:
+List and revoke trusted directories with:
 
 ```sh
 prat trust --list
 prat trust --revoke ~/src/old-clone
 ```
 
-`--list` prints one trusted folder per line, sorted, and marks a folder that no longer exists with
-` (missing)`; with an empty store it prints nothing. `--revoke [DIR]` removes the entry for DIR
+`--list` prints one trusted directory per line, sorted, and marks a directory that no longer exists
+with ` (missing)`; with an empty store it prints nothing. `--revoke [DIR]` removes the entry for DIR
 (default: the invocation directory), resolved like `prat trust DIR`. DIR need not exist, so a
-`(missing)` entry can be removed by the path `--list` printed. Revoking a folder that was never
-trusted reports `DIR was not trusted` and succeeds. A folder that is trusted only through a
+`(missing)` entry can be removed by the path `--list` printed. Revoking a directory that was never
+trusted reports `DIR was not trusted` and succeeds. A directory that is trusted only through a
 trusted parent cannot be revoked on its own: Prat exits 2, names the parent and leaves the store
 unchanged. `--list`, `--revoke` and a bare `DIR` cannot be combined.
 
-With `--json`, `prat trust` prints the folder's `path` and `"trusted": true`, `--revoke` prints
+With `--json`, `prat trust` prints the directory's `path` and `"trusted": true`, `--revoke` prints
 `path` and `"trusted": false`, and `--list` prints `directories`, an array of `path` and
 `exists` records.
 
 The global config and a file passed with `--config PATH` are trusted because you selected them,
-so `prat trust` rejects `--config` with exit 2; trust a folder with `prat trust DIR` instead.
+so `prat trust` rejects `--config` with exit 2; trust a directory with `prat trust DIR` instead.
 
 Create a local file with:
 
@@ -408,7 +408,7 @@ introduces a collision, rename your profile, update commands that use it, and ru
 
 `.pratfile` discovery now searches parent directories. In a subdirectory below an untrusted
 `.pratfile`, Prat used to run with the global config only; it now refuses until you review that
-file and run `prat trust` on its folder. A `.pratfile` in a parent folder also now applies to
+file and run `prat trust` on its directory. A `.pratfile` in a parent directory also now applies to
 every subdirectory that has none of its own.
 
 In `--dry-run --json` previews, `schema_transport` is now the token `inline` or `file`, replacing

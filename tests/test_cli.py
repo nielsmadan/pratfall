@@ -40,6 +40,15 @@ def test_help_is_available(arguments: list[str], capsys: pytest.CaptureFixture[s
     assert "usage: prat" in capsys.readouterr().out
 
 
+def test_trust_help_describes_directories(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as caught:
+        main(["trust", "--help"])
+    assert caught.value.code == 0
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "DIR Directory to trust or revoke; default: the invocation directory." in help_text
+    assert "--list List trusted directories." in help_text
+
+
 def test_version(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as caught:
         main(["--version"])
@@ -196,7 +205,7 @@ def test_local_config_runs_only_after_trust(
     assert json.loads(capsys.readouterr().out)["error"] == {
         "code": "invalid_config",
         "message": (
-            f"{local}: local config is not trusted; review it, then trust its folder and "
+            f"{local}: local config is not trusted; review it, then trust its directory and "
             f"everything under it with: prat trust {tmp_path}"
         ),
     }
@@ -250,7 +259,7 @@ def test_untrusted_ancestor_local_config_refuses_from_a_subdirectory(
     assert main(["triage", "prompt", "--dry-run"]) == 2
     assert capsys.readouterr().err == (
         f"prat: {tmp_path / '.pratfile'}: local config is not trusted; review it, then trust "
-        f"its folder and everything under it with: prat trust {tmp_path}\n"
+        f"its directory and everything under it with: prat trust {tmp_path}\n"
     )
 
 
@@ -260,11 +269,11 @@ def test_untrusted_ancestor_local_config_refuses_from_a_subdirectory(
 def test_trust_rejects_config(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     assert main(arguments) == 2
     assert capsys.readouterr().err == (
-        "prat: a --config file is already trusted; trust a folder with prat trust DIR\n"
+        "prat: a --config file is already trusted; trust a directory with prat trust DIR\n"
     )
 
 
-def test_trust_list_shows_sorted_folders_and_marks_missing_ones(
+def test_trust_list_shows_sorted_directories_and_marks_missing_ones(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert main(["trust", "--list"]) == 0
