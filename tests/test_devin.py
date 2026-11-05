@@ -159,6 +159,7 @@ def test_devin_text_capture_removes_only_terminal_line_endings(output: str) -> N
         (1, "", "Workspace is not trusted"),
     ],
 )
+@pytest.mark.usefixtures("terminal_stderr")
 def test_devin_native_failure_including_untrusted_workspace(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

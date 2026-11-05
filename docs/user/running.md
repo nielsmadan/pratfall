@@ -308,6 +308,17 @@ an equivalent `env NAME=VALUE command` invocation. Inherited environment values 
 Final output goes to stdout; progress and diagnostics go to stderr. With `--json`, stdout contains
 one [result object](json.md).
 
+When stderr is a terminal, Prat marks the start and end of a run with two lines of its own:
+
+```text
+prat: launching Claude Code
+prat: Claude Code finished with status success in 1532ms
+```
+
+When stderr is a file, a pipe or a log, these lines are left out, so `2>>nightly.log` collects
+only the agent's own stderr and Prat's error messages and warnings. `--progress` prints them
+regardless, together with its activity lines.
+
 | Flag | What appears on stderr |
 | --- | --- |
 | `--progress` | Elapsed time and activity categories such as reasoning, tool use, and answering. |

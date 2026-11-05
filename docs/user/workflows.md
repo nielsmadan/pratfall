@@ -282,6 +282,9 @@ prat: workflow 'write' failed at step 'critique': Codex exited with status 3.
 ```
 
 Each step's stderr is relayed to Prat's stderr one line at a time with a `[STEP] ` prefix.
+When Prat's stderr is a terminal, or with `--progress`, this includes each step's launch and finish
+lines, such as `[draft] prat: launching Claude Code`; otherwise only the agents' own stderr and
+error messages are relayed.
 Very long lines are split at 64 KiB, and relayed lines are dropped rather than delaying the run
 when stderr is blocked.
 

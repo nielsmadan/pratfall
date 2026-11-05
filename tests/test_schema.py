@@ -313,7 +313,7 @@ def test_schema_failure_cleanup_preserves_native_precedence(
     process = ProcessResult(capture, b"", native_exit, 0, process_group=123)
     adapter = ADAPTERS["claude"].for_schema(True)
     plan = dispatch._RunPlan(
-        resolved, adapter, Invocation(("fake",), b""), Path(), 1, None, True, False
+        resolved, adapter, Invocation(("fake",), b""), Path(), 1, None, True, False, True
     )
     process, result = dispatch._present_run(plan, _StreamDiagnostics(), process)
     assert groups == [123]

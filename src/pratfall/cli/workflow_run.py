@@ -16,6 +16,7 @@ from pratfall.cli.presentation import (
     _internal_message,
     _limit_text,
     _print_diagnostic,
+    _status_lines,
     _stderr_is_tty,
     _StdoutLatch,
 )
@@ -123,6 +124,7 @@ def _prepare(
         base,
         _passthrough(parsed),
         config.local_digest,
+        status_lines=_status_lines(progress=parsed.progress),
     )
 
 

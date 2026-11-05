@@ -47,6 +47,11 @@ def opencode_one_on_path(opencode_one_bin: Path, monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.fixture
+def terminal_stderr(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pratfall.cli.presentation._stderr_is_tty", lambda: True)
+
+
+@pytest.fixture
 def real_trust(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pratfall.config.is_trusted", local_trust.is_trusted)
 

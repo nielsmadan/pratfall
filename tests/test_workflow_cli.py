@@ -523,6 +523,7 @@ def test_json_result_has_workflow_shape_and_key_order(
     ]
 
 
+@pytest.mark.usefixtures("terminal_stderr")
 def test_child_stderr_is_relayed_with_step_prefix(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
@@ -533,6 +534,28 @@ def test_child_stderr_is_relayed_with_step_prefix(
     assert "[a] native note\n" in captured.err
     assert "[a] prat: launching Claude Code\n" in captured.err
     assert "[b] prat: launching Claude Code\n" in captured.err
+
+
+def test_piped_workflow_stderr_relays_only_native_lines(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    config = chain_config(tmp_path, first="@stderr native note\nfirst")
+    assert main(["chain", "--config", str(config)]) == 0
+    assert capfd.readouterr().err == "[a] native note\n"
+
+
+def test_children_inherit_a_parent_status_line_decision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = workflow_config(
+        tmp_path, {"first": "A $input"}, '[workflows.solo]\nsteps = [{name="a", profile="first"}]\n'
+    )
+    with_launcher(monkeypatch, tmp_path, "echo")
+    assert main(["solo", "--prompt=x", "--config", str(config)]) == 0
+    assert json.loads(capsys.readouterr().out)["status_lines"] is False
+    monkeypatch.setattr("pratfall.cli.presentation._stderr_is_tty", lambda: True)
+    assert main(["solo", "--prompt=x", "--config", str(config)]) == 0
+    assert json.loads(capsys.readouterr().out)["status_lines"] is True
 
 
 def test_long_stderr_lines_are_split_at_the_relay_cap(
@@ -657,6 +680,7 @@ def test_children_receive_spec_with_parent_and_passthrough(
         ],
         "input": "bäse",
         "config_digest": digest(config.read_bytes()),
+        "status_lines": True,
     }
 
 
@@ -1462,6 +1486,7 @@ def items_of(entry: dict[str, object]) -> list[dict[str, object]]:
     return items
 
 
+@pytest.mark.usefixtures("terminal_stderr")
 def test_each_runs_one_instance_per_line_with_the_item_as_parameter(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
@@ -2069,6 +2094,7 @@ def test_each_step_over_the_joined_output_cap_stops_later_launches(
     assert not log.exists()
 
 
+@pytest.mark.usefixtures("terminal_stderr")
 def test_each_relay_prefix_uses_the_item_label(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:

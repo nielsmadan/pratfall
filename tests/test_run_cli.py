@@ -163,6 +163,7 @@ print(json.dumps({"argv": sys.argv[1:], "prompt": prompt}))
 }
 
 
+@pytest.mark.usefixtures("terminal_stderr")
 def test_codex_dispatch_normalizes_output_and_supports_flags_around_selector(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -229,6 +230,93 @@ def test_codex_dispatch_normalizes_output_and_supports_flags_around_selector(
     assert "finished with status success" in captured.err
 
 
+def test_piped_stderr_holds_only_native_stderr(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "claude", CLAUDE_SUCCESS)
+    assert main(["cc", "hello", "--config", str(config)]) == 0
+    assert capsys.readouterr().err == "claude diagnostic\n"
+
+
+@pytest.mark.usefixtures("terminal_stderr")
+def test_terminal_stderr_shows_launch_and_finish_lines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "claude", CLAUDE_SUCCESS)
+    assert main(["cc", "hello", "--config", str(config), "--json"]) == 0
+    assert re.fullmatch(
+        r"prat: launching Claude Code\nclaude diagnostic\n"
+        r"prat: Claude Code finished with status success in \d+ms\n",
+        capsys.readouterr().err,
+    )
+
+
+def test_progress_forces_launch_and_finish_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "claude", CLAUDE_SUCCESS)
+    diagnostics = tmp_path / "diagnostics.log"
+    with diagnostics.open("w", encoding="utf-8") as stream:
+        monkeypatch.setattr(sys, "stderr", stream)
+        assert main(["cc", "hello", "--progress", "--config", str(config)]) == 0
+    written = diagnostics.read_text(encoding="utf-8")
+    assert "prat: launching Claude Code\n" in written
+    assert "prat: Claude Code finished with status success in " in written
+
+
+@pytest.mark.parametrize("status_lines", [False, True])
+def test_step_follows_the_parents_status_line_decision(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], status_lines: bool
+) -> None:
+    config = write_agent(tmp_path, "claude", CLAUDE_SUCCESS)
+    arguments = ["cc", "--config", str(config)]
+    spec = {
+        "version": 1,
+        "arguments": arguments,
+        "input": "hello",
+        "parent": 4242,
+        "config_digest": config_digest(arguments),
+        "status_lines": status_lines,
+    }
+    stdin = io.BytesIO(json.dumps(spec).encode("utf-8"))
+    assert run_step(stdin, tmp_path) == 0
+    err = capsys.readouterr().err
+    assert ("prat: launching Claude Code\n" in err) is status_lines
+    assert "claude diagnostic\n" in err
+
+
+def test_closed_stderr_without_progress_still_runs_the_agent(tmp_path: Path) -> None:
+    marker = tmp_path / "launched"
+    config = write_agent(
+        tmp_path,
+        "codex",
+        f"from pathlib import Path;Path({str(marker)!r}).touch()\n"
+        + CODEX_SUCCESS.replace('print("native diagnostic", file=sys.stderr)\n', ""),
+    )
+    bootstrap = """
+import os,sys
+os.close(2)
+from pratfall.cli import main
+raise SystemExit(main(sys.argv[1:]))
+"""
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+    }
+    completed = subprocess.run(
+        [sys.executable, "-c", bootstrap, "cx", "prompt", "--json", "--config", str(config)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
+    assert marker.exists()
+    assert completed.returncode == 0
+    assert json.loads(completed.stdout)["status"] == "success"
+
+
 def test_claude_text_dispatch_prints_only_final_answer(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -241,6 +329,7 @@ def test_claude_text_dispatch_prints_only_final_answer(
 
 
 @pytest.mark.parametrize("json_mode", [False, True])
+@pytest.mark.usefixtures("terminal_stderr")
 def test_trace_copies_streaming_native_stdout_to_stderr(
     tmp_path: Path,
     capfd: pytest.CaptureFixture[str],
@@ -1586,8 +1675,9 @@ time.sleep(30)
         os.close(read_descriptor)
 
 
-@pytest.mark.parametrize("native_diagnostic", [False, True])
-@pytest.mark.parametrize("progress", [False, True])
+@pytest.mark.parametrize(
+    ("progress", "native_diagnostic"), [(False, True), (True, False), (True, True)]
+)
 @pytest.mark.parametrize("json_mode", [False, True])
 def test_final_stderr_failure_preserves_output_and_cleans_owned_descendant(
     tmp_path: Path, native_diagnostic: bool, progress: bool, json_mode: bool
@@ -1639,7 +1729,7 @@ print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":1,"cached_in
     )
     stderr_data = bytearray()
     cleaned = False
-    launched = b"s starting" if progress else b"launching Codex"
+    launched = b"s starting" if progress else b""
     try:
         assert process.stderr is not None
         selected = selectors.DefaultSelector()
@@ -1972,9 +2062,8 @@ def test_quiet_run_has_no_elapsed_progress_events(
     assert "s working" not in captured.err
 
 
-@pytest.mark.parametrize("progress", [False, True])
-def test_closed_stderr_preserves_normalized_json_and_does_not_launch(
-    tmp_path: Path, progress: bool
+def test_closed_stderr_with_progress_preserves_normalized_json_and_does_not_launch(
+    tmp_path: Path,
 ) -> None:
     marker = tmp_path / "launched"
     config = write_agent(
@@ -2000,7 +2089,7 @@ raise SystemExit(main(sys.argv[1:]))
             bootstrap,
             "cx",
             "prompt",
-            *(["--progress"] if progress else []),
+            "--progress",
             "--json",
             "--config",
             str(config),
@@ -2039,6 +2128,7 @@ def test_progress_restores_stderr_flags_and_replays_native_diagnostics_once(
     assert "finished with status success" in written
 
 
+@pytest.mark.usefixtures("terminal_stderr")
 def test_native_stderr_write_failure_preserves_results_and_cleans_up_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2300,7 +2390,7 @@ def test_successful_fake_agent_output_to_early_closed_pipe_returns_one(
     completed = _run_with_closed_stdout(tmp_path, arguments)
     assert completed.returncode == 1
     assert b"BrokenPipeError" not in completed.stderr
-    assert b"finished with status success" in completed.stderr
+    assert completed.stderr == b"claude diagnostic\n"
 
 
 GEMINI_SURROGATE_ERROR = r"""import sys
@@ -3793,6 +3883,10 @@ BAD_PARENT = "Workflow step spec parent must be an integer."
         (spec_bytes(version=1, arguments=["cx"], input=None, parent="1"), BAD_PARENT),
         (spec_bytes(version=1, arguments=["cx"], input=None, parent=1.0), BAD_PARENT),
         (spec_bytes(version=1, arguments=["cx"], input=None, parent=None), BAD_PARENT),
+        (
+            spec_bytes(version=1, arguments=["cx"], input=None, parent=1, status_lines="yes"),
+            "Workflow step spec status_lines must be a boolean.",
+        ),
     ],
 )
 def test_step_malformed_spec_gives_one_json_error(

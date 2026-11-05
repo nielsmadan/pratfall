@@ -220,6 +220,10 @@ def _stderr_is_tty() -> bool:
         return False
 
 
+def _status_lines(*, progress: bool) -> bool:
+    return progress or _stderr_is_tty()
+
+
 def _presentation_error(error: Exception) -> ResultError:
     return ResultError("output_io_error", f"Cannot write diagnostics to stderr: {error}.")
 

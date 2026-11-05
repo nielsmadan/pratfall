@@ -65,6 +65,7 @@ class PreparedWorkflow:
     base: str | None
     passthrough: tuple[str, ...]
     config_digest: str | None = None
+    status_lines: bool = False
 
 
 class Supervised(NamedTuple):
@@ -214,6 +215,7 @@ def _start(state: _Supervision, step: WorkflowStep, item: int | None) -> None:
         "arguments": list(arguments),
         "input": text,
         "config_digest": prepared.config_digest,
+        "status_lines": prepared.status_lines,
     }
     try:
         process = _spawn(state.launcher, spec, state.cwd)

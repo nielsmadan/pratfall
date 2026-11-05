@@ -24,6 +24,7 @@ from pratfall.cli.presentation import (
     _presentation_error,
     _preview,
     _print_diagnostic,
+    _status_lines,
     _stderr_is_tty,
     _StdoutLatch,
     _StreamDiagnostics,
@@ -484,13 +485,15 @@ class _RunPlan:
     consumer: ByteConsumer | None
     json_mode: bool
     trace: bool
+    status_lines: bool
 
 
 def _execute(plan: _RunPlan, diagnostics: _Diagnostics) -> tuple[ProcessResult, DecodedOutput]:
     resolved = plan.resolved
     try:
         diagnostics.open()
-        diagnostics.line(f"prat: launching {resolved.agent.label}")
+        if plan.status_lines:
+            diagnostics.line(f"prat: launching {resolved.agent.label}")
         diagnostics.flush()
     except diagnostics.start_errors as error:
         diagnostics.fail()
@@ -542,10 +545,11 @@ def _present_run(
             process = _after_run_presentation_failure(process, error)
             diagnostics.fail()
     try:
-        diagnostics.line(
-            f"prat: {resolved.agent.label} finished with status {result.status} "
-            f"in {result.duration_ms}ms"
-        )
+        if plan.status_lines:
+            diagnostics.line(
+                f"prat: {resolved.agent.label} finished with status {result.status} "
+                f"in {result.duration_ms}ms"
+            )
         if not plan.json_mode and result.error is not None:
             diagnostics.line(f"prat: {result.error.message}")
         diagnostics.flush()
@@ -577,6 +581,7 @@ class _RunState:
 class _StepRun:
     input: str | None
     config_digest: str | None
+    status_lines: bool = False
 
 
 def _run_command(
@@ -802,7 +807,12 @@ def _run_prompt(
 
 
 def _run_plan(
-    parsed: RunArguments, prepared: _PreparedRun, invocation: Invocation, *, json_mode: bool
+    parsed: RunArguments,
+    prepared: _PreparedRun,
+    invocation: Invocation,
+    *,
+    json_mode: bool,
+    status_lines: bool,
 ) -> _RunPlan:
     resolved = prepared.resolved
     timeout = resolved.options.timeout
@@ -819,6 +829,7 @@ def _run_plan(
         consumer=CapturingConsumer(consumer) if parsed.trace and consumer is not None else consumer,
         json_mode=json_mode,
         trace=parsed.trace,
+        status_lines=status_lines,
     )
 
 
@@ -864,7 +875,14 @@ def _run_selected(
                     json_mode=state.json_mode,
                 )
                 return 0
-            plan = _run_plan(parsed, prepared, invocation, json_mode=state.json_mode)
+            status_lines = (
+                _status_lines(progress=parsed.progress)
+                if step is None
+                else parsed.progress or step.status_lines
+            )
+            plan = _run_plan(
+                parsed, prepared, invocation, json_mode=state.json_mode, status_lines=status_lines
+            )
             process, decoded = _execute(plan, diagnostics)
             state.process = process
         result = normalize(plan.resolved, process, decoded)
@@ -947,7 +965,12 @@ def _validated_step_spec(spec: object) -> tuple[list[str], _StepRun, int]:
         raise PratError(
             "Workflow step spec config_digest must be a string or null.", code="invalid_arguments"
         )
-    return list(arguments), _StepRun(text, digest), parent
+    status_lines = spec.get("status_lines", False)
+    if not isinstance(status_lines, bool):
+        raise PratError(
+            "Workflow step spec status_lines must be a boolean.", code="invalid_arguments"
+        )
+    return list(arguments), _StepRun(text, digest, status_lines), parent
 
 
 def _step_failure(error: PratError) -> int:

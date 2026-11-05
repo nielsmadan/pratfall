@@ -173,7 +173,9 @@ adapter or the runner itself.
 - **The `__step` protocol.** The hidden `__step` command is intercepted like `__complete`. The
   parent writes a JSON spec to an unlinked temporary file that becomes the child's stdin: `version`
   (1), `parent` (the workflow process's pid), `arguments` (a list of strings), `input` (a string
-  or null) and `config_digest` (the SHA-256 of the local config the parent loaded, or null). A
+  or null), `config_digest` (the SHA-256 of the local config the parent loaded, or null) and
+  `status_lines` (whether the child prints its launch and finish lines; the parent decides once
+  from its own stderr being a terminal or `--progress`, because a child's stderr is a pipe). A
   child whose loaded local config has a different digest fails with `invalid_config` before
   validating native options. The spec is bounded by `WORKFLOW_SPEC_BYTES`. The child moves the spec off fd 0, points
   fd 0 and `sys.stdin` at nothing, runs the ordinary run path with the step's input as its base
