@@ -5,11 +5,31 @@ Use `--json` to write one versioned result object to stdout. Diagnostics stay on
 Read fields by name: their order can differ on config or argument errors. Those errors use the
 same fields when `--json` is unambiguous.
 
+- [Conventions](#conventions)
 - [Run results](#run-results)
 - [Models, usage, and cost](#models-usage-and-cost)
 - [Workflow results](#workflow-results)
 - [Errors and partial results](#errors-and-partial-results)
 - [Previews and management commands](#previews-and-management-commands)
+
+## Conventions
+
+Every `--json` output follows these rules:
+
+- `--json` prints exactly one object on stdout, with `schema_version`, for every command that has
+  a result. Only `prat completion` and help are exempt.
+- Every JSON error carries `status: "error"`, `exit_code` and `error: {code, message}`. A run error
+  also carries the other run fields, set to null. Success is the exit code, or an `error` that is
+  null or absent.
+- Keys are snake_case and equal the config key where one exists.
+- A key has one meaning and one type everywhere it appears.
+- Values a script compares are lowercase tokens, such as `success`, `invalid_config` or `inline`.
+  Prose appears only in `message`-like fields.
+- A definition carries its own `name`. A report names what it ran by type: `agent`, `profile`,
+  `workflow`, `step` or `item`.
+- `null` means the agent decides. A default that Prat applies shows its value.
+- Durations are integers in milliseconds with an `_ms` suffix. Settings keep their config units,
+  such as `timeout` in seconds.
 
 ## Run results
 
@@ -241,11 +261,17 @@ result was already written, Prat reports the failure only on stderr to keep stdo
 
 `--dry-run --json` returns a preview containing `dry_run`, resolved identity, argv, cwd, timeout,
 and stdin byte count, rather than a run status. Active schemas add the original `schema` path and
-`schema_transport`; prepared temporary paths are labeled placeholders, not reusable filenames. Prompts passed through argv appear in the preview.
+`schema_transport`: `inline` when the schema's JSON is passed as an argument, `file` when the agent
+reads a temporary prepared copy. The text preview says `inline JSON` or `temporary prepared file`.
+Prepared temporary paths are labeled placeholders, not reusable filenames. Prompts passed through argv appear in the preview.
 
 Management commands return separate versioned inventory or config objects. Their errors still
 contain `status`, `exit_code`, and `error`. Agent capability records include `fast`.
 `prat completion` prints shell code and rejects `--json` with `invalid_arguments`.
+
+`prat trust --json` and `prat trust --revoke --json` return `path` and the boolean `trusted`.
+`prat trust --list --json` returns `directories`, an array of `{"path", "exists"}` records sorted by
+path.
 
 `prat profiles --json` records add `prompt` and `prompt_source` (the defining file's absolute
 path), both null without a profile `prompt`, and `parameters`, the prompt's parameter names in

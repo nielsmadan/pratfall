@@ -280,7 +280,7 @@ def test_trust_list_shows_sorted_folders_and_marks_missing_ones(
     assert main(["trust", "--list", "--json"]) == 0
     assert json.loads(capsys.readouterr().out) == {
         "schema_version": 1,
-        "trusted": [
+        "directories": [
             {"path": f"{real}/gone", "exists": False},
             {"path": f"{real}/repo", "exists": True},
         ],

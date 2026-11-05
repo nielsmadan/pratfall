@@ -229,6 +229,9 @@ class _StdoutLatch:
     emitted: bool = False
 
 
+_SCHEMA_TRANSPORT_TEXT = {"file": "temporary prepared file", "inline": "inline JSON"}
+
+
 def _preview(
     resolved: ResolvedProfile,
     invocation: Invocation,
@@ -255,9 +258,10 @@ def _preview(
     }
     if invocation.env:
         payload["env"] = dict(invocation.env)
-    if schema is not None:
+    transport = None if schema is None else "file" if schema.path else "inline"
+    if transport is not None:
         payload["schema"] = resolved.options.schema
-        payload["schema_transport"] = "temporary prepared file" if schema.path else "inline JSON"
+        payload["schema_transport"] = transport
     if json_mode:
         _emit_stdout(json.dumps(payload, ensure_ascii=False), latch)
         return
@@ -272,8 +276,8 @@ def _preview(
             (
                 f"command: {shlex.join(command)}",
                 *(
-                    [f"schema: {resolved.options.schema} ({payload['schema_transport']})"]
-                    if schema is not None
+                    [f"schema: {resolved.options.schema} ({_SCHEMA_TRANSPORT_TEXT[transport]})"]
+                    if transport is not None
                     else []
                 ),
                 f"cwd: {cwd}",

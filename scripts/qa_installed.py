@@ -4672,7 +4672,7 @@ def _exercise_w_schemas(prat: Path, root: Path) -> dict[str, object]:
         assert preview.returncode == 0, preview.stderr
         shown = _json_result(preview)
         assert shown["schema"] == str(root / "schema.json")
-        transport = "inline JSON" if agent == "claude" else "temporary prepared file"
+        transport = "inline" if agent == "claude" else "file"
         assert shown["schema_transport"] == transport
         if agent != "claude":
             placeholder = "<temporary prepared schema>"

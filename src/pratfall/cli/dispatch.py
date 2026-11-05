@@ -363,7 +363,7 @@ def _trust(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -> N
     if args.list:
         folders = trusted_folders(environ)
         _emit(
-            {"trusted": [{"path": str(path), "exists": exists} for path, exists in folders]},
+            {"directories": [{"path": str(path), "exists": exists} for path, exists in folders]},
             [f"{path}{'' if exists else ' (missing)'}" for path, exists in folders],
             json_mode=args.json,
         )

@@ -194,7 +194,7 @@ def test_schema_inheritance_listing_override_and_extract_rejection(
     assert main(["work", "--schema", str(schema), "task", "--dry-run", "--json"]) == 0
     preview = json.loads(capsys.readouterr().out)
     assert preview["schema"] == str(schema)
-    assert preview["schema_transport"] == "inline JSON"
+    assert preview["schema_transport"] == "inline"
     assert preview["argv"][-2:] == ["--json-schema", schema.read_text()]
     assert main(["work", "task", "--dry-run", "--json"]) == 2
     error = json.loads(capsys.readouterr().out)["error"]
@@ -591,7 +591,7 @@ def test_snapshot_context_covers_dispatch_exits(
         assert result["structured_output"] == {"answer": 42}
     if phase == "preview":
         assert result["schema"] == str(schema)
-        assert result["schema_transport"] == "temporary prepared file"
+        assert result["schema_transport"] == "file"
         assert result["argv"][-1] == "<temporary prepared schema>"
     for path in snapshots:
         assert not path.parent.exists()
@@ -753,7 +753,7 @@ def test_schema_file_preview_config_override_and_independent_cwd(
         assert main([*base, *extra]) == 0
         result = json.loads(capsys.readouterr().out)
         assert result["schema"] == str(expected)
-        assert result["schema_transport"] == "temporary prepared file"
+        assert result["schema_transport"] == "file"
         assert result["cwd"] == str(run_dir)
         token = ("" if agent == "codex" else "@") + "<temporary prepared schema>"
         assert token in result["argv"]
@@ -846,3 +846,18 @@ def test_schema_consumer_custom_numeric_budget(agent: str) -> None:
     decoded = consumer.finish()
     assert decoded.error is not None and decoded.error.code == "protocol_error"
     assert not decoded.structured_output_present
+
+
+@pytest.mark.parametrize(
+    ("selector", "token", "text"),
+    [("cc", "inline", "inline JSON"), ("cx", "file", "temporary prepared file")],
+)
+def test_preview_names_schema_transport_as_token_and_text(
+    selector: str, token: str, text: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    schema = tmp_path / "s.json"
+    schema.write_text('{"type":"object"}')
+    assert main([selector, "--schema", str(schema), "hi", "--dry-run", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["schema_transport"] == token
+    assert main([selector, "--schema", str(schema), "hi", "--dry-run"]) == 0
+    assert f"schema: {schema} ({text})\n" in capsys.readouterr().out

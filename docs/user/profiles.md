@@ -170,8 +170,8 @@ trusted parent cannot be revoked on its own: Prat exits 2, names the parent and 
 unchanged. `--list`, `--revoke` and a bare `DIR` cannot be combined.
 
 With `--json`, `prat trust` prints the folder's `path` and `"trusted": true`, `--revoke` prints
-`path` and `"trusted": false`, and `--list` prints `trusted`, an array of `path` and `exists`
-records.
+`path` and `"trusted": false`, and `--list` prints `directories`, an array of `path` and
+`exists` records.
 
 The global config and a file passed with `--config PATH` are trusted because you selected them,
 so `prat trust` rejects `--config` with exit 2; trust a folder with `prat trust DIR` instead.
@@ -410,6 +410,10 @@ introduces a collision, rename your profile, update commands that use it, and ru
 `.pratfile`, Prat used to run with the global config only; it now refuses until you review that
 file and run `prat trust` on its folder. A `.pratfile` in a parent folder also now applies to
 every subdirectory that has none of its own.
+
+In `--dry-run --json` previews, `schema_transport` is now the token `inline` or `file`, replacing
+`inline JSON` and `temporary prepared file`. Update scripts that compare it; the text preview keeps
+the readable wording.
 
 Two run flags were renamed to match their config keys, with no old spellings kept: `--attach` is
 now `--attachment` (key `attachments`) and `--disable-tools` is now `--disabled-tools` (key
