@@ -74,7 +74,7 @@ if [[ $zsh_eval_context == *func ]]; then _prat "$@"; else compdef _prat prat; f
 
 _DIR_FLAGS = frozenset({"--cwd", "--add-dir"})
 _FILE_FLAGS = frozenset(
-    {"-f", "--file", "--context", "--schema", "--attach", "--instructions-file", "--config"}
+    {"-f", "--file", "--context", "--schema", "--attachment", "--instructions-file", "--config"}
 )
 _TEMPLATE_FLAGS = frozenset({"-t", "--template"})
 _TOP_LEVEL_FLAGS: Mapping[str, str] = MappingProxyType(

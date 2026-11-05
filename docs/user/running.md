@@ -474,18 +474,18 @@ instruction form is active; combining them with public instructions is an error.
 ## Control tool availability
 
 ```sh
-prat cc --tools Read --tools Grep --disable-tools 'mcp__*' "review this checkout"
-prat qwen --tools ReadFileTool --disable-tools ShellTool "summarize the README"
-prat vibe --tools 'read*' --disable-tools 're:^bash$' "review this checkout"
+prat cc --tools Read --tools Grep --disabled-tools 'mcp__*' "review this checkout"
+prat qwen --tools ReadFileTool --disabled-tools ShellTool "summarize the README"
+prat vibe --tools 'read*' --disabled-tools 're:^bash$' "review this checkout"
 ```
 
-Repeat `--tools NAME` and `--disable-tools NAME` before or after the selector. Each occurrence is
+Repeat `--tools NAME` and `--disabled-tools NAME` before or after the selector. Each occurrence is
 one native name or pattern; Prat preserves order and duplicates. CLI lists replace configured
 lists. Use `--tools=-name` when a value starts with a dash. Config `tools=[]` is an active empty
 allowlist; an empty CLI string is invalid. The names, patterns and effective tool set belong to
 the native agent, and an unknown name can fail or match nothing according to that agent.
 
-| Agent | Allowlist (`--tools`) | Exclusions (`--disable-tools`) | Empty allowlist |
+| Agent | Allowlist (`--tools`) | Exclusions (`--disabled-tools`) | Empty allowlist |
 | --- | --- | --- | --- |
 | Claude | `--tools`; built-in names such as `Read`, `Grep`, or native preset `default` | `--disallowedTools`; names, MCP patterns and permission rules such as `Bash(rm *)` | `--tools=""`; built-ins only, with the exception below |
 | Qwen | `--core-tools`; native names and aliases such as `ReadFileTool` | `--exclude-tools`; native deny rules | Rejected |
@@ -582,16 +582,16 @@ selection fails before prompt input or editor startup.
 ## Native attachments
 
 ```sh
-prat cx --attach screenshot.png --attach detail.png "compare these screenshots"
-prat hm --attach photo.jpg "describe this image"
-prat cp --attach report.pdf "summarize this document"
-prat oc --attach source.py "review this file"
+prat cx --attachment screenshot.png --attachment detail.png "compare these screenshots"
+prat hm --attachment photo.jpg "describe this image"
+prat cp --attachment report.pdf "summarize this document"
+prat oc --attachment source.py "review this file"
 ```
 
-`--attach PATH` is repeatable before or after the selector and replaces inherited `attachments`.
+`--attachment PATH` is repeatable before or after the selector and replaces inherited `attachments`.
 Order and duplicates are preserved. CLI paths use the invocation directory, independently of
 `--cwd`; config paths use their defining file's directory. Home expansion is supported. Spaces,
-Unicode and leading dashes are literal (`--attach=-image.png`); Codex rejects commas because its
+Unicode and leading dashes are literal (`--attachment=-image.png`); Codex rejects commas because its
 native image flag splits them. Restrictions also apply to the canonical target of a symlink.
 Pi rejects Unicode spaces that its native path resolver converts to ASCII spaces; see the
 [exact character list](../reference/pi.md#attachments). Pi reads recognized images natively and
@@ -600,7 +600,7 @@ Hermes accepts one image; multiple attachments fail before prompt acquisition.
 
 Attachments supplement a task supplied through normal prompt input, a template or the editor.
 They do not supply a task themselves, prepend text or consume stdin. Redirected stdin still follows
-the usual prompt composition rules. `--attach -` names a local file called `-`.
+the usual prompt composition rules. `--attachment -` names a local file called `-`.
 
 The selected files must be local, regular and readable. Prat resolves symlinks through the filesystem,
 opens each nonblocking, checks its descriptor type, and reads at most one byte to check readability.

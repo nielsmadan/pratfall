@@ -616,7 +616,7 @@ def _resolve_run_paths(parsed: RunArguments, invocation_cwd: Path) -> RunArgumen
         paths = tuple(resolve_path(value, invocation_cwd, origin) for value in options.add_dirs)
         options = replace(options, add_dirs=paths)
     if options.attachments is not None:
-        origin = OptionOrigin("command line: --attach", "invalid_arguments")
+        origin = OptionOrigin("command line: --attachment", "invalid_arguments")
         paths = tuple(resolve_path(value, invocation_cwd, origin) for value in options.attachments)
         options = replace(options, attachments=paths)
     if options.instructions_file is not None:

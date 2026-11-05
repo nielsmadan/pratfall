@@ -96,10 +96,10 @@ printf 'summarize this checkout\n' | prat gm
 | `-x` / `--extract` | Return the body of the first fenced code block. |
 | `--schema PATH` | Request native JSON Schema output. |
 | `--json` | Return one JSON result with output, status, and available usage. |
-| `--attach PATH` | Attach a native image or file. |
+| `--attachment PATH` | Attach a native image or file. |
 | `--add-dir PATH` | Add a native workspace directory. |
 | `--instructions TEXT` / `--instructions-file PATH` | Append native instructions. |
-| `--tools NAME` / `--disable-tools NAME` | Restrict or disable native tools. |
+| `--tools NAME` / `--disabled-tools NAME` | Restrict or disable native tools. |
 | `--native-agent NAME` | Select a native agent or persona. |
 | `--session-id ID` | Set the native session id. |
 | `--progress` | Show live activity on stderr. |

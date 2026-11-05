@@ -111,7 +111,7 @@ defines `.option("file", { alias: ["f"], type: "string", array: true, ... })` an
 from each path using `path.resolve`. Prat emits repeated `--file=PATH`, with canonical regular
 readable paths so native lexical normalization cannot change symlink/`..` targets. Public
 attachments reject directories even though some native modes can construct directory parts.
-Native `--attach` connects to a server and is unrelated to public `--attach`.
+Native `--attach` connects to a server and is unrelated to public `--attachment`.
 
 The task continues through stdin; files do not replace it. Active public attachments conflict
 with native `--file` and `-f`; native-only use remains accepted. File content interpretation,

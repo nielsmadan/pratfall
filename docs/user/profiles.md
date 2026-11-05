@@ -411,6 +411,11 @@ introduces a collision, rename your profile, update commands that use it, and ru
 file and run `prat trust` on its folder. A `.pratfile` in a parent folder also now applies to
 every subdirectory that has none of its own.
 
+Two run flags were renamed to match their config keys, with no old spellings kept: `--attach` is
+now `--attachment` (key `attachments`) and `--disable-tools` is now `--disabled-tools` (key
+`disabled_tools`). Update scripts and aliases that pass the old flags, which now fail as
+unrecognized arguments. Native arguments after `--` are not affected.
+
 The new built-ins reserve `goose` and `kilo`. Rename colliding profiles, for example
 `[profiles.goose]` to `[profiles.my-goose]`, keeping its agent and settings.
 
@@ -502,8 +507,8 @@ attachments = ["images/screenshot.png", "images/detail.png"]
 ```
 
 `attachments` is an ordered array of nonempty path strings. Paths resolve relative to the defining
-configuration file, independently for global defaults, local defaults and profiles. CLI `--attach`
-paths use the invocation directory, even with `--cwd`. A higher-priority array replaces the whole
+configuration file, independently for global defaults, local defaults and profiles. CLI
+`--attachment` paths use the invocation directory, even with `--cwd`. A higher-priority array replaces the whole
 inherited list; `attachments = []` clears it and is neutral on every backend. Defaults affect every
 profile, so unsupported profiles must clear backend-specific attachments or config validation fails.
 Hermes accepts at most one attachment, including when validating an unused profile.

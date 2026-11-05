@@ -362,6 +362,12 @@ def test_path_flags_delegate_to_shell(flag: str, tmp_path: Path) -> None:
     assert _complete(["cc", flag, ""], loader(tmp_path)).mode == expected
 
 
+def test_flags_named_after_config_keys_complete(tmp_path: Path) -> None:
+    assert words(["cc", "--attach"], tmp_path) == ["--attachment"]
+    assert words(["cc", "--disable"], tmp_path) == ["--disabled-tools"]
+    assert _complete(["cc", "--attachment", ""], loader(tmp_path)).mode == "files"
+
+
 @pytest.mark.parametrize("flag", ["--model", "--timeout"])
 def test_free_value_flags_offer_nothing(flag: str, tmp_path: Path) -> None:
     assert words(["cc", flag, ""], tmp_path) == []

@@ -322,6 +322,30 @@ def test_trust_revoke_outcomes(tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert "local config is not trusted" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("flag", ["--attach", "--disable-tools"])
+def test_renamed_run_flags_reject_their_old_spellings(
+    flag: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["pi", flag, "x", "hi", "--dry-run", "--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == {
+        "code": "invalid_arguments",
+        "message": f"unrecognized argument: {flag}",
+    }
+
+
+def test_renamed_run_flags_render_native_arguments(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "x.png").write_bytes(b"png")
+    arguments = ["--disabled-tools", "write", "--attachment", "x.png", "--dry-run", "--json"]
+    assert main(["pi", "hi", *arguments]) == 0
+    assert json.loads(capsys.readouterr().out)["argv"][-3:] == [
+        "--exclude-tools",
+        "write",
+        f"@{tmp_path / 'x.png'}",
+    ]
+
+
 def test_trust_moved_out_of_config(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["config", "trust"]) == 2
     assert "invalid choice: 'trust'" in capsys.readouterr().err

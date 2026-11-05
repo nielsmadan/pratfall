@@ -4378,10 +4378,10 @@ def _control_cases(root: Path) -> list[tuple[str, list[str], list[str]]]:
     directory = str(root / "consumer" / "cli dir")
     attachment = str(root / "consumer" / "image.bin")
     dirs = ["--add-dir", "cli dir"]
-    tools = ["--tools", "Read", "--tools", "Search", "--disable-tools", "Write"]
+    tools = ["--tools", "Read", "--tools", "Search", "--disabled-tools", "Write"]
     instructions = ["--instructions-file", "rules.md"]
     persona = ["--native-agent", "reviewer"]
-    attach = ["--attach", "image.bin"]
+    attach = ["--attachment", "image.bin"]
     return [
         (
             "claude",
@@ -4552,7 +4552,7 @@ def _exercise_w_control_layers(prat: Path, root: Path) -> dict[str, object]:
                 "cli dir",
                 "--tools",
                 "CLI",
-                "--disable-tools",
+                "--disabled-tools",
                 "CLIDeny",
                 "--native-agent",
                 "cli",
@@ -4773,7 +4773,7 @@ def _exercise_w_control_rejections(prat: Path, root: Path) -> dict[str, object]:
         "unsupported-directories": ["amp", "--add-dir", "missing"],
         "unsupported-tools": ["amp", "--tools", "Read"],
         "unsupported-persona": ["amp", "--native-agent", "reviewer"],
-        "unsupported-attachments": ["amp", "--attach", "missing"],
+        "unsupported-attachments": ["amp", "--attachment", "missing"],
         "unsupported-schema": ["amp", "--schema", "missing"],
         "collision-tools": ["claude", "--tools", "Read", "--", "--tools=Write"],
         "collision-instructions": [
@@ -4785,14 +4785,14 @@ def _exercise_w_control_rejections(prat: Path, root: Path) -> dict[str, object]:
         ],
         "collision-directories": ["claude", "--add-dir", "cli dir", "--", "--add-dir=native"],
         "collision-persona": ["claude", "--native-agent", "reviewer", "--", "--agent=native"],
-        "collision-attachments": ["codex", "--attach", "image.bin", "--", "--image=native"],
+        "collision-attachments": ["codex", "--attachment", "image.bin", "--", "--image=native"],
         "collision-schema": ["claude", "--schema", "cli-schema.json", "--", "--json-schema={}"],
         "schema-extract": ["claude", "--schema", "missing", "--extract"],
         "invalid-schema": ["qwen", "--schema", "invalid.json"],
         "invalid-instructions": ["claude", "--instructions-file", "missing"],
         "invalid-directory": ["codex", "--add-dir", "image.bin"],
-        "invalid-attachment": ["codex", "--attach", "project"],
-        "hermes-count": ["hermes", "--attach", "image.bin", "--attach", "image.bin"],
+        "invalid-attachment": ["codex", "--attachment", "project"],
+        "hermes-count": ["hermes", "--attachment", "image.bin", "--attachment", "image.bin"],
     }
     observations: dict[str, object] = {"status": "Pass"}
     for name, arguments in cases.items():

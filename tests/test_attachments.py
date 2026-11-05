@@ -84,7 +84,7 @@ def test_attachment_fake_receives_binary_file_path_and_prompt(
     (tmp_path / ".pratfile").write_text(
         f"version=1\n[agents.{agent}]\ncommand={json.dumps([sys.executable, str(script)])}\n"
     )
-    assert main([agent, "task", *[f"--attach={p.name}" for p in paths], "--json"]) == 0
+    assert main([agent, "task", *[f"--attachment={p.name}" for p in paths], "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["output"] == "ok"
     argv, stdin = json.loads(log.read_text())
     assert argv == [
@@ -154,7 +154,7 @@ def test_selected_attachment_preserves_symlink_parent_target_and_origin(
     )
     cwd = tmp_path / "run"
     cwd.mkdir()
-    args = [] if from_config else ["--attach", "link/../image.png"]
+    args = [] if from_config else ["--attachment", "link/../image.png"]
     assert (
         main(
             [
@@ -191,7 +191,7 @@ def test_unsupported_attachments_fail_without_resource_or_input_reads(
     monkeypatch.setattr(dispatch, "prepare_attachments", forbidden)
     monkeypatch.setattr(dispatch, "acquire_prompt", forbidden)
     monkeypatch.setattr(dispatch, "edit_prompt", forbidden)
-    assert main([agent, "--attach=missing", "--file=missing", "--edit", "--json"]) == 2
+    assert main([agent, "--attachment=missing", "--file=missing", "--edit", "--json"]) == 2
     error = json.loads(capsys.readouterr().out)["error"]
     assert error["code"] == "invalid_arguments"
     assert "does not support attachments" in error["message"]
@@ -223,7 +223,7 @@ def test_invalid_attachment_fails_before_input(
         path.chmod(0)
     elif case == "multiple":
         agent = "hermes"
-        extras = ["--attach=second-missing"]
+        extras = ["--attachment=second-missing"]
         expected = "at most 1 attachment"
     elif case in {"comma", "canonical-comma"}:
         target = tmp_path / "image,part.png"
@@ -234,7 +234,7 @@ def test_invalid_attachment_fails_before_input(
             path = target
         expected = "cannot contain commas"
     try:
-        assert main([agent, f"--attach={path}", *extras, "--edit", "--json"]) == 2
+        assert main([agent, f"--attachment={path}", *extras, "--edit", "--json"]) == 2
         error = json.loads(capsys.readouterr().out)["error"]
         assert error["code"] == "invalid_arguments"
         assert "attachments" in error["message"]
@@ -277,7 +277,7 @@ def test_attachment_collision_and_native_only_compatibility(
 
     monkeypatch.setattr(dispatch, "prepare_attachments", forbidden)
     monkeypatch.setattr(dispatch, "acquire_prompt", forbidden)
-    assert main([agent, "--attach=missing", "--json", "--", *native]) == 2
+    assert main([agent, "--attachment=missing", "--json", "--", *native]) == 2
     assert "controlled by prat" in json.loads(capsys.readouterr().out)["error"]["message"]
 
 
@@ -318,7 +318,7 @@ def test_attachment_requires_prompt_and_preserves_stdin_and_template(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "image.png").write_bytes(b"\xff")
-    common = ["copilot", "--attach=image.png", "--json", "--dry-run"]
+    common = ["copilot", "--attachment=image.png", "--json", "--dry-run"]
     assert main(common) == 2
     assert "Provide exactly one prompt" in json.loads(capsys.readouterr().out)["error"]["message"]
     monkeypatch.setattr(sys, "stdin", io.StringIO("stdin task"))
@@ -376,7 +376,7 @@ def test_attachment_editor_task_and_later_native_file_read(
         return b"edited task"
 
     monkeypatch.setattr(dispatch, "edit_prompt", edit)
-    assert main(["hermes", "--attach=image.png", "--edit", "--json"]) == 0
+    assert main(["hermes", "--attachment=image.png", "--edit", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["output"] == "ok"
     assert drafts == [b""]
     assert json.loads(log.read_text()) == ["edited task", list(b"\xff\x00after")]
@@ -391,7 +391,7 @@ def test_attachment_cli_list_replaces_missing_config_resources(
         '[profiles.work]\nagent="codex"\nattachments=["missing-profile"]\n'
     )
     (tmp_path / "cli.png").write_bytes(b"\xff")
-    assert main(["--attach", "cli.png", "work", "task", "--dry-run", "--json"]) == 0
+    assert main(["--attachment", "cli.png", "work", "task", "--dry-run", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["argv"] == [
         "codex",
         "exec",
@@ -429,7 +429,7 @@ def test_attachment_dash_is_a_file_and_does_not_consume_stdin(
 ) -> None:
     (tmp_path / "-").write_bytes(b"\xff")
     monkeypatch.setattr(sys, "stdin", io.StringIO("task from stdin"))
-    assert main(["copilot", "--attach=-", "--dry-run", "--json"]) == 0
+    assert main(["copilot", "--attachment=-", "--dry-run", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["argv"] == [
         "copilot",
         "--output-format=json",

@@ -80,10 +80,10 @@ def test_tools_fake_process_receives_exact_argv(
                 "Read",
                 agent,
                 "--tools=-literal",
-                "--disable-tools",
+                "--disabled-tools",
                 "Write",
                 "task",
-                "--disable-tools=Edit",
+                "--disabled-tools=Edit",
                 "--json",
             ]
         )
@@ -216,22 +216,22 @@ def test_empty_disabled_tools_neutral_for_every_agent(agent: str, tmp_path: Path
     "agent,public,native",
     [
         ("claude", "--tools", "--tools=Read"),
-        ("claude", "--disable-tools", "--disallowedTools=Write"),
-        ("claude", "--disable-tools", "--disallowed-tools=Write"),
+        ("claude", "--disabled-tools", "--disallowedTools=Write"),
+        ("claude", "--disabled-tools", "--disallowed-tools=Write"),
         ("qwen", "--tools", "--core-tools=Read"),
-        ("qwen", "--disable-tools", "--exclude-tools=Write"),
+        ("qwen", "--disabled-tools", "--exclude-tools=Write"),
         ("copilot", "--tools", "--available-tools"),
         ("copilot", "--tools", "--enable-mcp-server=server"),
         ("copilot", "--tools", "--enable-all-github-mcp-tools"),
         ("copilot", "--tools", "--add-github-mcp-tool=tool"),
         ("copilot", "--tools", "--add-github-mcp-toolset=tools"),
-        ("copilot", "--disable-tools", "--excluded-tools=Write"),
+        ("copilot", "--disabled-tools", "--excluded-tools=Write"),
         ("droid", "--tools", "--restrict-tools=Read"),
         ("droid", "--tools", "--additional-tools=Write"),
-        ("droid", "--disable-tools", "--disabled-tools=Write"),
-        ("droid", "--disable-tools", "--additional-tools=Write"),
+        ("droid", "--disabled-tools", "--disabled-tools=Write"),
+        ("droid", "--disabled-tools", "--additional-tools=Write"),
         ("vibe", "--tools", "--enabled-tools=Read"),
-        ("vibe", "--disable-tools", "--disabled-tools=Write"),
+        ("vibe", "--disabled-tools", "--disabled-tools=Write"),
     ],
 )
 def test_tool_conflicts_fail_before_input(
@@ -307,7 +307,7 @@ def test_unrepresentable_tool_values_fail_before_input(
     assert "tools" in error["message"]
 
 
-@pytest.mark.parametrize("flag", ["--tools", "--disable-tools"])
+@pytest.mark.parametrize("flag", ["--tools", "--disabled-tools"])
 def test_unsupported_tools_rejected_before_input(
     flag: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

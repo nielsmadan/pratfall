@@ -71,9 +71,9 @@ _RUN_VALUE_FLAGS: Mapping[str, str] = MappingProxyType(
         "-f": "file",
         "--context": "context",
         "--add-dir": "add_dirs",
-        "--attach": "attachments",
+        "--attachment": "attachments",
         "--tools": "tools",
-        "--disable-tools": "disabled_tools",
+        "--disabled-tools": "disabled_tools",
         "--instructions": "instructions",
         "--instructions-file": "instructions_file",
         "--template": "template",
@@ -127,9 +127,9 @@ run options:
   --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
   --cwd PATH              Set the agent working directory.
   --add-dir PATH          Add a native workspace directory; repeat to include several.
-  --attach PATH           Attach a native image/file; repeat where supported.
+  --attachment PATH       Attach a native image/file; repeat where supported.
   --tools NAME            Restrict native tool availability; repeat for several.
-  --disable-tools NAME    Disable native tools or patterns; repeat for several.
+  --disabled-tools NAME   Disable native tools or patterns; repeat for several.
   --instructions TEXT     Append instructions while preserving native built-in guidance.
   --instructions-file PATH  Read appended instructions from a UTF-8 file.
   --config PATH           Merge PATH over global config instead of .pratfile.

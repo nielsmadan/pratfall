@@ -132,8 +132,8 @@ Requires Pi v0.85.1 or newer. `prat pi "review this checkout"` uses `pi --print 
 with stdin. Pi trims prompt-edge whitespace and saves its native session by default; use
 `prat pi "review" -- --no-session` for an ephemeral native session.
 
-Use `--model provider/model`, `--effort high`, `--tools read`, `--disable-tools bash`, or
-`--attach screenshot.png`. Effort accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`,
+Use `--model provider/model`, `--effort high`, `--tools read`, `--disabled-tools bash`, or
+`--attachment screenshot.png`. Effort accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`,
 and `max`; actual support depends on the native model. Tool lists cover built-in, extension
 and custom tools, including an empty config allowlist (`tools = []`).
 
