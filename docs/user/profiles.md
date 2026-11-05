@@ -415,6 +415,11 @@ In `--dry-run --json` previews, `schema_transport` is now the token `inline` or 
 `inline JSON` and `temporary prepared file`. Update scripts that compare it; the text preview keeps
 the readable wording.
 
+A native exit status of 2, 124, 126, 127 or 128 and above now makes Prat exit 1, so those codes
+keep only their [Prat meaning](json.md#errors-and-partial-results). Other native statuses still
+pass through. Scripts that branched on such a native status should read `native_exit_code` from
+`--json` output instead.
+
 Two run flags were renamed to match their config keys, with no old spellings kept: `--attach` is
 now `--attachment` (key `attachments`) and `--disable-tools` is now `--disabled-tools` (key
 `disabled_tools`). Update scripts and aliases that pass the old flags, which now fail as

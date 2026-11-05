@@ -1,6 +1,13 @@
 from dataclasses import asdict
 
-from pratfall.codes import FAILURE_EXIT, SIGNAL_EXIT_BASE, TIMEOUT_EXIT, Code, exit_code_for
+from pratfall.codes import (
+    FAILURE_EXIT,
+    SIGNAL_EXIT_BASE,
+    TIMEOUT_EXIT,
+    Code,
+    exit_code_for,
+    native_exit_code_for,
+)
 from pratfall.fences import extract_code
 from pratfall.models import DecodedOutput, NormalizedResult, ResolvedProfile, ResultError
 from pratfall.runner import ProcessResult
@@ -64,7 +71,7 @@ def normalize(
             process,
             decoded,
             "error",
-            native_exit,
+            native_exit_code_for(native_exit),
             ResultError("native_exit", message),
         )
     if decoded.error is not None:

@@ -438,6 +438,16 @@ def test_text_mode_failure_prints_one_stderr_line_and_no_stdout(
     )
 
 
+def test_step_whose_agent_exits_with_a_reserved_status_fails_the_workflow_with_one(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
+    config = chain_config(tmp_path, first="@exit 2")
+    assert main(["chain", "--config", str(config)]) == 1
+    assert capfd.readouterr().err.endswith(
+        "prat: workflow 'chain' failed at step 'a': Claude Code exited with status 2.\n"
+    )
+
+
 def test_parallel_branches_run_concurrently(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

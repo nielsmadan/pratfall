@@ -279,7 +279,8 @@ Consequently, native nonzero exit takes precedence over ordinary protocol errors
 Its `native_exit` message includes captured stderr followed by a recognized provider error,
 with identical diagnostics included once,
 bounded to 4,096 diagnostic characters plus a truncation marker. The native status remains the
-exit code; malformed protocol details do not replace the native failure.
+exit code unless it is one of Prat's reserved codes (2, 124, 126, 127, 128 and above), which exit
+1; malformed protocol details do not replace the native failure.
 
 Populate nullable usage, `reported_models`, and `cost_usd` only from verified native mappings.
 [`model_map`, `model` and `cost`](../src/pratfall/adapters/accounting.py) validate nonempty UTF-8

@@ -21,7 +21,8 @@ Version probing uses `--version`. The [versioned CLI guide](https://github.com/e
 defaults to `auto` only for a trusted workspace with working write-confining sandbox support;
 otherwise it uses `ask`. Headless ask mode refuses writes. Prat adds no approval override and
 configures no providers. Native `--permission-mode plan` requires an interactive
-session and exits 2 from `run`; explicit passthrough preserves that native failure.
+session and exits 2 from `run`; explicit passthrough reports that native failure as
+`native_exit` with `native_exit_code: 2`, and Prat exits 1 because 2 is its own usage code.
 
 The [whole JSON result](https://github.com/esengine/DeepSeek-Reasonix/blob/v2.37.0/internal/frontend/cli/run_output.go)
 and [completion classification](https://github.com/esengine/DeepSeek-Reasonix/blob/v2.37.0/internal/frontend/cli/run_completion.go)

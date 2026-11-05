@@ -158,7 +158,8 @@ def test_reasonix_runner_preserves_headless_plan_failure(
     )
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
-    assert status == payload["exit_code"] == payload["native_exit_code"] == 2
+    assert status == payload["exit_code"] == 1
+    assert payload["native_exit_code"] == 2
     assert payload["output"] == ""
     assert payload["error"]["code"] == "native_exit"
     assert "--permission-mode plan requires an interactive session" in captured.err

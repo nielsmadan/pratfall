@@ -67,5 +67,13 @@ EXIT_CODES: Mapping[Code, int] = MappingProxyType(
 )
 
 
+_RESERVED_EXITS = frozenset({USAGE_EXIT, TIMEOUT_EXIT, NOT_EXECUTABLE_EXIT, NOT_FOUND_EXIT})
+
+
 def exit_code_for(code: Code) -> int:
     return EXIT_CODES.get(code, FAILURE_EXIT)
+
+
+def native_exit_code_for(native_exit: int) -> int:
+    reserved = native_exit in _RESERVED_EXITS or native_exit >= SIGNAL_EXIT_BASE
+    return FAILURE_EXIT if reserved else native_exit

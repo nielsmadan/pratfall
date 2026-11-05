@@ -228,7 +228,7 @@ stable error codes and their exit codes:
 | `timeout` | 124 | Run deadline elapsed, or the native CLI reported its own timeout. |
 | `interrupted` | `128 + signal` | Prat received SIGINT or SIGTERM, or a SIGHUP it does not ignore while running a workflow. |
 | `native_signal` | `128 + signal` | The native CLI died from a signal. |
-| `native_exit` | the native status | The native CLI exited nonzero without another failure. |
+| `native_exit` | the native status, or 1 | The native CLI exited nonzero without another failure. |
 | `protocol_error` | 1 | Native output violated the agent's documented protocol. |
 | `provider_error` | 1 | The native CLI reported a provider or model failure. |
 | `output_encoding` | 1 | Native output was not valid UTF-8 or not representable text. |
@@ -239,8 +239,10 @@ stable error codes and their exit codes:
 | `stderr_limit_exceeded` | 1 | Native stderr exceeded its budget. |
 | `unsupported_platform` | 1 | Process execution requires POSIX. |
 
-The three signal- and status-derived exit codes vary per run; all others are fixed. Provider
-and protocol failures exit 1 unless a native nonzero exit takes precedence.
+The three signal- and status-derived exit codes vary per run; all others are fixed. A native
+status of 2, 124, 126, 127 or 128 and above would collide with Prat's own codes, so it exits 1;
+`native_exit_code` keeps the original. Provider and protocol failures exit 1 unless a native
+nonzero exit takes precedence.
 
 A rejected option reports `invalid_arguments` when set on the command line and `invalid_config`
 when set in defaults or a profile. Rejected native arguments always report `invalid_arguments`.

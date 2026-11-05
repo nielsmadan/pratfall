@@ -331,7 +331,9 @@ so they do not delay the agent deadline. Trace can show only what the native CLI
 
 On a nonzero native exit, the result's error message includes captured stderr followed by the
 adapter's recognized provider error, with identical diagnostics included once. The combined
-diagnostic is limited to 4,096 characters plus a truncation marker. Native exit codes are preserved.
+diagnostic is limited to 4,096 characters plus a truncation marker. Prat exits with the native
+status, except that 2, 124, 126, 127 and 128 and above exit 1, so those codes keep their Prat
+meaning; `--json` reports the original in `native_exit_code`.
 These diagnostics can contain native payload text; inspect them before sharing.
 
 For a failed Goose startup, for example, a missing credential reported as plain text on stdout

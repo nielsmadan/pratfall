@@ -111,6 +111,28 @@ def test_native_nonzero_outranks_protocol_failure() -> None:
     assert result.error.code == "native_exit"
 
 
+@pytest.mark.parametrize(
+    ("native", "expected"),
+    [
+        (1, 1),
+        (3, 3),
+        (125, 125),
+        (127, 1),
+        (2, 1),
+        (124, 1),
+        (126, 1),
+        (128, 1),
+        (130, 1),
+        (255, 1),
+    ],
+)
+def test_native_exit_maps_reserved_statuses_to_one(native: int, expected: int) -> None:
+    result = normalize(RESOLVED, process(native), DecodedOutput())
+    assert result.exit_code == expected
+    assert result.native_exit_code == native
+    assert result.error == ResultError("native_exit", f"Codex exited with status {native}.")
+
+
 def test_provider_timeout_maps_to_124_even_with_native_nonzero() -> None:
     error = ResultError("timeout", "provider timeout")
     result = normalize(RESOLVED, process(2), DecodedOutput(error=error, timed_out=True))

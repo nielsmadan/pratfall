@@ -1287,6 +1287,24 @@ def test_runtime_failures_are_one_normalized_json_result(
     assert captured.out.count("\n") == 1
 
 
+@pytest.mark.parametrize(
+    ("native", "expected"),
+    [(2, 1), (3, 3), (124, 1), (125, 125), (126, 1), (127, 1), (130, 1), (255, 1)],
+)
+def test_reserved_native_exit_statuses_exit_one_and_keep_the_native_status(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], native: int, expected: int
+) -> None:
+    config = write_agent(tmp_path, "codex", f"import sys;sys.exit({native})")
+    assert main(["cx", "prompt", "--config", str(config), "--json"]) == expected
+    result = json.loads(capsys.readouterr().out)
+    assert result["exit_code"] == expected
+    assert result["native_exit_code"] == native
+    assert result["error"] == {
+        "code": "native_exit",
+        "message": f"Codex exited with status {native}.",
+    }
+
+
 def test_notify_fires_after_a_successful_run_with_expected_osc9_bytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
