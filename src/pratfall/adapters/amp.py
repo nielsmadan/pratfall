@@ -65,7 +65,7 @@ class _Consumer(JsonlConsumer):
 
     def apply(self, event: dict[str, object]) -> Activity | None:
         if self.completed:
-            self.malformed("Amp emitted a record after its terminal result.")
+            self.malformed("Amp emitted a record after its terminal result")
             return None
         event_type = event["type"]
         if event_type == "assistant":
@@ -79,21 +79,21 @@ class _Consumer(JsonlConsumer):
             if isinstance(subtype, str) and subtype in _AMP_SYSTEM_ERRORS:
                 self._error(event.get("error"))
             elif subtype != "init":
-                self.malformed("Amp system subtype is malformed.")
+                self.malformed("Amp system subtype is malformed")
         elif event_type != "user":
-            self.malformed("Unknown Amp event type.")
+            self.malformed("unknown Amp event type")
         return None
 
     def _assistant(self, event: dict[str, object]) -> None:
         parent = event.get("parent_tool_use_id")
         if "parent_tool_use_id" not in event or not (parent is None or isinstance(parent, str)):
-            self.malformed("Amp assistant parent is malformed.")
+            self.malformed("Amp assistant parent is malformed")
             return
         if parent is not None:
             return
         message = event.get("message")
         if not isinstance(message, dict) or not isinstance(message.get("content"), list):
-            self.malformed("Amp assistant message is malformed.")
+            self.malformed("Amp assistant message is malformed")
             return
         texts: list[str] = []
         for block in message["content"]:
@@ -108,11 +108,11 @@ class _Consumer(JsonlConsumer):
                     "tool_use",
                 }
             ):
-                self.malformed("Amp assistant content is malformed.")
+                self.malformed("Amp assistant content is malformed")
                 return
             if block["type"] == "text":
                 if not isinstance(block.get("text"), str):
-                    self.malformed("Amp assistant text is malformed.")
+                    self.malformed("Amp assistant text is malformed")
                     return
                 texts.append(block["text"])
         if texts:
@@ -123,9 +123,9 @@ class _Consumer(JsonlConsumer):
 
     def _error(self, value: object) -> None:
         if not isinstance(value, str):
-            self.malformed("Amp error must be a string.")
+            self.malformed("Amp error must be a string")
         elif self.provider_error is None:
-            message = value or "Amp failed."
+            message = value or "Amp failed"
             self.retain.text("provider", message)
             self.provider_error = ResultError("provider_error", message)
 
@@ -135,7 +135,7 @@ class _Consumer(JsonlConsumer):
             try:
                 text = event.get("result")
                 if not isinstance(text, str):
-                    self.malformed("Amp result text is malformed.")
+                    self.malformed("Amp result text is malformed")
                     return
                 self._text(text)
             finally:
@@ -148,7 +148,7 @@ class _Consumer(JsonlConsumer):
             self._error(event.get("error"))
             self._retain_usage(event.get("usage"))
         else:
-            self.malformed("Amp result subtype or error flag is malformed.")
+            self.malformed("Amp result subtype or error flag is malformed")
             return
         self.completed = True
 
@@ -163,7 +163,7 @@ class _Consumer(JsonlConsumer):
     def result(self) -> DecodedOutput:
         error = self.provider_error or self.protocol_error
         if error is None and not self.completed and not self.failed:
-            error = ResultError("protocol_error", "Amp stream ended without a terminal result.")
+            error = ResultError("protocol_error", "Amp stream ended without a terminal result")
         return DecodedOutput(output=self.output.decode("utf-8"), usage=self.usage, error=error)
 
 
@@ -171,7 +171,7 @@ def _usage(value: object) -> Usage | ResultError | None:
     if value is None:
         return None
     if not isinstance(value, dict):
-        return ResultError("protocol_error", "Amp result usage is malformed.")
+        return ResultError("protocol_error", "Amp result usage is malformed")
     fields = (
         "input_tokens",
         "output_tokens",
@@ -183,7 +183,7 @@ def _usage(value: object) -> Usage | ResultError | None:
         if field.startswith("cache_") and field not in value:
             continue
         if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-            return ResultError("protocol_error", f"Amp usage {field} is malformed.")
+            return ResultError("protocol_error", f"Amp usage {field} is malformed")
     return Usage(
         input_tokens=value["input_tokens"],
         output_tokens=value["output_tokens"],

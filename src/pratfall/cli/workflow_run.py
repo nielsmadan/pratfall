@@ -111,7 +111,7 @@ def _prepare(
     )
     consumes = any(not step.after and step.input == "upstream" for step in workflow.steps)
     if not consumes and bound.source is not None:
-        raise PratError(f"{label} takes no input.", code=INVALID_ARGUMENTS)
+        raise PratError(f"{label} takes no input", code=INVALID_ARGUMENTS)
     timeouts = {step.name: _step_timeout(config, name, step, parsed) for step in workflow.steps}
     _run_cwd(parsed.cwd, invocation_cwd)
     base = _base_input(bound.source, invocation_cwd) if consumes else None
@@ -139,7 +139,7 @@ def _reject_flags(arguments: list[str]) -> None:
     if rejected is None and scan.native_arguments is not None:
         rejected = "--"
     if rejected is not None:
-        raise PratError(f"{rejected} is not supported for workflows.", code=INVALID_ARGUMENTS)
+        raise PratError(f"{rejected} is not supported for workflows", code=INVALID_ARGUMENTS)
 
 
 def _step_timeout(config: Config, name: str, step: WorkflowStep, parsed: RunArguments) -> float:
@@ -153,7 +153,7 @@ def _step_timeout(config: Config, name: str, step: WorkflowStep, parsed: RunArgu
             f"workflow '{name}' step '{step.name}': {error}", code=error.code
         ) from error
     if timeout is None:
-        raise PratError("Resolved timeout is missing.", code=INVALID_ARGUMENTS)
+        raise PratError("resolved timeout is missing", code=INVALID_ARGUMENTS)
     return timeout
 
 

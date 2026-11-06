@@ -186,13 +186,13 @@ def test_opencode_two_error_with_empty_message_uses_generic_text() -> None:
     decoded = opencode.decode(
         codex_stream({"type": "error", "error": {"type": "aborted", "message": ""}})
     )
-    assert decoded.error == ResultError("provider_error", "OpenCode reported an error.")
+    assert decoded.error == ResultError("provider_error", "OpenCode reported an error")
 
 
 @pytest.mark.parametrize("error", [{"type": "unknown"}, {"type": "unknown", "message": 5}])
 def test_opencode_two_error_without_string_message_is_malformed(error: dict[str, object]) -> None:
     decoded = opencode.decode(codex_stream({"type": "error", "error": error}))
-    assert decoded.error == ResultError("protocol_error", "OpenCode error event is malformed.")
+    assert decoded.error == ResultError("protocol_error", "OpenCode error event is malformed")
 
 
 def test_opencode_two_accepts_answer_whose_final_step_finish_was_dropped() -> None:
@@ -237,7 +237,7 @@ def test_opencode_unfinished_final_step_is_incomplete(
 ) -> None:
     decoded = decode_with(factory, _unfinished_final_step(*final, first=first))
     assert decoded.error == ResultError(
-        "protocol_error", "OpenCode stream ended without a stop finish."
+        "protocol_error", "OpenCode stream ended without a stop finish"
     )
 
 
@@ -432,7 +432,7 @@ def test_opencode_malformed_latest_cost_replaces_same_step_snapshot() -> None:
         )
     )
     assert decoded.cost_usd is None
-    assert decoded.error == ResultError("protocol_error", "OpenCode step_finish cost is malformed.")
+    assert decoded.error == ResultError("protocol_error", "OpenCode step_finish cost is malformed")
 
 
 def test_opencode_malformed_distinct_step_cost_makes_aggregate_unknown() -> None:
@@ -461,7 +461,7 @@ def test_opencode_malformed_distinct_step_cost_makes_aggregate_unknown() -> None
         )
     )
     assert decoded.cost_usd is None
-    assert decoded.error == ResultError("protocol_error", "OpenCode step_finish cost is malformed.")
+    assert decoded.error == ResultError("protocol_error", "OpenCode step_finish cost is malformed")
 
 
 def test_opencode_known_replacement_restores_total_after_malformed_cost() -> None:
@@ -500,7 +500,7 @@ def test_opencode_known_replacement_restores_total_after_malformed_cost() -> Non
         )
     )
     assert decoded.cost_usd == 3
-    assert decoded.error == ResultError("protocol_error", "OpenCode step_finish cost is malformed.")
+    assert decoded.error == ResultError("protocol_error", "OpenCode step_finish cost is malformed")
 
 
 def test_opencode_rejects_aggregate_cost_overflow_without_raising() -> None:
@@ -529,7 +529,7 @@ def test_opencode_rejects_aggregate_cost_overflow_without_raising() -> None:
         )
     )
     assert decoded.cost_usd is None
-    assert decoded.error == ResultError("protocol_error", "OpenCode aggregate cost is malformed.")
+    assert decoded.error == ResultError("protocol_error", "OpenCode aggregate cost is malformed")
 
 
 def test_opencode_provider_failure_outranks_malformed_cost() -> None:
@@ -549,7 +549,7 @@ def test_opencode_provider_failure_outranks_malformed_cost() -> None:
     )
     assert decoded.cost_usd is None
     assert decoded.error == ResultError(
-        "provider_error", "OpenCode stopped with finish reason 'error'."
+        "provider_error", "OpenCode stopped with finish reason 'error'"
     )
 
 

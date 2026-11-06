@@ -33,14 +33,14 @@ def normalize(
             process.error,
         )
     if process.timed_out:
-        error = process.error or ResultError("timeout", "The agent timed out.")
+        error = process.error or ResultError("timeout", "the agent timed out")
         return _result(resolved, process, decoded, "timeout", TIMEOUT_EXIT, error)
     if process.error is not None:
         return _result(
             resolved, process, decoded, "error", exit_code_for(process.error.code), process.error
         )
     if decoded.timed_out:
-        error = decoded.error or ResultError("timeout", "The agent timed out.")
+        error = decoded.error or ResultError("timeout", "the agent timed out")
         return _result(resolved, process, decoded, "timeout", TIMEOUT_EXIT, error)
     native_exit = process.native_exit_code
     if native_exit is not None and native_exit < 0:
@@ -51,7 +51,7 @@ def normalize(
             decoded,
             "interrupted",
             SIGNAL_EXIT_BASE + signum,
-            ResultError("native_signal", f"{resolved.agent.label} died from signal {signum}."),
+            ResultError("native_signal", f"{resolved.agent.label} died from signal {signum}"),
         )
     if native_exit not in {None, 0}:
         provider = (
@@ -63,7 +63,7 @@ def normalize(
         detail = "\n".join(dict.fromkeys(text for text in (stderr, provider) if text))
         if len(detail) > _DIAGNOSTIC_CHARS:
             detail = detail[:_DIAGNOSTIC_CHARS] + "\n[diagnostic truncated]"
-        message = f"{resolved.agent.label} exited with status {native_exit}."
+        message = f"{resolved.agent.label} exited with status {native_exit}"
         if detail:
             message += f"\n{detail}"
         return _result(

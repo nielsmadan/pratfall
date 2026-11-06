@@ -188,7 +188,7 @@ def test_local_defaults_commands_and_profiles_merge_by_their_boundaries(tmp_path
         model="cli", effort="high", timeout=12, fast=False, native_args=()
     )
     assert config.warnings == (
-        f"{local_path}: profile 'shared' replaces the profile from {global_path}.",
+        f"{local_path}: profile 'shared' replaces the profile from {global_path}",
     )
 
 
@@ -346,7 +346,7 @@ def test_trusting_requires_an_existing_directory(tmp_path: Path) -> None:
         with pytest.raises(PratError) as caught:
             trust_directory(target, cwd=tmp_path, env=os.environ)
         assert (str(caught.value), caught.value.code) == (
-            f"{tmp_path / target}: not a directory.",
+            f"{tmp_path / target}: not a directory",
             "invalid_arguments",
         )
 
@@ -861,7 +861,7 @@ def test_new_agent_profile_collisions_have_exact_migration_diagnostic(
     with pytest.raises(PratError) as failure:
         load_config(path, cwd=Path.cwd(), env=os.environ)
     assert str(failure.value) == (
-        f"{path}: profiles.{name}: name is reserved; choose a different profile name."
+        f"{path}: profiles.{name}: name is reserved; choose a different profile name"
     )
 
 
@@ -922,7 +922,7 @@ def test_template_merge_replaces_whole_definition_and_warns(tmp_path: Path) -> N
     assert config.templates["other"].source == global_path
     assert config.profiles["work"].agent == "codex"
     assert config.warnings == (
-        f"{local}: template 'work' replaces the template from {global_path}.",
+        f"{local}: template 'work' replaces the template from {global_path}",
     )
 
 
@@ -1306,35 +1306,35 @@ def test_workflow_default_after_is_the_previous_step(tmp_path: Path) -> None:
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_items=0}]\n',
-            r"step 'y'\.max_items: expected an integer from 1 to 4096\.",
+            r"step 'y'\.max_items: expected an integer from 1 to 4096",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_items=4097}]\n',
-            r"step 'y'\.max_items: expected an integer from 1 to 4096\.",
+            r"step 'y'\.max_items: expected an integer from 1 to 4096",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_items=true}]\n',
-            r"step 'y'\.max_items: expected an integer from 1 to 4096\.",
+            r"step 'y'\.max_items: expected an integer from 1 to 4096",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_items=2.0}]\n',
-            r"step 'y'\.max_items: expected an integer from 1 to 4096\.",
+            r"step 'y'\.max_items: expected an integer from 1 to 4096",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_items="all"}]\n',
-            r"step 'y'\.max_items: expected an integer from 1 to 4096\.",
+            r"step 'y'\.max_items: expected an integer from 1 to 4096",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",overflow="drop"}]\n',
-            r"step 'y'\.overflow: expected \"error\" or \"truncate\"\.",
+            r"step 'y'\.overflow: expected \"error\" or \"truncate\"",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",overflow=true}]\n',
-            r"step 'y'\.overflow: expected \"error\" or \"truncate\"\.",
+            r"step 'y'\.overflow: expected \"error\" or \"truncate\"",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",overflow=1}]\n',
-            r"step 'y'\.overflow: expected \"error\" or \"truncate\"\.",
+            r"step 'y'\.overflow: expected \"error\" or \"truncate\"",
         ),
         (
             '[workflows.w]\nsteps=[{name="x",profile="a"},{name="y",profile="b",each="x",max_parallel="ALL"}]\n',
@@ -1533,7 +1533,7 @@ def test_local_workflow_replaces_global_and_checks_global_profiles(
     assert [step.name for step in config.workflows["w"].steps] == ["l"]
     assert config.workflows["w"].source == local
     assert config.workflows["only"].source == global_path
-    assert config.warnings == (f"{local}: workflow 'w' replaces the workflow from {global_path}.",)
+    assert config.warnings == (f"{local}: workflow 'w' replaces the workflow from {global_path}",)
 
 
 @pytest.mark.parametrize(

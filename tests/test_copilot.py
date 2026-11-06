@@ -191,7 +191,7 @@ def test_copilot_answer_join_separator_respects_state_byte_limit() -> None:
             ).encode()
         )
     assert failure.value.error == ResultError(
-        "stdout_limit_exceeded", "Agent retained output state exceeded 5 bytes."
+        "stdout_limit_exceeded", "agent retained output state exceeded 5 bytes"
     )
 
 

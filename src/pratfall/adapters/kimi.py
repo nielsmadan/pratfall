@@ -89,7 +89,7 @@ class _Consumer(JsonlConsumer):
         if role == "assistant":
             text = event.get("content", "")
             if not isinstance(text, str):
-                self.malformed("Kimi Code assistant content is malformed.")
+                self.malformed("Kimi Code assistant content is malformed")
             elif text:
                 self._text = self.retain.text("answer", text)
             return "answering"
@@ -97,7 +97,7 @@ class _Consumer(JsonlConsumer):
             return "tool"
         if role == "meta":
             return self._metadata(event)
-        self.malformed("Unknown Kimi Code message role.")
+        self.malformed("unknown Kimi Code message role")
         return None
 
     def _metadata(self, event: dict[str, object]) -> Activity | None:
@@ -105,14 +105,14 @@ class _Consumer(JsonlConsumer):
         if kind == "session.resume_hint":
             session = event.get("session_id")
             if not isinstance(session, str):
-                self.malformed("Kimi Code session id is malformed.")
+                self.malformed("Kimi Code session id is malformed")
             else:
                 self.retain.text("session", session)
                 self._session = session
         elif kind == "turn.step.retrying":
             return "working"
         elif not isinstance(kind, str) or kind not in {"system.version", "goal.summary"}:
-            self.malformed("Unknown Kimi Code metadata type.")
+            self.malformed("unknown Kimi Code metadata type")
         return None
 
     def result(self) -> DecodedOutput:

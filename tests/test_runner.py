@@ -133,9 +133,9 @@ def test_timeout_verifies_cleanup_after_parent_exits_and_pipes_close(
     limits = RunLimits(terminate_grace=0, final_drain_grace=0.15)
     result = run(python("pass"), tmp_path, 5, limits=limits)
 
-    message = "Agent exceeded the 5 second timeout."
+    message = "agent exceeded the 5 second timeout"
     if cleanup_error is not None:
-        message += f" Process-group cleanup failed: {cleanup_error}."
+        message += f"; process-group cleanup failed: {cleanup_error}"
     assert result.error == ResultError("timeout", message)
     assert result.timed_out is True
     assert result.native_exit_code == 0
@@ -485,7 +485,7 @@ def test_missing_terminal_limit_outranks_native_exit_and_cleans_descendant(
             consumer=codex.consumer(ConsumerLimits(event_bytes=256, state_bytes=11, records=10)),
         )
         assert result.error == ResultError(
-            "stdout_limit_exceeded", "Agent retained output state exceeded 11 bytes."
+            "stdout_limit_exceeded", "agent retained output state exceeded 11 bytes"
         )
         assert result.native_exit_code == 17
         assert consumed(result).output == "answer12345"
@@ -523,7 +523,7 @@ def test_progress_failure_terminates_child_and_preserves_streamed_answer(tmp_pat
             progress=fail_progress,
         )
         assert result.error == ResultError(
-            "output_io_error", "Cannot write progress to stderr: closed progress pipe."
+            "output_io_error", "cannot write progress to stderr: closed progress pipe"
         )
         assert consumed(result).output == "partial"
         assert_process_terminated(int(pid_path.read_text()), lock_path)

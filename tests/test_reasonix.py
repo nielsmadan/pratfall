@@ -280,7 +280,7 @@ def test_reasonix_native_failure_outranks_malformed_optional_usage() -> None:
     decoded = reasonix.decode(json.dumps(result(subtype="recovery_paused", usage=[])))
     assert decoded.output == "answer" and decoded.usage is None
     assert decoded.error is not None and decoded.error.code == "provider_error"
-    assert decoded.error.message == "Reasonix run ended with recovery_paused."
+    assert decoded.error.message == "Reasonix run ended with recovery_paused"
 
 
 def test_reasonix_current_readiness_preserves_native_completion() -> None:

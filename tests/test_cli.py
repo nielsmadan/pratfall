@@ -71,7 +71,7 @@ def test_run_flag_without_selector_uses_normalized_run_error(
     assert result["agent"] is None
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "A selector is required.",
+        "message": "a selector is required",
     }
 
 
@@ -303,7 +303,7 @@ def test_trust_list_takes_no_other_target(
     arguments: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert main(arguments) == 2
-    assert capsys.readouterr().err == "prat: --list cannot be combined with --revoke or DIR.\n"
+    assert capsys.readouterr().err == "prat: --list cannot be combined with --revoke or DIR\n"
 
 
 @pytest.mark.usefixtures("real_trust")
@@ -381,7 +381,7 @@ def test_management_merges_configs_and_warns_on_stderr(
     result = json.loads(captured.out)
     assert result["schema_version"] == 1
     assert captured.err == (
-        f"prat: warning: {local_path}: profile 'simple' replaces the profile from {global_path}.\n"
+        f"prat: warning: {local_path}: profile 'simple' replaces the profile from {global_path}\n"
     )
     if command == ["profiles"]:
         assert result["profiles"][0]["agent"] == "claude"
@@ -759,7 +759,7 @@ def test_version_selection_strips_unicode_whitespace_before_stderr_fallback() ->
     )
     empty = _version_result(ProcessResult(RawCapture("\u2003".encode()), "\u2002".encode(), 0, 0))
     assert fallback == ("fallback 3.0", None)
-    assert empty == (None, "Version probe returned no version text.")
+    assert empty == (None, "version probe returned no version text")
 
 
 @pytest.mark.parametrize(
@@ -859,7 +859,7 @@ def test_notify_flags_are_treated_as_run_options_like_fast(
     result = json.loads(capsys.readouterr().out)
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "A selector is required.",
+        "message": "a selector is required",
     }
 
 
@@ -1180,7 +1180,7 @@ def test_config_errors_honor_json(tmp_path: Path, capsys: pytest.CaptureFixture[
     assert main(["profiles", "--config", str(path), "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
     assert result["error"]["code"] == "invalid_config"
-    assert result["error"]["message"] == f"{path}: config file does not exist."
+    assert result["error"]["message"] == f"{path}: config file does not exist"
 
 
 def test_unknown_user_config_path_error_honors_json(capsys: pytest.CaptureFixture[str]) -> None:

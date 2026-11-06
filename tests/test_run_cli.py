@@ -413,11 +413,11 @@ def test_unencodable_answer_is_normalized_instead_of_crashing(
         assert json.loads(captured.out)["output"] == ""
         assert json.loads(captured.out)["error"] == {
             "code": "output_encoding",
-            "message": "Agent output contains invalid Unicode text.",
+            "message": "agent output contains invalid Unicode text",
         }
     else:
         assert captured.out == ""
-        assert "prat: Agent output contains invalid Unicode text.\n" in captured.err
+        assert "prat: agent output contains invalid Unicode text\n" in captured.err
 
 
 @pytest.mark.parametrize("local_name", [".pratfile", "custom.toml"])
@@ -456,7 +456,7 @@ def test_run_uses_local_profile_and_global_wrapper_from_invocation_directory(
         "cwd": str(child),
     }
     warning = (
-        f"prat: warning: {local_path}: profile 'work' replaces the profile from {global_path}.\n"
+        f"prat: warning: {local_path}: profile 'work' replaces the profile from {global_path}\n"
     )
     assert captured.err.count(warning) == 1
     assert "native diagnostic\n" in captured.err
@@ -476,7 +476,7 @@ def test_config_warning_failure_returns_json_error_before_reading_input(
     assert main(["simple", "-", "--json", *flags]) == 1
     result = json.loads(capsys.readouterr().out)
     assert result["error"]["code"] == "output_io_error"
-    assert "Cannot write config warnings" in result["error"]["message"]
+    assert "cannot write config warnings" in result["error"]["message"]
 
 
 def test_invalid_local_config_fails_before_reading_prompt(
@@ -926,7 +926,7 @@ def test_prompt_source_conflicts_are_normalized_without_opening_input(
     assert result["exit_code"] == 2
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "Provide exactly one prompt source.",
+        "message": "provide exactly one prompt source",
     }
 
 
@@ -1034,7 +1034,7 @@ def test_unreadable_prompt_file_is_normalized(
         assert main(["cx", "--file", str(prompt_file), "--dry-run", "--json"]) == 2
         result = json.loads(capsys.readouterr().out)
         assert result["error"]["code"] == "invalid_arguments"
-        assert "Cannot open prompt file" in result["error"]["message"]
+        assert "cannot open prompt file" in result["error"]["message"]
     finally:
         prompt_file.chmod(0o600)
 
@@ -1048,7 +1048,7 @@ def test_closed_stdin_is_a_normalized_input_error(
     assert main(["cx", "-", "--dry-run", "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
     assert result["error"]["code"] == "invalid_arguments"
-    assert "Cannot read standard input" in result["error"]["message"]
+    assert "cannot read standard input" in result["error"]["message"]
 
 
 def test_stdin_closed_before_startup_is_normalized_and_explicit_sources_work(
@@ -1090,7 +1090,7 @@ def test_stdin_closed_before_startup_is_normalized_and_explicit_sources_work(
         assert completed.returncode == result["exit_code"] == 2
         assert result["status"] == "error"
         assert result["error"]["code"] == "invalid_arguments"
-        assert "Cannot read standard input" in result["error"]["message"]
+        assert "cannot read standard input" in result["error"]["message"]
         assert completed.stdout.count(b"\n") == 1
         assert b"Traceback" not in completed.stderr
         assert not marker.exists()
@@ -1184,7 +1184,7 @@ raise SystemExit(main(sys.argv[2:]))
     assert result["exit_code"] == 128 + chosen
     assert result["error"] == {
         "code": "interrupted",
-        "message": f"Interrupted by signal {chosen}.",
+        "message": f"interrupted by signal {chosen}",
     }
     assert stdout.count(b"\n") == 1
     assert stderr == b""
@@ -1301,7 +1301,7 @@ def test_reserved_native_exit_statuses_exit_one_and_keep_the_native_status(
     assert result["native_exit_code"] == native
     assert result["error"] == {
         "code": "native_exit",
-        "message": f"Codex exited with status {native}.",
+        "message": f"Codex exited with status {native}",
     }
 
 
@@ -1848,7 +1848,7 @@ os.write(2, b"\\xff")
         assert result["native_exit_code"] == 0
         assert result["error"] == {
             "code": "output_encoding",
-            "message": "Agent stderr is not valid UTF-8.",
+            "message": "agent stderr is not valid UTF-8",
         }
         assert stdout.count(b"\n") == 1
         assert b"Traceback" not in stderr
@@ -2028,8 +2028,8 @@ def test_final_presentation_cleanup_failure_stays_normalized() -> None:
     )
     assert updated.error == ResultError(
         "output_io_error",
-        "Cannot write diagnostics to stderr: closed diagnostics. "
-        "Process-group cleanup failed: permission denied.",
+        "cannot write diagnostics to stderr: closed diagnostics; "
+        "process-group cleanup failed: permission denied",
     )
     assert updated.native_exit_code == 0
 
@@ -2062,8 +2062,8 @@ def test_unverified_bounded_cleanup_preserves_primary_failure_and_output(
     )
     assert updated.error == ResultError(
         "stdout_limit_exceeded",
-        "primary output failure Process-group cleanup failed: could not verify "
-        "owned process-group cleanup before the deadline.",
+        "primary output failure; process-group cleanup failed: could not verify "
+        "owned process-group cleanup before the deadline",
     )
     assert updated.native_exit_code == 17
     assert updated.capture == ConsumedCapture(DecodedOutput(output="KEEP", error=primary))
@@ -2182,7 +2182,7 @@ def test_native_stderr_write_failure_preserves_results_and_cleans_up_once(
     result = json.loads(capsys.readouterr().out)
     assert result["error"] == {
         "code": "output_io_error",
-        "message": "Cannot write diagnostics to stderr: native replay failed.",
+        "message": "cannot write diagnostics to stderr: native replay failed",
     }
     assert result["output"] == "KEEP"
     assert result["usage"]["input_tokens"] == 3
@@ -2622,7 +2622,7 @@ print(json.dumps({{"response": "KEEP"}}), flush=True)
         assert result["native_exit_code"] == (None if incremental else 0)
         assert result["error"] == {
             "code": "internal_error",
-            "message": "Unexpected failure: KeyError: 'decoder blew up'",
+            "message": "unexpected failure: KeyError: 'decoder blew up'",
         }
         assert b"Traceback" not in stderr
         cleaned = _lock_is_available(lock_path)
@@ -2672,7 +2672,7 @@ def test_failure_after_emitted_output_adds_no_second_stdout_object(
     emitted = stdout.getvalue()
     assert emitted.count('"schema_version"') == 1
     assert json.loads(emitted)["status"] == "success"
-    assert "prat: Unexpected failure: ValueError: stdout is broken" in stderr.getvalue()
+    assert "prat: unexpected failure: ValueError: stdout is broken" in stderr.getvalue()
 
 
 def test_unrepresentable_result_text_emits_a_normalized_object_with_resolved_identity(
@@ -2708,7 +2708,7 @@ def test_decoder_exception_is_normalized_with_process_group_cleanup(
     assert result["native_exit_code"] == 0
     assert result["error"] == {
         "code": "internal_error",
-        "message": "Unexpected failure: KeyError: 'decoder blew up'",
+        "message": "unexpected failure: KeyError: 'decoder blew up'",
     }
 
 
@@ -2754,7 +2754,7 @@ def test_result_unencodable_for_stdout_in_text_mode_reports_on_stderr(tmp_path: 
     )
     assert completed.returncode == 1
     assert completed.stdout == b""
-    assert b"prat: Unexpected failure: UnicodeEncodeError" in completed.stderr
+    assert b"prat: unexpected failure: UnicodeEncodeError" in completed.stderr
     assert b"Traceback" not in completed.stderr
 
 
@@ -2837,7 +2837,7 @@ def test_template_keeps_explicit_empty_source_invalid(
     assert main(["cx", "-t", "work", *source, "--config", str(config), "--json"]) == 2
     assert (
         json.loads(capsys.readouterr().out)["error"]["message"]
-        == "Prompt must not be empty or whitespace-only."
+        == "prompt must not be empty or whitespace-only"
     )
 
 
@@ -3011,7 +3011,7 @@ def test_explicit_prompt_rejects_over_budget_pipe_without_waiting_for_eof(tmp_pa
             result = json.loads(process.stdout.read())
             assert result["error"] == {
                 "code": "invalid_arguments",
-                "message": f"Prompt exceeds the {PROMPT_LIMIT} byte limit.",
+                "message": f"prompt exceeds the {PROMPT_LIMIT} byte limit",
             }
         finally:
             if process.poll() is None:
@@ -3063,7 +3063,7 @@ def test_extract_cli_preserves_metadata_trace_and_exit(
         result = json.loads(completed.stdout)
         error = None
         if native_exit:
-            error = {"code": "native_exit", "message": "Claude Code exited with status 23."}
+            error = {"code": "native_exit", "message": "Claude Code exited with status 23"}
         elif provider_error:
             error = {"code": "provider_error", "message": answer}
         assert result == {
@@ -3158,7 +3158,7 @@ def test_edit_rejects_preview_before_reading_input(
     arguments = [flag, "cx"] if before_selector else ["cx", flag]
     assert main([*arguments, "--dry-run", "--json", "--file", "missing"]) == 2
     result = json.loads(capsys.readouterr().out)
-    assert result["error"]["message"] == "--edit cannot be combined with --dry-run."
+    assert result["error"]["message"] == "--edit cannot be combined with --dry-run"
 
 
 @pytest.mark.parametrize("flag", ["-e", "--edit"])
@@ -3180,9 +3180,9 @@ def test_edit_validates_initial_draft_before_opening_editor(
     assert main(["cx", "--edit", "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
     assert result["error"]["message"] in {
-        "Standard input prompt is not valid UTF-8.",
-        "Prompt must not contain NUL bytes.",
-        f"Prompt exceeds the {PROMPT_LIMIT} byte limit.",
+        "standard input prompt is not valid UTF-8",
+        "prompt must not contain NUL bytes",
+        f"prompt exceeds the {PROMPT_LIMIT} byte limit",
     }
 
 
@@ -3646,20 +3646,20 @@ def test_dry_run_shows_prompt_rendered_with_parameters(
             ["remove-empty", "src", "lib"],
             (
                 "profile 'remove-empty' prompt takes 1 parameter value(s) (folder) but got 2; "
-                "pass free text with --prompt=TEXT or --file PATH."
+                "pass free text with --prompt=TEXT or --file PATH"
             ),
         ),
         (
             ["remove-empty", "-"],
             (
                 "profile 'remove-empty' prompt: '-' cannot be the value of parameter 'folder'; "
-                "use --param folder=- for a literal dash or --file - to read standard input."
+                "use --param folder=- for a literal dash or --file - to read standard input"
             ),
         ),
-        (["move", "a.py"], "profile 'move' prompt: missing value for parameter(s) target."),
+        (["move", "a.py"], "profile 'move' prompt: missing value for parameter(s) target"),
         (
             ["cx", "-t", "rename", "foo", "--param", "old=bar"],
-            "template 'rename': parameter 'old' is bound more than once.",
+            "template 'rename': parameter 'old' is bound more than once",
         ),
         (
             ["remove-empty", "--param", "dir=src"],
@@ -3676,32 +3676,32 @@ def test_dry_run_shows_prompt_rendered_with_parameters(
             ["remove-empty", "--param", "folder= "],
             (
                 "profile 'remove-empty' prompt: parameter 'folder' must not be empty or "
-                "whitespace-only."
+                "whitespace-only"
             ),
         ),
         (
             ["plain", "--param", "folder=src"],
             (
                 "--param needs a prompt with parameters, but profile 'plain' prompt has no "
-                "parameters."
+                "parameters"
             ),
         ),
         (
             ["cx", "--param", "folder=src"],
-            "--param needs a prompt with parameters, but no template is active.",
+            "--param needs a prompt with parameters, but no template is active",
         ),
-        (["plain", "one", "two"], "Provide exactly one prompt source."),
+        (["plain", "one", "two"], "provide exactly one prompt source"),
         (
             ["remove-empty", "--param", ""],
-            "profile 'remove-empty' prompt: --param '' must have the form NAME=VALUE.",
+            "profile 'remove-empty' prompt: --param '' must have the form NAME=VALUE",
         ),
         (
             ["remove-empty", "--param", "folder=a\0b"],
-            "profile 'remove-empty' prompt: parameter 'folder' must not contain NUL bytes.",
+            "profile 'remove-empty' prompt: parameter 'folder' must not contain NUL bytes",
         ),
         (
             ["remove-empty", "--file", "missing.txt", "--context", "missing.txt", "--edit"],
-            ("profile 'remove-empty' prompt: missing value for parameter(s) folder."),
+            ("profile 'remove-empty' prompt: missing value for parameter(s) folder"),
         ),
     ],
 )
@@ -3855,7 +3855,7 @@ def test_step_null_input_without_template_is_an_error(
     assert result["exit_code"] == 2
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "Cannot read standard input; provide exactly one prompt another way.",
+        "message": "cannot read standard input; provide exactly one prompt another way",
     }
 
 
@@ -3863,20 +3863,20 @@ def spec_bytes(**fields: object) -> bytes:
     return json.dumps(fields).encode()
 
 
-NOT_JSON = "Workflow step spec is not valid JSON: "
-NOT_OBJECT = "Workflow step spec must be a JSON object."
-BAD_VERSION = "Workflow step spec version must be 1."
-BAD_ARGUMENTS = "Workflow step spec arguments must be a list of strings."
-BAD_PARENT = "Workflow step spec parent must be an integer."
+NOT_JSON = "workflow step spec is not valid JSON: "
+NOT_OBJECT = "workflow step spec must be a JSON object"
+BAD_VERSION = "workflow step spec version must be 1"
+BAD_ARGUMENTS = "workflow step spec arguments must be a list of strings"
+BAD_PARENT = "workflow step spec parent must be an integer"
 
 
 @pytest.mark.parametrize(
     ("raw", "message"),
     [
-        (b"not json", NOT_JSON + "Expecting value: line 1 column 1 (char 0)."),
+        (b"not json", NOT_JSON + "Expecting value: line 1 column 1 (char 0)"),
         (
             b"\xff\xfe",
-            NOT_JSON + "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte.",
+            NOT_JSON + "'utf-8' codec can't decode byte 0xff in position 0: invalid start byte",
         ),
         (b"[]", NOT_OBJECT),
         (spec_bytes(version=2, arguments=[], input=None, parent=1), BAD_VERSION),
@@ -3885,25 +3885,25 @@ BAD_PARENT = "Workflow step spec parent must be an integer."
         (spec_bytes(version=1, arguments=["cx", 3], input=None, parent=1), BAD_ARGUMENTS),
         (
             spec_bytes(version=1, arguments=["cx"], input=3, parent=1),
-            "Workflow step spec input must be a string or null.",
+            "workflow step spec input must be a string or null",
         ),
         (
             spec_bytes(version=1, arguments=["cx"])[:-1] + b",",
             NOT_JSON
-            + "Expecting property name enclosed in double quotes: line 1 column 36 (char 35).",
+            + "Expecting property name enclosed in double quotes: line 1 column 36 (char 35)",
         ),
         (
             b" " * (8 * PROMPT_LIMIT + 1),
-            f"Workflow step spec exceeds the {8 * PROMPT_LIMIT} byte limit.",
+            f"workflow step spec exceeds the {8 * PROMPT_LIMIT} byte limit",
         ),
         (
             b"[" * 200000,
             NOT_JSON
-            + "maximum recursion depth exceeded while decoding a JSON array from a unicode string.",
+            + "maximum recursion depth exceeded while decoding a JSON array from a unicode string",
         ),
         (
             spec_bytes(version=1, arguments=["cx"], parent=1),
-            "Workflow step spec must include input.",
+            "workflow step spec must include input",
         ),
         (spec_bytes(version=1, arguments=["cx"], input=None), BAD_PARENT),
         (spec_bytes(version=1, arguments=["cx"], input=None, parent=True), BAD_PARENT),
@@ -3912,7 +3912,7 @@ BAD_PARENT = "Workflow step spec parent must be an integer."
         (spec_bytes(version=1, arguments=["cx"], input=None, parent=None), BAD_PARENT),
         (
             spec_bytes(version=1, arguments=["cx"], input=None, parent=1, status_lines="yes"),
-            "Workflow step spec status_lines must be a boolean.",
+            "workflow step spec status_lines must be a boolean",
         ),
     ],
 )
@@ -3951,7 +3951,7 @@ def test_step_input_with_prompt_argument_is_rejected(
     assert run_step(spec, tmp_path) == 2
     assert step_result(capsys)["error"] == {
         "code": "invalid_arguments",
-        "message": "Provide exactly one prompt source.",
+        "message": "provide exactly one prompt source",
     }
 
 
@@ -4068,7 +4068,7 @@ def test_step_entry_reports_unreadable_spec_stream_as_json(
     assert cli_module._step_entry() == 2
     result = json.loads(capsys.readouterr().out)
     assert result["error"]["code"] == "invalid_arguments"
-    assert result["error"]["message"].startswith("Cannot read workflow step spec:")
+    assert result["error"]["message"].startswith("cannot read workflow step spec:")
 
 
 def test_step_entry_end_to_end_with_non_ascii(tmp_path: Path) -> None:
@@ -4176,7 +4176,7 @@ def test_opencode_version_probe_runs_in_the_run_cwd(
             "1.19.3",
             1,
             "error",
-            {"code": "protocol_error", "message": "OpenCode stream ended without a stop finish."},
+            {"code": "protocol_error", "message": "OpenCode stream ended without a stop finish"},
         ),
     ],
 )
@@ -4217,7 +4217,7 @@ def test_opencode_failed_version_probe_stops_before_launch(
     error = json.loads(capsys.readouterr().out)["error"]
     assert error == {
         "code": "native_exit",
-        "message": "OpenCode version probe failed: Version probe exited with status 3.",
+        "message": "OpenCode version probe failed: version probe exited with status 3",
     }
     assert _opencode_calls(tmp_path) == [[["--version"], ""]]
 

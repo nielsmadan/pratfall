@@ -449,7 +449,7 @@ def test_missing_terminal_diagnostic_counts_against_retained_state(
     assert failure.value.decoded is not None
     assert failure.value.decoded.output == "answer12345"
     assert failure.value.error == ResultError(
-        "stdout_limit_exceeded", "Agent retained output state exceeded 11 bytes."
+        "stdout_limit_exceeded", "agent retained output state exceeded 11 bytes"
     )
 
 
@@ -493,7 +493,7 @@ def test_prior_state_failure_survives_finalization_with_exhausted_budget(
     with pytest.raises(ConsumerFailure) as failure:
         incremental.feed(codex_stream(rejected).encode())
     assert failure.value.error == ResultError(
-        "stdout_limit_exceeded", "Agent retained output state exceeded 5 bytes."
+        "stdout_limit_exceeded", "agent retained output state exceeded 5 bytes"
     )
     with pytest.raises(ConsumerFailure) as finalized:
         incremental.finish()
@@ -532,7 +532,7 @@ def test_rejected_new_message_does_not_publish_ordering_entry(
     with pytest.raises(ConsumerFailure) as failure:
         incremental.feed(codex_stream(rejected).encode())
     assert failure.value.error == ResultError(
-        "stdout_limit_exceeded", "Agent retained output state exceeded 4 bytes."
+        "stdout_limit_exceeded", "agent retained output state exceeded 4 bytes"
     )
     with pytest.raises(ConsumerFailure) as finalized:
         incremental.finish()
@@ -630,7 +630,7 @@ def test_jsonl_event_bound_counts_blank_unknown_and_crlf_records() -> None:
     with pytest.raises(ConsumerFailure) as failure:
         oversized.feed(b"         \n")
     assert failure.value.error == ResultError(
-        "stdout_limit_exceeded", "Agent output event exceeded 8 bytes."
+        "stdout_limit_exceeded", "agent output event exceeded 8 bytes"
     )
 
 
@@ -694,7 +694,7 @@ def test_jsonl_bounds_retained_records_and_answer_join_separators() -> None:
             ).encode()
         )
     assert failure.value.error == ResultError(
-        "stdout_limit_exceeded", "Agent retained output state exceeded 6 bytes."
+        "stdout_limit_exceeded", "agent retained output state exceeded 6 bytes"
     )
 
 
@@ -784,7 +784,7 @@ def test_late_provider_failures_outrank_duplicate_terminal_protocol_errors() -> 
     )
     opencode_decoded = opencode_incremental.finish()
     assert copilot_decoded.error == ResultError(
-        "provider_error", "Copilot reported an unsuccessful result."
+        "provider_error", "Copilot reported an unsuccessful result"
     )
     assert antigravity_decoded.output == "answer"
     assert antigravity_decoded.error == ResultError("provider_error", "failed later")
@@ -1012,18 +1012,18 @@ _WHOLE_JSON_DECODERS: dict[str, tuple[AdapterModule, str, str]] = {
     ),
 }
 _WHOLE_JSON_DOCUMENT_GUARDS: tuple[tuple[str, Callable[[], str], Code, str], ...] = (
-    ("framing", lambda: "", "protocol_error", "Invalid {label} JSON: Expecting value."),
+    ("framing", lambda: "", "protocol_error", "invalid {label} JSON: Expecting value"),
     (
         "nesting",
         lambda: "[" * 100_000 + "]" * 100_000,
         "protocol_error",
-        "Invalid {label} JSON: document nesting is too deep.",
+        "invalid {label} JSON: document nesting is too deep",
     ),
     (
         "oversized-document",
         lambda: "a" * (STDOUT_BYTES + 1),
         "stdout_limit_exceeded",
-        "{label} JSON exceeds 8 MiB.",
+        "{label} JSON exceeds 8 MiB",
     ),
 )
 _WHOLE_JSON_FIELD_GUARDS: tuple[tuple[str, str, str, Code, str], ...] = (
@@ -1032,49 +1032,49 @@ _WHOLE_JSON_FIELD_GUARDS: tuple[tuple[str, str, str, Code, str], ...] = (
         '"unused":1,"unused":2',
         "",
         "protocol_error",
-        "Invalid {label} JSON: duplicate object key.",
+        "invalid {label} JSON: duplicate object key",
     ),
     (
         "nonfinite-number",
         '"unused":NaN',
         "answer",
         "protocol_error",
-        "{label} JSON contains a nonfinite number.",
+        "{label} JSON contains a nonfinite number",
     ),
     (
         "infinite-number",
         '"unused":Infinity',
         "answer",
         "protocol_error",
-        "{label} JSON contains a nonfinite number.",
+        "{label} JSON contains a nonfinite number",
     ),
     (
         "overflowing-exponent",
         '"unused":1e400',
         "answer",
         "protocol_error",
-        "{label} JSON contains a nonfinite number.",
+        "{label} JSON contains a nonfinite number",
     ),
     (
         "wide-number",
         '"unused":' + "9" * 200,
         "",
         "protocol_error",
-        "Invalid {label} JSON: numeric value is too large.",
+        "invalid {label} JSON: numeric value is too large",
     ),
     (
         "huge-number",
         '"unused":' + "9" * 5000,
         "",
         "protocol_error",
-        "Invalid {label} JSON: numeric value is too large.",
+        "invalid {label} JSON: numeric value is too large",
     ),
     (
         "lone-surrogate",
         '"unused":"\\ud800"',
         "answer",
         "output_encoding",
-        "Agent output contains invalid Unicode text.",
+        "agent output contains invalid Unicode text",
     ),
 )
 
@@ -1134,5 +1134,5 @@ def test_every_whole_document_decoder_clears_an_unencodable_answer(agent: str) -
     decoded = module.decode(document.replace('"answer"', json.dumps("a\ud800")))
     assert decoded.output == ""
     assert decoded.error == ResultError(
-        "output_encoding", "Agent output contains invalid Unicode text."
+        "output_encoding", "agent output contains invalid Unicode text"
     )

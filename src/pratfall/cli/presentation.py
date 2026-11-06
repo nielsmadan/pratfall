@@ -190,9 +190,7 @@ def _config_warnings(config: Config, diagnostics: _Diagnostics) -> None:
     except (AttributeError, OSError, ValueError) as error:
         diagnostics.close()
         _silence_broken_stream("stderr")
-        raise PratError(
-            f"Cannot write config warnings: {error}.", code="output_io_error"
-        ) from error
+        raise PratError(f"cannot write config warnings: {error}", code="output_io_error") from error
 
 
 def _guard[T](action: Callable[[], T], recover: Callable[[Exception], T]) -> T:
@@ -210,7 +208,7 @@ def _printable(error: Exception) -> str:
 
 
 def _internal_message(error: Exception) -> str:
-    return f"Unexpected failure: {_printable(error)}"
+    return f"unexpected failure: {_printable(error)}"
 
 
 def _stderr_is_tty() -> bool:
@@ -225,7 +223,7 @@ def _status_lines(*, progress: bool) -> bool:
 
 
 def _presentation_error(error: Exception) -> ResultError:
-    return ResultError("output_io_error", f"Cannot write diagnostics to stderr: {error}.")
+    return ResultError("output_io_error", f"cannot write diagnostics to stderr: {error}")
 
 
 @dataclass

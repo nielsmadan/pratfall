@@ -98,14 +98,14 @@ class _Consumer(JsonlConsumer):
         if event_type == "agent":
             text = event.get("text")
             if not isinstance(text, str):
-                self.malformed("Malformed Warp agent text.")
+                self.malformed("malformed Warp agent text")
                 return None
             slot = f"answer:{len(self._texts)}"
             separator = int(bool(self._texts))
             self._texts.append(self.retain.text(slot, text, extra=separator, record=True))
             return "answering"
         if event_type not in _IGNORED:
-            self.malformed("Unknown Warp event type.")
+            self.malformed("unknown Warp event type")
         if event_type == "agent_reasoning":
             return "reasoning"
         if event_type in {"tool_result", "tool_canceled", "tool_error", "tool_call"}:

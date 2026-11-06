@@ -223,7 +223,7 @@ def test_step_refuses_a_config_rewritten_during_the_workflow(
     assert [step["status"] for step in steps_of(result)] == ["success", "error"]
     assert steps_of(result)[1]["error"] == {
         "code": "invalid_config",
-        "message": f"{config}: local config changed since the workflow started.",
+        "message": f"{config}: local config changed since the workflow started",
     }
 
 
@@ -239,7 +239,7 @@ def test_step_refuses_a_pratfile_rewritten_during_the_workflow(
     assert [step["status"] for step in steps_of(result)] == ["success", "error"]
     assert steps_of(result)[1]["error"] == {
         "code": "invalid_config",
-        "message": ".pratfile: local config changed since the workflow started.",
+        "message": ".pratfile: local config changed since the workflow started",
     }
 
 
@@ -331,7 +331,7 @@ def test_missing_parameter_fails_before_any_step_starts(
         "cost_usd": None,
         "error": {
             "code": "invalid_arguments",
-            "message": "workflow 'solo': missing value for parameter(s) folder.",
+            "message": "workflow 'solo': missing value for parameter(s) folder",
         },
         "steps": [],
     }
@@ -356,7 +356,7 @@ def test_unsupported_flags_are_rejected_in_the_users_spelling(
     assert main(["chain", "--prompt=x", "--config", str(config), *extra]) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == f"prat: {flag} is not supported for workflows.\n"
+    assert captured.err == f"prat: {flag} is not supported for workflows\n"
 
 
 def test_base_input_for_workflow_without_input_is_rejected(
@@ -373,7 +373,7 @@ def test_base_input_for_workflow_without_input_is_rejected(
     result = json_result(capsys)
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "workflow 'closed' takes no input.",
+        "message": "workflow 'closed' takes no input",
     }
     assert result["steps"] == []
 
@@ -421,7 +421,7 @@ def test_branch_failure_lets_sibling_finish_and_skips_downstream(
     assert steps[3] == {"step": "m", "status": "skipped"}
     assert result["error"] == {
         "code": "native_exit",
-        "message": "step 'x': Claude Code exited with status 3.",
+        "message": "step 'x': Claude Code exited with status 3",
     }
     assert result["output"] == ""
 
@@ -434,7 +434,7 @@ def test_text_mode_failure_prints_one_stderr_line_and_no_stdout(
     captured = capfd.readouterr()
     assert captured.out == ""
     assert captured.err.endswith(
-        "prat: workflow 'chain' failed at step 'a': Claude Code exited with status 4.\n"
+        "prat: workflow 'chain' failed at step 'a': Claude Code exited with status 4\n"
     )
 
 
@@ -444,7 +444,7 @@ def test_step_whose_agent_exits_with_a_reserved_status_fails_the_workflow_with_o
     config = chain_config(tmp_path, first="@exit 2")
     assert main(["chain", "--config", str(config)]) == 1
     assert capfd.readouterr().err.endswith(
-        "prat: workflow 'chain' failed at step 'a': Claude Code exited with status 2.\n"
+        "prat: workflow 'chain' failed at step 'a': Claude Code exited with status 2\n"
     )
 
 
@@ -705,7 +705,7 @@ def test_children_receive_spec_with_parent_and_passthrough(
             "wrong-type",
             "exited with status 0 without a valid result: field 'exit_code' is missing or has the wrong type",
         ),
-        ("mismatch", "exited with status 3 but reported exit code 0."),
+        ("mismatch", "exited with status 3 but reported exit code 0"),
     ],
 )
 def test_bad_child_results_are_internal_errors(
@@ -735,7 +735,7 @@ def test_oversized_child_result_exceeds_the_workflow_budget(
     exit_code = exit_code_for(STDOUT_LIMIT_EXCEEDED)
     assert main(["chain", "--prompt=x", "--json", "--config", str(config)]) == exit_code
     result = json_result(capsys)
-    message = "step results exceeded the workflow budget of 1024 bytes."
+    message = "step results exceeded the workflow budget of 1024 bytes"
     assert result["error"] == {"code": STDOUT_LIMIT_EXCEEDED, "message": f"step 'a': {message}"}
     assert steps_of(result) == [
         failed_step("a", "error", exit_code, STDOUT_LIMIT_EXCEEDED, message),
@@ -758,7 +758,7 @@ def test_each_instances_share_one_workflow_result_budget(
     exit_code = exit_code_for(STDOUT_LIMIT_EXCEEDED)
     assert main(["fan", "--json", "--config", str(config)]) == exit_code
     result = json_result(capsys)
-    message = "step results exceeded the workflow budget of 6000 bytes."
+    message = "step results exceeded the workflow budget of 6000 bytes"
     assert result["error"] == {
         "code": STDOUT_LIMIT_EXCEEDED,
         "message": f"step 'w': item 'c': {message}",
@@ -784,7 +784,7 @@ def test_child_without_a_result_reports_its_exit_status() -> None:
 
 
 def test_signalled_child_without_a_result_is_interrupted() -> None:
-    expected = failed_step("a", "interrupted", 130, "interrupted", "Interrupted by signal 2.")
+    expected = failed_step("a", "interrupted", 130, "interrupted", "interrupted by signal 2")
     del expected["step"]
     assert supervisor_module._child_result(False, b"", -2, signal.SIGINT).payload == expected
 
@@ -802,7 +802,7 @@ def test_launcher_that_cannot_start_fails_the_step(
     assert result["status"] == "error"
     assert steps_of(result)[0]["error"] == {
         "code": "executable_not_found",
-        "message": "Executable '/nonexistent/prat-launcher' was not found.",
+        "message": "executable '/nonexistent/prat-launcher' was not found",
     }
 
 
@@ -812,12 +812,12 @@ def test_launcher_that_cannot_start_fails_the_step(
         (
             PermissionError(errno.EACCES, "denied"),
             "executable_not_executable",
-            "Executable 'launcher' cannot be executed.",
+            "executable 'launcher' cannot be executed",
         ),
         (
             OSError(errno.EIO, "io"),
             "process_io_error",
-            "Cannot start workflow step 'launcher': [Errno 5] io.",
+            "cannot start workflow step 'launcher': [Errno 5] io",
         ),
     ],
 )
@@ -840,7 +840,7 @@ def test_backstop_tears_down_a_hung_child(
     assert exit_code == 124
     result = json_result(capsys)
     assert steps_of(result)[0] == failed_step(
-        "a", "timeout", 124, "timeout", "exceeded the workflow backstop of 0.4 seconds."
+        "a", "timeout", 124, "timeout", "exceeded the workflow backstop of 0.4 seconds"
     )
 
 
@@ -882,7 +882,7 @@ def test_teardown_kills_a_child_that_ignores_terminate(
     assert main(["chain", "--prompt=x", "--json", "--config", str(config)]) == 1
     assert json_result(capsys)["error"] == {
         "code": "internal_error",
-        "message": "Unexpected failure: RuntimeError: kaboom",
+        "message": "unexpected failure: RuntimeError: kaboom",
     }
     assert [process.returncode for process in spawned] == [-signal.SIGKILL]
 
@@ -896,7 +896,7 @@ def test_runtime_check_rejects_prompt_less_step_without_input(
     assert main(["bare", "--json", "--config", str(config)]) == 2
     result = json_result(capsys)
     assert steps_of(result) == [
-        failed_step("a", "error", 2, "invalid_arguments", "has no prompt and received no input.")
+        failed_step("a", "error", 2, "invalid_arguments", "has no prompt and received no input")
     ]
 
 
@@ -914,7 +914,7 @@ def test_runtime_check_rejects_bind_to_empty_output(
     result = json_result(capsys)
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "step 'm': binds parameter 'report' to the empty output of step 'r'.",
+        "message": "step 'm': binds parameter 'report' to the empty output of step 'r'",
     }
 
 
@@ -932,7 +932,7 @@ def test_runtime_check_rejects_bind_to_whitespace_only_output(
     result = json_result(capsys)
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "step 'm': binds parameter 'report' to the empty output of step 'r'.",
+        "message": "step 'm': binds parameter 'report' to the empty output of step 'r'",
     }
 
 
@@ -966,7 +966,7 @@ def test_runtime_check_rejects_oversized_step_input(
     result = json_result(capsys)
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "step 'm': input and bound parameters exceed the 1048576 byte limit.",
+        "message": "step 'm': input and bound parameters exceed the 1048576 byte limit",
     }
 
 
@@ -1014,7 +1014,7 @@ def test_unexpected_failure_is_a_workflow_internal_error(
     assert result["workflow"] == "chain"
     assert result["error"] == {
         "code": "internal_error",
-        "message": "Unexpected failure: RuntimeError: kaboom",
+        "message": "unexpected failure: RuntimeError: kaboom",
     }
 
 
@@ -1028,7 +1028,7 @@ def test_unexpected_failure_in_text_mode_prints_one_stderr_line(
     config = chain_config(tmp_path)
     assert main(["chain", "--prompt=x", "--config", str(config)]) == 1
     captured = capsys.readouterr()
-    assert (captured.out, captured.err) == ("", "prat: Unexpected failure: RuntimeError: kaboom\n")
+    assert (captured.out, captured.err) == ("", "prat: unexpected failure: RuntimeError: kaboom\n")
 
 
 def test_signal_to_a_vanished_child_group_is_not_counted(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1144,7 +1144,7 @@ def test_signal_interrupts_running_step_and_skips_the_rest(
     assert result["exit_code"] == exit_code
     assert result["error"] == {
         "code": "interrupted",
-        "message": f"Interrupted by signal {int(chosen)}.",
+        "message": f"interrupted by signal {int(chosen)}",
     }
     steps = steps_of(result)
     assert (steps[0]["step"], steps[0]["status"]) == ("a", "interrupted")
@@ -1234,7 +1234,7 @@ def test_child_killed_by_forwarded_signal_without_result_is_interrupted(
     assert main(["chain", "--prompt=x", "--json", "--config", str(config)]) == 129
     result = json_result(capsys)
     assert steps_of(result) == [
-        failed_step("a", "interrupted", 129, "interrupted", "Interrupted by signal 1."),
+        failed_step("a", "interrupted", 129, "interrupted", "interrupted by signal 1"),
         {"step": "b", "status": "skipped"},
     ]
 
@@ -1324,7 +1324,7 @@ def test_text_mode_interruption_prints_one_stderr_line(
     assert main(["chain", "--config", str(config)]) == 129
     captured = capfd.readouterr()
     assert captured.out == ""
-    assert captured.err.endswith("prat: workflow 'chain': Interrupted by signal 1.\n")
+    assert captured.err.endswith("prat: workflow 'chain': interrupted by signal 1\n")
 
 
 def test_input_interrupted_before_launch_reports_workflow_payload(
@@ -1339,7 +1339,7 @@ def test_input_interrupted_before_launch_reports_workflow_payload(
     result = json_result(capsys)
     assert result["workflow"] == "chain"
     assert result["status"] == "interrupted"
-    assert result["error"] == {"code": "interrupted", "message": "Interrupted by signal 2."}
+    assert result["error"] == {"code": "interrupted", "message": "interrupted by signal 2"}
     assert result["steps"] == []
 
 
@@ -1441,7 +1441,7 @@ def test_failure_during_setup_still_reaps_the_started_child(
     assert main(["chain", "--prompt=x", "--json", "--config", str(config)]) == 1
     assert json_result(capsys)["error"] == {
         "code": "internal_error",
-        "message": "Unexpected failure: OSError: [Errno 9] broken",
+        "message": "unexpected failure: OSError: [Errno 9] broken",
     }
     assert [process.returncode is not None for process in spawned] == [True]
 
@@ -1461,7 +1461,7 @@ def test_teardown_reaps_running_children_when_supervision_raises(
     assert main(["chain", "--json", "--config", str(config)]) == 1
     assert json_result(capsys)["error"] == {
         "code": "internal_error",
-        "message": "Unexpected failure: RuntimeError: kaboom",
+        "message": "unexpected failure: RuntimeError: kaboom",
     }
     assert_gone(int(ready.read_text()))
 
@@ -1727,7 +1727,7 @@ def test_failed_instance_lets_running_finish_and_skips_queued_and_downstream(
         driver.join()
     assert exit_code == 3
     result = json_result(capsys)
-    message = "item '#1': Claude Code exited with status 3."
+    message = "item '#1': Claude Code exited with status 3"
     assert result["error"] == {"code": "native_exit", "message": f"step 'w': {message}"}
     steps = steps_of(result)
     entry = steps[1]
@@ -1781,7 +1781,7 @@ def test_other_step_failing_leaves_each_step_skipped_with_mixed_items(
     result = json_result(capsys)
     assert result["error"] == {
         "code": "native_exit",
-        "message": "step 'x': Claude Code exited with status 5.",
+        "message": "step 'x': Claude Code exited with status 5",
     }
     entry = steps_of(result)[1]
     assert (entry["status"], entry["exit_code"], entry["output"], entry["error"]) == (
@@ -1831,7 +1831,7 @@ def test_interrupt_during_fan_out_skips_queued_instances_and_stops_running_ones(
     assert parent.returncode == 130, stderr
     result = json.loads(stdout)
     assert result["status"] == "interrupted"
-    assert result["error"] == {"code": "interrupted", "message": "Interrupted by signal 2."}
+    assert result["error"] == {"code": "interrupted", "message": "interrupted by signal 2"}
     items = items_of(steps_of(result)[1])
     assert [(item["item"], item["status"]) for item in items] == [
         ("a", "interrupted"),
@@ -1940,7 +1940,7 @@ def test_each_items_error_fails_the_step_before_any_instance_launches(
     )
     assert main(["fan", "--json", "--config", str(config)]) == 2
     result = json_result(capsys)
-    message = "output of step 'l' is not valid JSON."
+    message = "output of step 'l' is not valid JSON"
     assert result["error"] == {"code": "invalid_arguments", "message": f"step 'w': {message}"}
     assert steps_of(result)[1] == {
         "step": "w",
@@ -1971,7 +1971,7 @@ def test_each_overflow_truncate_runs_the_first_items_and_reports_the_rest_droppe
     )
     assert main(["fan", "--json", "--config", str(config)]) == 0
     captured = capfd.readouterr()
-    line = "prat: workflow 'fan' step 'w': running the first 2 of 5 items.\n"
+    line = "prat: workflow 'fan' step 'w': running the first 2 of 5 items\n"
     assert captured.err.count(line) == 1
     step = json.loads(captured.out)["steps"][1]
     assert [(item["item"], item["status"]) for item in step["items"]] == [
@@ -2013,7 +2013,7 @@ def test_each_overflow_error_fails_the_step_before_any_instance_launches(
     )
     assert main(["fan", "--json", "--config", str(config)]) == 2
     result = json_result(capsys)
-    message = "output of step 'l' has 3 items, more than the 2 item limit."
+    message = "output of step 'l' has 3 items, more than the 2 item limit"
     assert result["error"] == {"code": "invalid_arguments", "message": f"step 'w': {message}"}
     step = steps_of(result)[1]
     assert (step["items"], step["dropped"]) == ([], 0)
@@ -2056,7 +2056,7 @@ def test_each_step_whose_last_instance_fails_skips_downstream(
     )
     assert main(["fan", "--json", "--config", str(config)]) == 3
     result = json_result(capsys)
-    message = "item '@exit 3': Claude Code exited with status 3."
+    message = "item '@exit 3': Claude Code exited with status 3"
     assert result["error"] == {"code": "native_exit", "message": f"step 'w': {message}"}
     steps = steps_of(result)
     assert (steps[1]["status"], steps[1]["exit_code"], steps[1]["error"]) == (
@@ -2088,7 +2088,7 @@ def test_each_step_over_the_joined_output_cap_stops_later_launches(
     exit_code = exit_code_for(STDOUT_LIMIT_EXCEEDED)
     assert main(["fan", "--json", "--config", str(config)]) == exit_code
     result = json_result(capsys)
-    message = "joined output exceeds the 20 byte limit."
+    message = "joined output exceeds the 20 byte limit"
     assert result["error"] == {"code": STDOUT_LIMIT_EXCEEDED, "message": f"step 'w': {message}"}
     steps = steps_of(result)
     assert (steps[1]["status"], steps[1]["exit_code"], steps[1]["error"]) == (

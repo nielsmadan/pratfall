@@ -331,7 +331,7 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
     if args.command == "completion":
         if args.json:
             raise PratError(
-                "completion prints shell code; --json is not supported.", code="invalid_arguments"
+                "completion prints shell code; --json is not supported", code="invalid_arguments"
             )
         sys.stdout.write(_completion_script(args.shell, environ))
     elif args.command == "config" and args.config_command == "path":
@@ -366,7 +366,7 @@ def _trust(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -> N
             code="invalid_arguments",
         )
     if args.list and (args.revoke or args.directory is not None):
-        raise PratError("--list cannot be combined with --revoke or DIR.", code="invalid_arguments")
+        raise PratError("--list cannot be combined with --revoke or DIR", code="invalid_arguments")
     if args.list:
         directories = list_trusted_directories(environ)
         _emit(
@@ -431,12 +431,12 @@ def _decode_process(
         try:
             stdout = raw_stdout(capture).decode("utf-8")
         except UnicodeDecodeError:
-            encoding_error = ResultError("output_encoding", "Agent stdout is not valid UTF-8.")
+            encoding_error = ResultError("output_encoding", "agent stdout is not valid UTF-8")
     try:
         stderr = process.stderr.decode("utf-8")
     except UnicodeDecodeError:
         encoding_error = encoding_error or ResultError(
-            "output_encoding", "Agent stderr is not valid UTF-8."
+            "output_encoding", "agent stderr is not valid UTF-8"
         )
     if decoded is None:
         decoded = adapter.decode(stdout) if stdout is not None else DecodedOutput()
@@ -449,10 +449,10 @@ def _with_decode_cleanup_failure(
     if cleanup_error is None or decoded.error is None:
         return decoded, stderr
     failure = decoded.error
-    message = f"{failure.message} Process-group cleanup failed: {cleanup_error}."
+    message = f"{failure.message}; process-group cleanup failed: {cleanup_error}"
     return (
         replace(decoded, error=ResultError(failure.code, message)),
-        f"{stderr}\nprat: Process-group cleanup failed: {cleanup_error}.\n",
+        f"{stderr}\nprat: process-group cleanup failed: {cleanup_error}\n",
     )
 
 
@@ -468,7 +468,7 @@ def _with_failure(
     chosen = process.error or failure
     if cleanup_error is not None:
         chosen = ResultError(
-            chosen.code, f"{chosen.message} Process-group cleanup failed: {cleanup_error}."
+            chosen.code, f"{chosen.message}; process-group cleanup failed: {cleanup_error}"
         )
     return replace(process, error=chosen)
 
@@ -681,7 +681,7 @@ def _prepare_run_paths(
 
 def _validate_schema_extraction(resolved: ResolvedProfile, extract: bool) -> None:
     if resolved.options.schema is not None and extract:
-        raise PratError("--schema and --extract cannot be used together.", code="invalid_arguments")
+        raise PratError("--schema and --extract cannot be used together", code="invalid_arguments")
 
 
 def _prepare_run_schema(
@@ -694,7 +694,7 @@ def _prepare_run_schema(
         return resolved
     transport = adapter.schema_transport
     if transport is None:
-        raise PratError("Agent does not support schema output.", code="invalid_arguments")
+        raise PratError("agent does not support schema output", code="invalid_arguments")
     origin = origins.get("schema", OptionOrigin("schema"))
     prepared = resources.enter_context(prepare_schema(resolved.options.schema, origin, transport))
     if adapter.validate_schema is not None:
@@ -760,7 +760,7 @@ def _with_step(parsed: RunArguments, step: _StepRun | None) -> RunArguments:
     if step.input is None:
         return parsed
     if parsed.prompt_source is not None:
-        raise PratError("Provide exactly one prompt source.", code="invalid_arguments")
+        raise PratError("provide exactly one prompt source", code="invalid_arguments")
     return replace(parsed, prompt_source=PromptSource("inline", step.input))
 
 
@@ -826,7 +826,7 @@ def _run_plan(
     resolved = prepared.resolved
     timeout = resolved.options.timeout
     if timeout is None:
-        raise PratError("Resolved timeout is missing.", code="invalid_arguments")
+        raise PratError("resolved timeout is missing", code="invalid_arguments")
     adapter = prepared.adapter.for_schema(resolved.options.schema is not None)
     consumer = adapter.consumer() if adapter.consumer is not None else None
     return _RunPlan(
@@ -862,7 +862,7 @@ def _run_selected(
             if step is not None and config.local_digest != step.config_digest:
                 raise PratError(
                     f"{parsed.config or '.pratfile'}: local config changed since the workflow "
-                    "started."
+                    "started"
                 )
             _validate_config_native_arguments(config)
             if step is None:
@@ -930,7 +930,7 @@ def _read_step_spec(stdin: BinaryIO) -> tuple[list[str], _StepRun, int]:
             chunk = stdin.read(min(65536, WORKFLOW_SPEC_BYTES + 1 - size))
         except (OSError, ValueError) as error:
             raise PratError(
-                f"Cannot read workflow step spec: {error}.", code="invalid_arguments"
+                f"cannot read workflow step spec: {error}", code="invalid_arguments"
             ) from error
         if not chunk:
             break
@@ -938,48 +938,48 @@ def _read_step_spec(stdin: BinaryIO) -> tuple[list[str], _StepRun, int]:
         size += len(chunk)
     if size > WORKFLOW_SPEC_BYTES:
         raise PratError(
-            f"Workflow step spec exceeds the {WORKFLOW_SPEC_BYTES} byte limit.",
+            f"workflow step spec exceeds the {WORKFLOW_SPEC_BYTES} byte limit",
             code="invalid_arguments",
         )
     try:
         spec = json.loads(b"".join(chunks).decode("utf-8"))
     except (UnicodeDecodeError, ValueError, RecursionError) as error:
         raise PratError(
-            f"Workflow step spec is not valid JSON: {error}.", code="invalid_arguments"
+            f"workflow step spec is not valid JSON: {error}", code="invalid_arguments"
         ) from error
     return _validated_step_spec(spec)
 
 
 def _validated_step_spec(spec: object) -> tuple[list[str], _StepRun, int]:
     if not isinstance(spec, dict):
-        raise PratError("Workflow step spec must be a JSON object.", code="invalid_arguments")
+        raise PratError("workflow step spec must be a JSON object", code="invalid_arguments")
     version = spec.get("version")
     if type(version) is not int or version != 1:
-        raise PratError("Workflow step spec version must be 1.", code="invalid_arguments")
+        raise PratError("workflow step spec version must be 1", code="invalid_arguments")
     arguments = spec.get("arguments")
     if not isinstance(arguments, list) or not all(isinstance(item, str) for item in arguments):
         raise PratError(
-            "Workflow step spec arguments must be a list of strings.", code="invalid_arguments"
+            "workflow step spec arguments must be a list of strings", code="invalid_arguments"
         )
     parent = spec.get("parent")
     if type(parent) is not int:
-        raise PratError("Workflow step spec parent must be an integer.", code="invalid_arguments")
+        raise PratError("workflow step spec parent must be an integer", code="invalid_arguments")
     if "input" not in spec:
-        raise PratError("Workflow step spec must include input.", code="invalid_arguments")
+        raise PratError("workflow step spec must include input", code="invalid_arguments")
     text = spec["input"]
     if text is not None and not isinstance(text, str):
         raise PratError(
-            "Workflow step spec input must be a string or null.", code="invalid_arguments"
+            "workflow step spec input must be a string or null", code="invalid_arguments"
         )
     digest = spec.get("config_digest")
     if digest is not None and not isinstance(digest, str):
         raise PratError(
-            "Workflow step spec config_digest must be a string or null.", code="invalid_arguments"
+            "workflow step spec config_digest must be a string or null", code="invalid_arguments"
         )
     status_lines = spec.get("status_lines", False)
     if not isinstance(status_lines, bool):
         raise PratError(
-            "Workflow step spec status_lines must be a boolean.", code="invalid_arguments"
+            "workflow step spec status_lines must be a boolean", code="invalid_arguments"
         )
     return list(arguments), _StepRun(text, digest, status_lines), parent
 

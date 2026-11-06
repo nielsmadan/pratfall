@@ -130,7 +130,7 @@ def test_completion_rejects_json(capsys: pytest.CaptureFixture[str]) -> None:
     error = json.loads(capsys.readouterr().out)["error"]
     assert error == {
         "code": "invalid_arguments",
-        "message": "completion prints shell code; --json is not supported.",
+        "message": "completion prints shell code; --json is not supported",
     }
     assert main(["completion", "zsh", "--json"]) == 2
 

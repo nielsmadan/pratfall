@@ -87,7 +87,7 @@ def decode(stdout: str) -> DecodedOutput:
     if isinstance(value, ResultError):
         return DecodedOutput(error=value)
     if not isinstance(value, dict):
-        return _protocol("Gemini result must be a JSON object.")
+        return _protocol("Gemini result must be a JSON object")
     stats = value.get("stats") if "stats" in value else None
     models_value = stats.get("models") if isinstance(stats, dict) else stats
     reported_models, model_error = model_map(models_value, "Gemini stats.models")
@@ -95,7 +95,7 @@ def decode(stdout: str) -> DecodedOutput:
     if output is not None and not isinstance(output, str):
         return DecodedOutput(
             reported_models=reported_models,
-            error=ResultError("protocol_error", "Gemini response must be a string when present."),
+            error=ResultError("protocol_error", "Gemini response must be a string when present"),
         )
     output = encodable_text(output) if output is not None else None
     usage, usage_error = split_error(_usage(stats) if "stats" in value else None)
@@ -129,14 +129,14 @@ def decode(stdout: str) -> DecodedOutput:
         return DecodedOutput(
             usage=usage,
             reported_models=reported_models,
-            error=ResultError("protocol_error", "Gemini result is missing a response or error."),
+            error=ResultError("protocol_error", "Gemini result is missing a response or error"),
         )
     return DecodedOutput(output=output, usage=usage, reported_models=reported_models)
 
 
 def _provider_error(value: object) -> ResultError:
     if not isinstance(value, dict):
-        return ResultError("protocol_error", "Gemini error field is malformed.")
+        return ResultError("protocol_error", "Gemini error field is malformed")
     error_type = value.get("type")
     message = value.get("message")
     code = value.get("code")
@@ -145,27 +145,27 @@ def _provider_error(value: object) -> ResultError:
         or not isinstance(message, str)
         or (code is not None and (isinstance(code, bool) or not isinstance(code, str | int)))
     ):
-        return ResultError("protocol_error", "Gemini error field is malformed.")
-    return ResultError("provider_error", message or f"Gemini reported {error_type}.")
+        return ResultError("protocol_error", "Gemini error field is malformed")
+    return ResultError("provider_error", message or f"Gemini reported {error_type}")
 
 
 def _usage(value: object) -> Usage | ResultError | None:
     if not isinstance(value, dict):
-        return ResultError("protocol_error", "Gemini stats must be a JSON object.")
+        return ResultError("protocol_error", "Gemini stats must be a JSON object")
     models = value.get("models")
     if not isinstance(models, dict):
-        return ResultError("protocol_error", "Gemini stats.models must be a JSON object.")
+        return ResultError("protocol_error", "Gemini stats.models must be a JSON object")
     if not models:
         return None
     totals = dict.fromkeys(("input", "cached", "candidates", "thoughts"), 0)
     for model in models.values():
         if not isinstance(model, dict) or not isinstance(model.get("tokens"), dict):
-            return ResultError("protocol_error", "Gemini model token statistics are malformed.")
+            return ResultError("protocol_error", "Gemini model token statistics are malformed")
         tokens = model["tokens"]
         for name in ("input", "prompt", "candidates", "cached", "thoughts", "tool", "total"):
             count = tokens.get(name)
             if not _token_count(count):
-                return ResultError("protocol_error", f"Gemini token field {name!r} is malformed.")
+                return ResultError("protocol_error", f"Gemini token field {name!r} is malformed")
             if name in totals:
                 totals[name] += count
     return Usage(

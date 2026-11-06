@@ -200,7 +200,7 @@ def test_instruction_interruption_is_preserved(monkeypatch: pytest.MonkeyPatch) 
     "flags, message",
     [
         (["gemini", "--instructions-file", "missing"], "does not support appended instructions"),
-        (["claude", "--instructions-file", "missing"], "Cannot open instructions file"),
+        (["claude", "--instructions-file", "missing"], "cannot open instructions file"),
         (
             ["claude", "--instructions", "rules", "--instructions-file", "missing"],
             "cannot be used together",
@@ -339,7 +339,7 @@ def test_instruction_file_open_failure_has_original_source(
             str(tmp_path / "rules"), OptionOrigin("global.toml: defaults.instructions_file")
         )
     assert caught.value.code == "invalid_config"
-    assert "global.toml: defaults.instructions_file: Cannot open instructions file" in str(
+    assert "global.toml: defaults.instructions_file: cannot open instructions file" in str(
         caught.value
     )
     assert "test read denied" in str(caught.value)

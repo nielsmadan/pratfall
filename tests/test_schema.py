@@ -150,7 +150,7 @@ def test_snapshot_lifetime_bytes_permissions_and_exception_propagation(
         (["gemini", "--schema", "missing"], "does not support schema"),
         (["claude", "--schema", "missing", "--extract"], "cannot be used together"),
         (["claude", "--schema", "missing", "--", "--json-schema={}"], "controlled by prat"),
-        (["claude", "--schema", "missing"], "Cannot open schema file"),
+        (["claude", "--schema", "missing"], "cannot open schema file"),
     ],
 )
 def test_schema_validation_precedes_prompt_and_editor(
@@ -329,9 +329,9 @@ def test_schema_cleanup_failure_is_observable_with_native_exit() -> None:
     process = ProcessResult(RawCapture(b"{}"), b"", 7, 0, process_group=123)
     decoded, stderr, _ = dispatch._decode_process(ADAPTERS["claude"].for_schema(True), process)
     decoded, stderr = dispatch._with_decode_cleanup_failure(decoded, stderr, "test cleanup denied")
-    assert stderr == "\nprat: Process-group cleanup failed: test cleanup denied.\n"
+    assert stderr == "\nprat: process-group cleanup failed: test cleanup denied\n"
     assert decoded.error is not None
-    assert decoded.error.message.endswith("Process-group cleanup failed: test cleanup denied.")
+    assert decoded.error.message.endswith("; process-group cleanup failed: test cleanup denied")
     assert normalize(resolved, process, decoded).exit_code == 7
 
 

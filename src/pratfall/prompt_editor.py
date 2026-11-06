@@ -42,7 +42,7 @@ def edit_prompt(draft: bytes, invocation_cwd: Path, environ: Mapping[str, str]) 
                 _edit([*command, str(path)], invocation_cwd, state)
                 return read_edited_prompt(path, state)
         except (OSError, ValueError, termios.error) as error:
-            raise PratError(f"Cannot edit prompt: {error}.", code="invalid_arguments") from error
+            raise PratError(f"cannot edit prompt: {error}", code="invalid_arguments") from error
         finally:
             if state.received is not None:
                 raise InputInterrupted(state.received)
@@ -55,7 +55,7 @@ def _editor_command(environ: Mapping[str, str]) -> list[str]:
     )
     command = shlex.split(value)
     if not command or not command[0] or any("\0" in part for part in command):
-        raise PratError("Editor command must contain a valid executable.", code="invalid_arguments")
+        raise PratError("editor command must contain a valid executable", code="invalid_arguments")
     return command
 
 
@@ -107,11 +107,11 @@ def _run_editor(
             if state.received is None:
                 detail = errors.read(4096).decode("utf-8", errors="replace")
                 if detail:
-                    raise PratError(f"Cannot edit prompt: {detail}.", code="invalid_arguments")
+                    raise PratError(f"cannot edit prompt: {detail}", code="invalid_arguments")
             if code in (-signal.SIGINT, -signal.SIGTERM):
                 state.received = state.received or -code
             elif code != 0 and state.received is None:
-                raise PratError(f"Editor exited with status {code}.", code="invalid_arguments")
+                raise PratError(f"editor exited with status {code}", code="invalid_arguments")
         finally:
             _cleanup(process, state)
 
@@ -127,7 +127,7 @@ def _wait_editor(process: subprocess.Popen[bytes], state: InterruptionState) -> 
                     _signal_group(process.pid, signal.SIGCONT)
                 else:
                     raise PratError(
-                        f"Editor stopped by signal {os.WSTOPSIG(status)}.", code="invalid_arguments"
+                        f"editor stopped by signal {os.WSTOPSIG(status)}", code="invalid_arguments"
                     )
             else:
                 process.returncode = os.waitstatus_to_exitcode(status)
@@ -165,5 +165,5 @@ def _cleanup(process: subprocess.Popen[bytes], state: InterruptionState) -> None
             _signal_group(process.pid, signal.SIGKILL)
             killed = True
         if elapsed >= TERMINATE_GRACE + FINAL_DRAIN_GRACE:
-            raise PratError("Could not clean up editor process group.", code="invalid_arguments")
+            raise PratError("could not clean up editor process group", code="invalid_arguments")
         time.sleep(0.02)

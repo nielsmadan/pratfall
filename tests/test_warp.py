@@ -182,7 +182,7 @@ def test_warp_malformed_stream_retains_partial_text(suffix: str) -> None:
 def test_warp_rejects_invalid_unicode() -> None:
     decoded = warp.decode('{"type":"agent","text":"\\ud800"}\n')
     assert decoded.error == ResultError(
-        "output_encoding", "Agent output contains invalid Unicode text."
+        "output_encoding", "agent output contains invalid Unicode text"
     )
 
 

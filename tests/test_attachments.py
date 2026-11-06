@@ -320,7 +320,7 @@ def test_attachment_requires_prompt_and_preserves_stdin_and_template(
     (tmp_path / "image.png").write_bytes(b"\xff")
     common = ["copilot", "--attachment=image.png", "--json", "--dry-run"]
     assert main(common) == 2
-    assert "Provide exactly one prompt" in json.loads(capsys.readouterr().out)["error"]["message"]
+    assert "provide exactly one prompt" in json.loads(capsys.readouterr().out)["error"]["message"]
     monkeypatch.setattr(sys, "stdin", io.StringIO("stdin task"))
     assert main(common) == 0
     assert json.loads(capsys.readouterr().out)["argv"][-1] == "--prompt=stdin task"

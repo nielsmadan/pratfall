@@ -80,12 +80,12 @@ def decode(stdout: str) -> DecodedOutput:
     if isinstance(value, ResultError):
         return DecodedOutput(error=value)
     if not isinstance(value, dict):
-        return DecodedOutput(error=_protocol("Droid result must be a JSON object."))
+        return DecodedOutput(error=_protocol("Droid result must be a JSON object"))
     output = value.get("result")
     output_error = None
     if not isinstance(output, str):
         output = ""
-        output_error = _protocol("Droid result text is malformed.")
+        output_error = _protocol("Droid result text is malformed")
     try:
         output.encode("utf-8")
     except UnicodeEncodeError:
@@ -101,13 +101,13 @@ def decode(stdout: str) -> DecodedOutput:
 
 def _completion(value: dict[str, object]) -> ResultError | None:
     if value.get("type") == "result" and value.get("is_error") is True:
-        return ResultError("provider_error", "Droid reported a failed result.")
+        return ResultError("provider_error", "Droid reported a failed result")
     if (
         value.get("type") != "result"
         or value.get("subtype") != "success"
         or value.get("is_error") is not False
     ):
-        return _protocol("Droid result is missing a successful completion envelope.")
+        return _protocol("Droid result is missing a successful completion envelope")
     return None
 
 

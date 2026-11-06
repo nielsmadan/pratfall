@@ -68,7 +68,7 @@ def decode(stdout: str) -> DecodedOutput:
     if isinstance(value, ResultError):
         return DecodedOutput(error=value)
     if not isinstance(value, dict):
-        return _protocol("Cursor result must be a JSON object.")
+        return _protocol("Cursor result must be a JSON object")
     output = value.get("result")
     if (
         value.get("type") != "result"
@@ -76,7 +76,7 @@ def decode(stdout: str) -> DecodedOutput:
         or value.get("is_error") is not False
         or not isinstance(output, str)
     ):
-        return _protocol("Cursor success result envelope is malformed.")
+        return _protocol("Cursor success result envelope is malformed")
     return DecodedOutput(
         output=encodable_text(output),
         session_id=session_text(value.get("session_id")),

@@ -73,7 +73,7 @@ def decode(stdout: str) -> DecodedOutput:
     if isinstance(value, ResultError):
         return DecodedOutput(error=value)
     if not isinstance(value, list):
-        return DecodedOutput(error=_protocol("Vibe history must be a JSON array."))
+        return DecodedOutput(error=_protocol("Vibe history must be a JSON array"))
     texts = [_assistant_text(entry) for entry in value]
     error = next((text for text in texts if isinstance(text, ResultError)), None)
     output = next((text for text in reversed(texts) if isinstance(text, str) and text), "")
@@ -82,13 +82,13 @@ def decode(stdout: str) -> DecodedOutput:
 
 def _assistant_text(entry: object) -> str | ResultError | None:
     if not isinstance(entry, dict) or not isinstance(entry.get("type"), str):
-        return _protocol("Malformed Vibe history entry.")
+        return _protocol("malformed Vibe history entry")
     if entry["type"] in _IGNORED:
         return None
     if entry["type"] != "message":
-        return _protocol("Unknown Vibe history entry type.")
+        return _protocol("unknown Vibe history entry type")
     if entry.get("role") not in ("system", "user", "assistant"):
-        return _protocol("Malformed Vibe message role.")
+        return _protocol("malformed Vibe message role")
     text = _content_text(entry.get("content"))
     if isinstance(text, ResultError):
         return text
@@ -97,15 +97,15 @@ def _assistant_text(entry: object) -> str | ResultError | None:
 
 def _content_text(content: object) -> str | ResultError:
     if not isinstance(content, list):
-        return _protocol("Malformed Vibe message content.")
+        return _protocol("malformed Vibe message content")
     texts = []
     for block in content:
         if not isinstance(block, dict) or block.get("type") not in ("text", "image", "resource"):
-            return _protocol("Malformed Vibe content block.")
+            return _protocol("malformed Vibe content block")
         if block["type"] == "text":
             text = block.get("text")
             if not isinstance(text, str):
-                return _protocol("Malformed Vibe text block.")
+                return _protocol("malformed Vibe text block")
             try:
                 text.encode("utf-8")
             except UnicodeEncodeError:

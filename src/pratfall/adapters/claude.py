@@ -161,7 +161,7 @@ def decode(stdout: str, *, schema: bool = False) -> DecodedOutput:
     if isinstance(value, ResultError):
         return DecodedOutput(error=value)
     if not isinstance(value, dict):
-        return _protocol("Claude result must be a JSON object.")
+        return _protocol("Claude result must be a JSON object")
     decoded = _decode_document(value, schema=schema)
     return replace(decoded, session_id=session_text(value.get("session_id")))
 
@@ -177,7 +177,7 @@ def _decode_document(value: dict[str, object], *, schema: bool) -> DecodedOutput
         return DecodedOutput(
             reported_models=reported_models,
             cost_usd=cost_usd,
-            error=ResultError("protocol_error", "Claude result envelope is malformed."),
+            error=ResultError("protocol_error", "Claude result envelope is malformed"),
         )
     decoded_usage = _usage(value.get("usage"))
     usage = None if isinstance(decoded_usage, ResultError) else decoded_usage
@@ -213,7 +213,7 @@ def _decode_document(value: dict[str, object], *, schema: bool) -> DecodedOutput
         usage=usage,
         reported_models=reported_models,
         cost_usd=cost_usd,
-        error=ResultError("protocol_error", f"Claude result has unknown subtype {subtype!r}."),
+        error=ResultError("protocol_error", f"Claude result has unknown subtype {subtype!r}"),
     )
 
 
@@ -233,12 +233,12 @@ def _decode_success(
             cost_usd=cost_usd,
             error=protocol_error
             or ResultError(
-                "protocol_error", "Claude success result is missing a string result field."
+                "protocol_error", "Claude success result is missing a string result field"
             ),
         )
     output = encodable_text(output)
     if is_error:
-        message = output.strip() or "Claude reported an error."
+        message = output.strip() or "Claude reported an error"
         return DecodedOutput(
             output=output,
             usage=usage,
@@ -271,10 +271,10 @@ def _decode_failure(
             cost_usd=cost_usd,
             error=protocol_error
             or ResultError(
-                "protocol_error", "Claude error result is missing a string array errors field."
+                "protocol_error", "Claude error result is missing a string array errors field"
             ),
         )
-    message = "\n".join(errors) or f"Claude reported {subtype}."
+    message = "\n".join(errors) or f"Claude reported {subtype}"
     return DecodedOutput(
         usage=usage,
         reported_models=reported_models,
@@ -285,7 +285,7 @@ def _decode_failure(
 
 def _usage(value: object) -> Usage | ResultError:
     if not isinstance(value, dict):
-        return ResultError("protocol_error", "Claude usage must be a JSON object.")
+        return ResultError("protocol_error", "Claude usage must be a JSON object")
     fields = {
         "input_tokens": "input_tokens",
         "cache_read_input_tokens": "cached_input_tokens",
@@ -296,9 +296,9 @@ def _usage(value: object) -> Usage | ResultError:
     for source, target in fields.items():
         item = value.get(source)
         if source in {"input_tokens", "output_tokens"} and item is None:
-            return ResultError("protocol_error", f"Claude usage is missing {source!r}.")
+            return ResultError("protocol_error", f"Claude usage is missing {source!r}")
         if item is not None and (not isinstance(item, int) or isinstance(item, bool) or item < 0):
-            return ResultError("protocol_error", f"Claude usage field {source!r} is malformed.")
+            return ResultError("protocol_error", f"Claude usage field {source!r} is malformed")
         numbers[target] = item
     return Usage(**numbers)
 
@@ -326,7 +326,7 @@ def _structured_success(
         return replace(
             decoded,
             error=protocol_error
-            or ResultError("protocol_error", "Claude success is missing structured_output."),
+            or ResultError("protocol_error", "Claude success is missing structured_output"),
         )
     retain = Retention(StateBudget(ConsumerLimits()))
     retained_usage = None

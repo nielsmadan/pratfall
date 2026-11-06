@@ -54,4 +54,4 @@ def valid_model(value: object) -> TypeGuard[str]:
 
 
 def _malformed(label: str) -> ResultError:
-    return ResultError("protocol_error", f"{label} is malformed.")
+    return ResultError("protocol_error", f"{label} is malformed")

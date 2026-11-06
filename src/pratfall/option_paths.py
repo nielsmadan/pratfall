@@ -11,7 +11,7 @@ def resolve_path(value: str, base: Path, origin: OptionOrigin) -> str:
         return str(base / Path(value).expanduser())
     except RuntimeError as error:
         raise PratError(
-            f"{origin.label}: cannot expand {value!r}; use an absolute path or a valid ~user path.",
+            f"{origin.label}: cannot expand {value!r}; use an absolute path or a valid ~user path",
             code=origin.code,
         ) from error
 
@@ -28,7 +28,7 @@ def prepare_directories(paths: tuple[str, ...], origin: OptionOrigin) -> tuple[s
             ) from error
         except (OSError, RuntimeError, ValueError) as error:
             raise PratError(
-                f"{origin.label}: cannot inspect directory {value!r}: {error}.", code=origin.code
+                f"{origin.label}: cannot inspect directory {value!r}: {error}", code=origin.code
             ) from error
         if not is_directory:
             raise PratError(f"{origin.label}: not a directory: {value}", code=origin.code)
@@ -56,7 +56,7 @@ def prepare_attachments(paths: tuple[str, ...], origin: OptionOrigin) -> tuple[s
                 os.close(descriptor)
         except (OSError, RuntimeError, ValueError) as error:
             raise PratError(
-                f"{origin.label}: cannot read attachment {value!r}: {error}.", code=origin.code
+                f"{origin.label}: cannot read attachment {value!r}: {error}", code=origin.code
             ) from error
         prepared.append(str(path))
     return tuple(prepared)

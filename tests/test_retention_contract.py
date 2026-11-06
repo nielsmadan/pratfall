@@ -31,7 +31,7 @@ from pratfall.consumer import (
 from pratfall.models import DecodedOutput, ResultError, Usage
 
 _SEPARATOR = 1
-_ENCODING = ResultError("output_encoding", "Agent output contains invalid Unicode text.")
+_ENCODING = ResultError("output_encoding", "agent output contains invalid Unicode text")
 _SURROGATE = "\ud800"
 
 
@@ -189,7 +189,7 @@ def test_codex_retains_identifier_answer_and_usage_for_each_transition() -> None
     incremental = codex.consumer(_state_limits(1024))
 
     # The thread id is retained for native_session_id, so it is charged like any other
-    # identifier. Its slot is not a turn slot: it spans the run and survives turn.started.
+    # identifier. Its slot is not a turn slot: it spans the run and survives turn.started
     session = len(b"t")
 
     _feed(incremental, {"type": "thread.started", "thread_id": "t"})
@@ -286,7 +286,7 @@ def test_codex_turn_completion_peaks_above_the_state_it_settles_on() -> None:
     with pytest.raises(ConsumerFailure) as failure:
         _feed(rejected, *events)
     assert failure.value.error == ResultError(
-        "stdout_limit_exceeded", f"Agent retained output state exceeded {peak - 1} bytes."
+        "stdout_limit_exceeded", f"agent retained output state exceeded {peak - 1} bytes"
     )
 
 
@@ -365,7 +365,7 @@ def test_opencode_second_text_part_charges_exactly_one_join_separator() -> None:
     with pytest.raises(ConsumerFailure) as failure:
         _feed(rejected, *events)
     assert failure.value.error == ResultError(
-        "stdout_limit_exceeded", f"Agent retained output state exceeded {joined - 1} bytes."
+        "stdout_limit_exceeded", f"agent retained output state exceeded {joined - 1} bytes"
     )
 
 
@@ -534,11 +534,11 @@ def test_antigravity_late_provider_error_refunds_the_retained_result_error() -> 
     incremental = antigravity.consumer(_state_limits(1024))
     _feed(incremental, {"event": "init", "init": {}})
 
-    nonterminal = len(b"Antigravity result has nonterminal status 'WAITING'.")
+    nonterminal = len(b"Antigravity result has nonterminal status 'WAITING'")
     _feed(incremental, _antigravity_result("partial", status="WAITING"))
     assert _retained(incremental) == (len(b"partial") + nonterminal, 2)
 
-    malformed = len(b"Antigravity result event is malformed.")
+    malformed = len(b"Antigravity result event is malformed")
     _feed(incremental, _antigravity_result("", status="ERROR", error="failed hard"))
     replaced = len(b"partial") + malformed + len(b"failed hard")
     assert _retained(incremental) == (replaced, 2)
@@ -738,7 +738,7 @@ def test_retained_state_one_byte_over_the_limit_is_rejected(case: _Canonical) ->
         incremental.finish()
     assert failure.value.error == ResultError(
         "stdout_limit_exceeded",
-        f"Agent retained output state exceeded {case.ceiling - 1} bytes.",
+        f"agent retained output state exceeded {case.ceiling - 1} bytes",
     )
 
 
@@ -751,7 +751,7 @@ def test_retained_records_one_below_the_limit_is_rejected(case: _Canonical) -> N
         incremental.finish()
     assert failure.value.error == ResultError(
         "stdout_limit_exceeded",
-        f"Agent retained output records exceeded {case.records - 1}.",
+        f"agent retained output records exceeded {case.records - 1}",
     )
 
 
@@ -865,7 +865,7 @@ def test_a_multi_slot_charge_is_rejected_one_byte_below_its_transient_peak(case:
         _feed(incremental, *case.events)
     assert failure.value.error == ResultError(
         "stdout_limit_exceeded",
-        f"Agent retained output state exceeded {case.peak_bytes - 1} bytes.",
+        f"agent retained output state exceeded {case.peak_bytes - 1} bytes",
     )
 
 
@@ -884,7 +884,7 @@ def test_codex_partial_answer_and_usage_survive_a_missing_turn_diagnostic() -> N
     with pytest.raises(ConsumerFailure) as failure:
         incremental.finish()
     assert failure.value.error == ResultError(
-        "stdout_limit_exceeded", f"Agent retained output state exceeded {ceiling} bytes."
+        "stdout_limit_exceeded", f"agent retained output state exceeded {ceiling} bytes"
     )
     decoded = failure.value.decoded
     assert decoded is not None
@@ -1123,7 +1123,7 @@ def test_qwen_reported_model_with_an_unpaired_surrogate_reports_protocol_error()
             },
         },
     )
-    message = "Qwen assistant model is malformed."
+    message = "Qwen assistant model is malformed"
     assert _retained(incremental) == (len(message.encode()), 0)
     decoded = incremental.finish()
     assert decoded.error == ResultError("protocol_error", message)

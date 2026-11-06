@@ -81,7 +81,7 @@ def test_gemini_malformed_response_preserves_valid_reported_models() -> None:
     )
     assert decoded.reported_models == ("model-a", "model-b")
     assert decoded.error == ResultError(
-        "protocol_error", "Gemini response must be a string when present."
+        "protocol_error", "Gemini response must be a string when present"
     )
 
 
@@ -102,7 +102,7 @@ def test_gemini_preserves_partial_response_on_provider_error() -> None:
 
 def test_gemini_does_not_convert_malformed_timeout_error() -> None:
     decoded = gemini.decode('{"error":{"type":"TimeoutError"}}')
-    assert decoded.error == ResultError("protocol_error", "Gemini error field is malformed.")
+    assert decoded.error == ResultError("protocol_error", "Gemini error field is malformed")
     assert not decoded.timed_out
 
 

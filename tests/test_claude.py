@@ -202,7 +202,7 @@ def test_claude_malformed_envelope_preserves_valid_accounting(
     decoded = claude.decode(json.dumps(value))
     assert decoded.reported_models == ("model-a", "model-b")
     assert decoded.cost_usd == 1.25
-    assert decoded.error == ResultError("protocol_error", "Claude result envelope is malformed.")
+    assert decoded.error == ResultError("protocol_error", "Claude result envelope is malformed")
 
 
 def test_claude_rejects_huge_cost_without_numeric_conversion_failure() -> None:
@@ -269,7 +269,7 @@ def test_claude_schema_missing_answer_preserves_partial_text_and_accounting() ->
     assert not decoded.structured_output_present
     assert decoded.usage == Usage(input_tokens=7, output_tokens=9)
     assert decoded.error == ResultError(
-        "protocol_error", "Claude success is missing structured_output."
+        "protocol_error", "Claude success is missing structured_output"
     )
 
 
@@ -313,7 +313,7 @@ def test_claude_schema_retains_only_models_within_record_limit() -> None:
     value["modelUsage"] = {model: {} for model in models}
     decoded = claude.decode_schema(json.dumps(value))
     assert decoded.error == ResultError(
-        "stdout_limit_exceeded", f"Agent retained output records exceeded {RECORD_COUNT}."
+        "stdout_limit_exceeded", f"agent retained output records exceeded {RECORD_COUNT}"
     )
     assert decoded.reported_models == models[:RECORD_COUNT]
     assert decoded.usage == Usage(input_tokens=7, output_tokens=9)
@@ -338,7 +338,7 @@ def test_claude_schema_retains_only_accepted_accounting(
     monkeypatch.setattr(claude, "ConsumerLimits", lambda: ConsumerLimits(state_bytes=state_bytes))
     decoded = claude.decode_schema(json.dumps(_schema_result(None)))
     assert decoded.error == ResultError(
-        "stdout_limit_exceeded", f"Agent retained output state exceeded {state_bytes} bytes."
+        "stdout_limit_exceeded", f"agent retained output state exceeded {state_bytes} bytes"
     )
     assert decoded.usage == expected_usage
     assert decoded.cost_usd == expected_cost
@@ -352,7 +352,7 @@ def test_claude_schema_drops_rejected_protocol_error(monkeypatch: pytest.MonkeyP
     value["usage"] = None
     decoded = claude.decode_schema(json.dumps(value))
     assert decoded.error == ResultError(
-        "stdout_limit_exceeded", "Agent retained output state exceeded 17 bytes."
+        "stdout_limit_exceeded", "agent retained output state exceeded 17 bytes"
     )
     assert decoded.usage is None
     assert decoded.cost_usd == 0.125

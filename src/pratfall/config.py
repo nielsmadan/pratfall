@@ -76,7 +76,7 @@ def config_path(explicit: str | Path | None = None, *, cwd: Path, env: Mapping[s
         requested = explicit if explicit is not None else xdg
         raise PratError(
             f"{requested or 'config path'}: cannot expand user path ({error}); "
-            "use an absolute path or a valid ~user path."
+            "use an absolute path or a valid ~user path"
         ) from error
     return Path(os.path.abspath(cwd / path))
 
@@ -88,7 +88,7 @@ def _home(env: Mapping[str, str]) -> Path:
 
 def _table(value: object, label: str) -> dict[str, object]:
     if not isinstance(value, dict):
-        raise PratError(f"{label}: expected a TOML table.")
+        raise PratError(f"{label}: expected a TOML table")
     return value
 
 
@@ -100,17 +100,17 @@ def _known_keys(table: dict[str, object], allowed: frozenset[str], label: str) -
 
 def _string(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip() or "\0" in value:
-        raise PratError(f"{label}: expected a nonempty string without NUL bytes.")
+        raise PratError(f"{label}: expected a nonempty string without NUL bytes")
     return value
 
 
 def _validated_text(value: object, origin: OptionOrigin, noun: str) -> str:
     if not isinstance(value, str) or not value.strip() or "\0" in value:
-        raise _rejected(origin, f"expected a nonempty {noun} without NUL bytes.")
+        raise _rejected(origin, f"expected a nonempty {noun} without NUL bytes")
     try:
         value.encode("utf-8")
     except UnicodeEncodeError as error:
-        raise _rejected(origin, f"{noun} must be valid UTF-8.") from error
+        raise _rejected(origin, f"{noun} must be valid UTF-8") from error
     return value
 
 
@@ -124,37 +124,37 @@ def validate_session_id(value: object, origin: OptionOrigin) -> str:
 
 def _number(value: object, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
-        raise PratError(f"{label}: expected a finite positive number.")
+        raise PratError(f"{label}: expected a finite positive number")
     try:
         number = float(value)
     except OverflowError:
-        raise PratError(f"{label}: expected a finite positive number.") from None
+        raise PratError(f"{label}: expected a finite positive number") from None
     if not math.isfinite(number) or number <= 0:
-        raise PratError(f"{label}: expected a finite positive number.")
+        raise PratError(f"{label}: expected a finite positive number")
     return number
 
 
 def _integer(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= MAX_TURNS:
-        raise PratError(f"{label}: expected a positive integer within the native u32 range.")
+        raise PratError(f"{label}: expected a positive integer within the native u32 range")
     return value
 
 
 def _boolean(value: object, label: str) -> bool:
     if not isinstance(value, bool):
-        raise PratError(f"{label}: expected a boolean.")
+        raise PratError(f"{label}: expected a boolean")
     return value
 
 
 def _nonnegative_number(value: object, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float):
-        raise PratError(f"{label}: expected a finite non-negative number.")
+        raise PratError(f"{label}: expected a finite non-negative number")
     try:
         number = float(value)
     except OverflowError:
-        raise PratError(f"{label}: expected a finite non-negative number.") from None
+        raise PratError(f"{label}: expected a finite non-negative number") from None
     if not math.isfinite(number) or number < 0:
-        raise PratError(f"{label}: expected a finite non-negative number.")
+        raise PratError(f"{label}: expected a finite non-negative number")
     return number
 
 
@@ -168,9 +168,9 @@ def _notify_method(value: object, label: str) -> NotifyMethod:
 
 def _arguments(value: object, label: str) -> tuple[str, ...]:
     if not isinstance(value, list | tuple):
-        raise PratError(f"{label}: expected an array of strings.")
+        raise PratError(f"{label}: expected an array of strings")
     if any(not isinstance(item, str) or "\0" in item for item in value):
-        raise PratError(f"{label}: expected an array of strings without NUL bytes.")
+        raise PratError(f"{label}: expected an array of strings without NUL bytes")
     return tuple(value)
 
 
@@ -184,7 +184,7 @@ def _paths(value: object, label: str, base: Path | None) -> tuple[str, ...]:
 def parse_options(table: dict[str, object], label: str, *, base: Path | None = None) -> Options:
     _known_keys(table, OPTION_FIELDS, label)
     if "instructions" in table and "instructions_file" in table:
-        raise PratError(f"{label}: instructions and instructions_file cannot be used together.")
+        raise PratError(f"{label}: instructions and instructions_file cannot be used together")
     instructions_file = (
         _string(table["instructions_file"], f"{label}.instructions_file")
         if "instructions_file" in table
@@ -326,10 +326,10 @@ def validate_capabilities(
         ("fast", "a fast-mode override"),
     ):
         if getattr(options, name) is not None and not getattr(caps, name):
-            raise _rejected(fields[name], f"{agent.label} does not support {setting}.")
+            raise _rejected(fields[name], f"{agent.label} does not support {setting}")
     if options.effort is not None:
         if not caps.effort:
-            raise _rejected(fields["effort"], f"{agent.label} does not support an effort override.")
+            raise _rejected(fields["effort"], f"{agent.label} does not support an effort override")
         if caps.effort_values and options.effort not in caps.effort_values:
             allowed = ", ".join(caps.effort_values)
             origin = fields["effort"]
@@ -341,36 +341,34 @@ def validate_capabilities(
         if getattr(options, field) is not None and field not in caps.budgets:
             raise _rejected(fields[field], f"{agent.label} does not support {budget}")
     if options.add_dirs and not caps.add_dirs:
-        raise _rejected(fields["add_dirs"], f"{agent.label} does not support extra directories.")
+        raise _rejected(fields["add_dirs"], f"{agent.label} does not support extra directories")
     _validate_attachments(agent, options, fields["attachments"])
     for name in ("instructions", "instructions_file"):
         if getattr(options, name) is not None and not caps.instructions:
-            raise _rejected(fields[name], f"{agent.label} does not support appended instructions.")
+            raise _rejected(fields[name], f"{agent.label} does not support appended instructions")
     if options.tools is not None:
         if not caps.tools:
-            raise _rejected(fields["tools"], f"{agent.label} does not support tool allowlists.")
+            raise _rejected(fields["tools"], f"{agent.label} does not support tool allowlists")
         if not options.tools and not caps.tools_empty:
             raise _rejected(
-                fields["tools"], f"{agent.label} cannot represent an empty tool allowlist."
+                fields["tools"], f"{agent.label} cannot represent an empty tool allowlist"
             )
     if options.disabled_tools and not caps.disabled_tools:
-        raise _rejected(
-            fields["disabled_tools"], f"{agent.label} does not support disabling tools."
-        )
+        raise _rejected(fields["disabled_tools"], f"{agent.label} does not support disabling tools")
 
 
 def _validate_attachments(agent: AgentSpec, options: Options, origin: OptionOrigin) -> None:
     caps = agent.capabilities
     if options.attachments:
         if not caps.attachments:
-            raise _rejected(origin, f"{agent.label} does not support attachments.")
+            raise _rejected(origin, f"{agent.label} does not support attachments")
         if (
             caps.attachment_max_count is not None
             and len(options.attachments) > caps.attachment_max_count
         ):
             raise _rejected(
                 origin,
-                f"{agent.label} accepts at most {caps.attachment_max_count} attachment(s).",
+                f"{agent.label} accepts at most {caps.attachment_max_count} attachment(s)",
             )
 
 
@@ -413,7 +411,7 @@ def _command_prefix(value: object, label: str, base: Path | None) -> tuple[str, 
     if not prefix:
         return prefix
     if not prefix[0].strip():
-        raise PratError(f"{label}: expected an empty array or an executable argv prefix.")
+        raise PratError(f"{label}: expected an empty array or an executable argv prefix")
     return _with_executable(prefix, base)
 
 
@@ -439,7 +437,7 @@ def _agent_settings(
             continue
         command = _arguments(settings["command"], f"{label}.command")
         if not command or not command[0].strip():
-            raise PratError(f"{label}.command: expected a nonempty executable argv prefix.")
+            raise PratError(f"{label}.command: expected a nonempty executable argv prefix")
         commands[name] = _with_executable(command, path.parent)
     return commands, prefixes
 
@@ -459,10 +457,10 @@ def _profiles(table: dict[str, object], path: Path) -> dict[str, ProfileLayer]:
     for name, value in table.items():
         label = f"{path}: profiles.{name}"
         if name in RESERVED_NAMES:
-            raise PratError(f"{label}: name is reserved; choose a different profile name.")
+            raise PratError(f"{label}: name is reserved; choose a different profile name")
         if re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", name) is None:
             raise PratError(
-                f"{label}: use letters, digits, underscores or hyphens in profile names."
+                f"{label}: use letters, digits, underscores or hyphens in profile names"
             )
         settings = _table(value, label)
         _known_keys(settings, OPTION_FIELDS | {"agent", "extends", "prompt"}, label)
@@ -512,9 +510,7 @@ def _chain(layers: Mapping[str, ProfileLayer], name: str) -> tuple[ProfileLayer,
                 f"{label}: unknown profile {layer.extends!r}" + did_you_mean(layer.extends, layers)
             )
         if layer.extends in seen:
-            raise PratError(
-                f"{label}: inheritance cycle: {' -> '.join((*visited, layer.extends))}."
-            )
+            raise PratError(f"{label}: inheritance cycle: {' -> '.join((*visited, layer.extends))}")
         current = layer.extends
 
 
@@ -552,7 +548,7 @@ def _templates(table: dict[str, object], path: Path) -> dict[str, PromptTemplate
         label = f"{path}: templates.{name}"
         if re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", name) is None:
             raise PratError(
-                f"{label}: use letters, digits, underscores or hyphens in template names."
+                f"{label}: use letters, digits, underscores or hyphens in template names"
             )
         settings = _table(value, label)
         _known_keys(settings, frozenset({"prompt"}), label)
@@ -585,7 +581,7 @@ def _max_parallel(settings: dict[str, object], step_label: str) -> int:
         return MAX_PARALLEL_LIMIT
     parallel = _bounded_integer(value, MAX_PARALLEL_LIMIT)
     if parallel is None:
-        raise PratError(f'{step_label}.max_parallel: expected an integer from 1 to 64 or "all".')
+        raise PratError(f'{step_label}.max_parallel: expected an integer from 1 to 64 or "all"')
     return parallel
 
 
@@ -595,7 +591,7 @@ def _max_items(settings: dict[str, object], step_label: str) -> int:
     items = _bounded_integer(settings["max_items"], WORKFLOW_EACH_ITEMS)
     if items is None:
         raise PratError(
-            f"{step_label}.max_items: expected an integer from 1 to {WORKFLOW_EACH_ITEMS}."
+            f"{step_label}.max_items: expected an integer from 1 to {WORKFLOW_EACH_ITEMS}"
         )
     return items
 
@@ -607,14 +603,14 @@ def _overflow(settings: dict[str, object], step_label: str) -> Literal["error", 
         case "truncate":
             return "truncate"
         case _:
-            raise PratError(f'{step_label}.overflow: expected "error" or "truncate".')
+            raise PratError(f'{step_label}.overflow: expected "error" or "truncate"')
 
 
 def _each_settings(settings: dict[str, object], step_label: str, no_input: bool) -> _EachSettings:
     if "each" not in settings:
         for key in ("split", "as", "max_parallel", "max_items", "overflow"):
             if key in settings:
-                raise PratError(f"{step_label}.{key}: only valid together with each.")
+                raise PratError(f"{step_label}.{key}: only valid together with each")
         return _EachSettings()
     each = _string(settings["each"], f"{step_label}.each")
     split: Literal["lines", "json"] = "lines"
@@ -624,14 +620,14 @@ def _each_settings(settings: dict[str, object], step_label: str, no_input: bool)
         elif settings["split"] == "json":
             split = "json"
         else:
-            raise PratError(f'{step_label}.split: expected "lines" or "json".')
+            raise PratError(f'{step_label}.split: expected "lines" or "json"')
     as_parameter = _string(settings["as"], f"{step_label}.as") if "as" in settings else None
     max_parallel = _max_parallel(settings, step_label)
     max_items = _max_items(settings, step_label)
     overflow = _overflow(settings, step_label)
     if no_input and as_parameter is None:
         raise PratError(
-            f'{step_label}.input: "none" needs as when each is set; the item is the input.'
+            f'{step_label}.input: "none" needs as when each is set; the item is the input'
         )
     return _EachSettings(each, split, as_parameter, max_parallel, max_items, overflow)
 
@@ -662,9 +658,9 @@ def _workflow_step(
         step_label,
     )
     if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", name) is None:
-        raise PratError(f"{step_label}: use letters, digits, underscores or hyphens in step names.")
+        raise PratError(f"{step_label}: use letters, digits, underscores or hyphens in step names")
     if any(step.name == name for step in previous):
-        raise PratError(f"{step_label}: duplicate step name.")
+        raise PratError(f"{step_label}: duplicate step name")
     selector = _string(settings.get("profile"), f"{step_label}.profile")
     declared = {step.name for step in previous}
     if "after" in settings:
@@ -673,17 +669,17 @@ def _workflow_step(
             for item in _arguments(settings["after"], f"{step_label}.after")
         )
         if len(set(after)) != len(after):
-            raise PratError(f"{step_label}.after: duplicate step names.")
+            raise PratError(f"{step_label}.after: duplicate step names")
         for item in after:
             if item not in declared:
                 raise PratError(
-                    f"{step_label}.after: {item!r} is not a step declared earlier in this workflow."
+                    f"{step_label}.after: {item!r} is not a step declared earlier in this workflow"
                 )
     else:
         after = (previous[-1].name,) if previous else ()
     no_input = settings.get("input") == "none"
     if "input" in settings and not no_input:
-        raise PratError(f'{step_label}.input: expected "none".')
+        raise PratError(f'{step_label}.input: expected "none"')
     bind_table = _table(settings.get("bind", {}), f"{step_label}.bind")
     bind = {
         _string(key, f"{step_label}.bind"): _string(source, f"{step_label}.bind.{key}")
@@ -710,16 +706,16 @@ def _workflows(table: dict[str, object], path: Path) -> dict[str, Workflow]:
     for name, value in table.items():
         label = f"{path}: workflows.{name}"
         if name in RESERVED_NAMES:
-            raise PratError(f"{label}: name is reserved; choose a different workflow name.")
+            raise PratError(f"{label}: name is reserved; choose a different workflow name")
         if re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", name) is None:
             raise PratError(
-                f"{label}: use letters, digits, underscores or hyphens in workflow names."
+                f"{label}: use letters, digits, underscores or hyphens in workflow names"
             )
         settings = _table(value, label)
         _known_keys(settings, frozenset({"steps", "parallel"}), label)
         raw_steps = settings.get("steps")
         if not isinstance(raw_steps, list) or not raw_steps:
-            raise PratError(f"{label}.steps: expected a nonempty array of step tables.")
+            raise PratError(f"{label}.steps: expected a nonempty array of step tables")
         steps: tuple[WorkflowStep, ...] = ()
         for index, raw in enumerate(raw_steps):
             steps = (*steps, _workflow_step(raw, f"{path}: workflow {name!r}", index, steps))
@@ -760,10 +756,10 @@ def _validate_each(
 ) -> None:
     if step.each is not None:
         if step.each not in ancestors:
-            raise PratError(f"{label}.each: {step.each!r} is not an ancestor of this step.")
+            raise PratError(f"{label}.each: {step.each!r} is not an ancestor of this step")
         source = next(item for item in workflow.steps if item.name == step.each)
         if source.each is not None:
-            raise PratError(f"{label}.each: step {step.each!r} is itself an each step.")
+            raise PratError(f"{label}.each: step {step.each!r} is itself an each step")
     if step.as_parameter is not None:
         if step.as_parameter not in parameters:
             raise PratError(
@@ -771,16 +767,14 @@ def _validate_each(
                 + did_you_mean(step.as_parameter, parameters)
             )
         if step.as_parameter in step.bind:
-            raise PratError(f"{label}.as: {step.as_parameter!r} is also bound in bind.")
+            raise PratError(f"{label}.as: {step.as_parameter!r} is also bound in bind")
 
 
 def _validate_workflow_step(
     config: Config, workflow: Workflow, step: WorkflowStep, label: str
 ) -> None:
     if step.selector in config.workflows:
-        raise PratError(
-            f"{label}.profile: {step.selector!r} is a workflow, not a profile or agent."
-        )
+        raise PratError(f"{label}.profile: {step.selector!r} is a workflow, not a profile or agent")
     if step.selector not in config.profiles and step.selector not in BY_SELECTOR:
         raise PratError(
             f"{label}.profile: unknown selector {step.selector!r}"
@@ -795,9 +789,7 @@ def _validate_workflow_step(
     ancestors = _ancestors(workflow, step)
     for parameter, source in step.bind.items():
         if source not in ancestors:
-            raise PratError(
-                f"{label}.bind.{parameter}: {source!r} is not an ancestor of this step."
-            )
+            raise PratError(f"{label}.bind.{parameter}: {source!r} is not an ancestor of this step")
         if parameter not in parameters:
             raise PratError(
                 f"{label}.bind.{parameter}: {step.selector!r} has no parameter {parameter!r}"
@@ -807,7 +799,7 @@ def _validate_workflow_step(
     if prompt is None and step.input == "none" and not step.bind:
         raise PratError(
             f'{label}: {step.selector!r} has no prompt and input is "none", '
-            "so the step can never receive input."
+            "so the step can never receive input"
         )
 
 
@@ -816,7 +808,7 @@ def _validate_workflows(config: Config) -> None:
         if name in config.profiles:
             raise PratError(
                 f"{workflow.source}: workflows.{name}: name is also a profile; "
-                "choose a different workflow name."
+                "choose a different workflow name"
             )
     for name, workflow in config.workflows.items():
         for step in workflow.steps:
@@ -831,20 +823,20 @@ def _read_config(path: Path, *, required: bool) -> bytes | None:
     except FileNotFoundError as error:
         if not required:
             return None
-        raise PratError(f"{path}: config file does not exist.") from error
+        raise PratError(f"{path}: config file does not exist") from error
     except OSError as error:
-        raise PratError(f"{path}: cannot read config: {error}.") from error
+        raise PratError(f"{path}: cannot read config: {error}") from error
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise PratError(f"{path}: cannot read config: not a regular file.")
+            raise PratError(f"{path}: cannot read config: not a regular file")
         with os.fdopen(descriptor, "rb", closefd=False) as stream:
             contents = stream.read(CONFIG_BYTES + 1)
     except OSError as error:
-        raise PratError(f"{path}: cannot read config: {error}.") from error
+        raise PratError(f"{path}: cannot read config: {error}") from error
     finally:
         os.close(descriptor)
     if len(contents) > CONFIG_BYTES:
-        raise PratError(f"{path}: config exceeds the {CONFIG_BYTES} byte limit.")
+        raise PratError(f"{path}: config exceeds the {CONFIG_BYTES} byte limit")
     return contents
 
 
@@ -857,20 +849,20 @@ def _parse_file(path: Path, raw: bytes) -> Config:
     try:
         contents = raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
     except UnicodeError as error:
-        raise PratError(f"{path}: cannot read config: {error}.") from error
+        raise PratError(f"{path}: cannot read config: {error}") from error
     try:
         table = tomllib.loads(contents)
     except (tomllib.TOMLDecodeError, ValueError) as error:
-        raise PratError(f"{path}: invalid TOML: {error}.") from error
+        raise PratError(f"{path}: invalid TOML: {error}") from error
     except RecursionError as error:
-        raise PratError(f"{path}: invalid TOML: nesting is too deep.") from error
+        raise PratError(f"{path}: invalid TOML: nesting is too deep") from error
     _known_keys(
         table,
         frozenset({"version", "defaults", "agents", "profiles", "templates", "workflows"}),
         str(path),
     )
     if type(table.get("version")) is not int or table["version"] != 1:
-        raise PratError(f"{path}: version must be the integer 1.")
+        raise PratError(f"{path}: version must be the integer 1")
     defaults = parse_options(
         _table(table.get("defaults", {}), f"{path}: defaults"),
         f"{path}: defaults",
@@ -901,17 +893,17 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
         return global_config
     collisions = sorted(global_config.profile_layers.keys() & local_config.profile_layers.keys())
     warnings = tuple(
-        f"{local_config.path}: profile {name!r} replaces the profile from {global_config.path}."
+        f"{local_config.path}: profile {name!r} replaces the profile from {global_config.path}"
         for name in collisions
     )
     template_collisions = sorted(global_config.templates.keys() & local_config.templates.keys())
     warnings += tuple(
-        f"{local_config.path}: template {name!r} replaces the template from {global_config.path}."
+        f"{local_config.path}: template {name!r} replaces the template from {global_config.path}"
         for name in template_collisions
     )
     workflow_collisions = sorted(global_config.workflows.keys() & local_config.workflows.keys())
     warnings += tuple(
-        f"{local_config.path}: workflow {name!r} replaces the workflow from {global_config.path}."
+        f"{local_config.path}: workflow {name!r} replaces the workflow from {global_config.path}"
         for name in workflow_collisions
     )
     default_sources = _without_instruction_peer(
@@ -1004,7 +996,7 @@ def _untrusted_message(path: Path) -> str:
 def trust_directory(directory: str | Path, *, cwd: Path, env: Mapping[str, str]) -> Path:
     path = _trust_path(directory, cwd)
     if not path.is_dir():
-        raise PratError(f"{path}: not a directory.", code="invalid_arguments")
+        raise PratError(f"{path}: not a directory", code="invalid_arguments")
     real = Path(os.path.realpath(path))
     trust(real, env)
     return real
@@ -1036,7 +1028,7 @@ def _trust_path(directory: str | Path, cwd: Path) -> Path:
     except RuntimeError as error:
         raise PratError(
             f"{directory}: cannot expand user path ({error}); "
-            "use an absolute path or a valid ~user path.",
+            "use an absolute path or a valid ~user path",
             code="invalid_arguments",
         ) from error
 
@@ -1103,15 +1095,15 @@ def init_config(explicit: str | Path | None = None, *, cwd: Path, env: Mapping[s
         for directory in reversed(missing):
             directory.mkdir(mode=0o700)
     except OSError as error:
-        raise PratError(f"{path}: cannot create config directory: {error}.") from error
+        raise PratError(f"{path}: cannot create config directory: {error}") from error
     try:
         descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             stream.write(SAMPLE_CONFIG)
     except FileExistsError as error:
         raise PratError(
-            f"{path}: already exists; edit it or choose another --config path."
+            f"{path}: already exists; edit it or choose another --config path"
         ) from error
     except OSError as error:
-        raise PratError(f"{path}: cannot create config: {error}.") from error
+        raise PratError(f"{path}: cannot create config: {error}") from error
     return path

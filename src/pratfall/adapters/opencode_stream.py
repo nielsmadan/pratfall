@@ -16,8 +16,8 @@ from pratfall.models import Activity, DecodedOutput, ResultError, Usage
 
 _FAILURE_REASONS = frozenset({"length", "content-filter", "error", "unknown"})
 _MESSAGELESS_ERRORS = frozenset({"MessageOutputLengthError"})
-_MALFORMED_ERROR = "OpenCode error event is malformed."
-_GENERIC_ERROR = "OpenCode reported an error."
+_MALFORMED_ERROR = "OpenCode error event is malformed"
+_GENERIC_ERROR = "OpenCode reported an error"
 
 
 @dataclass
@@ -86,7 +86,7 @@ class _Consumer(JsonlConsumer):
             if self.failed:
                 return DecodedOutput(output=output, usage=usage, cost_usd=cost_usd)
             suffix = "" if state.recognized else " (only unknown events were received)"
-            message = f"OpenCode stream ended without a stop finish{suffix}."
+            message = f"OpenCode stream ended without a stop finish{suffix}"
             try:
                 self.malformed(message)
             except ConsumerFailure as budget_failure:
@@ -142,7 +142,7 @@ def _text(consumer: _Consumer, event: dict[str, object]) -> None:
     state = consumer.state
     part = _part(event, "text")
     if part is None:
-        consumer.malformed("OpenCode text event is malformed.")
+        consumer.malformed("OpenCode text event is malformed")
         return
     part_id = part.get("id")
     text = part.get("text")
@@ -153,7 +153,7 @@ def _text(consumer: _Consumer, event: dict[str, object]) -> None:
         or not isinstance(time, dict)
         or "end" not in time
     ):
-        consumer.malformed("OpenCode completed text part is malformed.")
+        consumer.malformed("OpenCode completed text part is malformed")
         return
     encoded = retained_utf8(text)
     _record(consumer, part_id)
@@ -171,7 +171,7 @@ def _finish(consumer: _Consumer, event: dict[str, object]) -> None:
     part = _part(event, "step-finish")
     part_id = part.get("id") if part is not None else None
     if part is None or not isinstance(part_id, str):
-        consumer.malformed("OpenCode step_finish event is malformed.")
+        consumer.malformed("OpenCode step_finish event is malformed")
         return
     _record(consumer, part_id)
     reason = part.get("reason")
@@ -183,13 +183,13 @@ def _finish(consumer: _Consumer, event: dict[str, object]) -> None:
         "error",
         "unknown",
     }:
-        consumer.malformed("OpenCode step_finish reason is malformed.")
+        consumer.malformed("OpenCode step_finish reason is malformed")
     elif reason == "stop":
         state.completed = True
     elif reason == "tool-calls":
         state.completed = False
     elif reason in _FAILURE_REASONS:
-        _provider(consumer, f"OpenCode stopped with finish reason {reason!r}.")
+        _provider(consumer, f"OpenCode stopped with finish reason {reason!r}")
     part_cost, cost_error = cost(part.get("cost"), "OpenCode step_finish cost")
     consumer.retain.numbers(f"cost:{part_id}", (part_cost,))
     state.cost_parts[part_id] = part_cost
@@ -237,7 +237,7 @@ def _named_error(consumer: _Consumer, value: dict[str, object]) -> None:
 
 def _usage(value: object) -> Usage | ResultError:
     if not isinstance(value, dict) or not isinstance(value.get("cache"), dict):
-        return ResultError("protocol_error", "OpenCode token statistics are malformed.")
+        return ResultError("protocol_error", "OpenCode token statistics are malformed")
     cache = value["cache"]
     sources = {
         "input": value.get("input"),
@@ -247,9 +247,9 @@ def _usage(value: object) -> Usage | ResultError:
         "reasoning": value.get("reasoning"),
     }
     if any(not _token_count(item) for item in sources.values()):
-        return ResultError("protocol_error", "OpenCode token statistics are malformed.")
+        return ResultError("protocol_error", "OpenCode token statistics are malformed")
     if "total" in value and not _token_count(value["total"]):
-        return ResultError("protocol_error", "OpenCode token statistics are malformed.")
+        return ResultError("protocol_error", "OpenCode token statistics are malformed")
     return Usage(
         input_tokens=sources["input"],
         cached_input_tokens=sources["cached"],
@@ -275,7 +275,7 @@ def _total_usage(parts: Iterable[Usage]) -> tuple[Usage | None, ResultError | No
             total.reasoning_output_tokens,
         )
         if any(len(str(value)) > NUMERIC_BYTES for value in values):
-            return None, ResultError("protocol_error", "OpenCode aggregate usage is malformed.")
+            return None, ResultError("protocol_error", "OpenCode aggregate usage is malformed")
     return total, None
 
 
@@ -306,7 +306,7 @@ def _total_cost(
         except OverflowError:
             finite = False
         if not finite:
-            return None, ResultError("protocol_error", "OpenCode aggregate cost is malformed.")
+            return None, ResultError("protocol_error", "OpenCode aggregate cost is malformed")
     return (None if unknown else total), None
 
 

@@ -227,7 +227,7 @@ def test_invalid_editor_command_is_normalized(tmp_path: Path, command: str) -> N
         ("path.write_bytes(b'\\xff')", "UTF-8"),
         ("path.write_bytes(b'a\\0b')", "NUL"),
         ("path.write_bytes(b'x' * (1048576 + 1))", "byte limit"),
-        ("path.unlink()", "Cannot open"),
+        ("path.unlink()", "cannot open"),
         ("path.unlink(); path.mkdir()", "regular file"),
         ("sys.exit(7)", "status 7"),
     ],
@@ -245,7 +245,7 @@ def test_editor_launch_failure_restores_terminal(tmp_path: Path) -> None:
     with editor_session(tmp_path, "", environment={"VISUAL": "/nonexistent/editor"}) as session:
         report, _, _ = session.finish()
     assert report["code"] == 2
-    assert "Cannot edit prompt" in report["error"]
+    assert "cannot edit prompt" in report["error"]
 
 
 @pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])

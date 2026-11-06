@@ -172,15 +172,15 @@ def input_problem(
     item: str | None = None,
 ) -> str | None:
     if prompt is None and text is None:
-        return "has no prompt and received no input."
+        return "has no prompt and received no input"
     empty = next((name for name, source in step.bind.items() if not outputs[source].strip()), None)
     if empty is not None:
-        return f"binds parameter '{empty}' to the empty output of step '{step.bind[empty]}'."
+        return f"binds parameter '{empty}' to the empty output of step '{step.bind[empty]}'"
     parameter = () if item is None or step.as_parameter is None else (item,)
     bound = tuple(trimmed_output(outputs[source]) for source in step.bind.values())
     values = (text or "", *parameter, *bound)
     if sum(len(value.encode("utf-8")) for value in values) > PROMPT_LIMIT:
-        return f"input and bound parameters exceed the {PROMPT_LIMIT} byte limit."
+        return f"input and bound parameters exceed the {PROMPT_LIMIT} byte limit"
     return None
 
 
@@ -205,7 +205,7 @@ def each_items(step: WorkflowStep, source: StepResult) -> EachItems:
         case "error":
             message = (
                 f"output of step '{step.each}' has {len(items)} items, "
-                f"more than the {step.max_items} item limit."
+                f"more than the {step.max_items} item limit"
             )
             raise PratError(message, code=INVALID_ARGUMENTS)
         case _:
@@ -361,7 +361,7 @@ def _json_items(source: str | None, result: StepResult) -> tuple[str, ...]:
     structured = result.structured_output
     value = structured if isinstance(structured, list) else _parsed(source, result.output)
     if not isinstance(value, list):
-        raise PratError(f"output of step '{source}' is not a JSON array.", code=INVALID_ARGUMENTS)
+        raise PratError(f"output of step '{source}' is not a JSON array", code=INVALID_ARGUMENTS)
     try:
         texts = tuple(_encodable(_item_text(element)) for element in value)
     except ValueError:
@@ -379,7 +379,7 @@ def _parsed(source: str | None, output: str) -> object:
 
 
 def _invalid_json(source: str | None) -> str:
-    return f"output of step '{source}' is not valid JSON."
+    return f"output of step '{source}' is not valid JSON"
 
 
 def _reject_constant(constant: str) -> object:
@@ -435,7 +435,7 @@ def _oversized(output: str) -> bool:
 
 
 def _join_limit_message() -> str:
-    return f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit."
+    return f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit"
 
 
 def _skipped_entry(step: WorkflowStep) -> dict[str, object]:
@@ -565,7 +565,7 @@ def _summary(
     interrupted_by: int | None,
 ) -> tuple[str, int, str, dict[str, str] | None]:
     if interrupted_by is not None:
-        message = f"Interrupted by signal {interrupted_by}."
+        message = f"interrupted by signal {interrupted_by}"
         error = {"code": INTERRUPTED, "message": message}
         return "interrupted", SIGNAL_EXIT_BASE + interrupted_by, "", error
     if failure is not None:
@@ -585,7 +585,7 @@ def _summary(
 
 def _error_fields(error: ResultError | None) -> tuple[Code, str]:
     if error is None:
-        return INTERNAL_ERROR, "failed without an error report."
+        return INTERNAL_ERROR, "failed without an error report"
     return error.code, error.message
 
 

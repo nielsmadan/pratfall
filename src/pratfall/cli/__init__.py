@@ -53,7 +53,7 @@ def _step_entry() -> int:
         spec = _detach_stdin()
     except OSError as error:
         return _step_failure(
-            PratError(f"Cannot set up workflow step input: {error}.", code="invalid_arguments")
+            PratError(f"cannot set up workflow step input: {error}", code="invalid_arguments")
         )
     with spec:
         return _step_command(spec, Path.cwd(), os.environ, _start_parent_watchdog)

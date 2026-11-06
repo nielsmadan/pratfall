@@ -87,7 +87,7 @@ def _joined_match(argument: str, flags: Mapping[str, Flag]) -> str | None:
 def fail_native_argument(agent: str, argument: str, reason: str) -> NoReturn:
     raise PratError(
         f"{agent} native argument {argument!r}: {reason}; use a trusted executable wrapper "
-        "for unsupported native arguments.",
+        "for unsupported native arguments",
         code="invalid_arguments",
     )
 
@@ -96,8 +96,8 @@ def validate_directory_values(paths: tuple[str, ...]) -> None:
     for value in paths:
         if "," in value or value != value.strip(_ECMASCRIPT_TRIM_CHARACTERS):
             raise PratError(
-                f"Directory path {value!r} cannot contain commas or surrounding whitespace "
-                "with this agent.",
+                f"directory path {value!r} cannot contain commas or surrounding whitespace "
+                "with this agent",
                 code="invalid_arguments",
                 option="add_dirs",
             )
@@ -116,7 +116,7 @@ def validate_tool_values(
             value.encode("utf-8")
         except UnicodeEncodeError as error:
             raise PratError(
-                "Tool names and patterns must be valid UTF-8.",
+                "tool names and patterns must be valid UTF-8",
                 code="invalid_arguments",
                 option=option,
             ) from error
@@ -129,8 +129,8 @@ def validate_tool_values(
             or (trim and value != value.strip(_ECMASCRIPT_TRIM_CHARACTERS))
         ):
             raise PratError(
-                f"Tool name or pattern {value!r} contains a native list delimiter "
-                "or surrounding whitespace; use one native name or pattern per value.",
+                f"tool name or pattern {value!r} contains a native list delimiter "
+                "or surrounding whitespace; use one native name or pattern per value",
                 code="invalid_arguments",
                 option=option,
             )

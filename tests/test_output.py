@@ -130,7 +130,7 @@ def test_native_exit_maps_reserved_statuses_to_one(native: int, expected: int) -
     result = normalize(RESOLVED, process(native), DecodedOutput())
     assert result.exit_code == expected
     assert result.native_exit_code == native
-    assert result.error == ResultError("native_exit", f"Codex exited with status {native}.")
+    assert result.error == ResultError("native_exit", f"Codex exited with status {native}")
 
 
 def test_provider_timeout_maps_to_124_even_with_native_nonzero() -> None:
@@ -213,7 +213,7 @@ def test_native_failure_retains_provider_diagnostic(native: int) -> None:
     )
     assert result.exit_code == native
     assert result.error == ResultError(
-        "native_exit", f"Codex exited with status {native}.\nMissing API key."
+        "native_exit", f"Codex exited with status {native}\nMissing API key."
     )
 
 
@@ -221,7 +221,7 @@ def test_native_failure_includes_bounded_stderr() -> None:
     native = ProcessResult(RawCapture(), b"x" * 5000, 1, 42)
     result = normalize(RESOLVED, native, DecodedOutput())
     assert result.error == ResultError(
-        "native_exit", "Codex exited with status 1.\n" + "x" * 4096 + "\n[diagnostic truncated]"
+        "native_exit", "Codex exited with status 1\n" + "x" * 4096 + "\n[diagnostic truncated]"
     )
 
 
@@ -239,7 +239,7 @@ def test_native_failure_retains_stderr_alongside_provider_error(
     result = normalize(
         RESOLVED, native, DecodedOutput(error=ResultError("provider_error", provider))
     )
-    assert result.error == ResultError("native_exit", "Codex exited with status 1.\n" + expected)
+    assert result.error == ResultError("native_exit", "Codex exited with status 1\n" + expected)
 
 
 def test_combined_native_diagnostics_are_bounded() -> None:
@@ -249,7 +249,7 @@ def test_combined_native_diagnostics_are_bounded() -> None:
     )
     assert result.error == ResultError(
         "native_exit",
-        "Codex exited with status 1.\n"
+        "Codex exited with status 1\n"
         + "x" * 3000
         + "\n"
         + "y" * 1095

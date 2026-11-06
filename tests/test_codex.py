@@ -150,7 +150,7 @@ def test_codex_incomplete_turn_keeps_latest_completed_assistant_message_once() -
     )
     assert decoded.output == "A\nB"
     assert decoded.error == ResultError(
-        "protocol_error", "Codex stream ended without turn.completed."
+        "protocol_error", "Codex stream ended without turn.completed"
     )
 
 
@@ -170,7 +170,7 @@ def test_codex_new_assistant_item_without_turn_started_requires_completion() -> 
     )
     assert decoded.output == "A\nB"
     assert decoded.error == ResultError(
-        "protocol_error", "Codex stream ended without turn.completed."
+        "protocol_error", "Codex stream ended without turn.completed"
     )
 
 

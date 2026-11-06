@@ -57,7 +57,7 @@ class Adapter:
         if not enabled:
             return self
         if self.schema_transport is None:
-            raise ValueError("Adapter does not support schema output.")
+            raise ValueError("adapter does not support schema output")
         return replace(
             self, whole_document=self.schema_whole_document, consumer=self.schema_consumer
         )

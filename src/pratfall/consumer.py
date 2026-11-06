@@ -56,7 +56,7 @@ class CapturingConsumer:
         self.stdout.extend(captured)
         activity = self.consumer.feed(captured) if captured else None
         if len(data) > remaining:
-            raise _limit_failure(f"Agent stdout exceeded {self.limit} bytes.")
+            raise _limit_failure(f"agent stdout exceeded {self.limit} bytes")
         return activity
 
     def finish(self) -> DecodedOutput:
@@ -73,10 +73,10 @@ class StateBudget:
         updated_bytes = self._bytes - old_bytes + new_bytes
         updated_records = self._records + added_records
         if updated_records > self._limits.records:
-            raise _limit_failure(f"Agent retained output records exceeded {self._limits.records}.")
+            raise _limit_failure(f"agent retained output records exceeded {self._limits.records}")
         if updated_bytes > self._limits.state_bytes:
             raise _limit_failure(
-                f"Agent retained output state exceeded {self._limits.state_bytes} bytes."
+                f"agent retained output state exceeded {self._limits.state_bytes} bytes"
             )
         self._bytes = updated_bytes
         self._records = updated_records
@@ -87,7 +87,7 @@ class StateBudget:
         size = len(str(value).encode("ascii"))
         if size > self._limits.numeric_bytes:
             raise _limit_failure(
-                f"Agent output numeric value exceeded {self._limits.numeric_bytes} bytes."
+                f"agent output numeric value exceeded {self._limits.numeric_bytes} bytes"
             )
         return size
 
@@ -223,12 +223,12 @@ class JsonlConsumer:
     def _consume(self, record: bytes) -> Activity | None:
         self._line_number += 1
         if len(record) > self._limits.event_bytes:
-            raise _limit_failure(f"Agent output event exceeded {self._limits.event_bytes} bytes.")
+            raise _limit_failure(f"agent output event exceeded {self._limits.event_bytes} bytes")
         try:
             line = record.decode("utf-8")
         except UnicodeDecodeError as error:
             raise ConsumerFailure(
-                ResultError("output_encoding", "Agent stdout is not valid UTF-8.")
+                ResultError("output_encoding", "agent stdout is not valid UTF-8")
             ) from error
         if not line.strip():
             return None
@@ -236,19 +236,19 @@ class JsonlConsumer:
             event = self.parse_record(line)
         except UnicodeEncodeError as error:
             raise ConsumerFailure(
-                ResultError("output_encoding", "Agent output contains invalid Unicode text.")
+                ResultError("output_encoding", "agent output contains invalid Unicode text")
             ) from error
         except json.JSONDecodeError as error:
-            self.malformed(f"Invalid {self._name} JSONL on line {self._line_number}: {error.msg}.")
+            self.malformed(f"invalid {self._name} JSONL on line {self._line_number}: {error.msg}")
             return None
         except (ValueError, RecursionError):
             self.malformed(
-                f"Invalid {self._name} JSONL on line {self._line_number}: "
-                "numeric value is too large or nesting is excessive."
+                f"invalid {self._name} JSONL on line {self._line_number}: "
+                "numeric value is too large or nesting is excessive"
             )
             return None
         if not isinstance(event, dict) or not isinstance(event.get(self.type_field), str):
-            self.malformed(f"Malformed {self._name} event on line {self._line_number}.")
+            self.malformed(f"malformed {self._name} event on line {self._line_number}")
             return None
         return self.apply(event)
 
@@ -283,9 +283,9 @@ class JsonlConsumer:
     def _check_unfinished_limit(self) -> None:
         size = len(self._buffer) - self._start
         if size > self._limits.event_bytes + 1:
-            raise _limit_failure(f"Agent output event exceeded {self._limits.event_bytes} bytes.")
+            raise _limit_failure(f"agent output event exceeded {self._limits.event_bytes} bytes")
         if size == self._limits.event_bytes + 1 and self._buffer[-1] != CR:
-            raise _limit_failure(f"Agent output event exceeded {self._limits.event_bytes} bytes.")
+            raise _limit_failure(f"agent output event exceeded {self._limits.event_bytes} bytes")
 
     def _compact(self) -> None:
         if self._start and (self._start >= 64 * 1024 or self._start == len(self._buffer)):
@@ -304,7 +304,7 @@ def decode_with(factory: ConsumerFactory, stdout: str) -> DecodedOutput:
         return consumer.finish()
     except UnicodeEncodeError:
         return DecodedOutput(
-            error=ResultError("output_encoding", "Agent output contains invalid Unicode text.")
+            error=ResultError("output_encoding", "agent output contains invalid Unicode text")
         )
     except ConsumerFailure as failure:
         decoded = failure.decoded
@@ -321,7 +321,7 @@ def retained_utf8(value: str) -> bytes:
         return value.encode("utf-8")
     except UnicodeEncodeError as error:
         raise ConsumerFailure(
-            ResultError("output_encoding", "Agent output contains invalid Unicode text.")
+            ResultError("output_encoding", "agent output contains invalid Unicode text")
         ) from error
 
 

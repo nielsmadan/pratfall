@@ -60,12 +60,12 @@ def decode(stdout: str) -> DecodedOutput:
     if isinstance(value, ResultError):
         return DecodedOutput(error=value)
     if not isinstance(value, dict):
-        return DecodedOutput(error=_protocol("Reasonix result must be a JSON object."))
+        return DecodedOutput(error=_protocol("Reasonix result must be a JSON object"))
     output = value.get("result")
     output_error = None
     if not isinstance(output, str):
         output = ""
-        output_error = _protocol("Reasonix result text is malformed.")
+        output_error = _protocol("Reasonix result text is malformed")
     try:
         output.encode("utf-8")
     except UnicodeEncodeError:
@@ -89,9 +89,9 @@ def _completion(value: dict[str, object]) -> ResultError | None:
         or subtype not in _COMPLETIONS
         or value.get("is_error") is not _COMPLETIONS[subtype]
     ):
-        return _protocol("Reasonix result subtype or error flag is malformed.")
+        return _protocol("Reasonix result subtype or error flag is malformed")
     if subtype != "success":
-        return ResultError("provider_error", f"Reasonix run ended with {subtype}.")
+        return ResultError("provider_error", f"Reasonix run ended with {subtype}")
     return None
 
 
@@ -99,13 +99,13 @@ def _usage(value: object) -> Usage | ResultError | None:
     if value is None:
         return None
     if not isinstance(value, dict):
-        return _protocol("Reasonix result usage is malformed.")
+        return _protocol("Reasonix result usage is malformed")
     for field in ("input_tokens", "output_tokens", "cache_read_input_tokens"):
         count = value.get(field)
         if field == "cache_read_input_tokens" and field not in value:
             continue
         if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-            return _protocol(f"Reasonix usage {field} is malformed.")
+            return _protocol(f"Reasonix usage {field} is malformed")
     return Usage(
         input_tokens=value["input_tokens"],
         output_tokens=value["output_tokens"],

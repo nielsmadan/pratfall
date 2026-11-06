@@ -261,7 +261,7 @@ def test_pi_provider_failure_retains_partial_text(reason: str) -> None:
 def test_pi_output_token_limit_is_a_provider_failure_with_partial_text() -> None:
     decoded = pi.decode(stream(end(message("truncated", stopReason="length")), SETTLED))
     assert decoded.output == "truncated"
-    assert decoded.error == ResultError("provider_error", "Pi stopped at the output token limit.")
+    assert decoded.error == ResultError("provider_error", "Pi stopped at the output token limit")
 
 
 @pytest.mark.parametrize(
@@ -354,7 +354,7 @@ def test_pi_bounds_distinct_model_records(overflow: bool) -> None:
         with pytest.raises(ConsumerFailure) as caught:
             consumer.feed(stream(end(message("third", model="third-model"))).encode())
         assert caught.value.error == ResultError(
-            "stdout_limit_exceeded", f"Agent retained output records exceeded {record_limit}."
+            "stdout_limit_exceeded", f"agent retained output records exceeded {record_limit}"
         )
         with pytest.raises(ConsumerFailure) as finished:
             consumer.finish()

@@ -172,7 +172,7 @@ With `overflow = "truncate"`, the first `max_items` items run and the rest are d
 one line to stderr when it cuts the list:
 
 ```text
-prat: workflow 'review-files' step 'review': running the first 20 of 57 items.
+prat: workflow 'review-files' step 'review': running the first 20 of 57 items
 ```
 
 The stderr line is a best-effort notice and can be lost when stderr is blocked. The step's JSON entry
@@ -278,7 +278,7 @@ workflow fails with `stdout_limit_exceeded` and the error `final output: joined 
 67108864 byte limit.` On failure stdout is empty and one line goes to stderr:
 
 ```text
-prat: workflow 'write' failed at step 'critique': Codex exited with status 3.
+prat: workflow 'write' failed at step 'critique': Codex exited with status 3
 ```
 
 Each step's stderr is relayed to Prat's stderr one line at a time with a `[STEP] ` prefix.

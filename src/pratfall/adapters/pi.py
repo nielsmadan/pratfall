@@ -125,7 +125,7 @@ def validate(resolved: ResolvedProfile) -> None:
             for char in path
         ):
             raise PratError(
-                "Pi attachment paths cannot contain Unicode spaces that Pi normalizes.",
+                "Pi attachment paths cannot contain Unicode spaces that Pi normalizes",
                 code="invalid_arguments",
                 option="attachments",
             )
@@ -169,7 +169,7 @@ class _Consumer(JsonlConsumer):
     def apply(self, event: dict[str, object]) -> Activity | None:
         kind = event["type"]
         if self.completed:
-            self.malformed("Pi emitted a record after agent_settled.")
+            self.malformed("Pi emitted a record after agent_settled")
             return None
         if kind == "agent_settled":
             self.completed = True
@@ -177,7 +177,7 @@ class _Consumer(JsonlConsumer):
         if kind == "message_end":
             message = event.get("message")
             if not isinstance(message, dict) or not isinstance(message.get("role"), str):
-                self.malformed("Pi message is malformed.")
+                self.malformed("Pi message is malformed")
             elif message["role"] == "assistant":
                 self._assistant(message)
                 return "answering"
@@ -186,7 +186,7 @@ class _Consumer(JsonlConsumer):
         elif kind in {"tool_execution_start", "tool_execution_update", "tool_execution_end"}:
             return "tool"
         elif kind not in _IGNORED:
-            self.malformed("Unknown Pi event type.")
+            self.malformed("unknown Pi event type")
         return None
 
     def _assistant(self, message: dict[str, object]) -> None:
@@ -194,17 +194,17 @@ class _Consumer(JsonlConsumer):
         self._account(message)
         reason = message.get("stopReason")
         if reason not in ("stop", "length", "toolUse", "error", "aborted"):
-            self.malformed("Pi assistant stop reason is malformed.")
+            self.malformed("Pi assistant stop reason is malformed")
             return
         if reason in ("error", "aborted"):
-            error = message.get("errorMessage") or f"Pi request {reason}."
+            error = message.get("errorMessage") or f"Pi request {reason}"
             if not isinstance(error, str):
-                self.malformed("Pi assistant error is malformed.")
+                self.malformed("Pi assistant error is malformed")
                 return
             self.retain.text("provider", error)
             self.provider_error = ResultError("provider_error", error)
         elif reason == "length":
-            error = "Pi stopped at the output token limit."
+            error = "Pi stopped at the output token limit"
             self.retain.text("provider", error)
             self.provider_error = ResultError("provider_error", error)
         else:
@@ -212,7 +212,7 @@ class _Consumer(JsonlConsumer):
             self.provider_error = None
         content = message.get("content")
         if not isinstance(content, list):
-            self.malformed("Pi assistant content is malformed.")
+            self.malformed("Pi assistant content is malformed")
             return
         texts: list[str] = []
         for block in content:
@@ -221,12 +221,12 @@ class _Consumer(JsonlConsumer):
                 "thinking",
                 "toolCall",
             ):
-                self.malformed("Pi assistant content block is malformed.")
+                self.malformed("Pi assistant content block is malformed")
                 return
             if block["type"] == "text":
                 text = block.get("text")
                 if not isinstance(text, str):
-                    self.malformed("Pi assistant text is malformed.")
+                    self.malformed("Pi assistant text is malformed")
                     return
                 texts.append(text)
         if texts or reason not in ("error", "aborted"):
@@ -271,7 +271,7 @@ class _Consumer(JsonlConsumer):
     def result(self) -> DecodedOutput:
         error = self.provider_error or self.protocol_error
         if error is None and not self.failed and not (self.completed and self.assistant_seen):
-            error = ResultError("protocol_error", "Pi stream ended without a settled answer.")
+            error = ResultError("protocol_error", "Pi stream ended without a settled answer")
         return DecodedOutput(
             output=self.output.decode("utf-8"),
             usage=self.usage if self.usage_complete else None,
@@ -294,4 +294,4 @@ def _usage(value: object) -> Usage | ResultError | None:
             counts.append(count)
         if len(counts) == len(fields):
             return Usage(*counts)
-    return ResultError("protocol_error", "Pi usage is malformed.")
+    return ResultError("protocol_error", "Pi usage is malformed")

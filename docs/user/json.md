@@ -30,6 +30,9 @@ Every `--json` output follows these rules:
 - `null` means the agent decides. A default that Prat applies shows its value.
 - Durations are integers in milliseconds with an `_ms` suffix. Settings keep their config units,
   such as `timeout` in seconds.
+- `error.message` is the same text Prat prints on stderr without `--json`: lowercase, no trailing
+  period, naming the flag or config key and the rejected value, such as `--effort 'ultra': Claude
+  Code accepts low, medium, high, xhigh, max`. Its wording can change; match `error.code`.
 
 ## Run results
 

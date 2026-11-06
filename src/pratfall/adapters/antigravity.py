@@ -94,7 +94,7 @@ class _Consumer(JsonlConsumer):
         if state.result is None:
             return DecodedOutput(
                 error=self.protocol_error
-                or ResultError("protocol_error", "Antigravity stream ended without a result event.")
+                or ResultError("protocol_error", "Antigravity stream ended without a result event")
             )
         decoded = state.result
         if decoded.error is not None and decoded.error.code == "provider_error":
@@ -107,9 +107,7 @@ class _Consumer(JsonlConsumer):
             return DecodedOutput(
                 output=decoded.output,
                 usage=decoded.usage,
-                error=ResultError(
-                    "protocol_error", "Antigravity stream is missing its init event."
-                ),
+                error=ResultError("protocol_error", "Antigravity stream is missing its init event"),
             )
         return decoded
 
@@ -119,7 +117,7 @@ def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | No
     event_type = event["event"]
     if event_type == "init":
         if state.initialized or state.result is not None or not isinstance(event.get("init"), dict):
-            consumer.malformed("Antigravity init event is malformed.")
+            consumer.malformed("Antigravity init event is malformed")
         else:
             consumer.retain.record("init")
         state.initialized = True
@@ -130,19 +128,19 @@ def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | No
             or state.result is not None
             or not isinstance(event.get("step_update"), dict)
         ):
-            consumer.malformed("Antigravity step_update event is malformed.")
+            consumer.malformed("Antigravity step_update event is malformed")
         return "working"
     elif event_type == "result":
         value = event.get("result")
         if state.result is not None or not isinstance(value, dict):
-            consumer.malformed("Antigravity result event is malformed.")
+            consumer.malformed("Antigravity result event is malformed")
             if isinstance(value, dict):
                 later = _decode_result(value)
                 if later.error is not None and later.error.code == "provider_error":
                     _retain_provider(consumer, later.error)
         else:
             if not state.initialized:
-                consumer.malformed("Antigravity result event is malformed.")
+                consumer.malformed("Antigravity result event is malformed")
             decoded = _decode_result(value)
             _retain_result(consumer, decoded)
             state.result = decoded
@@ -175,7 +173,7 @@ def _decode_result(value: dict[str, object]) -> DecodedOutput:
     status = value.get("status")
     output = value.get("response")
     if not isinstance(status, str) or not isinstance(output, str):
-        return _protocol("Antigravity result envelope is malformed.")
+        return _protocol("Antigravity result envelope is malformed")
     if status not in {
         "SUCCESS",
         "ERROR",
@@ -185,7 +183,7 @@ def _decode_result(value: dict[str, object]) -> DecodedOutput:
         "WAITING",
         "RUNNING",
     }:
-        return _protocol(f"Antigravity result has unknown status {status!r}.")
+        return _protocol(f"Antigravity result has unknown status {status!r}")
     usage, usage_error = split_error(_usage(value.get("usage")))
     if status != "SUCCESS":
         message = value.get("error")
@@ -200,7 +198,7 @@ def _decode_result(value: dict[str, object]) -> DecodedOutput:
         return DecodedOutput(
             output=output,
             usage=usage,
-            error=ResultError("provider_error", message or f"Antigravity reported {status}."),
+            error=ResultError("provider_error", message or f"Antigravity reported {status}"),
         )
     if usage_error is not None:
         return DecodedOutput(output=output, error=usage_error)
@@ -229,7 +227,7 @@ def _usage(value: object) -> Usage | ResultError:
 
 
 def _protocol_error(detail: str) -> ResultError:
-    return ResultError("protocol_error", f"Antigravity {detail}.")
+    return ResultError("protocol_error", f"Antigravity {detail}")
 
 
 def _protocol(message: str) -> DecodedOutput:

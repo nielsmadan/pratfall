@@ -58,10 +58,10 @@ def decode(stdout: str) -> DecodedOutput:
             return DecodedOutput(error=ResultError("provider_error", stdout.strip()))
         return DecodedOutput(error=value)
     if not isinstance(value, dict):
-        return DecodedOutput(error=_protocol("Goose result must be an object."))
+        return DecodedOutput(error=_protocol("Goose result must be an object"))
     messages, metadata = value.get("messages"), value.get("metadata")
     if not isinstance(messages, list) or not isinstance(metadata, dict):
-        return DecodedOutput(error=_protocol("Goose messages or metadata are malformed."))
+        return DecodedOutput(error=_protocol("Goose messages or metadata are malformed"))
     output = ""
     error = None
     for message in messages:
@@ -72,9 +72,9 @@ def decode(stdout: str) -> DecodedOutput:
             output = text
     status = metadata.get("status")
     if status == "error":
-        error = ResultError("provider_error", "Goose reported a failed run.")
+        error = ResultError("provider_error", "Goose reported a failed run")
     elif status != "completed":
-        error = error or _protocol("Goose result is missing completed status.")
+        error = error or _protocol("Goose result is missing completed status")
     cost_usd, cost_error = cost(metadata.get("cost_usd"), "Goose cost_usd")
     return DecodedOutput(
         output=output,
@@ -85,20 +85,20 @@ def decode(stdout: str) -> DecodedOutput:
 
 def _assistant_text(message: object) -> str | ResultError | None:
     if not isinstance(message, dict) or not isinstance(message.get("role"), str):
-        return _protocol("Goose message is malformed.")
+        return _protocol("Goose message is malformed")
     if message["role"] != "assistant":
         return None
     content = message.get("content")
     if not isinstance(content, list):
-        return _protocol("Goose assistant content is malformed.")
+        return _protocol("Goose assistant content is malformed")
     texts = []
     for block in content:
         if not isinstance(block, dict) or not isinstance(block.get("type"), str):
-            return _protocol("Goose content block is malformed.")
+            return _protocol("Goose content block is malformed")
         if block["type"] == "text":
             text = block.get("text")
             if not isinstance(text, str):
-                return _protocol("Goose text block is malformed.")
+                return _protocol("Goose text block is malformed")
             try:
                 text.encode("utf-8")
             except UnicodeEncodeError:

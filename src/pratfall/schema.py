@@ -99,7 +99,7 @@ def prepare_schema(
     try:
         data = read_bounded_file(Path(source), limit=SCHEMA_BYTES, label="schema file")
         if len(data) > SCHEMA_BYTES:
-            raise ValueError(f"Schema exceeds the {SCHEMA_BYTES} byte limit")
+            raise ValueError(f"schema exceeds the {SCHEMA_BYTES} byte limit")
         text = data.decode("utf-8")
         value = parse_json(text)
         if not isinstance(value, dict | bool):
@@ -140,7 +140,7 @@ def retain_answer(value: object, retain: Retention, slot: str = "structured") ->
         output = json.dumps(typed, ensure_ascii=False, separators=(",", ":"))
     except UnicodeEncodeError as error:
         raise ConsumerFailure(
-            ResultError("output_encoding", "Structured answer contains invalid Unicode text.")
+            ResultError("output_encoding", "structured answer contains invalid Unicode text")
         ) from error
     except ValueError as error:
         raise ConsumerFailure(ResultError("protocol_error", str(error))) from error

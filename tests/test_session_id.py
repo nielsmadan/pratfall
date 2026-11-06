@@ -142,10 +142,10 @@ def test_session_id_config_validation(value: object) -> None:
 @pytest.mark.parametrize(
     ("value", "message"),
     [
-        ("", "expected a nonempty session id without NUL bytes."),
-        (" \t", "expected a nonempty session id without NUL bytes."),
-        ("a\0b", "expected a nonempty session id without NUL bytes."),
-        ("\ud800", "session id must be valid UTF-8."),
+        ("", "expected a nonempty session id without NUL bytes"),
+        (" \t", "expected a nonempty session id without NUL bytes"),
+        ("a\0b", "expected a nonempty session id without NUL bytes"),
+        ("\ud800", "session id must be valid UTF-8"),
     ],
 )
 def test_invalid_session_id_rejected_before_input_or_editor(

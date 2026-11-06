@@ -125,7 +125,7 @@ def _doctor_result(
     lines = [_doctor_line(record, versions=versions) for record in records]
     payload: dict[str, object] = {"agents": records}
     if interrupted is not None:
-        message = f"Interrupted by signal {interrupted}."
+        message = f"interrupted by signal {interrupted}"
         payload.update(
             status="interrupted",
             exit_code=SIGNAL_EXIT_BASE + interrupted,
@@ -149,20 +149,20 @@ def _version_result(process: ProcessResult) -> tuple[str | None, str | None]:
     if process.error is not None:
         return None, process.error.message
     if process.native_exit_code != 0:
-        return None, f"Version probe exited with status {process.native_exit_code}."
+        return None, f"version probe exited with status {process.native_exit_code}"
     try:
         stdout = raw_stdout(process.capture).decode("utf-8").strip()
     except UnicodeDecodeError:
-        return None, "Version output is not valid UTF-8."
+        return None, "version output is not valid UTF-8"
     if stdout:
         return stdout, None
     try:
         stderr = process.stderr.decode("utf-8").strip()
     except UnicodeDecodeError:
-        return None, "Version output is not valid UTF-8."
+        return None, "version output is not valid UTF-8"
     if stderr:
         return stderr, None
-    return None, "Version probe returned no version text."
+    return None, "version probe returned no version text"
 
 
 def _doctor_line(record: dict[str, object], *, versions: bool) -> str:

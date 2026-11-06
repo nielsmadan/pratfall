@@ -25,7 +25,7 @@ def store_path(env: Mapping[str, str]) -> Path:
     except RuntimeError as error:
         raise PratError(
             f"{state or 'trust store path'}: cannot expand user path ({error}); "
-            "set XDG_STATE_HOME to an absolute path."
+            "set XDG_STATE_HOME to an absolute path"
         ) from error
     return Path(os.path.abspath(root / "pratfall" / "trusted.json"))
 
@@ -73,11 +73,11 @@ def _trusted_directories(store: Path) -> tuple[Path, ...]:
         return ()
     raw = read_bounded_file(store, limit=TRUST_STORE_BYTES, label="trust store")
     if len(raw) > TRUST_STORE_BYTES:
-        raise PratError(f"{store}: trust store exceeds the {TRUST_STORE_BYTES} byte limit.")
+        raise PratError(f"{store}: trust store exceeds the {TRUST_STORE_BYTES} byte limit")
     try:
         value = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError, RecursionError) as error:
-        raise PratError(f"{store}: invalid trust store: {error}; delete it to reset.") from error
+        raise PratError(f"{store}: invalid trust store: {error}; delete it to reset") from error
     if isinstance(value, dict) and value.get("version") == 1:
         return ()
     directories = (
@@ -88,7 +88,7 @@ def _trusted_directories(store: Path) -> tuple[Path, ...]:
     if not isinstance(directories, list) or not all(
         isinstance(item, str) and Path(item).is_absolute() for item in directories
     ):
-        raise PratError(f"{store}: invalid trust store; delete it to reset.")
+        raise PratError(f"{store}: invalid trust store; delete it to reset")
     return tuple(Path(item) for item in directories)
 
 
@@ -101,7 +101,7 @@ def _write_store(store: Path, value: dict[str, object]) -> None:
             dir=store.parent, prefix=".trusted-", suffix=".json"
         )
     except OSError as error:
-        raise PratError(f"{store}: cannot create trust store: {error}.") from error
+        raise PratError(f"{store}: cannot create trust store: {error}") from error
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             json.dump(value, stream, ensure_ascii=False, indent=2)
@@ -109,4 +109,4 @@ def _write_store(store: Path, value: dict[str, object]) -> None:
         os.replace(temporary, store)
     except OSError as error:
         Path(temporary).unlink(missing_ok=True)
-        raise PratError(f"{store}: cannot write trust store: {error}.") from error
+        raise PratError(f"{store}: cannot write trust store: {error}") from error

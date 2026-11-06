@@ -58,7 +58,7 @@ def validate(resolved: ResolvedProfile) -> None:
     validate_flags("OpenClaw", arguments, _ALLOWED, _RESERVED)
     if _has_fallback(arguments) and resolved.options.model is None:
         raise PratError(
-            "OpenClaw native --fallback requires an explicit model override.",
+            "OpenClaw native --fallback requires an explicit model override",
             code="invalid_arguments",
         )
 
@@ -68,7 +68,7 @@ def decode(stdout: str) -> DecodedOutput:
     if isinstance(value, ResultError):
         return DecodedOutput(error=value)
     if not isinstance(value, dict):
-        return _protocol("OpenClaw result must be a JSON object.")
+        return _protocol("OpenClaw result must be a JSON object")
     return _decode_envelope(value)
 
 
@@ -87,7 +87,7 @@ def _decode_envelope(value: dict[str, object]) -> DecodedOutput:
         return DecodedOutput(
             reported_models=reported_models,
             cost_usd=cost_usd,
-            error=ResultError("protocol_error", "OpenClaw result envelope is malformed."),
+            error=ResultError("protocol_error", "OpenClaw result envelope is malformed"),
         )
     final = encodable_text(final)
     decoded = DecodedOutput(
@@ -154,21 +154,21 @@ def _has_fallback(arguments: tuple[str, ...]) -> bool:
 
 def _usage(value: object) -> Usage | ResultError:
     if not isinstance(value, dict):
-        return ResultError("protocol_error", "OpenClaw usage is malformed.")
+        return ResultError("protocol_error", "OpenClaw usage is malformed")
     counts = {name: value.get(name) for name in ("input", "output", "total")}
     if any(
         not isinstance(count, int) or isinstance(count, bool) or count < 0
         for count in counts.values()
     ):
-        return ResultError("protocol_error", "OpenClaw usage is malformed.")
+        return ResultError("protocol_error", "OpenClaw usage is malformed")
     return Usage(input_tokens=counts["input"], output_tokens=counts["output"])
 
 
 def _payloads(value: object) -> tuple[dict[str, object], ...] | ResultError:
     if not isinstance(value, list):
-        return ResultError("protocol_error", "OpenClaw payloads are malformed.")
+        return ResultError("protocol_error", "OpenClaw payloads are malformed")
     if not all(isinstance(payload, dict) and _valid_payload(payload) for payload in value):
-        return ResultError("protocol_error", "OpenClaw payloads are malformed.")
+        return ResultError("protocol_error", "OpenClaw payloads are malformed")
     return tuple(value)
 
 
@@ -196,18 +196,18 @@ def _payload_error(payloads: tuple[dict[str, object], ...]) -> ResultError | Non
             message = payload.get("text")
             if isinstance(message, str) and message.strip():
                 return ResultError("provider_error", message)
-            return ResultError("provider_error", "OpenClaw reported an error payload.")
+            return ResultError("provider_error", "OpenClaw reported an error payload")
     return None
 
 
 def _error(value: object) -> ResultError:
     if not isinstance(value, dict):
-        return ResultError("protocol_error", "OpenClaw error is malformed.")
+        return ResultError("protocol_error", "OpenClaw error is malformed")
     message = value.get("message")
     kind = value.get("kind")
     if not isinstance(message, str) or not isinstance(kind, str):
-        return ResultError("protocol_error", "OpenClaw error is malformed.")
-    return ResultError("provider_error", message or f"OpenClaw reported {kind}.")
+        return ResultError("protocol_error", "OpenClaw error is malformed")
+    return ResultError("provider_error", message or f"OpenClaw reported {kind}")
 
 
 def _provider_error(*errors: ResultError | None) -> ResultError | None:
@@ -217,11 +217,11 @@ def _provider_error(*errors: ResultError | None) -> ResultError | None:
 
 
 def _envelope_mismatch() -> ResultError:
-    return ResultError("protocol_error", "OpenClaw ok and status fields disagree.")
+    return ResultError("protocol_error", "OpenClaw ok and status fields disagree")
 
 
 def _missing_error() -> ResultError:
-    return ResultError("protocol_error", "OpenClaw failure envelope is missing an error.")
+    return ResultError("protocol_error", "OpenClaw failure envelope is missing an error")
 
 
 def _protocol(message: str) -> DecodedOutput:

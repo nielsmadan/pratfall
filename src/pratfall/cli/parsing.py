@@ -367,11 +367,11 @@ def _parse_run(arguments: list[str]) -> RunArguments:
             key, flag_value, label = tri_state_flag
             current = tri_state[key]
             if current is not None and current != flag_value:
-                raise PratError(f"{label} cannot be used together.", code="invalid_arguments")
+                raise PratError(f"{label} cannot be used together", code="invalid_arguments")
             tri_state[key] = flag_value
             continue
         if argument == "--prompt":
-            raise PratError("--prompt requires the --prompt=TEXT form.", code="invalid_arguments")
+            raise PratError("--prompt requires the --prompt=TEXT form", code="invalid_arguments")
         if argument.startswith("--prompt="):
             prompt_source = _add_prompt_source(
                 prompt_source, PromptSource("inline", argument.removeprefix("--prompt="))
@@ -397,9 +397,9 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         else:
             words.append(argument)
     if selector is None:
-        raise PratError("A selector is required.", code="invalid_arguments")
+        raise PratError("a selector is required", code="invalid_arguments")
     if edit and dry_run:
-        raise PratError("--edit cannot be combined with --dry-run.", code="invalid_arguments")
+        raise PratError("--edit cannot be combined with --dry-run", code="invalid_arguments")
     options = _run_options(
         values, tri_state["fast"], tri_state["notify"], repeated, scan.native_arguments
     )
@@ -431,7 +431,7 @@ def _run_options(
 ) -> Options:
     if "instructions" in values and "instructions_file" in values:
         raise PratError(
-            "--instructions and --instructions-file cannot be used together.",
+            "--instructions and --instructions-file cannot be used together",
             code="invalid_arguments",
         )
     return Options(
@@ -476,7 +476,7 @@ def _run_options(
 
 def _store_value(values: dict[str, str], field: str, value: str) -> None:
     if field == "template" and field in values:
-        raise PratError("Provide only one template.", code="invalid_arguments")
+        raise PratError("provide only one template", code="invalid_arguments")
     values[field] = value
 
 
@@ -509,19 +509,19 @@ def _scan_run(arguments: list[str]) -> _RunScan:
 
 def _run_token_value(token: _RunToken) -> str:
     if token.value is None:
-        raise PratError(f"{token.name} requires a value.", code="invalid_arguments")
+        raise PratError(f"{token.name} requires a value", code="invalid_arguments")
     return token.value
 
 
 def _add_prompt_source(current: PromptSource | None, added: PromptSource) -> PromptSource:
     if current is not None:
-        raise PratError("Provide exactly one prompt source.", code="invalid_arguments")
+        raise PratError("provide exactly one prompt source", code="invalid_arguments")
     return added
 
 
 def _text_option(value: str | None, flag: str) -> str | None:
     if value is not None and (not value.strip() or "\0" in value):
-        raise PratError(f"{flag} requires a nonempty value.", code="invalid_arguments")
+        raise PratError(f"{flag} requires a nonempty value", code="invalid_arguments")
     return value
 
 
@@ -533,7 +533,7 @@ def _number_option(value: str | None, flag: str) -> float | None:
     except ValueError:
         number = math.nan
     if not math.isfinite(number) or number <= 0:
-        raise PratError(f"{flag} requires a finite positive number.", code="invalid_arguments")
+        raise PratError(f"{flag} requires a finite positive number", code="invalid_arguments")
     return number
 
 
@@ -545,7 +545,7 @@ def _integer_option(value: str | None, flag: str) -> int | None:
     except ValueError:
         number = 0
     if str(number) != value or not 0 < number <= MAX_TURNS:
-        raise PratError(f"{flag} requires a positive integer.", code="invalid_arguments")
+        raise PratError(f"{flag} requires a positive integer", code="invalid_arguments")
     return number
 
 
@@ -556,7 +556,7 @@ def _run_cwd(value: str | None, invocation_cwd: Path) -> Path:
         path = Path(os.path.abspath(invocation_cwd / Path(value).expanduser()))
     except RuntimeError as error:
         raise PratError(
-            f"--cwd cannot expand {value!r}; use an absolute path or a valid ~user path.",
+            f"--cwd cannot expand {value!r}; use an absolute path or a valid ~user path",
             code="invalid_arguments",
         ) from error
     if not path.is_dir():

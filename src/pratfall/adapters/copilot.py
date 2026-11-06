@@ -213,7 +213,7 @@ class _Consumer(JsonlConsumer):
                     output=output, session_id=state.session_id, reported_models=models
                 )
             suffix = "" if state.recognized else " (only unknown events were received)"
-            message = f"Copilot stream ended without a successful result event{suffix}."
+            message = f"Copilot stream ended without a successful result event{suffix}"
             try:
                 self.malformed(message)
             except ConsumerFailure as budget_failure:
@@ -278,19 +278,19 @@ def _message(consumer: _Consumer, event: dict[str, object], event_type: object) 
     state = consumer.state
     data = event.get("data")
     if not isinstance(data, dict):
-        consumer.malformed(f"Copilot {event_type} event is malformed.")
+        consumer.malformed(f"Copilot {event_type} event is malformed")
         return
     if any(
         marker is not None and not isinstance(marker, str)
         for marker in (event.get("agentId"), data.get("agentId"), data.get("parentToolCallId"))
     ):
-        consumer.malformed(f"Copilot {event_type} event is malformed.")
+        consumer.malformed(f"Copilot {event_type} event is malformed")
         return
     message_id = data.get("messageId")
     field = "content" if event_type == "assistant.message" else "deltaContent"
     content = data.get(field)
     if not isinstance(message_id, str) or not isinstance(content, str):
-        consumer.malformed(f"Copilot {event_type} event is malformed.")
+        consumer.malformed(f"Copilot {event_type} event is malformed")
         return
     encoded = retained_utf8(content)
     new_message = message_id not in state.messages
@@ -326,14 +326,14 @@ def _message(consumer: _Consumer, event: dict[str, object], event_type: object) 
 def _session_error(consumer: _Consumer, event: dict[str, object]) -> None:
     data = event.get("data")
     if not isinstance(data, dict):
-        consumer.malformed("Copilot session.error event is malformed.")
+        consumer.malformed("Copilot session.error event is malformed")
         return
     error_type = data.get("errorType")
     message = data.get("message")
     if not isinstance(error_type, str) or not isinstance(message, str):
-        consumer.malformed("Copilot session.error event is malformed.")
+        consumer.malformed("Copilot session.error event is malformed")
     elif error_type != "model_call":
-        _provider(consumer, message or f"Copilot reported {error_type}.")
+        _provider(consumer, message or f"Copilot reported {error_type}")
 
 
 def _session_warning(consumer: _Consumer, event: dict[str, object]) -> None:
@@ -343,12 +343,12 @@ def _session_warning(consumer: _Consumer, event: dict[str, object]) -> None:
         or not isinstance(data.get("warningType"), str)
         or not isinstance(data.get("message"), str)
     ):
-        consumer.malformed("Copilot session.warning event is malformed.")
+        consumer.malformed("Copilot session.warning event is malformed")
         return
     warning_type = data["warningType"]
     if warning_type in _TERMINAL_WARNINGS:
         message = data.get("message")
-        _provider(consumer, message or f"Copilot reported {warning_type}.")
+        _provider(consumer, message or f"Copilot reported {warning_type}")
 
 
 def _result(consumer: _Consumer, event: dict[str, object]) -> None:
@@ -365,10 +365,10 @@ def _result(consumer: _Consumer, event: dict[str, object]) -> None:
         or not isinstance(usage, dict)
         or not _summary_usage(usage)
     ):
-        consumer.malformed("Copilot result event is malformed.")
+        consumer.malformed("Copilot result event is malformed")
         return
     if state.terminal_seen:
-        consumer.malformed("Copilot result event is malformed.")
+        consumer.malformed("Copilot result event is malformed")
     else:
         consumer.retain.record("result")
         state.terminal_seen = True
@@ -379,7 +379,7 @@ def _result(consumer: _Consumer, event: dict[str, object]) -> None:
     if exit_code == 0:
         state.completed = True
     else:
-        _provider(consumer, "Copilot reported an unsuccessful result.")
+        _provider(consumer, "Copilot reported an unsuccessful result")
 
 
 def _provider(consumer: _Consumer, message: str) -> None:

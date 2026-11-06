@@ -116,7 +116,7 @@ def test_an_inherited_option_the_child_agent_rejects_names_the_parent(tmp_path: 
 
     assert caught.value.args[0] == (
         f"{global_path}: profiles.claude-base.tools (selector 'odd'): "
-        "Codex does not support tool allowlists."
+        "Codex does not support tool allowlists"
     )
     assert caught.value.code == "invalid_config"
 
@@ -128,7 +128,7 @@ def test_a_root_profile_still_requires_an_agent(tmp_path: Path) -> None:
         load_config(cwd=Path.cwd(), env=os.environ)
 
     assert caught.value.args[0] == (
-        f"{path}: profiles.work.agent: expected a nonempty string without NUL bytes."
+        f"{path}: profiles.work.agent: expected a nonempty string without NUL bytes"
     )
 
 
@@ -153,11 +153,11 @@ def test_a_child_may_override_the_inherited_agent(tmp_path: Path) -> None:
         ),
         (
             '[profiles.work]\nextends="work"\n',
-            "profiles.work.extends: inheritance cycle: work -> work.",
+            "profiles.work.extends: inheritance cycle: work -> work",
         ),
         (
             '[profiles.a]\nextends="b"\n[profiles.b]\nextends="a"\n',
-            "inheritance cycle: a -> b -> a.",
+            "inheritance cycle: a -> b -> a",
         ),
         ('[profiles.work]\nextends="claude"\n', "profiles.work.extends: unknown profile 'claude'"),
         ('[defaults]\nextends="x"\n', "unknown field 'extends'"),
@@ -193,5 +193,5 @@ def test_a_local_base_replaces_the_global_one_for_every_child(tmp_path: Path) ->
     assert resolve_profile(config, "from-global").options.model == "local"
     assert resolve_profile(config, "from-local").options.model == "local"
     assert config.warnings == (
-        f"{tmp_path / '.pratfile'}: profile 'base' replaces the profile from {global_path}.",
+        f"{tmp_path / '.pratfile'}: profile 'base' replaces the profile from {global_path}",
     )

@@ -45,8 +45,8 @@ runpy.run_path(entry_point, run_name="__main__")
 """
 
 _VERSION_CASE_ERRORS = {
-    "QA_VERSION_TIMEOUT": "Agent exceeded the 3 second timeout.",
-    "QA_VERSION_OVERFLOW": "Agent stdout exceeded 65536 bytes.",
+    "QA_VERSION_TIMEOUT": "agent exceeded the 3 second timeout",
+    "QA_VERSION_OVERFLOW": "agent stdout exceeded 65536 bytes",
 }
 
 AGENTS = {
@@ -1916,9 +1916,9 @@ def _assert_version_cleanup_case(
         assert payload["exit_code"] == 130
         assert payload["error"] == {
             "code": "interrupted",
-            "message": "Interrupted by signal 2.",
+            "message": "interrupted by signal 2",
         }
-        assert record["version_error"] == "Interrupted by signal 2."
+        assert record["version_error"] == "interrupted by signal 2"
     else:
         assert completed.returncode == 0
         assert "status" not in payload
@@ -2227,7 +2227,7 @@ _PROTOCOL_EXPECTATIONS = (
         "DROID_PARTIAL",
         1,
         error_code="provider_error",
-        error_message="Droid reported a failed result.",
+        error_message="Droid reported a failed result",
     ),
     _ProtocolExpectation("A09.vibe_projection", "vibe", "VIBE_ONE\n\nVIBE_TWO"),
     _ProtocolExpectation(
@@ -2243,7 +2243,7 @@ _PROTOCOL_EXPECTATIONS = (
         "REASONIX_PARTIAL",
         1,
         error_code="provider_error",
-        error_message="Reasonix run ended with recovery_paused.",
+        error_message="Reasonix run ended with recovery_paused",
         tokens=(13, 5, 3),
     ),
     _ProtocolExpectation("A11.aliases", "reasonix", "REASONIX_SUCCESS", tokens=(13, 5, 3)),
@@ -2255,28 +2255,28 @@ _PROTOCOL_EXPECTATIONS = (
         17,
         17,
         "native_exit",
-        "Warp exited with status 17.",
+        "Warp exited with status 17",
     ),
     _ProtocolExpectation(
         "A14.numeric_width",
         "droid",
         exit_code=1,
         error_code="protocol_error",
-        error_message="Invalid Droid JSON: numeric value is too large.",
+        error_message="invalid Droid JSON: numeric value is too large",
     ),
     _ProtocolExpectation(
         "A14.nesting",
         "reasonix",
         exit_code=1,
         error_code="protocol_error",
-        error_message="Invalid Reasonix JSON: document nesting is too deep.",
+        error_message="invalid Reasonix JSON: document nesting is too deep",
     ),
     _ProtocolExpectation(
         "A14.unicode",
         "vibe",
         exit_code=1,
         error_code="output_encoding",
-        error_message="Agent output contains invalid Unicode text.",
+        error_message="agent output contains invalid Unicode text",
     ),
     *(
         _ProtocolExpectation(
@@ -2286,7 +2286,7 @@ _PROTOCOL_EXPECTATIONS = (
             exit_code,
             exit_code,
             "native_exit" if exit_code else None,
-            f"{label} exited with status 17." if exit_code else None,
+            f"{label} exited with status 17" if exit_code else None,
         )
         for agent, label in (
             ("crush", "Crush"),
@@ -2604,10 +2604,10 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
     before = len(_calls(root / "native.jsonl"))
     controls = {}
     for selector, arguments, message in (
-        ("amp", ["--effort", "high"], "--effort: Amp does not support an effort override."),
-        ("vibe", ["--model", "chosen"], "--model: Mistral Vibe does not support a model override."),
+        ("amp", ["--effort", "high"], "--effort: Amp does not support an effort override"),
+        ("vibe", ["--model", "chosen"], "--model: Mistral Vibe does not support a model override"),
         ("rx", ["--max-turns", "3"], "--max-turns: Reasonix does not support a turn limit"),
-        ("cr", ["--fast"], "--fast: Crush does not support a fast-mode override."),
+        ("cr", ["--fast"], "--fast: Crush does not support a fast-mode override"),
     ):
         completed = _run(
             prat, root, [selector, "invalid control", *arguments, "--json"], config=config
@@ -2634,7 +2634,7 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
             status="error",
             native_exit_code=None,
             error_code="invalid_config",
-            error_message=f"{collision}: profiles.{name}: name is reserved; choose a different profile name.",
+            error_message=f"{collision}: profiles.{name}: name is reserved; choose a different profile name",
         )
         collisions[name] = _compact_result(completed)
     assert len(_calls(root / "native.jsonl")) == before
@@ -2663,7 +2663,7 @@ def _exercise_versions(prat: Path, root: Path, config: Path) -> dict[str, object
         assert record["available"] is True
         assert record["version"] == (None if agent == "hermes" else f"{agent} opaque version 1.0")
         assert record["version_error"] == (
-            "Version probe exited with status 17." if agent == "hermes" else None
+            "version probe exited with status 17" if agent == "hermes" else None
         )
     return {
         "status": "Pass",
@@ -2830,27 +2830,27 @@ def _exercise_e03(context: _EnhancementContext) -> _ScenarioObservation:
     invalid_specs = {
         "inline_and_file": (
             ["cx", "inline", "--file", prompt_file.name, "--json"],
-            "Provide exactly one prompt source.",
+            "provide exactly one prompt source",
         ),
         "two_files": (
             ["cx", "--file", prompt_file.name, "--file", prompt_file.name, "--json"],
-            "Provide exactly one prompt source.",
+            "provide exactly one prompt source",
         ),
         "missing_file": (
             ["cx", "--file", str(missing), "--json"],
-            f"Cannot open prompt file {missing}: {os.strerror(errno.ENOENT)}.",
+            f"cannot open prompt file {missing}: {os.strerror(errno.ENOENT)}.",
         ),
         "invalid_utf8": (
             ["cx", "--file", str(invalid_utf8), "--json"],
-            "Prompt file is not valid UTF-8.",
+            "prompt file is not valid UTF-8",
         ),
         "oversize": (
             ["cx", "--file", str(oversized), "--json"],
-            "Prompt exceeds the 1048576 byte limit.",
+            "prompt exceeds the 1048576 byte limit",
         ),
         "fifo": (
             ["cx", "--file", str(fifo), "--json"],
-            f"Prompt file is not a regular file: {fifo}",
+            f"prompt file is not a regular file: {fifo}",
         ),
     }
     invalid_cases = {
@@ -2892,7 +2892,7 @@ def _exercise_e04(context: _EnhancementContext) -> _ScenarioObservation:
             status="interrupted",
             native_exit_code=None,
             error_code="interrupted",
-            error_message=f"Interrupted by signal {chosen}.",
+            error_message=f"interrupted by signal {chosen}",
         )
         assert pending and len(_calls(log)) == before
         input_interrupts[source_name] = {
@@ -2952,7 +2952,7 @@ def _exercise_e05(context: _EnhancementContext) -> _ScenarioObservation:
         status="error",
         native_exit_code=None,
         error_code="invalid_arguments",
-        error_message="--fast: Gemini does not support a fast-mode override.",
+        error_message="--fast: Gemini does not support a fast-mode override",
     )
     assert len(_calls(log)) == calls_before
     return "E05", {
@@ -3104,7 +3104,7 @@ def _exercise_e10(context: _EnhancementContext) -> _ScenarioObservation:
         status="error",
         native_exit_code=0,
         error_code="protocol_error",
-        error_message="Codex stream ended without turn.completed.",
+        error_message="Codex stream ended without turn.completed",
     )
     assert partial_result["output"] == "PARTIAL_KEEP"
     return "E10", {
@@ -3437,7 +3437,7 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
     )
     assert created.stdout.decode() == f"Created {init_path}\n"
     assert refused.stderr.decode() == (
-        f"prat: {init_path}: already exists; edit it or choose another --config path.\n"
+        f"prat: {init_path}: already exists; edit it or choose another --config path\n"
     )
     assert validated.stdout.decode() == f"Valid config: {init_path}\n"
     expected_profiles = {
@@ -3643,7 +3643,7 @@ def _exercise_q11(context: _ExerciseContext) -> dict[str, object]:
         status="error",
         native_exit_code=17,
         error_code="native_exit",
-        error_message="Codex exited with status 17.",
+        error_message="Codex exited with status 17",
     )
     assert json.loads(_text(success_result["output"]))["prompt"] == "json success"
     assert failure_result["output"] == "native failure answer"
@@ -3690,7 +3690,7 @@ def _exercise_q12(context: _ExerciseContext) -> dict[str, object]:
             native_exit_code=None,
             error_code="invalid_config",
             error_message=(
-                f"{unsupported}: profiles.bad.effort: Gemini does not support an effort override."
+                f"{unsupported}: profiles.bad.effort: Gemini does not support an effort override"
             ),
         ),
         _assert_result(
@@ -3739,7 +3739,7 @@ def _exercise_q13(context: _ExerciseContext) -> dict[str, object]:
         status="error",
         native_exit_code=None,
         error_code="executable_not_found",
-        error_message=f"Executable '{missing}' was not found.",
+        error_message=f"executable '{missing}' was not found",
     )
     _assert_result(
         blocked_case,
@@ -3747,7 +3747,7 @@ def _exercise_q13(context: _ExerciseContext) -> dict[str, object]:
         status="error",
         native_exit_code=None,
         error_code="executable_not_executable",
-        error_message=f"Executable '{blocked}' cannot be executed.",
+        error_message=f"executable '{blocked}' cannot be executed",
     )
     return {
         "Q13": {
@@ -3780,7 +3780,7 @@ def _exercise_q14(context: _ExerciseContext) -> dict[str, object]:
         status="error",
         native_exit_code=0,
         error_code="protocol_error",
-        error_message="Codex stream ended without turn.completed.",
+        error_message="Codex stream ended without turn.completed",
     )
     recovery_result = _assert_result(
         recovery, returncode=0, status="success", native_exit_code=0, error_code=None
@@ -3816,7 +3816,7 @@ def _exercise_q15(context: _ExerciseContext) -> dict[str, object]:
         status="timeout",
         native_exit_code=-signal.SIGTERM,
         error_code="timeout",
-        error_message="Agent exceeded the 1 second timeout.",
+        error_message="agent exceeded the 1 second timeout",
     )
     _assert_result(
         interrupt_case,
@@ -3824,7 +3824,7 @@ def _exercise_q15(context: _ExerciseContext) -> dict[str, object]:
         status="interrupted",
         native_exit_code=-signal.SIGTERM,
         error_code="interrupted",
-        error_message="Interrupted by signal 2.",
+        error_message="interrupted by signal 2",
     )
     retry = _run(prat, root, ["cx", "after interruption", "--json"], config=config)
     retry_result = _assert_result(
@@ -3857,7 +3857,7 @@ def _exercise_q16(context: _ExerciseContext) -> dict[str, object]:
         status="timeout",
         native_exit_code=0,
         error_code="timeout",
-        error_message="Agent exceeded the 1 second timeout.",
+        error_message="agent exceeded the 1 second timeout",
     )
     return {
         "Q16": {
@@ -3882,7 +3882,7 @@ def _exercise_q17(context: _ExerciseContext) -> dict[str, object]:
         status="error",
         native_exit_code=-signal.SIGTERM,
         error_code="stdout_limit_exceeded",
-        error_message="Agent output event exceeded 8388608 bytes.",
+        error_message="agent output event exceeded 8388608 bytes",
     )
     stderr_fixture = _async_run(prat, root, config, "QA_STDERR_LIMIT", "9")
     stderr_case, stderr_pending, stderr_released = _complete_async(stderr_fixture)
@@ -3892,7 +3892,7 @@ def _exercise_q17(context: _ExerciseContext) -> dict[str, object]:
         status="error",
         native_exit_code=-signal.SIGTERM,
         error_code="stderr_limit_exceeded",
-        error_message="Agent stderr exceeded 2097152 bytes.",
+        error_message="agent stderr exceeded 2097152 bytes",
     )
     invalid_utf8 = _run(prat, root, ["kiro", "QA_BAD_UTF8", "--json"], config=config)
     oversized = _run(
@@ -3908,7 +3908,7 @@ def _exercise_q17(context: _ExerciseContext) -> dict[str, object]:
         status="error",
         native_exit_code=0,
         error_code="output_encoding",
-        error_message="Agent stdout is not valid UTF-8.",
+        error_message="agent stdout is not valid UTF-8",
     )
     oversized_result = _assert_result(
         oversized,
@@ -3916,7 +3916,7 @@ def _exercise_q17(context: _ExerciseContext) -> dict[str, object]:
         status="error",
         native_exit_code=None,
         error_code="invalid_arguments",
-        error_message="Prompt exceeds the 1048576 byte limit.",
+        error_message="prompt exceeds the 1048576 byte limit",
     )
     assert limit_pending and limit_released and limit_result["output"] == ""
     assert stderr_pending and stderr_released and stderr_result["output"] == ""
@@ -4171,7 +4171,7 @@ def _assert_workflow_extraction(
         status="error" if code else "success",
         native_exit_code=code,
         error_code="native_exit" if code else None,
-        error_message="Claude Code exited with status 17." if code else None,
+        error_message="Claude Code exited with status 17" if code else None,
     )
     assert result["output"] == json.dumps({"prompt": prompt}, ensure_ascii=False) + "\n"
     assert result["reported_models"] == ["workflow-model"]
@@ -4331,9 +4331,7 @@ def _exercise_w_editor(prat: Path, root: Path) -> dict[str, object]:
     assert calls[0]["cwd"] == str(consumer / "project")
     rejected, rejected_editor = _run_editor_workflow(prat, root, config, "empty")
     assert rejected_editor["draft"] == draft
-    rejected_result = _assert_input_failure(
-        rejected, "Prompt must not be empty or whitespace-only."
-    )
+    rejected_result = _assert_input_failure(rejected, "prompt must not be empty or whitespace-only")
     assert _calls(root / "native.jsonl") == calls
     return {
         "status": "Pass",
@@ -4608,7 +4606,7 @@ def _assert_schema_result(
     assert result["status"] == ("error" if code else "success")
     assert result["exit_code"] == result["native_exit_code"] == code
     label = {"claude": "Claude Code", "codex": "Codex", "qwen": "Qwen Code"}[agent]
-    expected_error = {"code": "native_exit", "message": f"{label} exited with status 17."}
+    expected_error = {"code": "native_exit", "message": f"{label} exited with status 17"}
     assert result["error"] == (expected_error if code else None)
     assert result["usage"] == {
         "input_tokens": 3,
@@ -4803,7 +4801,7 @@ def _exercise_w_control_rejections(prat: Path, root: Path) -> dict[str, object]:
     fragments = {
         "schema-extract": "cannot be used together",
         "invalid-schema": "duplicate object key",
-        "invalid-instructions": "Cannot open instructions file",
+        "invalid-instructions": "cannot open instructions file",
         "invalid-directory": "not a directory",
         "invalid-attachment": "not a regular attachment file",
         "hermes-count": "at most 1",

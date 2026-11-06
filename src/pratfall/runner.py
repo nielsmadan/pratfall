@@ -99,9 +99,7 @@ def run(
     started = time.monotonic()
     consumer_state = _ConsumerState(consumer)
     if os.name != "posix":
-        return _startup_failure(
-            started, "unsupported_platform", "Process execution requires POSIX."
-        )
+        return _startup_failure(started, "unsupported_platform", "process execution requires POSIX")
     signal_state = _SignalState()
     previous: Previous = {}
     install(_interrupt_handler(signal_state), previous)
@@ -144,10 +142,10 @@ def run(
                 _force_cleanup(process, limits)
             consumer_error = _finish_consumer(consumer_state)[1] if process is not None else None
             failure = (
-                ResultError("interrupted", f"Interrupted by signal {signal_state.received}.")
+                ResultError("interrupted", f"interrupted by signal {signal_state.received}")
                 if signal_state.received is not None
                 else consumer_error
-                or ResultError("process_io_error", f"Process I/O failed: {error}.")
+                or ResultError("process_io_error", f"process I/O failed: {error}")
             )
             return ProcessResult(
                 consumer_state.capture(b""),
@@ -217,12 +215,12 @@ def _collect(
                 cleanup_error = cleanup_error or "agent process could not be reaped"
     if context.signal_state.received is not None:
         interrupted = context.signal_state.received
-        error = ResultError("interrupted", f"Interrupted by signal {interrupted}.")
+        error = ResultError("interrupted", f"interrupted by signal {interrupted}")
     elif timed_out:
-        error = ResultError("timeout", f"Agent exceeded the {context.timeout:g} second timeout.")
+        error = ResultError("timeout", f"agent exceeded the {context.timeout:g} second timeout")
     if cleanup_error is not None and error is not None:
         error = ResultError(
-            error.code, f"{error.message} Process-group cleanup failed: {cleanup_error}."
+            error.code, f"{error.message}; process-group cleanup failed: {cleanup_error}"
         )
     return ProcessResult(
         consumer_state.capture(bytes(output.buffers["stdout"])),
@@ -311,7 +309,7 @@ def _read_ready(
     except BlockingIOError:
         return None
     except OSError as error:
-        return ResultError("output_io_error", f"Cannot read agent {name}: {error}.")
+        return ResultError("output_io_error", f"cannot read agent {name}: {error}")
     if not chunk:
         selector.unregister(key.fileobj)
         cast(BinaryIO, key.fileobj).close()
@@ -330,7 +328,7 @@ def _read_ready(
     output.buffers[name].extend(chunk[:remaining])
     if len(chunk) > remaining:
         code: Code = STDOUT_LIMIT_EXCEEDED if name == "stdout" else STDERR_LIMIT_EXCEEDED
-        return ResultError(code, f"Agent {name} exceeded {limit} bytes.")
+        return ResultError(code, f"agent {name} exceeded {limit} bytes")
     return None
 
 
@@ -446,13 +444,13 @@ def _spawn_failure(started: float, error: OSError, executable: str) -> ProcessRe
     code: Code
     if isinstance(error, FileNotFoundError) or error.errno == errno.ENOENT:
         code = EXECUTABLE_NOT_FOUND
-        message = f"Executable {executable!r} was not found."
+        message = f"executable {executable!r} was not found"
     elif isinstance(error, PermissionError) or error.errno in {errno.EACCES, errno.ENOEXEC}:
         code = EXECUTABLE_NOT_EXECUTABLE
-        message = f"Executable {executable!r} cannot be executed."
+        message = f"executable {executable!r} cannot be executed"
     else:
         code = PROCESS_IO_ERROR
-        message = f"Cannot start executable {executable!r}: {error}."
+        message = f"cannot start executable {executable!r}: {error}"
     return _startup_failure(started, code, message)
 
 
@@ -481,4 +479,4 @@ def _finish_consumer(
 
 
 def _presentation_error(error: OSError) -> ResultError:
-    return ResultError("output_io_error", f"Cannot write progress to stderr: {error}.")
+    return ResultError("output_io_error", f"cannot write progress to stderr: {error}")

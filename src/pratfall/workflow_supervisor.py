@@ -257,12 +257,12 @@ def _spawn(
 def _spawn_failure(error: OSError, executable: str) -> StepResult:
     if isinstance(error, FileNotFoundError) or error.errno == errno.ENOENT:
         return synthesized_result(
-            "error", EXECUTABLE_NOT_FOUND, f"Executable {executable!r} was not found."
+            "error", EXECUTABLE_NOT_FOUND, f"executable {executable!r} was not found"
         )
     if isinstance(error, PermissionError) or error.errno in {errno.EACCES, errno.ENOEXEC}:
-        message = f"Executable {executable!r} cannot be executed."
+        message = f"executable {executable!r} cannot be executed"
         return synthesized_result("error", EXECUTABLE_NOT_EXECUTABLE, message)
-    message = f"Cannot start workflow step {executable!r}: {error}."
+    message = f"cannot start workflow step {executable!r}: {error}"
     return synthesized_result("error", PROCESS_IO_ERROR, message)
 
 
@@ -285,7 +285,7 @@ def _prepare_items(state: _Supervision, step: WorkflowStep, source: str) -> None
         kept = len(listed.items)
         state.relay.write(
             f"prat: workflow '{state.prepared.name}' step '{step.name}': "
-            f"running the first {kept} of {kept + listed.dropped} items.\n".encode()
+            f"running the first {kept} of {kept + listed.dropped} items\n".encode()
         )
     if not listed.items:
         state.outputs[step.name] = ""
@@ -454,7 +454,7 @@ def _wait_all(processes: list[subprocess.Popen[bytes]], grace: float) -> None:
 
 def _backstop(timeout: float) -> StepResult:
     seconds = timeout + 2 * TERMINATE_GRACE + BACKSTOP_SLACK
-    message = f"exceeded the workflow backstop of {seconds:g} seconds."
+    message = f"exceeded the workflow backstop of {seconds:g} seconds"
     return synthesized_result("timeout", TIMEOUT, message)
 
 
@@ -462,19 +462,19 @@ def _child_result(
     overflow: bool, stdout: bytes, returncode: int, interrupting: int | None
 ) -> StepResult:
     if overflow:
-        message = f"step results exceeded the workflow budget of {WORKFLOW_RESULT_BYTES} bytes."
+        message = f"step results exceeded the workflow budget of {WORKFLOW_RESULT_BYTES} bytes"
         return synthesized_result("error", STDOUT_LIMIT_EXCEEDED, message)
     try:
         result = _parse_result(stdout)
     except ValueError as error:
         if interrupting is not None:
-            message = f"Interrupted by signal {interrupting}."
+            message = f"interrupted by signal {interrupting}"
             exit_code = SIGNAL_EXIT_BASE + interrupting
             return synthesized_result("interrupted", INTERRUPTED, message, exit_code)
         message = f"exited with status {returncode} without a valid result: {error}"
         return synthesized_result("error", INTERNAL_ERROR, message)
     if result.exit_code != returncode:
-        message = f"exited with status {returncode} but reported exit code {result.exit_code}."
+        message = f"exited with status {returncode} but reported exit code {result.exit_code}"
         return synthesized_result("error", INTERNAL_ERROR, message)
     return result
 

@@ -363,7 +363,7 @@ def test_failure_without_error_report_is_an_internal_error() -> None:
     )
     assert result["error"] == {
         "code": "internal_error",
-        "message": "step 'a': failed without an error report.",
+        "message": "step 'a': failed without an error report",
     }
 
 
@@ -371,14 +371,14 @@ def test_interruption_overrides_a_failure() -> None:
     broken = child(status="error", exit_code=1, error={"code": "native_exit", "message": "x"})
     result = workflow_result("chain", CHAIN, (outcome("a", broken),), 7, 2, {})
     assert (result["status"], result["exit_code"], result["output"]) == ("interrupted", 130, "")
-    assert result["error"] == {"code": "interrupted", "message": "Interrupted by signal 2."}
+    assert result["error"] == {"code": "interrupted", "message": "interrupted by signal 2"}
 
 
 def test_interruption_overrides_a_success() -> None:
     outcomes = tuple(outcome(n, child(n.upper())) for n in "abc")
     result = workflow_result("chain", CHAIN, outcomes, 7, 15, {})
     assert (result["status"], result["exit_code"], result["output"]) == ("interrupted", 143, "")
-    assert result["error"] == {"code": "interrupted", "message": "Interrupted by signal 15."}
+    assert result["error"] == {"code": "interrupted", "message": "interrupted by signal 15"}
 
 
 def test_usage_and_cost_sum_reported_values() -> None:
@@ -507,7 +507,7 @@ def test_empty_structured_output_list_wins_over_an_array_in_the_output() -> None
 def test_structured_items_reject_nonfinite_numbers(structured: object) -> None:
     assert items_error(fan("fix", "list", split="json"), source("[]", structured)) == (
         "invalid_arguments",
-        "output of step 'list' is not valid JSON.",
+        "output of step 'list' is not valid JSON",
     )
 
 
@@ -538,7 +538,7 @@ def test_json_elements_become_item_text_and_null_or_blank_is_dropped() -> None:
 def test_json_items_reject_nonfinite_numbers(output: str) -> None:
     assert items_error(fan("fix", "list", split="json"), source(output)) == (
         "invalid_arguments",
-        "output of step 'list' is not valid JSON.",
+        "output of step 'list' is not valid JSON",
     )
 
 
@@ -549,7 +549,7 @@ def test_json_items_reject_nonfinite_numbers(output: str) -> None:
 def test_json_items_reject_unpaired_surrogates(output: str, structured: object) -> None:
     assert items_error(fan("fix", "list", split="json"), source(output, structured)) == (
         "invalid_arguments",
-        "output of step 'list' is not valid JSON.",
+        "output of step 'list' is not valid JSON",
     )
 
 
@@ -557,7 +557,7 @@ def test_json_items_reject_unpaired_surrogates(output: str, structured: object) 
 def test_unparseable_json_output_is_an_items_error(output: str) -> None:
     assert items_error(fan("fix", "list", split="json"), source(output)) == (
         "invalid_arguments",
-        "output of step 'list' is not valid JSON.",
+        "output of step 'list' is not valid JSON",
     )
 
 
@@ -569,7 +569,7 @@ def test_json_output_that_is_not_an_array_is_an_items_error(
 ) -> None:
     assert items_error(fan("fix", "list", split="json"), source(output, structured)) == (
         "invalid_arguments",
-        "output of step 'list' is not a JSON array.",
+        "output of step 'list' is not a JSON array",
     )
 
 
@@ -582,7 +582,7 @@ def test_item_limit_counts_items_after_dropping_null_and_blank() -> None:
         "invalid_arguments",
         (
             f"output of step 'list' has {WORKFLOW_EACH_ITEMS + 1} items, "
-            f"more than the {WORKFLOW_EACH_ITEMS} item limit."
+            f"more than the {WORKFLOW_EACH_ITEMS} item limit"
         ),
     )
 
@@ -641,7 +641,7 @@ def test_prompt_limit_counts_the_as_item() -> None:
     outputs = {"list": "a\n"}
     assert input_problem(step, "Fix $file", text, outputs, "abc") is None
     assert input_problem(step, "Fix $file", text, outputs, "abcd") == (
-        f"input and bound parameters exceed the {PROMPT_LIMIT} byte limit."
+        f"input and bound parameters exceed the {PROMPT_LIMIT} byte limit"
     )
 
 
@@ -865,7 +865,7 @@ def test_each_result_over_the_joined_output_cap_fails_the_step() -> None:
     result = each_result(fan("fix", "list"), items, instances, True, 0)
     assert (result.status, result.exit_code, result.output) == ("error", 1, "")
     assert result.error == ResultError(
-        "stdout_limit_exceeded", f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit."
+        "stdout_limit_exceeded", f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit"
     )
 
 
@@ -881,7 +881,7 @@ def test_each_result_one_byte_over_the_joined_output_cap_fails() -> None:
     result = each_result(fan("fix", "list"), ("a",), (instance(0, child(block)),), True, 0)
     assert (result.status, result.exit_code, result.output) == ("error", 1, "")
     assert result.error == ResultError(
-        "stdout_limit_exceeded", f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit."
+        "stdout_limit_exceeded", f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit"
     )
 
 
@@ -949,14 +949,14 @@ def test_workflow_result_reports_a_failed_instance_and_skips_the_rest() -> None:
 
 def test_pre_launch_items_error_has_no_item_entries() -> None:
     failure = synthesized_result(
-        "error", "invalid_arguments", "output of step 'list' is not a JSON array."
+        "error", "invalid_arguments", "output of step 'list' is not a JSON array"
     )
     outcomes = (outcome("list", child("x")), outcome("fix", failure))
     result = workflow_result("fixes", FIXES, outcomes, 1, None, {})
     assert (result["status"], result["exit_code"]) == ("error", 2)
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "step 'fix': output of step 'list' is not a JSON array.",
+        "message": "step 'fix': output of step 'list' is not a JSON array",
     }
     steps = result["steps"]
     assert isinstance(steps, list)
@@ -970,7 +970,7 @@ def test_pre_launch_items_error_has_no_item_entries() -> None:
         "cost_usd": None,
         "error": {
             "code": "invalid_arguments",
-            "message": "output of step 'list' is not a JSON array.",
+            "message": "output of step 'list' is not a JSON array",
         },
         "items": [],
         "dropped": 0,
@@ -1018,7 +1018,7 @@ def test_first_failure_orders_instances_and_steps_by_completion() -> None:
 
 
 def test_interrupted_fan_out_reports_the_signal_and_skips_queued_items() -> None:
-    interrupted = synthesized_result("interrupted", "interrupted", "Interrupted by signal 2.", 130)
+    interrupted = synthesized_result("interrupted", "interrupted", "interrupted by signal 2", 130)
     outcomes = (
         outcome("list", child("a\nb\nc")),
         instance(0, child("A")),
@@ -1027,13 +1027,13 @@ def test_interrupted_fan_out_reports_the_signal_and_skips_queued_items() -> None
     items = {"fix": EachItems(("a", "b", "c"), 0)}
     result = workflow_result("fixes", FIXES, outcomes, 1, 2, items)
     assert (result["status"], result["exit_code"], result["output"]) == ("interrupted", 130, "")
-    assert result["error"] == {"code": "interrupted", "message": "Interrupted by signal 2."}
+    assert result["error"] == {"code": "interrupted", "message": "interrupted by signal 2"}
     steps = result["steps"]
     assert isinstance(steps, list)
     assert (steps[1]["status"], steps[1]["exit_code"]) == ("interrupted", 130)
     assert steps[1]["error"] == {
         "code": "interrupted",
-        "message": "item 'b': Interrupted by signal 2.",
+        "message": "item 'b': interrupted by signal 2",
     }
     assert steps[1]["items"] == [
         {"item": "a", "label": "a", **child("A")},
@@ -1054,7 +1054,7 @@ def test_output_cap_failure_counts_from_the_last_instance_completion() -> None:
     second = workflow_result("fixes", workflow, after, 1, None, {"fix": EachItems(items, 0)})
     assert first["error"] == {
         "code": "stdout_limit_exceeded",
-        "message": f"step 'fix': joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit.",
+        "message": f"step 'fix': joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit",
     }
     assert second["error"] == {"code": "native_exit", "message": "step 'check': x"}
 
@@ -1066,7 +1066,7 @@ CAPPED = tuple(instance(index, child("x" * STDOUT_BYTES)) for index in range(8))
 def test_workflow_result_reports_the_output_cap_as_the_each_step_failure() -> None:
     outcomes = (outcome("list", child("a")), *CAPPED)
     result = workflow_result("fixes", FIXES, outcomes, 1, None, CAPPED_ITEMS)
-    message = f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit."
+    message = f"joined output exceeds the {WORKFLOW_RESULT_BYTES} byte limit"
     assert (result["status"], result["exit_code"]) == ("error", 1)
     assert result["error"] == {"code": "stdout_limit_exceeded", "message": f"step 'fix': {message}"}
     steps = result["steps"]
@@ -1092,7 +1092,7 @@ def test_workflow_result_fails_when_the_joined_final_output_exceeds_the_cap(
     assert (result["status"], result["exit_code"], result["output"]) == ("error", 1, "")
     assert result["error"] == {
         "code": "stdout_limit_exceeded",
-        "message": "final output: joined output exceeds the 20 byte limit.",
+        "message": "final output: joined output exceeds the 20 byte limit",
     }
     steps = result["steps"]
     assert isinstance(steps, list)
@@ -1127,7 +1127,7 @@ def test_item_limit_error_reports_the_step_limit_above_it() -> None:
     result = source("a\n\nb\nc\n")
     assert items_error(capped(2, "error"), result) == (
         "invalid_arguments",
-        "output of step 'list' has 3 items, more than the 2 item limit.",
+        "output of step 'list' has 3 items, more than the 2 item limit",
     )
 
 

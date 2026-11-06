@@ -257,11 +257,11 @@ def _input_error(message: str) -> subprocess.CompletedProcess[bytes]:
 
 
 def test_input_failure_oracle_rejects_swapped_and_generic_messages() -> None:
-    expected = "Provide exactly one prompt source."
+    expected = "provide exactly one prompt source"
     qa._assert_input_failure(_input_error(expected), expected)
 
     for wrong in (
-        "Prompt exceeds the 1048576 byte limit.",
+        "prompt exceeds the 1048576 byte limit",
         "The prompt is invalid.",
     ):
         with pytest.raises(AssertionError):
@@ -1236,7 +1236,7 @@ def test_schema_oracle_rejects_metadata_loss(
         "status": "error",
         "exit_code": 17,
         "native_exit_code": 17,
-        "error": {"code": "native_exit", "message": f"{label} exited with status 17."},
+        "error": {"code": "native_exit", "message": f"{label} exited with status 17"},
         "usage": {
             "input_tokens": 3,
             "output_tokens": 2,

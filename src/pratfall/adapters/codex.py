@@ -90,7 +90,7 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     argv.extend(f"--image={attachment}" for attachment in resolved.options.attachments or ())
     if resolved.prepared_schema is not None:
         if resolved.prepared_schema.path is None:
-            raise ValueError("Prepared schema requires a file snapshot.")
+            raise ValueError("prepared schema requires a file snapshot")
         argv.extend(("--output-schema", resolved.prepared_schema.path))
     argv.extend(arguments)
     if options.attachments:
@@ -110,7 +110,7 @@ def validate(resolved: ResolvedProfile) -> None:
         for path in resolved.options.attachments:
             if "," in path:
                 raise PratError(
-                    f"Codex attachment path {path!r} cannot contain commas.",
+                    f"Codex attachment path {path!r} cannot contain commas",
                     code="invalid_arguments",
                     option="attachments",
                 )
@@ -195,7 +195,7 @@ class _Consumer(JsonlConsumer):
         if not state.completed:
             if self.failed:
                 return DecodedOutput(output=output, session_id=state.session_id, usage=state.usage)
-            message = "Codex stream ended without turn.completed."
+            message = "Codex stream ended without turn.completed"
             try:
                 self.malformed(message)
             except ConsumerFailure as budget_failure:
@@ -221,7 +221,7 @@ def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | No
     if event_type == "thread.started":
         thread_id = event.get("thread_id")
         if not isinstance(thread_id, str):
-            consumer.malformed("Codex thread.started event is malformed.")
+            consumer.malformed("Codex thread.started event is malformed")
         else:
             session_id = session_text(thread_id)
             if session_id is not None:
@@ -253,11 +253,11 @@ def _apply_event(consumer: _Consumer, event: dict[str, object]) -> Activity | No
             consumer.retain.commit(*_TURN_SLOTS)
         return "finishing"
     elif event_type == "turn.failed":
-        error = _event_error(event.get("error"), "Codex turn failed.")
+        error = _event_error(event.get("error"), "Codex turn failed")
         _set_failure(consumer, error)
         return "finishing"
     elif event_type == "error":
-        error = _event_error(event, "Codex reported an error.")
+        error = _event_error(event, "Codex reported an error")
         _set_failure(consumer, error)
         return "finishing"
     return None
@@ -273,7 +273,7 @@ def _apply_item(
         or not isinstance(item.get("id"), str)
         or not isinstance(item.get("type"), str)
     ):
-        consumer.malformed(f"Codex {event_type} event is malformed.")
+        consumer.malformed(f"Codex {event_type} event is malformed")
         return "working"
     item_id = item["id"]
     if event_type == "item.completed" and item["type"] == "agent_message":
@@ -283,7 +283,7 @@ def _apply_item(
             state.current_answer_id = item_id
         text = item.get("text")
         if not isinstance(text, str):
-            consumer.malformed("Codex agent_message item is malformed.")
+            consumer.malformed("Codex agent_message item is malformed")
         else:
             # the join byte outlives same-identifier answer replacement
             if state.current_answer is None and state.answers:
@@ -311,7 +311,7 @@ def _set_failure(consumer: _Consumer, error: ResultError) -> None:
 
 def _usage(value: object) -> Usage | ResultError:
     if not isinstance(value, dict):
-        return ResultError("protocol_error", "Codex turn.completed usage is malformed.")
+        return ResultError("protocol_error", "Codex turn.completed usage is malformed")
     required = ("input_tokens", "cached_input_tokens", "output_tokens")
     optional = ("cache_write_input_tokens", "reasoning_output_tokens")
     values: dict[str, int | None] = {}
@@ -321,14 +321,14 @@ def _usage(value: object) -> Usage | ResultError:
             values[name] = None
             continue
         if not isinstance(item, int) or isinstance(item, bool) or item < 0:
-            return ResultError("protocol_error", f"Codex usage field {name!r} is malformed.")
+            return ResultError("protocol_error", f"Codex usage field {name!r} is malformed")
         values[name] = item
     return Usage(**values)
 
 
 def _event_error(value: object, fallback: str) -> ResultError:
     if not isinstance(value, Mapping) or not isinstance(value.get("message"), str):
-        return ResultError("protocol_error", "Codex failure event is malformed.")
+        return ResultError("protocol_error", "Codex failure event is malformed")
     return ResultError("provider_error", value["message"] or fallback)
 
 
@@ -371,13 +371,13 @@ class _SchemaConsumer(_Consumer):
                 self.state.completed = False
                 self.current_valid = False
                 if not isinstance(item.get("id"), str) or not isinstance(item.get("text"), str):
-                    self.malformed("Codex agent_message item is malformed.")
+                    self.malformed("Codex agent_message item is malformed")
                     return "answering"
                 try:
                     value = parse_json(item["text"], numeric_bytes=self.numeric_bytes)
                 except UnicodeEncodeError as error:
                     raise ConsumerFailure(
-                        ResultError("output_encoding", "Codex answer contains invalid Unicode.")
+                        ResultError("output_encoding", "Codex answer contains invalid Unicode")
                     ) from error
                 except ValueError:
                     return "answering"
@@ -390,10 +390,10 @@ class _SchemaConsumer(_Consumer):
         error = self.state.provider_error or self.protocol_error
         if error is None and not self.failed:
             if not self.state.completed:
-                error = ResultError("protocol_error", "Codex stream ended without turn.completed.")
+                error = ResultError("protocol_error", "Codex stream ended without turn.completed")
             elif not self.current_valid:
                 error = ResultError(
-                    "protocol_error", "Codex final agent_message is missing or is not strict JSON."
+                    "protocol_error", "Codex final agent_message is missing or is not strict JSON"
                 )
         return DecodedOutput(
             output=self.answer.output if self.answer is not None else "",

@@ -95,7 +95,7 @@ def test_signal_during_validation_interrupts_and_restores_handlers(
         return original_validate(value, label, allow_empty=allow_empty)
 
     monkeypatch.setattr(prompt_input, "_validate", interrupting_validate)
-    with pytest.raises(InputInterrupted, match=f"Interrupted by signal {chosen.value}") as raised:
+    with pytest.raises(InputInterrupted, match=f"interrupted by signal {chosen.value}") as raised:
         acquire_prompt(PromptSource("inline", "prompt"), tmp_path, None)
 
     assert raised.value.signum == chosen
@@ -178,7 +178,7 @@ def test_context_requires_regular_file(tmp_path: Path, kind: str) -> None:
         path.mkdir()
     elif kind == "fifo":
         os.mkfifo(path)
-    with pytest.raises(PratError, match=r"Cannot open context file|not a regular file"):
+    with pytest.raises(PratError, match=r"cannot open context file|not a regular file"):
         prompt_input.prepend_contexts((kind,), b"task", tmp_path)
 
 

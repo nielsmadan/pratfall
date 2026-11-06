@@ -50,6 +50,10 @@ native config changes.
 - Tests and release tests use fake agent/external commands and never spend inference credits.
 - New code normally needs no comments or docstrings. Use names and small typed functions.
 - Keep stdout for final text or one JSON result. Send progress and diagnostics to stderr.
+- Write error messages in git style: lowercase first word unless it is a proper noun, an agent
+  label, a flag, a path or a quoted value; no trailing period; clauses joined with `;`. Name what
+  the user typed (the flag, or the config file and key, then the rejected value) before what is
+  allowed, and offer a near match with `did_you_mean` from `errors.py`.
 - Treat configured command prefixes and native arguments as trusted input, while keeping prompts as
   argv or stdin data without invoking a shell.
 - Update the README and linked Markdown guides when the CLI or config contract changes.

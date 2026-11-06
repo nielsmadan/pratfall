@@ -26,7 +26,7 @@ class PromptSource:
 
 class InputInterrupted(Exception):
     def __init__(self, signum: int) -> None:
-        super().__init__(f"Interrupted by signal {signum}.")
+        super().__init__(f"interrupted by signal {signum}")
         self.signum = signum
 
 
@@ -46,7 +46,7 @@ def acquire_prompt(
             if allow_absent:
                 return b""
             raise PratError(
-                "Provide exactly one prompt as text, --file PATH, or redirected standard input.",
+                "provide exactly one prompt as text, --file PATH, or redirected standard input",
                 code="invalid_arguments",
             )
         source = PromptSource("stdin")
@@ -57,12 +57,12 @@ def acquire_prompt(
             label = "Prompt"
         elif source.kind == "file" and source.value != "-":
             value = _read_file(cast(str, source.value), invocation_cwd, state)
-            label = "Prompt file"
+            label = "prompt file"
         else:
             value = _read_stdin(stdin, state)
             if implicit and allow_absent and not value:
                 return b""
-            return _validate(value, "Standard input prompt", allow_empty=allow_blank)
+            return _validate(value, "standard input prompt", allow_empty=allow_blank)
         _raise_if_interrupted(state)
         value = _validate(value, label, allow_empty=allow_blank)
         if stdin is not None and not stdin.closed and not _stdin_is_terminal(stdin):
@@ -71,7 +71,7 @@ def acquire_prompt(
             if piped:
                 _check_size(len(value) + 2 + len(piped))
                 value = _validate(
-                    piped + b"\n\n" + value, "Combined prompt", allow_empty=allow_blank
+                    piped + b"\n\n" + value, "combined prompt", allow_empty=allow_blank
                 )
         return value
 
@@ -87,7 +87,7 @@ def _encode_inline(value: str) -> bytes:
     try:
         return value.encode("utf-8")
     except UnicodeEncodeError as error:
-        raise PratError("Prompt is not valid UTF-8.", code="invalid_arguments") from error
+        raise PratError("prompt is not valid UTF-8", code="invalid_arguments") from error
 
 
 def prepend_contexts(paths: tuple[str, ...], prompt: bytes, invocation_cwd: Path) -> bytes:
@@ -111,7 +111,7 @@ def prepend_contexts(paths: tuple[str, ...], prompt: bytes, invocation_cwd: Path
             _raise_if_interrupted(state)
             content = _read_file(path, invocation_cwd, state, limit=remaining, label="context file")
             _check_size(PROMPT_LIMIT - remaining + len(content))
-            _validate(content, "Context file", allow_empty=True)
+            _validate(content, "context file", allow_empty=True)
             remaining -= len(content)
             parts.extend((header, content, b"\n\n"))
         parts.append(prompt)
@@ -120,7 +120,7 @@ def prepend_contexts(paths: tuple[str, ...], prompt: bytes, invocation_cwd: Path
 
 def _check_size(size: int) -> None:
     if size > PROMPT_LIMIT:
-        raise PratError(f"Prompt exceeds the {PROMPT_LIMIT} byte limit.", code="invalid_arguments")
+        raise PratError(f"prompt exceeds the {PROMPT_LIMIT} byte limit", code="invalid_arguments")
 
 
 def _read_file(
@@ -137,7 +137,7 @@ def _read_file(
         descriptor = os.open(path, flags)
     except OSError as error:
         raise PratError(
-            f"Cannot open {label} {path}: {error.strerror or error}.",
+            f"cannot open {label} {path}: {error.strerror or error}",
             code="invalid_arguments",
         ) from error
     try:
@@ -145,13 +145,11 @@ def _read_file(
             mode = os.fstat(descriptor).st_mode
         except OSError as error:
             raise PratError(
-                f"Cannot inspect {label} {path}: {error.strerror or error}.",
+                f"cannot inspect {label} {path}: {error.strerror or error}",
                 code="invalid_arguments",
             ) from error
         if not stat.S_ISREG(mode):
-            raise PratError(
-                f"{label.capitalize()} is not a regular file: {path}", code="invalid_arguments"
-            )
+            raise PratError(f"{label} is not a regular file: {path}", code="invalid_arguments")
         return _read_descriptor(descriptor, state, wait=False, label=f"{label} {path}", limit=limit)
     finally:
         os.close(descriptor)
@@ -163,7 +161,7 @@ def _read_stdin(
     stream = cast(BinaryIO | TextIO, getattr(stdin, "buffer", stdin))
     if stream is None:
         raise PratError(
-            "Cannot read standard input; provide exactly one prompt another way.",
+            "cannot read standard input; provide exactly one prompt another way",
             code="invalid_arguments",
         )
     try:
@@ -181,14 +179,14 @@ def _read_stream(
         value = stream.read(limit + 1)
     except (OSError, ValueError) as error:
         raise PratError(
-            f"Cannot read standard input; provide exactly one prompt another way: {error}.",
+            f"cannot read standard input; provide exactly one prompt another way: {error}",
             code="invalid_arguments",
         ) from error
     _raise_if_interrupted(state)
     if isinstance(value, str):
         return _encode_inline(value)
     if not isinstance(value, bytes):
-        raise PratError("Cannot read standard input as bytes.", code="invalid_arguments")
+        raise PratError("cannot read standard input as bytes", code="invalid_arguments")
     return value
 
 
@@ -208,7 +206,7 @@ def _read_descriptor(
                 readable, _, _ = select.select([descriptor], [], [], 0.05)
             except (OSError, ValueError) as error:
                 raise PratError(
-                    f"Cannot read {label}: {error}.", code="invalid_arguments"
+                    f"cannot read {label}: {error}", code="invalid_arguments"
                 ) from error
             if not readable:
                 continue
@@ -220,7 +218,7 @@ def _read_descriptor(
             if error.errno == errno.EINTR:
                 continue
             raise PratError(
-                f"Cannot read {label}: {error.strerror or error}.", code="invalid_arguments"
+                f"cannot read {label}: {error.strerror or error}", code="invalid_arguments"
             ) from error
         if not chunk:
             break
@@ -231,13 +229,13 @@ def _read_descriptor(
 def _validate(value: bytes, label: str, *, allow_empty: bool = False) -> bytes:
     _check_size(len(value))
     if b"\0" in value:
-        raise PratError("Prompt must not contain NUL bytes.", code="invalid_arguments")
+        raise PratError("prompt must not contain NUL bytes", code="invalid_arguments")
     try:
         text = value.decode("utf-8")
     except UnicodeDecodeError as error:
-        raise PratError(f"{label} is not valid UTF-8.", code="invalid_arguments") from error
+        raise PratError(f"{label} is not valid UTF-8", code="invalid_arguments") from error
     if not allow_empty and not text.strip():
-        raise PratError("Prompt must not be empty or whitespace-only.", code="invalid_arguments")
+        raise PratError("prompt must not be empty or whitespace-only", code="invalid_arguments")
     return value
 
 
@@ -259,7 +257,7 @@ def read_edited_prompt(path: Path, state: InterruptionState) -> bytes:
     _raise_if_interrupted(state)
     value = _read_file(str(path), path.parent, state, label="edited prompt")
     _raise_if_interrupted(state)
-    return _validate(value, "Edited prompt")
+    return _validate(value, "edited prompt")
 
 
 def read_bounded_file(path: Path, *, limit: int, label: str) -> bytes:

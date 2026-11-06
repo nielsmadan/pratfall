@@ -156,7 +156,7 @@ def test_openclaw_preserves_final_when_success_error_field_is_malformed() -> Non
     )
     assert decoded.output == "safe final"
     assert decoded.usage == Usage(input_tokens=12, output_tokens=4)
-    assert decoded.error == ResultError("protocol_error", "OpenClaw error is malformed.")
+    assert decoded.error == ResultError("protocol_error", "OpenClaw error is malformed")
 
 
 def test_openclaw_provider_timeout_is_explicit() -> None:
@@ -197,7 +197,7 @@ def test_openclaw_malformed_provider_drops_model_but_preserves_cost(provider: ob
     )
     assert decoded.reported_models is None
     assert decoded.cost_usd == 0.25
-    assert decoded.error == ResultError("protocol_error", "OpenClaw provider is malformed.")
+    assert decoded.error == ResultError("protocol_error", "OpenClaw provider is malformed")
 
 
 @pytest.mark.parametrize("model_value", [None, "missing"])
@@ -209,7 +209,7 @@ def test_openclaw_validates_provider_without_a_model(model_value: object, provid
     decoded = openclaw.decode(json.dumps(value))
     assert decoded.reported_models is None
     assert decoded.cost_usd == 0.25
-    assert decoded.error == ResultError("protocol_error", "OpenClaw provider is malformed.")
+    assert decoded.error == ResultError("protocol_error", "OpenClaw provider is malformed")
 
 
 @pytest.mark.parametrize("model_value", [None, "missing"])

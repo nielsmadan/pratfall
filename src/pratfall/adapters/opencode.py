@@ -75,7 +75,7 @@ def major_version(version: str) -> int:
     match = _VERSION.search(version)
     if match is None:
         raise PratError(
-            f"OpenCode version output is not recognized: {version!r}.", code="protocol_error"
+            f"OpenCode version output is not recognized: {version!r}", code="protocol_error"
         )
     return int(match.group(1))
 
@@ -113,13 +113,13 @@ def validate_v2(resolved: ResolvedProfile) -> None:
         return
     if model is None:
         raise PratError(
-            "OpenCode 2 selects effort as a model variant; set a model as well.",
+            "OpenCode 2 selects effort as a model variant; set a model as well",
             code="invalid_arguments",
             option="effort",
         )
     if "#" in model:
         raise PratError(
-            "OpenCode 2 model already names a #variant; remove it or the effort.",
+            "OpenCode 2 model already names a #variant; remove it or the effort",
             code="invalid_arguments",
             option="effort",
         )

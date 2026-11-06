@@ -100,7 +100,7 @@ def test_antigravity_failure_preserves_safe_response_and_usage() -> None:
                 },
                 {"event": "init", "init": {}},
             ),
-            "Antigravity result event is malformed.",
+            "Antigravity result event is malformed",
         ),
         (
             (
@@ -115,7 +115,7 @@ def test_antigravity_failure_preserves_safe_response_and_usage() -> None:
                     },
                 },
             ),
-            "Antigravity step_update event is malformed.",
+            "Antigravity step_update event is malformed",
         ),
         (
             (
@@ -130,7 +130,7 @@ def test_antigravity_failure_preserves_safe_response_and_usage() -> None:
                 },
                 {"event": "step_update", "step_update": {}},
             ),
-            "Antigravity step_update event is malformed.",
+            "Antigravity step_update event is malformed",
         ),
     ],
 )

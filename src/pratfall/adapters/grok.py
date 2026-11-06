@@ -122,7 +122,7 @@ def decode(stdout: str) -> DecodedOutput:
     if isinstance(value, ResultError):
         return DecodedOutput(error=value)
     if not isinstance(value, dict):
-        return DecodedOutput(error=_protocol("Grok result must be a JSON object."))
+        return DecodedOutput(error=_protocol("Grok result must be a JSON object"))
     if value.get("type") == "error":
         return _decode_error(value)
 
@@ -133,7 +133,7 @@ def decode(stdout: str) -> DecodedOutput:
             usage=usage,
             reported_models=reported_models,
             cost_usd=cost_usd,
-            error=_protocol("Grok result envelope is malformed."),
+            error=_protocol("Grok result envelope is malformed"),
         )
     try:
         output.encode("utf-8")
@@ -156,7 +156,7 @@ def decode(stdout: str) -> DecodedOutput:
             usage=usage,
             reported_models=reported_models,
             cost_usd=cost_usd,
-            error=output_error or _protocol("Grok result envelope is malformed."),
+            error=output_error or _protocol("Grok result envelope is malformed"),
         )
 
     session_id = session_text(session)
@@ -167,7 +167,7 @@ def decode(stdout: str) -> DecodedOutput:
             usage=usage,
             reported_models=reported_models,
             cost_usd=cost_usd,
-            error=ResultError("provider_error", f"Grok run ended with {stop_reason}."),
+            error=ResultError("provider_error", f"Grok run ended with {stop_reason}"),
         )
     return DecodedOutput(
         output=output,
@@ -182,7 +182,7 @@ def decode(stdout: str) -> DecodedOutput:
 def _decode_error(value: dict[str, object]) -> DecodedOutput:
     message = value.get("message")
     if not isinstance(message, str) or not message:
-        return DecodedOutput(error=_protocol("Grok error result is missing a string message."))
+        return DecodedOutput(error=_protocol("Grok error result is missing a string message"))
     try:
         message.encode("utf-8")
     except UnicodeEncodeError:
@@ -207,7 +207,7 @@ def _accounting(
     if incomplete is True:
         usage = None
         cost_usd = None
-        usage_error = _protocol("Grok usage is incomplete.")
+        usage_error = _protocol("Grok usage is incomplete")
     return (
         usage,
         reported_models,
@@ -220,16 +220,16 @@ def _usage(value: object) -> tuple[Usage | None, ResultError | None]:
     if value is None:
         return None, None
     if not isinstance(value, dict):
-        return None, _protocol("Grok usage must be a JSON object.")
+        return None, _protocol("Grok usage must be a JSON object")
     counts: dict[str, int] = {}
     for field in _USAGE_FIELDS:
         item = value.get(field)
         if not isinstance(item, int) or isinstance(item, bool) or item < 0:
-            return None, _protocol(f"Grok usage field {field!r} is malformed.")
+            return None, _protocol(f"Grok usage field {field!r} is malformed")
         counts[field] = item
     expected_total = sum(counts[field] for field in _USAGE_FIELDS[:4])
     if counts["total_tokens"] != expected_total:
-        return None, _protocol("Grok usage total_tokens is inconsistent.")
+        return None, _protocol("Grok usage total_tokens is inconsistent")
     return (
         Usage(
             input_tokens=counts["input_tokens"],
@@ -248,23 +248,23 @@ def _accounting_metadata(
     for field in ("usage_is_incomplete", "cost_is_partial"):
         item = value.get(field)
         if item is not None and not isinstance(item, bool):
-            return _protocol(f"Grok {field} is malformed.")
+            return _protocol(f"Grok {field} is malformed")
     turns = value.get("num_turns")
     if turns is not None and (not isinstance(turns, int) or isinstance(turns, bool) or turns < 0):
-        return _protocol("Grok num_turns is malformed.")
+        return _protocol("Grok num_turns is malformed")
     ticks = value.get("total_cost_usd_ticks")
     if ticks is not None and (not isinstance(ticks, int) or isinstance(ticks, bool) or ticks < 0):
-        return _protocol("Grok total_cost_usd_ticks is malformed.")
+        return _protocol("Grok total_cost_usd_ticks is malformed")
     if value.get("cost_is_partial") is True and (cost_usd is not None or ticks is not None):
-        return _protocol("Grok partial cost includes a total.")
+        return _protocol("Grok partial cost includes a total")
     if (cost_usd is None) != (ticks is None):
-        return _protocol("Grok cost fields are incomplete.")
+        return _protocol("Grok cost fields are incomplete")
     if (
         cost_usd is not None
         and ticks is not None
         and not math.isclose(float(cost_usd), ticks / 10_000_000_000, rel_tol=0, abs_tol=5e-11)
     ):
-        return _protocol("Grok cost fields are inconsistent.")
+        return _protocol("Grok cost fields are inconsistent")
     return None
 
 

@@ -40,7 +40,7 @@ def test_invalid_placeholder_syntax_fails_validation(prompt: str) -> None:
     assert caught.value.code == "invalid_config"
     assert str(caught.value) == (
         "source: templates.work.prompt: use $name or ${name} placeholders "
-        "and $$ for a literal dollar."
+        "and $$ for a literal dollar"
     )
 
 
@@ -51,7 +51,7 @@ def test_input_case_near_miss_fails_validation(prompt: str, identifier: str) -> 
     assert caught.value.code == "invalid_config"
     assert str(caught.value) == (
         f"templates.work.prompt: placeholder '{identifier}' differs from 'input' only in case; "
-        "use $input or ${input} for the base prompt."
+        "use $input or ${input} for the base prompt"
     )
 
 
@@ -165,22 +165,22 @@ def test_named_parameter_splits_at_first_equals_and_keeps_dash_values() -> None:
 def test_too_many_positionals_suggest_free_text_options() -> None:
     assert binding_error(("a", "b", "c")) == (
         "profile 'clean' prompt takes 2 parameter value(s) (src, dst) but got 3; "
-        "pass free text with --prompt=TEXT or --file PATH."
+        "pass free text with --prompt=TEXT or --file PATH"
     )
 
 
 def test_lone_dash_positional_is_rejected_in_parameter_mode() -> None:
     assert binding_error(("a", "-")) == (
         "profile 'clean' prompt: '-' cannot be the value of parameter 'dst'; "
-        "use --param dst=- for a literal dash or --file - to read standard input."
+        "use --param dst=- for a literal dash or --file - to read standard input"
     )
 
 
 @pytest.mark.parametrize(
     ("named", "message"),
     [
-        (("src",), "profile 'clean' prompt: --param 'src' must have the form NAME=VALUE."),
-        (("=a",), "profile 'clean' prompt: --param '=a' has an empty parameter name."),
+        (("src",), "profile 'clean' prompt: --param 'src' must have the form NAME=VALUE"),
+        (("=a",), "profile 'clean' prompt: --param '=a' has an empty parameter name"),
         (
             ("other=a",),
             "profile 'clean' prompt has no parameter 'other'; its parameters are src, dst",
@@ -189,7 +189,7 @@ def test_lone_dash_positional_is_rejected_in_parameter_mode() -> None:
             ("input=a",),
             (
                 "profile 'clean' prompt: 'input' is not a parameter; provide the base prompt "
-                "with --prompt=TEXT, --file PATH, or standard input."
+                "with --prompt=TEXT, --file PATH, or standard input"
             ),
         ),
     ],
@@ -204,7 +204,7 @@ def test_malformed_named_parameters_are_rejected(named: tuple[str, ...], message
 )
 def test_parameter_bound_twice_is_rejected(words: tuple[str, ...], named: tuple[str, ...]) -> None:
     assert binding_error(words, named) == (
-        "profile 'clean' prompt: parameter 'src' is bound more than once."
+        "profile 'clean' prompt: parameter 'src' is bound more than once"
     )
 
 
@@ -216,7 +216,7 @@ def test_unbound_parameters_are_all_listed(
     words: tuple[str, ...], named: tuple[str, ...], missing: str
 ) -> None:
     assert binding_error(words, named) == (
-        f"profile 'clean' prompt: missing value for parameter(s) {missing}."
+        f"profile 'clean' prompt: missing value for parameter(s) {missing}"
     )
 
 
@@ -231,18 +231,18 @@ def test_unbound_parameters_are_all_listed(
 )
 def test_invalid_parameter_values_are_rejected(value: str, problem: str) -> None:
     assert binding_error(("a",), (f"dst={value}",)) == (
-        f"profile 'clean' prompt: parameter 'dst' {problem}."
+        f"profile 'clean' prompt: parameter 'dst' {problem}"
     )
-    assert binding_error((value, "b")) == f"profile 'clean' prompt: parameter 'src' {problem}."
+    assert binding_error((value, "b")) == f"profile 'clean' prompt: parameter 'src' {problem}"
 
 
 @pytest.mark.parametrize(
     ("prompt", "message"),
     [
-        (None, "--param needs a prompt with parameters, but no template is active."),
+        (None, "--param needs a prompt with parameters, but no template is active"),
         (
             "Review $input",
-            "--param needs a prompt with parameters, but profile 'clean' prompt has no parameters.",
+            "--param needs a prompt with parameters, but profile 'clean' prompt has no parameters",
         ),
     ],
 )
@@ -285,7 +285,7 @@ def test_more_than_one_prompt_source_is_rejected_without_parameters(
     with pytest.raises(PratError) as caught:
         bind(words, (), None, explicit)
     assert caught.value.code == "invalid_arguments"
-    assert str(caught.value) == "Provide exactly one prompt source."
+    assert str(caught.value) == "provide exactly one prompt source"
 
 
 @pytest.mark.parametrize(
@@ -332,8 +332,8 @@ def test_parameter_values_count_utf8_bytes_toward_limit(
 @pytest.mark.parametrize(
     ("active", "message"),
     [
-        (False, "--param needs a prompt with parameters, but no template is active."),
-        (True, "--param needs a prompt with parameters, but workflow 'tidy' has no parameters."),
+        (False, "--param needs a prompt with parameters, but no template is active"),
+        (True, "--param needs a prompt with parameters, but workflow 'tidy' has no parameters"),
     ],
 )
 def test_bind_input_rejects_named_values_without_parameters(active: bool, message: str) -> None:
