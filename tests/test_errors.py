@@ -22,6 +22,20 @@ def test_did_you_mean_names_the_closest_candidate_or_the_fallback(
     assert did_you_mean(value, ["codex", "claude", "claude"], otherwise) == expected
 
 
+@pytest.mark.parametrize(
+    ("value", "candidates", "expected"),
+    [
+        ("qwne", ["qwen", "kilo"], "; did you mean 'qwen'?"),
+        ("--attach", ["--attachment", "--add-dir"], "; did you mean '--attachment'?"),
+        ("iflow", ["kilo", "qwen"], ""),
+    ],
+)
+def test_did_you_mean_suggests_only_matches_at_three_quarters_similarity(
+    value: str, candidates: list[str], expected: str
+) -> None:
+    assert did_you_mean(value, candidates) == expected
+
+
 _SOURCE = Path(__file__).resolve().parents[1] / "src" / "pratfall"
 _MESSAGE_CALLS = frozenset(
     {"PratError", "ResultError", "malformed", "_protocol", "_argument_error"}

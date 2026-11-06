@@ -242,6 +242,14 @@ MANAGEMENT_COMMANDS = frozenset(
     {"agents", "profiles", "templates", "workflows", "doctor", "config", "trust", "completion"}
 )
 RESERVED_NAMES = frozenset(BY_SELECTOR) | MANAGEMENT_COMMANDS | {"help", "version"}
+REMOVED_AGENTS = MappingProxyType(dict.fromkeys(("openhands", "oh", "iflow", "if"), "0.9.0"))
+
+
+def removed_agent(name: str) -> str | None:
+    version = REMOVED_AGENTS.get(name)
+    if version is None:
+        return None
+    return f"agent {name!r} was removed in {version}; run 'prat agents' to list choices"
 
 
 def get_agent(selector: str) -> AgentSpec:
@@ -249,6 +257,7 @@ def get_agent(selector: str) -> AgentSpec:
         return BY_SELECTOR[selector]
     except KeyError:
         raise PratError(
-            f"unknown agent {selector!r}"
+            removed_agent(selector)
+            or f"unknown agent {selector!r}"
             + did_you_mean(selector, BY_SELECTOR, "run 'prat agents' to list agents")
         ) from None

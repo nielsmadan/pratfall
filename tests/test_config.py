@@ -1567,6 +1567,21 @@ def test_local_workflow_replaces_global_and_checks_global_profiles(
             "'work' has no parameter 'fodler'; did you mean 'folder'?",
         ),
         (
+            'version=1\n[profiles.work]\nagent="iflow"',
+            (
+                "profiles.work.agent: agent 'iflow' was removed in 0.9.0; "
+                "run 'prat agents' to list choices"
+            ),
+        ),
+        (
+            'version=1\n[agents.oh]\ncommand=["oh"]',
+            "agents.oh: agent 'oh' was removed in 0.9.0; run 'prat agents' to list choices",
+        ),
+        (
+            'version=1\n[workflows.w]\nsteps=[{name="a", profile="if"}]',
+            "step 'a'.profile: agent 'if' was removed in 0.9.0; run 'prat agents' to list choices",
+        ),
+        (
             'version=1\n[defaults]\nnotify_method="osc8"',
             "defaults.notify_method 'osc8': expected one of ",
         ),

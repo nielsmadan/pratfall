@@ -75,7 +75,8 @@ def test_unknown_agent_is_actionable() -> None:
 
 @pytest.mark.parametrize("name", ["openhands", "oh", "iflow", "if"])
 def test_retired_agents_are_rejected_with_selection_guidance(name: str) -> None:
-    with pytest.raises(
-        PratError, match=f"unknown agent '{name}'; (run 'prat agents'|did you mean)"
-    ):
+    with pytest.raises(PratError) as caught:
         get_agent(name)
+    assert str(caught.value) == (
+        f"agent '{name}' was removed in 0.9.0; run 'prat agents' to list choices"
+    )

@@ -1656,3 +1656,23 @@ def test_unknown_selector_suggests_a_configured_workflow(
     )
     assert main(["nightyl", "hi", "--dry-run"]) == 2
     assert capsys.readouterr().err == "prat: unknown selector 'nightyl'; did you mean 'nightly'?\n"
+
+
+@pytest.mark.parametrize("name", ["openhands", "oh", "iflow", "if"])
+def test_removed_agent_selectors_say_when_they_were_removed(
+    name: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main([name, "hi", "--dry-run", "--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == {
+        "code": "invalid_arguments",
+        "message": f"agent '{name}' was removed in 0.9.0; run 'prat agents' to list choices",
+    }
+
+
+def test_removed_agent_name_configured_as_a_profile_still_runs(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = init_config(cwd=Path.cwd(), env=os.environ)
+    path.write_text('version=1\n[profiles.iflow]\nagent="codex"\n')
+    assert main(["iflow", "hi", "--dry-run", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["agent"] == "codex"

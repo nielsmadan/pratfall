@@ -15,7 +15,7 @@ class PratError(Exception):
 
 
 def did_you_mean(value: str, candidates: Iterable[str], otherwise: str = "") -> str:
-    matches = get_close_matches(value, sorted(set(candidates)), n=1)
+    matches = get_close_matches(value, sorted(set(candidates)), n=1, cutoff=0.75)
     if matches:
         return f"; did you mean '{matches[0]}'?"
     return f"; {otherwise}" if otherwise else ""

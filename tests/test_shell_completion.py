@@ -669,5 +669,5 @@ def test_completion_reads_profiles_and_config_path_through_the_loader() -> None:
 
 
 def test_completion_suggests_the_closest_shell(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["completion", "zhs"]) == 2
-    assert capsys.readouterr().err == "prat: unsupported shell 'zhs'; did you mean 'zsh'?\n"
+    assert main(["completion", "bassh"]) == 2
+    assert capsys.readouterr().err == "prat: unsupported shell 'bassh'; did you mean 'bash'?\n"

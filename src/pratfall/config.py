@@ -10,7 +10,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, NamedTuple
 
-from pratfall.catalog import BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent
+from pratfall.catalog import BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent, removed_agent
 from pratfall.errors import PratError, did_you_mean
 from pratfall.instructions import validate_instructions
 from pratfall.limits import (
@@ -423,10 +423,10 @@ def _agent_settings(
     for name, value in table.items():
         label = f"{path}: agents.{name}"
         if name not in BY_NAME:
-            raise PratError(
-                f"{label}: unknown agent {name!r}"
-                + did_you_mean(name, BY_NAME, "use a canonical name from 'prat agents'")
+            unknown = removed_agent(name) or f"unknown agent {name!r}" + did_you_mean(
+                name, BY_NAME, "use a canonical name from 'prat agents'"
             )
+            raise PratError(f"{label}: {unknown}")
         settings = _table(value, label)
         _known_keys(settings, frozenset({"command", "command_prefix"}), label)
         if "command_prefix" in settings:
@@ -776,14 +776,14 @@ def _validate_workflow_step(
     if step.selector in config.workflows:
         raise PratError(f"{label}.profile: {step.selector!r} is a workflow, not a profile or agent")
     if step.selector not in config.profiles and step.selector not in BY_SELECTOR:
-        raise PratError(
-            f"{label}.profile: unknown selector {step.selector!r}"
-            + did_you_mean(
-                step.selector,
-                [*BY_SELECTOR, *config.profiles],
-                "run 'prat agents' or 'prat profiles' to list choices",
-            )
+        unknown = removed_agent(
+            step.selector
+        ) or f"unknown selector {step.selector!r}" + did_you_mean(
+            step.selector,
+            [*BY_SELECTOR, *config.profiles],
+            "run 'prat agents' or 'prat profiles' to list choices",
         )
+        raise PratError(f"{label}.profile: {unknown}")
     prompt = step_prompt(config, step)
     parameters = () if prompt is None else template_parameters(prompt)
     ancestors = _ancestors(workflow, step)
@@ -1050,7 +1050,8 @@ def resolve_profile(
         profile_options = Options()
     else:
         raise PratError(
-            f"unknown selector {selector!r}"
+            removed_agent(selector)
+            or f"unknown selector {selector!r}"
             + did_you_mean(
                 selector,
                 [*BY_SELECTOR, *config.profiles, *config.workflows],
