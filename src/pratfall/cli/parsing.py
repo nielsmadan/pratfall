@@ -1,16 +1,16 @@
 import argparse
 import math
 import os
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from importlib.metadata import version
 from pathlib import Path
 from types import MappingProxyType
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from pratfall.catalog import MANAGEMENT_COMMANDS
 from pratfall.config import validate_native_agent, validate_session_id
-from pratfall.errors import PratError
+from pratfall.errors import PratError, did_you_mean
 from pratfall.instructions import validate_instructions
 from pratfall.models import MAX_TURNS, OptionOrigin, Options
 from pratfall.prompt_input import PromptSource
@@ -81,6 +81,25 @@ _RUN_VALUE_FLAGS: Mapping[str, str] = MappingProxyType(
         "--param": "parameters",
     }
 )
+
+_OPTION_FLAGS: Mapping[str, str] = MappingProxyType(
+    {
+        **{field: flag for flag, field in _RUN_VALUE_FLAGS.items() if flag.startswith("--")},
+        "native_args": "arguments after --",
+    }
+)
+
+
+def option_flags(options: Options) -> dict[str, str]:
+    tri_state = {
+        field: flag
+        for flag, (field, value, _) in _TRI_STATE_FLAGS.items()
+        if getattr(options, field) is value
+    }
+    return {**_OPTION_FLAGS, **tri_state}
+
+
+_RUN_FLAG_NAMES = frozenset({*_RUN_VALUE_FLAGS, *_RUN_FLAGS_WITHOUT_VALUE, "--prompt"})
 
 _WORKFLOW_FLAGS = frozenset(
     {
@@ -183,8 +202,23 @@ class _RunScan:
 
 
 class Parser(argparse.ArgumentParser):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self.flags: list[str] = []
+        super().__init__(*args, **kwargs)
+
+    def add_argument(self, *args: Any, **kwargs: Any) -> argparse.Action:
+        action = super().add_argument(*args, **kwargs)
+        if action.help != argparse.SUPPRESS:
+            self.flags.extend(action.option_strings)
+        return action
+
     def error(self, message: str) -> NoReturn:
         raise PratError(message, code="invalid_arguments")
+
+
+def unrecognized_argument(argument: str, flags: Iterable[str]) -> PratError:
+    suggestion = did_you_mean(argument.partition("=")[0], flags) if argument[:1] == "-" else ""
+    return PratError(f"unrecognized argument: {argument}{suggestion}", code="invalid_arguments")
 
 
 def _common_flags(parser: argparse.ArgumentParser) -> None:
@@ -203,6 +237,41 @@ def _common_flags(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> Parser:
+    return _parsers()[()]
+
+
+def parse_management(arguments: list[str]) -> argparse.Namespace:
+    _check_config_command(arguments)
+    parsers = _parsers()
+    args, extras = parsers[()].parse_known_args(arguments)
+    if extras:
+        command = (args.command, getattr(args, "config_command", None))
+        path = tuple(name for name in command if name is not None)
+        raise unrecognized_argument(extras[0], parsers[path].flags)
+    return args
+
+
+def _check_config_command(arguments: list[str]) -> None:
+    tokens = _scan_run(arguments).tokens
+    if any(token.argument in {"-h", "--help"} for token in tokens):
+        return
+    words = [token.argument for token in tokens if token.argument[:1] != "-"]
+    if words[:1] != ["config"]:
+        return
+    choices = ", ".join(_CONFIG_COMMAND_HELP)
+    if len(words) == 1:
+        raise PratError(
+            f"config requires a command (choose from {choices})", code="invalid_arguments"
+        )
+    if words[1] not in _CONFIG_COMMAND_HELP:
+        suggestion = did_you_mean(words[1], _CONFIG_COMMAND_HELP)
+        raise PratError(
+            f"unknown config command {words[1]!r}{suggestion} (choose from {choices})",
+            code="invalid_arguments",
+        )
+
+
+def _parsers() -> dict[tuple[str, ...], Parser]:
     parser = Parser(
         prog="prat",
         description="One-shot coding agents for scripts and pipes.",
@@ -214,8 +283,10 @@ def build_parser() -> Parser:
     _common_flags(parser)
     parser.add_argument("--version", action="version", version=f"prat {version('pratfall')}")
     subparsers = parser.add_subparsers(dest="command", parser_class=Parser)
+    parsers: dict[tuple[str, ...], Parser] = {(): parser}
     for command in ("agents", "profiles", "templates", "workflows", "doctor"):
         child = subparsers.add_parser(command, help=_MANAGEMENT_HELP[command], allow_abbrev=False)
+        parsers[(command,)] = child
         _common_flags(child)
         if command == "doctor":
             child.add_argument(
@@ -228,14 +299,17 @@ def build_parser() -> Parser:
                 ),
             )
     config = subparsers.add_parser("config", help=_MANAGEMENT_HELP["config"], allow_abbrev=False)
+    parsers[("config",)] = config
     _common_flags(config)
     config_commands = config.add_subparsers(
         dest="config_command", required=True, parser_class=Parser
     )
     for name, help_text in _CONFIG_COMMAND_HELP.items():
         child = config_commands.add_parser(name, help=help_text, allow_abbrev=False)
+        parsers[("config", name)] = child
         _common_flags(child)
     trust = subparsers.add_parser("trust", help=_MANAGEMENT_HELP["trust"], allow_abbrev=False)
+    parsers[("trust",)] = trust
     trust.add_argument("--config", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     trust.add_argument(
         "--json",
@@ -256,13 +330,14 @@ def build_parser() -> Parser:
     completion = subparsers.add_parser(
         "completion", help=_MANAGEMENT_HELP["completion"], allow_abbrev=False
     )
+    parsers[("completion",)] = completion
     completion.add_argument(
         "shell",
         nargs="?",
         metavar="SHELL",
         help="bash or zsh; default: the basename of $SHELL, else bash.",
     )
-    return parser
+    return parsers
 
 
 def _parse_run(arguments: list[str]) -> RunArguments:
@@ -316,7 +391,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
                 _store_value(values, field, value)
             continue
         if argument.startswith("-") and argument != "-":
-            raise PratError(f"unrecognized argument: {argument}", code="invalid_arguments")
+            raise unrecognized_argument(argument, _RUN_FLAG_NAMES)
         if selector is None:
             selector = argument
         else:

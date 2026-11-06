@@ -2803,7 +2803,7 @@ def test_unknown_template_fails_before_stdin(
     assert main(["cx", "--template=missing", "--config", str(config), "--json"]) == 2
     assert json.loads(capsys.readouterr().out)["error"] == {
         "code": "invalid_arguments",
-        "message": "Unknown template 'missing'; run 'prat templates' to list choices.",
+        "message": "unknown template 'missing'; run 'prat templates' to list choices",
     }
 
 
@@ -2875,7 +2875,9 @@ def test_template_flag_after_native_boundary_stays_native(
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
     monkeypatch.setattr(sys, "stdin", UnreadInput())
     assert main(["cx", "--config", str(config), "--json", "--", "--template=work"]) == 2
-    assert "native_args" in json.loads(capsys.readouterr().out)["error"]["message"]
+    assert json.loads(capsys.readouterr().out)["error"]["message"].startswith(
+        "arguments after --: Codex native argument '--template=work'"
+    )
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
@@ -3330,7 +3332,7 @@ def test_extra_directories_reject_native_path_rewriting_before_input(
     assert main([agent, "--add-dir", name, "--json"]) == 2
     error = json.loads(capsys.readouterr().out)["error"]
     assert error["code"] == "invalid_arguments"
-    assert "command line:" in error["message"]
+    assert error["message"].startswith("--add-dir: ")
     assert "commas or surrounding whitespace" in error["message"]
 
 
@@ -3624,7 +3626,7 @@ def test_param_after_native_boundary_stays_native(
     arguments = ["remove-empty", "src", "--config", str(config), "--json"]
     assert main([*arguments, "--", "--param", "folder=lib"]) == 2
     assert json.loads(capsys.readouterr().out)["error"]["message"].startswith(
-        "command line: selector 'remove-empty'.native_args: Codex native argument '--param': "
+        "arguments after --: Codex native argument '--param': "
     )
 
 
@@ -3661,8 +3663,15 @@ def test_dry_run_shows_prompt_rendered_with_parameters(
         ),
         (
             ["remove-empty", "--param", "dir=src"],
-            "profile 'remove-empty' prompt has no parameter 'dir'; its parameters are folder.",
+            "profile 'remove-empty' prompt has no parameter 'dir'; its parameters are folder",
         ),
+        (
+            ["remove-empty", "--param", "fodler=src"],
+            "profile 'remove-empty' prompt has no parameter 'fodler'; did you mean 'folder'?",
+        ),
+        (["cx", "-t", "renam", "foo"], "unknown template 'renam'; did you mean 'rename'?"),
+        (["remove-emty", "src"], "unknown selector 'remove-emty'; did you mean 'remove-empty'?"),
+        (["clade", "src"], "unknown selector 'clade'; did you mean 'claude'?"),
         (
             ["remove-empty", "--param", "folder= "],
             (
@@ -3753,7 +3762,7 @@ def test_unknown_selector_wins_over_extra_prompt_words(
     assert json.loads(capsys.readouterr().out)["error"] == {
         "code": "invalid_arguments",
         "message": (
-            "Unknown selector 'missing'; run 'prat agents' or 'prat profiles' to list choices."
+            "unknown selector 'missing'; run 'prat agents' or 'prat profiles' to list choices"
         ),
     }
 
@@ -4223,7 +4232,7 @@ def test_opencode_missing_executable_reports_not_found(capsys: pytest.CaptureFix
 @pytest.mark.parametrize(
     ("arguments", "settings", "expected"),
     [
-        (["oc", "--effort=high"], "", ("invalid_arguments", "selector 'oc'.effort")),
+        (["oc", "--effort=high"], "", ("invalid_arguments", "--effort: ")),
         (["work"], 'effort = "high"', ("invalid_config", "profiles.work.effort")),
         (["oc", "--", "--pure"], "", ("invalid_arguments", "--pure")),
     ],

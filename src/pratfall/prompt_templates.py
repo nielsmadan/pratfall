@@ -4,7 +4,7 @@ from re import Match
 from string import Template
 from types import MappingProxyType
 
-from pratfall.errors import PratError
+from pratfall.errors import PratError, did_you_mean
 from pratfall.prompt_input import PROMPT_LIMIT, PromptSource
 
 _INPUT = "input"
@@ -160,7 +160,8 @@ def _split_named(raw: str, names: tuple[str, ...], label: str) -> tuple[str, str
         )
     if name not in names:
         raise _argument_error(
-            f"{label} has no parameter '{name}'; its parameters are {', '.join(names)}."
+            f"{label} has no parameter '{name}'"
+            + did_you_mean(name, names, f"its parameters are {', '.join(names)}")
         )
     return name, value
 

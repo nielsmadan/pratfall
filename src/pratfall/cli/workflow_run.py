@@ -7,7 +7,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import cast
 
-from pratfall.cli.parsing import _WORKFLOW_FLAGS, RunArguments, _run_cwd, _scan_run
+from pratfall.cli.parsing import _WORKFLOW_FLAGS, RunArguments, _run_cwd, _scan_run, option_flags
 from pratfall.cli.presentation import (
     _emit_result,
     _emit_stdout,
@@ -144,7 +144,10 @@ def _reject_flags(arguments: list[str]) -> None:
 
 def _step_timeout(config: Config, name: str, step: WorkflowStep, parsed: RunArguments) -> float:
     try:
-        timeout = resolve_profile(config, step.selector, parsed.options).options.timeout
+        resolved = resolve_profile(
+            config, step.selector, parsed.options, option_flags(parsed.options)
+        )
+        timeout = resolved.options.timeout
     except PratError as error:
         raise PratError(
             f"workflow '{name}' step '{step.name}': {error}", code=error.code

@@ -1,6 +1,6 @@
 from types import MappingProxyType
 
-from pratfall.errors import PratError
+from pratfall.errors import PratError, did_you_mean
 from pratfall.models import AgentSpec, Capabilities
 
 AGENTS = (
@@ -248,4 +248,7 @@ def get_agent(selector: str) -> AgentSpec:
     try:
         return BY_SELECTOR[selector]
     except KeyError:
-        raise PratError(f"Unknown agent {selector!r}; run 'prat agents' to list agents.") from None
+        raise PratError(
+            f"unknown agent {selector!r}"
+            + did_you_mean(selector, BY_SELECTOR, "run 'prat agents' to list agents")
+        ) from None

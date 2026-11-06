@@ -121,7 +121,7 @@ def test_completion_rejects_unsupported_shell(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == (
-        "prat: Unsupported shell 'fish'; run 'prat completion bash' or 'prat completion zsh'.\n"
+        "prat: unsupported shell 'fish'; run 'prat completion bash' or 'prat completion zsh'\n"
     )
 
 
@@ -666,3 +666,8 @@ def test_completion_reads_profiles_and_config_path_through_the_loader() -> None:
     result = _complete(["--config", "~/team.toml", "ni"], load)
     assert result.candidates == (("night", "profile: claude"),)
     assert requested == [str(Path("~/team.toml").expanduser())]
+
+
+def test_completion_suggests_the_closest_shell(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["completion", "zhs"]) == 2
+    assert capsys.readouterr().err == "prat: unsupported shell 'zhs'; did you mean 'zsh'?\n"

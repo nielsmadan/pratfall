@@ -237,7 +237,7 @@ def test_invalid_attachment_fails_before_input(
         assert main([agent, f"--attachment={path}", *extras, "--edit", "--json"]) == 2
         error = json.loads(capsys.readouterr().out)["error"]
         assert error["code"] == "invalid_arguments"
-        assert "attachments" in error["message"]
+        assert error["message"].startswith("--attachment")
         assert expected in error["message"]
     finally:
         if case == "unreadable":

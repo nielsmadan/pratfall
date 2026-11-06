@@ -149,7 +149,7 @@ def test_a_child_may_override_the_inherited_agent(tmp_path: Path) -> None:
         ("[profiles.work]\nextends=1\n", "profiles.work.extends: expected"),
         (
             '[profiles.work]\nagent="claude"\nextends="missing"\n',
-            "profiles.work.extends: unknown profile 'missing'.",
+            "profiles.work.extends: unknown profile 'missing'",
         ),
         (
             '[profiles.work]\nextends="work"\n',
@@ -159,7 +159,7 @@ def test_a_child_may_override_the_inherited_agent(tmp_path: Path) -> None:
             '[profiles.a]\nextends="b"\n[profiles.b]\nextends="a"\n',
             "inheritance cycle: a -> b -> a.",
         ),
-        ('[profiles.work]\nextends="claude"\n', "profiles.work.extends: unknown profile 'claude'."),
+        ('[profiles.work]\nextends="claude"\n', "profiles.work.extends: unknown profile 'claude'"),
         ('[defaults]\nextends="x"\n', "unknown field 'extends'"),
     ],
 )

@@ -9,6 +9,7 @@ from adapter_helpers import codex_stream, codex_usage, copilot_result
 from pratfall.adapters import claude, codex, copilot, cursor, droid, grok, kimi
 from pratfall.catalog import BY_NAME
 from pratfall.cli import dispatch, main
+from pratfall.cli.parsing import option_flags
 from pratfall.config import config_path, load_config, option_origins, parse_options, resolve_profile
 from pratfall.errors import PratError
 from pratfall.models import Options
@@ -125,8 +126,9 @@ def test_session_id_four_layer_precedence_and_provenance(tmp_path: Path) -> None
     assert resolve_profile(config, "work").options.session_id == "profile"
     resolved = resolve_profile(config, "work", Options(session_id="cli"))
     assert resolved.options.session_id == "cli"
-    origin = option_origins(config, "work", Options(session_id="cli"))["session_id"]
-    assert origin.label == "command line: selector 'work'.session_id"
+    cli = Options(session_id="cli")
+    origin = option_origins(config, "work", cli, option_flags(cli))["session_id"]
+    assert origin.label == "--session-id"
     assert origin.code == "invalid_arguments"
 
 

@@ -11,7 +11,7 @@ from types import MappingProxyType
 from typing import Literal, NamedTuple
 
 from pratfall.catalog import BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent
-from pratfall.errors import PratError
+from pratfall.errors import PratError, did_you_mean
 from pratfall.instructions import validate_instructions
 from pratfall.limits import (
     CONFIG_BYTES,
@@ -95,7 +95,7 @@ def _table(value: object, label: str) -> dict[str, object]:
 def _known_keys(table: dict[str, object], allowed: frozenset[str], label: str) -> None:
     unknown = sorted(table.keys() - allowed)
     if unknown:
-        raise PratError(f"{label}: unknown field {unknown[0]!r}.")
+        raise PratError(f"{label}: unknown field {unknown[0]!r}{did_you_mean(unknown[0], allowed)}")
 
 
 def _string(value: object, label: str) -> str:
@@ -161,7 +161,8 @@ def _nonnegative_number(value: object, label: str) -> float:
 def _notify_method(value: object, label: str) -> NotifyMethod:
     if not isinstance(value, str) or value not in NOTIFY_METHODS:
         allowed = ", ".join(NOTIFY_METHODS)
-        raise PratError(f"{label}: expected one of {allowed}.")
+        rejected = f"{label} {value!r}" if isinstance(value, str) else label
+        raise PratError(f"{rejected}: expected one of {allowed}")
     return value
 
 
@@ -297,6 +298,15 @@ def _rejected(origin: OptionOrigin, message: str) -> PratError:
     return PratError(f"{origin.label}: {message}", code=origin.code)
 
 
+_BUDGETS: Mapping[str, str] = MappingProxyType(
+    {
+        "max_budget_usd": "a USD budget",
+        "max_turns": "a turn limit",
+        "max_ai_credits": "an AI-credit limit",
+    }
+)
+
+
 def validate_capabilities(
     agent: AgentSpec,
     options: Options,
@@ -322,10 +332,14 @@ def validate_capabilities(
             raise _rejected(fields["effort"], f"{agent.label} does not support an effort override.")
         if caps.effort_values and options.effort not in caps.effort_values:
             allowed = ", ".join(caps.effort_values)
-            raise _rejected(fields["effort"], f"{agent.label} accepts: {allowed}.")
-    for field in ("max_budget_usd", "max_turns", "max_ai_credits"):
+            origin = fields["effort"]
+            raise PratError(
+                f"{origin.label} {options.effort!r}: {agent.label} accepts {allowed}",
+                code=origin.code,
+            )
+    for field, budget in _BUDGETS.items():
         if getattr(options, field) is not None and field not in caps.budgets:
-            raise _rejected(fields[field], f"{agent.label} does not support this budget.")
+            raise _rejected(fields[field], f"{agent.label} does not support {budget}")
     if options.add_dirs and not caps.add_dirs:
         raise _rejected(fields["add_dirs"], f"{agent.label} does not support extra directories.")
     _validate_attachments(agent, options, fields["attachments"])
@@ -361,7 +375,10 @@ def _validate_attachments(agent: AgentSpec, options: Options, origin: OptionOrig
 
 
 def option_origins(
-    config: Config, selector: str, overrides: Options | None = None
+    config: Config,
+    selector: str,
+    overrides: Options | None = None,
+    flags: Mapping[str, str] = MappingProxyType({}),
 ) -> dict[str, OptionOrigin]:
     origins = {
         name: OptionOrigin(f"{source}: defaults.{name} (selector {selector!r})")
@@ -377,7 +394,7 @@ def option_origins(
             }
     if overrides is not None:
         origins = _without_instruction_peer(origins, overrides) | {
-            name: OptionOrigin(f"command line: selector {selector!r}.{name}", "invalid_arguments")
+            name: OptionOrigin(flags.get(name, name), "invalid_arguments")
             for name, value in asdict(overrides).items()
             if value is not None
         }
@@ -408,7 +425,10 @@ def _agent_settings(
     for name, value in table.items():
         label = f"{path}: agents.{name}"
         if name not in BY_NAME:
-            raise PratError(f"{label}: use a canonical name from 'prat agents'.")
+            raise PratError(
+                f"{label}: unknown agent {name!r}"
+                + did_you_mean(name, BY_NAME, "use a canonical name from 'prat agents'")
+            )
         settings = _table(value, label)
         _known_keys(settings, frozenset({"command", "command_prefix"}), label)
         if "command_prefix" in settings:
@@ -488,7 +508,9 @@ def _chain(layers: Mapping[str, ProfileLayer], name: str) -> tuple[ProfileLayer,
             return tuple(reversed(chain))
         label = f"{layer.source}: profiles.{layer.name}.extends"
         if layer.extends not in layers:
-            raise PratError(f"{label}: unknown profile {layer.extends!r}.")
+            raise PratError(
+                f"{label}: unknown profile {layer.extends!r}" + did_you_mean(layer.extends, layers)
+            )
         if layer.extends in seen:
             raise PratError(
                 f"{label}: inheritance cycle: {' -> '.join((*visited, layer.extends))}."
@@ -745,7 +767,8 @@ def _validate_each(
     if step.as_parameter is not None:
         if step.as_parameter not in parameters:
             raise PratError(
-                f"{label}.as: {step.selector!r} has no parameter {step.as_parameter!r}."
+                f"{label}.as: {step.selector!r} has no parameter {step.as_parameter!r}"
+                + did_you_mean(step.as_parameter, parameters)
             )
         if step.as_parameter in step.bind:
             raise PratError(f"{label}.as: {step.as_parameter!r} is also bound in bind.")
@@ -760,8 +783,12 @@ def _validate_workflow_step(
         )
     if step.selector not in config.profiles and step.selector not in BY_SELECTOR:
         raise PratError(
-            f"{label}.profile: unknown selector {step.selector!r}; "
-            "run 'prat agents' or 'prat profiles' to list choices."
+            f"{label}.profile: unknown selector {step.selector!r}"
+            + did_you_mean(
+                step.selector,
+                [*BY_SELECTOR, *config.profiles],
+                "run 'prat agents' or 'prat profiles' to list choices",
+            )
         )
     prompt = step_prompt(config, step)
     parameters = () if prompt is None else template_parameters(prompt)
@@ -773,7 +800,8 @@ def _validate_workflow_step(
             )
         if parameter not in parameters:
             raise PratError(
-                f"{label}.bind.{parameter}: {step.selector!r} has no parameter {parameter!r}."
+                f"{label}.bind.{parameter}: {step.selector!r} has no parameter {parameter!r}"
+                + did_you_mean(parameter, parameters)
             )
     _validate_each(workflow, step, label, ancestors, parameters)
     if prompt is None and step.input == "none" and not step.bind:
@@ -1017,6 +1045,7 @@ def resolve_profile(
     config: Config,
     selector: str,
     overrides: Options | None = None,
+    flags: Mapping[str, str] = MappingProxyType({}),
 ) -> ResolvedProfile:
     if selector in config.profiles:
         profile = config.profiles[selector]
@@ -1029,7 +1058,12 @@ def resolve_profile(
         profile_options = Options()
     else:
         raise PratError(
-            f"Unknown selector {selector!r}; run 'prat agents' or 'prat profiles' to list choices.",
+            f"unknown selector {selector!r}"
+            + did_you_mean(
+                selector,
+                [*BY_SELECTOR, *config.profiles, *config.workflows],
+                "run 'prat agents' or 'prat profiles' to list choices",
+            ),
             code="invalid_arguments",
         )
     options = merge_options(
@@ -1043,7 +1077,7 @@ def resolve_profile(
         agent,
         options,
         f"{config.path}: selector {selector!r}",
-        origins=option_origins(config, selector, overrides),
+        origins=option_origins(config, selector, overrides, flags),
     )
     return ResolvedProfile(
         agent,

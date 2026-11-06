@@ -11,7 +11,13 @@ from typing import BinaryIO
 from pratfall.adapters.registry import ADAPTERS, Adapter
 from pratfall.catalog import AGENTS
 from pratfall.cli.doctor import RUN_VERSION_TIMEOUT, _doctor, probe_version
-from pratfall.cli.parsing import RunArguments, _json_requested, _parse_run, _run_cwd
+from pratfall.cli.parsing import (
+    RunArguments,
+    _json_requested,
+    _parse_run,
+    _run_cwd,
+    option_flags,
+)
 from pratfall.cli.presentation import (
     _config_warnings,
     _Diagnostics,
@@ -43,7 +49,7 @@ from pratfall.config import (
     trust_directory,
 )
 from pratfall.consumer import ByteConsumer, CapturingConsumer
-from pratfall.errors import PratError
+from pratfall.errors import PratError, did_you_mean
 from pratfall.instructions import read_instructions
 from pratfall.limits import DEFAULT_MAX_PARALLEL, WORKFLOW_SPEC_BYTES
 from pratfall.models import (
@@ -621,19 +627,19 @@ def _internal_payload(message: str, resolved: ResolvedProfile | None) -> dict[st
 def _resolve_run_paths(parsed: RunArguments, invocation_cwd: Path) -> RunArguments:
     options = parsed.options
     if options.add_dirs is not None:
-        origin = OptionOrigin("command line: --add-dir", "invalid_arguments")
+        origin = OptionOrigin("--add-dir", "invalid_arguments")
         paths = tuple(resolve_path(value, invocation_cwd, origin) for value in options.add_dirs)
         options = replace(options, add_dirs=paths)
     if options.attachments is not None:
-        origin = OptionOrigin("command line: --attachment", "invalid_arguments")
+        origin = OptionOrigin("--attachment", "invalid_arguments")
         paths = tuple(resolve_path(value, invocation_cwd, origin) for value in options.attachments)
         options = replace(options, attachments=paths)
     if options.instructions_file is not None:
-        origin = OptionOrigin("command line: --instructions-file", "invalid_arguments")
+        origin = OptionOrigin("--instructions-file", "invalid_arguments")
         path = resolve_path(options.instructions_file, invocation_cwd, origin)
         options = replace(options, instructions_file=path)
     if options.schema is not None:
-        origin = OptionOrigin("command line: --schema", "invalid_arguments")
+        origin = OptionOrigin("--schema", "invalid_arguments")
         options = replace(options, schema=resolve_path(options.schema, invocation_cwd, origin))
     return replace(parsed, options=options)
 
@@ -727,7 +733,10 @@ def _active_template(config: Config, parsed: RunArguments) -> tuple[str, str] | 
         template = config.templates.get(parsed.template)
         if template is None:
             raise PratError(
-                f"Unknown template {parsed.template!r}; run 'prat templates' to list choices.",
+                f"unknown template {parsed.template!r}"
+                + did_you_mean(
+                    parsed.template, config.templates, "run 'prat templates' to list choices"
+                ),
                 code="invalid_arguments",
             )
         return template.prompt, f"template '{parsed.template}'"
@@ -773,7 +782,7 @@ def _prepare_run(
 ) -> _PreparedRun:
     _validate_schema_extraction(resolved, parsed.extract)
     fallback = OptionOrigin(f"selector {parsed.selector!r}.native_args")
-    origins = option_origins(config, parsed.selector, parsed.options)
+    origins = option_origins(config, parsed.selector, parsed.options, option_flags(parsed.options))
     label = origins.get("native_args", fallback).label
     resolved = _prepare_run_paths(resolved, origins, label)
     cwd = _run_cwd(parsed.cwd, invocation_cwd)
@@ -861,7 +870,9 @@ def _run_selected(
                 if parsed.selector in config.workflows:
                     diagnostics.close()
                     return run_workflow(arguments, parsed, config, invocation_cwd, state.stdout)
-            resolved = resolve_profile(config, parsed.selector, parsed.options)
+            resolved = resolve_profile(
+                config, parsed.selector, parsed.options, option_flags(parsed.options)
+            )
             state.resolved = resolved
             prepared = _prepare_run(parsed, config, resolved, invocation_cwd, resources)
             prompt = _run_prompt(parsed, prepared, invocation_cwd, environ)

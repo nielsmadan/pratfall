@@ -183,7 +183,7 @@ def test_lone_dash_positional_is_rejected_in_parameter_mode() -> None:
         (("=a",), "profile 'clean' prompt: --param '=a' has an empty parameter name."),
         (
             ("other=a",),
-            "profile 'clean' prompt has no parameter 'other'; its parameters are src, dst.",
+            "profile 'clean' prompt has no parameter 'other'; its parameters are src, dst",
         ),
         (
             ("input=a",),

@@ -331,14 +331,16 @@ def test_trust_revoke_outcomes(tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert "local config is not trusted" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("flag", ["--attach", "--disable-tools"])
+@pytest.mark.parametrize(
+    ("flag", "renamed"), [("--attach", "--attachment"), ("--disable-tools", "--disabled-tools")]
+)
 def test_renamed_run_flags_reject_their_old_spellings(
-    flag: str, capsys: pytest.CaptureFixture[str]
+    flag: str, renamed: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     assert main(["pi", flag, "x", "hi", "--dry-run", "--json"]) == 2
     assert json.loads(capsys.readouterr().out)["error"] == {
         "code": "invalid_arguments",
-        "message": f"unrecognized argument: {flag}",
+        "message": f"unrecognized argument: {flag}; did you mean '{renamed}'?",
     }
 
 
@@ -357,7 +359,9 @@ def test_renamed_run_flags_render_native_arguments(
 
 def test_trust_moved_out_of_config(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["config", "trust"]) == 2
-    assert "invalid choice: 'trust'" in capsys.readouterr().err
+    assert capsys.readouterr().err == (
+        "prat: unknown config command 'trust' (choose from path, init, validate)\n"
+    )
 
 
 def test_default_validate_explains_missing_config(capsys: pytest.CaptureFixture[str]) -> None:
@@ -475,7 +479,7 @@ def test_cli_override_error_identifies_command_line(capsys: pytest.CaptureFixtur
     path.write_text("version=1\n[defaults]\nfast=true\n")
     assert main(["gm", "prompt", "--no-fast", "--dry-run", "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
-    assert result["error"]["message"].startswith("command line: selector 'gm'.fast:")
+    assert result["error"]["message"].startswith("--no-fast: Gemini does not support")
 
 
 def test_validation_reports_single_source_for_global_file_alias(
@@ -1526,7 +1530,7 @@ def test_workflows_listing_reports_the_defining_layer(
 
 def test_workflows_listing_rejects_extra_arguments(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["workflows", "extra"]) == 2
-    assert "unrecognized arguments: extra" in capsys.readouterr().err
+    assert capsys.readouterr().err == "prat: unrecognized argument: extra\n"
 
 
 def test_config_validate_reports_workflow_errors(
@@ -1559,7 +1563,7 @@ def test_unknown_template_is_rejected_from_config_data() -> None:
         "template 'review'",
     )
     assert dispatch_module._active_template(config, _parse_run(["cc"])) is None
-    with pytest.raises(PratError, match="Unknown template 'missing'"):
+    with pytest.raises(PratError, match="unknown template 'missing'"):
         dispatch_module._active_template(config, _parse_run(["cc", "-t", "missing"]))
 
 
@@ -1591,3 +1595,64 @@ def test_templates_view_lists_sorted_templates_or_a_placeholder() -> None:
     assert dispatch_module._templates_view(Config(Path("config.toml")))[1] == [
         "No templates configured."
     ]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (
+            ["cc", "--modle", "opus", "hi"],
+            "unrecognized argument: --modle; did you mean '--model'?",
+        ),
+        (
+            ["cc", "--modle=opus", "hi"],
+            "unrecognized argument: --modle=opus; did you mean '--model'?",
+        ),
+        (["cc", "--bogus", "hi"], "unrecognized argument: --bogus"),
+        (["agents", "--jsno"], "unrecognized argument: --jsno; did you mean '--json'?"),
+        (["agents", "--bogus"], "unrecognized argument: --bogus"),
+        (["agents", "--bogus", "--other"], "unrecognized argument: --bogus"),
+        (["doctor", "--version"], "unrecognized argument: --version; did you mean '--versions'?"),
+        (["trust", "--lst"], "unrecognized argument: --lst; did you mean '--list'?"),
+        (["config", "path", "--jsn"], "unrecognized argument: --jsn; did you mean '--json'?"),
+        (["agents", "extra"], "unrecognized argument: extra"),
+    ],
+)
+def test_unrecognized_arguments_use_one_wording_with_a_suggestion(
+    arguments: list[str], message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main([*arguments, "--dry-run"] if arguments[0] == "cc" else arguments) == 2
+    assert capsys.readouterr().err == f"prat: {message}\n"
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (
+            ["config", "valdate"],
+            (
+                "unknown config command 'valdate'; did you mean 'validate'? "
+                "(choose from path, init, validate)"
+            ),
+        ),
+        (["config", "bogus"], "unknown config command 'bogus' (choose from path, init, validate)"),
+        (["config"], "config requires a command (choose from path, init, validate)"),
+    ],
+)
+def test_config_command_errors_name_the_command_and_the_choices(
+    arguments: list[str], message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(arguments) == 2
+    assert capsys.readouterr().err == f"prat: {message}\n"
+
+
+def test_unknown_selector_suggests_a_configured_workflow(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = init_config(cwd=Path.cwd(), env=os.environ)
+    path.write_text(
+        'version=1\n[profiles.weekly]\nagent="codex"\n'
+        '[workflows.nightly]\nsteps=[{name="a", profile="weekly"}]\n'
+    )
+    assert main(["nightyl", "hi", "--dry-run"]) == 2
+    assert capsys.readouterr().err == "prat: unknown selector 'nightyl'; did you mean 'nightly'?\n"

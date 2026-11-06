@@ -784,9 +784,7 @@ def test_qwen_schema_root_rejected_before_input_with_origin(
     error = json.loads(capsys.readouterr().out)["error"]
     assert error["code"] == ("invalid_config" if from_config else "invalid_arguments")
     assert "root must accept objects" in error["message"]
-    assert (
-        "profiles.work.schema" if from_config else "command line: selector 'qwen'.schema"
-    ) in error["message"]
+    assert ("profiles.work.schema" if from_config else "--schema: ") in error["message"]
 
 
 @pytest.mark.parametrize("agent", ["codex", "qwen"])

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from pratfall.catalog import BY_NAME
+from pratfall.cli.parsing import option_flags
 from pratfall.config import (
     DEFAULT_TIMEOUT,
     SAMPLE_CONFIG,
@@ -42,7 +43,7 @@ def test_missing_default_resolves_builtin_defaults() -> None:
 
 @pytest.mark.parametrize("name", ["ki", "wp", "qw", "km", "mv"])
 def test_removed_agent_aliases_are_available_for_profiles(tmp_path: Path, name: str) -> None:
-    with pytest.raises(PratError, match="Unknown"):
+    with pytest.raises(PratError, match="unknown selector"):
         resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), name)
     path = write_config(tmp_path, f'version=1\n[profiles.{name}]\nagent="codex"\n')
     resolved = resolve_profile(load_config(path, cwd=Path.cwd(), env=os.environ), name)
@@ -572,14 +573,20 @@ native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", 
         ('version=1\n[profiles."two words"]\nagent="codex"', "profile names"),
         ("version=1\n[profiles]\nwork=[]", "profiles.work: expected a TOML table"),
         ("version=1\n[profiles.work]", "profiles.work.agent"),
-        ('version=1\n[profiles.work]\nagent="bad"', "profiles.work.agent: Unknown agent"),
+        ('version=1\n[profiles.work]\nagent="bad"', "profiles.work.agent: unknown agent"),
         ('version=1\n[profiles.work]\nagent="codex"\ncommand=["bad"]', "unknown field 'command'"),
         (
             'version=1\n[profiles.work]\nagent="hermes"\neffort="unknown"',
-            "Hermes accepts:",
+            "effort 'unknown': Hermes accepts none, minimal",
         ),
-        ('version=1\n[profiles.work]\nagent="kiro"\neffort="ultra"', "Kiro accepts:"),
-        ('version=1\n[profiles.work]\nagent="claude"\neffort="bad"', "Claude Code accepts:"),
+        (
+            'version=1\n[profiles.work]\nagent="kiro"\neffort="ultra"',
+            "effort 'ultra': Kiro accepts ",
+        ),
+        (
+            'version=1\n[profiles.work]\nagent="claude"\neffort="bad"',
+            "effort 'bad': Claude Code accepts low",
+        ),
         (
             'version=1\n[profiles.work]\nagent="codex"\nmax_budget_usd=1',
             "profiles.work.max_budget_usd",
@@ -643,7 +650,7 @@ def test_defaults_and_overrides_are_validated_for_selected_builtin(tmp_path: Pat
     path = write_config(tmp_path, 'version=1\n[defaults]\nmodel="new-model"\n')
     config = load_config(path, cwd=Path.cwd(), env=os.environ)
     assert resolve_profile(config, "kiro").options.model == "new-model"
-    with pytest.raises(PratError, match="Hermes accepts:"):
+    with pytest.raises(PratError, match="effort 'unknown': Hermes accepts "):
         resolve_profile(config, "hm", Options(effort="unknown"))
 
 
@@ -710,25 +717,35 @@ def test_notify_after_zero_is_accepted(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    ("selector", "overrides", "field"),
+    ("selector", "overrides", "message"),
     [
-        ("amp", Options(model="chosen"), "model"),
-        ("gm", Options(effort="low"), "effort"),
-        ("cc", Options(effort="unknown"), "effort"),
-        ("cx", Options(max_budget_usd=5.0), "max_budget_usd"),
-        ("rx", Options(max_turns=3), "max_turns"),
-        ("cx", Options(max_ai_credits=5.0), "max_ai_credits"),
-        ("gm", Options(fast=True), "fast"),
+        ("amp", Options(model="chosen"), "--model: Amp does not support a model override"),
+        ("gm", Options(effort="low"), "--effort: Gemini does not support an effort override"),
+        ("cc", Options(effort="unknown"), "--effort 'unknown': Claude Code accepts low, medium"),
+        (
+            "cx",
+            Options(max_budget_usd=5.0),
+            "--max-budget-usd: Codex does not support a USD budget",
+        ),
+        ("rx", Options(max_turns=3), "--max-turns: Reasonix does not support a turn limit"),
+        (
+            "cx",
+            Options(max_ai_credits=5.0),
+            "--max-ai-credits: Codex does not support an AI-credit",
+        ),
+        ("gm", Options(fast=True), "--fast: Gemini does not support a fast-mode override"),
+        ("gm", Options(fast=False), "--no-fast: Gemini does not support a fast-mode override"),
     ],
 )
-def test_command_line_capability_rejections_are_invalid_arguments(
-    selector: str, overrides: Options, field: str
+def test_command_line_capability_rejections_name_the_flag(
+    selector: str, overrides: Options, message: str
 ) -> None:
+    config = load_config(cwd=Path.cwd(), env=os.environ)
     with pytest.raises(PratError) as caught:
-        resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), selector, overrides)
+        resolve_profile(config, selector, overrides, option_flags(overrides))
     assert caught.value.code == "invalid_arguments"
     assert caught.value.exit_code == 2
-    assert str(caught.value).startswith(f"command line: selector {selector!r}.{field}: ")
+    assert str(caught.value).startswith(message)
 
 
 @pytest.mark.parametrize(
@@ -1517,3 +1534,49 @@ def test_local_workflow_replaces_global_and_checks_global_profiles(
     assert config.workflows["w"].source == local
     assert config.workflows["only"].source == global_path
     assert config.warnings == (f"{local}: workflow 'w' replaces the workflow from {global_path}.",)
+
+
+@pytest.mark.parametrize(
+    ("contents", "message"),
+    [
+        (
+            'version=1\n[profiles.work]\nagent="codex"\nmodle="m"',
+            "profiles.work: unknown field 'modle'; did you mean 'model'?",
+        ),
+        (
+            'version=1\n[agents.cluade]\ncommand=["claude"]',
+            "unknown agent 'cluade'; did you mean 'claude'?",
+        ),
+        (
+            'version=1\n[profiles.work]\nagent="codex"\n[profiles.other]\nextends="wrok"',
+            "profiles.other.extends: unknown profile 'wrok'; did you mean 'work'?",
+        ),
+        (
+            (
+                'version=1\n[profiles.work]\nagent="codex"\n'
+                '[workflows.w]\nsteps=[{name="a", profile="wrok"}]'
+            ),
+            "unknown selector 'wrok'; did you mean 'work'?",
+        ),
+        (
+            (
+                'version=1\n[profiles.work]\nagent="codex"\nprompt="Fix $folder"\n'
+                '[workflows.w]\nsteps=[{name="a", profile="cx"}, '
+                '{name="b", profile="work", bind={fodler="a"}}]'
+            ),
+            "'work' has no parameter 'fodler'; did you mean 'folder'?",
+        ),
+        (
+            'version=1\n[defaults]\nnotify_method="osc8"',
+            "defaults.notify_method 'osc8': expected one of ",
+        ),
+    ],
+)
+def test_config_errors_name_the_rejected_value_and_suggest_a_match(
+    tmp_path: Path, contents: str, message: str
+) -> None:
+    path = write_config(tmp_path, contents)
+    with pytest.raises(PratError) as caught:
+        load_config(path, cwd=Path.cwd(), env=os.environ)
+    assert str(path) in str(caught.value)
+    assert message in str(caught.value)

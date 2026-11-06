@@ -7,6 +7,7 @@ import pytest
 
 from adapter_helpers import copilot_result
 from pratfall.cli import dispatch, main
+from pratfall.cli.parsing import option_flags
 from pratfall.config import config_path, load_config, option_origins, parse_options, resolve_profile
 from pratfall.errors import PratError
 from pratfall.models import Options
@@ -94,8 +95,8 @@ def test_native_agent_four_layer_precedence_and_provenance(tmp_path: Path) -> No
         "work",
         "cli",
     )
-    origin = option_origins(config, "work", cli)["native_agent"]
-    assert origin.label == "command line: selector 'work'.native_agent"
+    origin = option_origins(config, "work", cli, option_flags(cli))["native_agent"]
+    assert origin.label == "--native-agent"
     assert origin.code == "invalid_arguments"
 
 

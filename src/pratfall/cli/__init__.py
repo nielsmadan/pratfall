@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from pratfall.cli.dispatch import _dispatch, _run_command, _step_command, _step_failure
-from pratfall.cli.parsing import _json_requested, _management_mode, build_parser
+from pratfall.cli.parsing import _json_requested, _management_mode, build_parser, parse_management
 from pratfall.cli.presentation import _emit, _print_diagnostic, _silence_broken_stream
 from pratfall.cli.shell_completion import _complete_command
 from pratfall.errors import PratError
@@ -68,10 +68,9 @@ def _main(argv: Sequence[str] | None = None) -> int:
     if not _management_mode(arguments):
         return _run_command(arguments, Path.cwd(), os.environ)
     try:
-        parser = build_parser()
-        args = parser.parse_args(arguments)
+        args = parse_management(arguments)
         if args.command is None:
-            parser.print_help()
+            build_parser().print_help()
             return 0
         return _dispatch(args, Path.cwd(), os.environ)
     except PratError as error:

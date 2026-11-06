@@ -2604,10 +2604,10 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
     before = len(_calls(root / "native.jsonl"))
     controls = {}
     for selector, arguments, message in (
-        ("amp", ["--effort", "high"], "effort: Amp does not support an effort override."),
-        ("vibe", ["--model", "chosen"], "model: Mistral Vibe does not support a model override."),
-        ("rx", ["--max-turns", "3"], "max_turns: Reasonix does not support this budget."),
-        ("cr", ["--fast"], "fast: Crush does not support a fast-mode override."),
+        ("amp", ["--effort", "high"], "--effort: Amp does not support an effort override."),
+        ("vibe", ["--model", "chosen"], "--model: Mistral Vibe does not support a model override."),
+        ("rx", ["--max-turns", "3"], "--max-turns: Reasonix does not support a turn limit"),
+        ("cr", ["--fast"], "--fast: Crush does not support a fast-mode override."),
     ):
         completed = _run(
             prat, root, [selector, "invalid control", *arguments, "--json"], config=config
@@ -2618,7 +2618,7 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
             status="error",
             native_exit_code=None,
             error_code="invalid_arguments",
-            error_message=f"command line: selector {selector!r}.{message}",
+            error_message=message,
         )
         controls[selector] = _compact_result(completed)
     collisions = {}
@@ -2952,9 +2952,7 @@ def _exercise_e05(context: _EnhancementContext) -> _ScenarioObservation:
         status="error",
         native_exit_code=None,
         error_code="invalid_arguments",
-        error_message=(
-            "command line: selector 'gm'.fast: Gemini does not support a fast-mode override."
-        ),
+        error_message="--fast: Gemini does not support a fast-mode override.",
     )
     assert len(_calls(log)) == calls_before
     return "E05", {
@@ -3683,7 +3681,7 @@ def _exercise_q12(context: _ExerciseContext) -> dict[str, object]:
             status="error",
             native_exit_code=None,
             error_code="invalid_config",
-            error_message=f"{invalid}: unknown field 'unknown'.",
+            error_message=f"{invalid}: unknown field 'unknown'",
         ),
         _assert_result(
             bad_cases[1],
@@ -3702,7 +3700,7 @@ def _exercise_q12(context: _ExerciseContext) -> dict[str, object]:
             native_exit_code=None,
             error_code="invalid_arguments",
             error_message=(
-                "Unknown selector 'unknown'; run 'prat agents' or 'prat profiles' to list choices."
+                "unknown selector 'unknown'; run 'prat agents' or 'prat profiles' to list choices"
             ),
         ),
     ]

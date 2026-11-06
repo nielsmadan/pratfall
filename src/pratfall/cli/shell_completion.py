@@ -19,7 +19,7 @@ from pratfall.cli.parsing import (
     _scan_run,
 )
 from pratfall.config import load_config
-from pratfall.errors import PratError
+from pratfall.errors import PratError, did_you_mean
 from pratfall.models import Config
 from pratfall.prompt_templates import template_parameters
 from pratfall.workflow_plan import workflow_parameter_names
@@ -111,7 +111,8 @@ def _completion_script(shell: str | None, environ: Mapping[str, str]) -> str:
     if chosen == "bash":
         return _BASH_SCRIPT
     raise PratError(
-        f"Unsupported shell {chosen!r}; run 'prat completion bash' or 'prat completion zsh'.",
+        f"unsupported shell {chosen!r}"
+        + did_you_mean(chosen, SHELLS, "run 'prat completion bash' or 'prat completion zsh'"),
         code="invalid_arguments",
     )
 

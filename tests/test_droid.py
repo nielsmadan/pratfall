@@ -96,7 +96,7 @@ def test_droid_effort_union_is_validated(native_contract_config: Path) -> None:
     config = load_config(native_contract_config, cwd=Path.cwd(), env=os.environ)
     for effort in expected:
         assert resolve_profile(config, "dr", Options(effort=effort)).options.effort == effort
-    with pytest.raises(PratError, match="Droid accepts:"):
+    with pytest.raises(PratError, match="Droid accepts "):
         resolve_profile(config, "dr", Options(effort="ultra"))
 
 
