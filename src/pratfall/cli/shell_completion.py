@@ -1,5 +1,4 @@
 import os
-import re
 import shlex
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -11,12 +10,12 @@ from typing import Literal
 from pratfall.catalog import AGENTS, BY_NAME, BY_SELECTOR, MANAGEMENT_COMMANDS
 from pratfall.cli.parsing import (
     _CONFIG_COMMAND_HELP,
-    _EPILOG,
     _MANAGEMENT_HELP,
     _RUN_FLAGS_WITHOUT_VALUE,
     _RUN_VALUE_FLAGS,
     _management_mode,
     _scan_run,
+    run_flag_help,
 )
 from pratfall.config import load_config
 from pratfall.errors import PratError, did_you_mean
@@ -79,8 +78,8 @@ _FILE_FLAGS = frozenset(
 _TEMPLATE_FLAGS = frozenset({"-t", "--template"})
 _TOP_LEVEL_FLAGS: Mapping[str, str] = MappingProxyType(
     {
-        "-h": "Show help and exit.",
-        "--help": "Show help and exit.",
+        "-h": "Show this help and exit.",
+        "--help": "Show this help and exit.",
         "--version": "Show the version and exit.",
     }
 )
@@ -88,8 +87,8 @@ _MANAGEMENT_FLAGS: Mapping[str, str] = MappingProxyType(
     {
         "--config": "Merge PATH over global config instead of .pratfile.",
         "--json": "Print a JSON management result.",
-        "-h": "Show help and exit.",
-        "--help": "Show help and exit.",
+        "-h": "Show this help and exit.",
+        "--help": "Show this help and exit.",
     }
 )
 
@@ -307,19 +306,8 @@ def _config_for(preceding: list[str], load: Loader) -> Config | None:
 
 def _run_flags() -> dict[str, str]:
     flags = [*_RUN_VALUE_FLAGS, *_RUN_FLAGS_WITHOUT_VALUE, "--prompt="]
-    help_text = _run_flag_help()
+    help_text = run_flag_help()
     return {flag: help_text.get(flag, "") for flag in flags}
-
-
-def _run_flag_help() -> dict[str, str]:
-    section = _EPILOG.split("run options:\n", 1)[1].split("\n\n", 1)[0]
-    matches = (re.fullmatch(r"  (-\S.*?)\s{2,}(\S.*)", line) for line in section.splitlines())
-    return {
-        flag: match[2]
-        for match in matches
-        if match is not None
-        for flag in re.findall(r"--?[a-z][\w-]*=?", match[1])
-    }
 
 
 def _words(current: str, candidates: Iterable[Candidate]) -> _Completion:

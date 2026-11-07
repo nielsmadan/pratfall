@@ -20,14 +20,23 @@ from pratfall.cli import dispatch as dispatch_module
 from pratfall.cli import doctor as doctor_module
 from pratfall.cli import main
 from pratfall.cli.doctor import Which, _doctor, _doctor_inventory, _doctor_line, _version_result
-from pratfall.cli.parsing import _parse_run
+from pratfall.cli.parsing import (
+    _COMMAND_EXAMPLES,
+    _CONFIG_COMMAND_HELP,
+    _MANAGEMENT_HELP,
+    _RUN_FLAG_NAMES,
+    _RUN_OPTIONS,
+    _WORKFLOW_FLAGS,
+    _parse_run,
+    run_options_text,
+)
 from pratfall.config import init_config, load_config, resolve_profile
 from pratfall.errors import PratError
 from pratfall.interruption import InterruptionState
 from pratfall.models import Config, Invocation, Options, PromptTemplate, RawCapture
 from pratfall.runner import ProcessResult, RunLimits
 from pratfall.runner import run as run_process
-from test_run_cli import CLAUDE_SUCCESS, write_agent
+from test_run_cli import CLAUDE_SUCCESS, UnreadInput, write_agent
 
 
 @pytest.mark.parametrize(
@@ -81,7 +90,7 @@ def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str])
     assert caught.value.code == 0
     output = capsys.readouterr().out
     assert "prat [RUN_OPTIONS] SELECTOR [PROMPT | VALUE...] [-- NATIVE_ARGS]" in output
-    assert "  --param NAME=VALUE      Fill a prompt parameter; repeat for several." in output
+    assert "  --param NAME=VALUE        Fill a prompt parameter; repeat for several." in output
     for flag in (
         "--prompt=TEXT",
         "-f, --file PATH",
@@ -1676,3 +1685,184 @@ def test_removed_agent_name_configured_as_a_profile_still_runs(
     path.write_text('version=1\n[profiles.iflow]\nagent="codex"\n')
     assert main(["iflow", "hi", "--dry-run", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["agent"] == "codex"
+
+
+HELP_CONFIG = """
+[profiles.weekly]
+agent="codex"
+prompt="Summarize ${topic} this week"
+
+[workflows.ship]
+steps=[{name="draft", profile="cx"}, {name="check", profile="weekly"}]
+"""
+
+
+def help_config(tmp_path: Path) -> Path:
+    config = write_agent(tmp_path, "codex", "raise AssertionError('help launched the agent')")
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write(HELP_CONFIG)
+    return config
+
+
+def listing_line(command: str, name: str, config: Path, capsys: pytest.CaptureFixture[str]) -> str:
+    assert main([command, "--config", str(config)]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    return next(line for line in lines if line.startswith((f"{name}:", f"{name} (")))
+
+
+def run_option_flags(text: str) -> set[str]:
+    section = text.split("run options:\n", 1)[1].split("\n\n", 1)[0]
+    labels = [line[2:].split("  ", 1)[0] for line in section.splitlines() if line[2:3] == "-"]
+    return {
+        word.split("=", 1)[0].strip(",")
+        for label in labels
+        for word in label.split()
+        if word.startswith("-")
+    }
+
+
+@pytest.mark.parametrize(
+    ("arguments", "command", "name"),
+    [
+        (["cc", "--help"], "agents", "claude"),
+        (["-h", "codex"], "agents", "codex"),
+        (["weekly", "-h", "--effort", "high", "some", "words"], "profiles", "weekly"),
+    ],
+)
+def test_selector_help_prints_its_listing_line_and_every_run_option(
+    arguments: list[str],
+    command: str,
+    name: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = help_config(tmp_path)
+    header = listing_line(command, name, config, capsys)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main([*arguments, "--config", str(config)]) == 0
+    selector = next(word for word in arguments if not word.startswith("-"))
+    assert capsys.readouterr().out == (
+        f"{header}\n\nusage: prat [RUN_OPTIONS] {selector} [PROMPT | VALUE...] [-- NATIVE_ARGS]"
+        f"\n\nrun options:\n{run_options_text()}\n"
+    )
+
+
+def test_profile_help_header_names_its_parameters(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = help_config(tmp_path)
+    assert main(["weekly", "--help", "--config", str(config)]) == 0
+    header = capsys.readouterr().out.splitlines()[0]
+    assert header.startswith("weekly: codex ")
+    assert header.endswith(" parameters=topic")
+
+
+def test_workflow_help_lists_only_the_workflow_options(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = help_config(tmp_path)
+    header = listing_line("workflows", "ship", config, capsys)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["ship", "--help", "--config", str(config)]) == 0
+    output = capsys.readouterr().out
+    assert output.startswith(f"{header}\n\nusage: prat [RUN_OPTIONS] ship [PROMPT | VALUE...]\n")
+    assert "parameters=topic" in header
+    assert run_option_flags(output) == _WORKFLOW_FLAGS
+    assert len(_WORKFLOW_FLAGS) == 13
+
+
+def test_top_level_and_selector_help_share_the_run_option_section(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    top = capsys.readouterr().out
+    assert main(["cc", "--help"]) == 0
+    selector = capsys.readouterr().out
+    section = run_options_text()
+    assert f"run options:\n{section}\n\nexamples:" in top
+    assert selector.endswith(f"run options:\n{section}\n")
+    assert run_option_flags(top) == _RUN_FLAG_NAMES
+
+
+def test_run_option_descriptions_start_in_one_column() -> None:
+    lines = run_options_text().splitlines()
+    starts = {
+        len(line) - len(line[2:].split("  ", 1)[1].lstrip()) for line in lines if line[2] == "-"
+    }
+    continuations = {len(line) - len(line.lstrip()) for line in lines if line[2] == " "}
+    assert len(starts) == 1
+    assert continuations <= starts
+    assert {flag for option in _RUN_OPTIONS for flag in option.flags} == _RUN_FLAG_NAMES
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["clade", "--help"], "prat: unknown selector 'clade'; did you mean 'claude'?\n"),
+        (
+            ["iflow", "-h"],
+            "prat: agent 'iflow' was removed in 0.9.0; run 'prat agents' to list choices\n",
+        ),
+    ],
+)
+def test_unknown_selector_help_reports_the_selector_error(
+    arguments: list[str], message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(arguments) == 2
+    assert capsys.readouterr().err == message
+
+
+def test_help_after_the_native_boundary_stays_native(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = help_config(tmp_path)
+    assert main(["cx", "x", "--config", str(config), "--dry-run", "--", "--help"]) == 2
+    assert capsys.readouterr().err == (
+        "prat: arguments after --: Codex native argument '--help': unknown native option; "
+        "use a trusted executable wrapper for unsupported native arguments\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "arguments", [["--prompt=--help", "cx"], ["cx", "--model", "--help", "hi"]]
+)
+def test_help_as_a_flag_value_is_not_a_help_request(
+    arguments: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = help_config(tmp_path)
+    assert main([*arguments, "--config", str(config), "--dry-run", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["agent"] == "codex"
+
+
+def test_help_without_a_selector_prints_the_top_level_help(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["--model", "x", "--help"]) == 0
+    output = capsys.readouterr().out
+    assert output.startswith("usage: prat [-h] [--config PATH] [--json] [--version]")
+    assert "  -h, --help            Show this help and exit." in output
+    assert "  --version             Show the version and exit." in output
+    assert "profile, or workflow" in output
+    assert "  prat cc -t rename --param old=foo --param new=bar\n" in output
+    assert '  prat ship "add a --verbose flag"\n' in output
+    assert '  prat cx --json "summarize this diff" < change.diff\n' in output
+
+
+@pytest.mark.parametrize("path", list(_COMMAND_EXAMPLES))
+def test_management_help_has_a_description_and_an_example(
+    path: tuple[str, ...], capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as caught:
+        main([*path, "--help"])
+    assert caught.value.code == 0
+    output = capsys.readouterr().out
+    description = (
+        _CONFIG_COMMAND_HELP if path[:1] == ("config",) and path[1:] else _MANAGEMENT_HELP
+    )[path[-1]]
+    assert output.startswith(f"usage: prat {' '.join(path)} [-h]")
+    assert f"\n\n{description}\n\n" in output
+    assert "\n  -h, --help" in output
+    assert "Show this help and exit." in output
+    assert output.endswith(f"\nexample:\n  {_COMMAND_EXAMPLES[path]}\n")

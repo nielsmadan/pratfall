@@ -253,6 +253,12 @@ prat cx --model gpt-5.6-luna --effort low "review this change"
 prat cc --timeout 120 --cwd ../project "inspect this failure"
 ```
 
+`prat SELECTOR --help` (or `-h`) prints the selector's line from `prat agents`, `prat profiles` or
+`prat workflows`, then the usage line and the run options that selector takes: every run option
+for an agent, alias or profile, and only the workflow options for a workflow. It exits 0 without
+reading a prompt or launching anything. Other arguments are ignored, except `--config` for the
+lookup; `--help` after `--` stays a native argument, and `--prompt=--help` is a prompt.
+
 | Control | Flags and behavior |
 | --- | --- |
 | Model and effort | `--model`, `--effort`; support depends on the agent. |

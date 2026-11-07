@@ -9,14 +9,18 @@ from pathlib import Path
 from typing import BinaryIO
 
 from pratfall.adapters.registry import ADAPTERS, Adapter
-from pratfall.catalog import AGENTS
+from pratfall.catalog import AGENTS, BY_SELECTOR
 from pratfall.cli.doctor import RUN_VERSION_TIMEOUT, _doctor, probe_version
 from pratfall.cli.parsing import (
+    HelpRequest,
     RunArguments,
     _json_requested,
     _parse_run,
     _run_cwd,
+    build_parser,
+    help_request,
     option_flags,
+    selector_help,
 )
 from pratfall.cli.presentation import (
     _config_warnings,
@@ -53,6 +57,7 @@ from pratfall.errors import PratError, did_you_mean
 from pratfall.instructions import read_instructions
 from pratfall.limits import DEFAULT_MAX_PARALLEL, WORKFLOW_SPEC_BYTES
 from pratfall.models import (
+    AgentSpec,
     Config,
     ConsumedCapture,
     DecodedOutput,
@@ -133,63 +138,67 @@ def _agents_view() -> _View:
                 "capabilities": capabilities,
             }
         )
-        supported = [
-            field
-            for field in (
-                "model",
-                "effort",
-                "fast",
-                "add_dirs",
-                "attachments",
-                "instructions",
-                "schema",
-                "tools",
-                "disabled_tools",
-                "native_agent",
-                "session_id",
-            )
-            if getattr(caps, field)
-        ]
-        supported.extend(sorted(caps.budgets))
-        if caps.attachments:
-            supported.append("attachment_types=" + "/".join(caps.attachment_types))
-            if caps.attachment_max_count is not None:
-                supported.append(f"attachment_max_count={caps.attachment_max_count}")
-        selectors = f"{agent.name} ({', '.join(agent.aliases)})" if agent.aliases else agent.name
-        lines.append(f"{selectors}: {', '.join(supported) or 'none'}")
+        lines.append(_agent_line(agent))
     return {"agents": records}, lines
 
 
+def _agent_line(agent: AgentSpec) -> str:
+    caps = agent.capabilities
+    supported = [
+        field
+        for field in (
+            "model",
+            "effort",
+            "fast",
+            "add_dirs",
+            "attachments",
+            "instructions",
+            "schema",
+            "tools",
+            "disabled_tools",
+            "native_agent",
+            "session_id",
+        )
+        if getattr(caps, field)
+    ]
+    supported.extend(sorted(caps.budgets))
+    if caps.attachments:
+        supported.append("attachment_types=" + "/".join(caps.attachment_types))
+        if caps.attachment_max_count is not None:
+            supported.append(f"attachment_max_count={caps.attachment_max_count}")
+    selectors = f"{agent.name} ({', '.join(agent.aliases)})" if agent.aliases else agent.name
+    return f"{selectors}: {', '.join(supported) or 'none'}"
+
+
 def _profiles_view(config: Config) -> _View:
-    records = []
-    lines = []
-    for name in sorted(config.profiles):
-        resolved = resolve_profile(config, name)
-        options = asdict(resolved.options)
-        template = config.profiles[name].prompt
-        parameters = () if template is None else template_parameters(template.prompt)
-        records.append(
-            {
-                "name": name,
-                "agent": resolved.agent.name,
-                "options": options,
-                "prompt": None if template is None else template.prompt,
-                "prompt_source": None if template is None else str(template.source),
-                "parameters": list(parameters),
-            }
-        )
-        rendered = "".join(
-            f" {key}={_rendered_option(key, value)}"
-            for key, value in options.items()
-            if value is not None and (value != () or key == "tools")
-        )
-        prompt = (
-            "" if template is None else f" prompt={json.dumps(template.prompt, ensure_ascii=False)}"
-        )
-        lines.append(
-            f"{name}: {resolved.agent.name}{rendered}{prompt}{_parameters_text(parameters)}"
-        )
+    entries = [_profile_entry(config, name) for name in sorted(config.profiles)]
+    records = [record for record, _ in entries]
+    lines = [line for _, line in entries]
     return {"profiles": records}, lines or ["No profiles configured."]
+
+
+def _profile_entry(config: Config, name: str) -> tuple[dict[str, object], str]:
+    resolved = resolve_profile(config, name)
+    options = asdict(resolved.options)
+    template = config.profiles[name].prompt
+    parameters = () if template is None else template_parameters(template.prompt)
+    record: dict[str, object] = {
+        "name": name,
+        "agent": resolved.agent.name,
+        "options": options,
+        "prompt": None if template is None else template.prompt,
+        "prompt_source": None if template is None else str(template.source),
+        "parameters": list(parameters),
+    }
+    rendered = "".join(
+        f" {key}={_rendered_option(key, value)}"
+        for key, value in options.items()
+        if value is not None and (value != () or key == "tools")
+    )
+    prompt = (
+        "" if template is None else f" prompt={json.dumps(template.prompt, ensure_ascii=False)}"
+    )
+    return record, f"{name}: {resolved.agent.name}{rendered}{prompt}{_parameters_text(parameters)}"
 
 
 def _rendered_option(key: str, value: object) -> object:
@@ -238,40 +247,42 @@ def _config_view(config: Config) -> _View:
 
 
 def _workflows_view(config: Config) -> _View:
-    records = []
-    lines = []
-    for name, workflow in sorted(config.workflows.items()):
-        parameters = workflow_parameter_names(config, workflow)
-        records.append(
-            {
-                "name": name,
-                "parallel": workflow.parallel,
-                "parameters": list(parameters),
-                "source": str(workflow.source),
-                "steps": [
-                    {
-                        "name": step.name,
-                        "profile": step.selector,
-                        "after": list(step.after),
-                        "input": step.input,
-                        "bind": dict(step.bind),
-                        "each": step.each,
-                        "split": None if step.each is None else step.split,
-                        "as": step.as_parameter,
-                        "max_parallel": None if step.each is None else step.max_parallel,
-                        "max_items": None if step.each is None else step.max_items,
-                        "overflow": None if step.each is None else step.overflow,
-                    }
-                    for step in workflow.steps
-                ],
-            }
-        )
-        steps = "; ".join(_workflow_step_text(workflow, i) for i in range(len(workflow.steps)))
-        line = f"{name}: {steps}"
-        line += "" if workflow.parallel else " parallel=false"
-        line += _parameters_text(parameters)
-        lines.append(f"{line} source={workflow.source}")
+    entries = [_workflow_entry(config, name) for name in sorted(config.workflows)]
+    records = [record for record, _ in entries]
+    lines = [line for _, line in entries]
     return {"workflows": records}, lines or ["No workflows configured."]
+
+
+def _workflow_entry(config: Config, name: str) -> tuple[dict[str, object], str]:
+    workflow = config.workflows[name]
+    parameters = workflow_parameter_names(config, workflow)
+    record: dict[str, object] = {
+        "name": name,
+        "parallel": workflow.parallel,
+        "parameters": list(parameters),
+        "source": str(workflow.source),
+        "steps": [
+            {
+                "name": step.name,
+                "profile": step.selector,
+                "after": list(step.after),
+                "input": step.input,
+                "bind": dict(step.bind),
+                "each": step.each,
+                "split": None if step.each is None else step.split,
+                "as": step.as_parameter,
+                "max_parallel": None if step.each is None else step.max_parallel,
+                "max_items": None if step.each is None else step.max_items,
+                "overflow": None if step.each is None else step.overflow,
+            }
+            for step in workflow.steps
+        ],
+    }
+    steps = "; ".join(_workflow_step_text(workflow, i) for i in range(len(workflow.steps)))
+    line = f"{name}: {steps}"
+    line += "" if workflow.parallel else " parallel=false"
+    line += _parameters_text(parameters)
+    return record, f"{line} source={workflow.source}"
 
 
 def _workflow_step_text(workflow: Workflow, index: int) -> str:
@@ -596,11 +607,40 @@ def _run_command(
     environ: Mapping[str, str],
     step: _StepRun | None = None,
 ) -> int:
+    request = help_request(arguments) if step is None else None
+    if request is not None:
+        return _guard(
+            lambda: _show_help(request, invocation_cwd, environ),
+            lambda error: _internal_failure(error, _RunState(json_mode=False)),
+        )
     state = _RunState(json_mode=step is not None or _json_requested(arguments))
     return _guard(
         lambda: _run_selected(arguments, invocation_cwd, environ, state, step),
         lambda error: _internal_failure(error, state),
     )
+
+
+def _show_help(request: HelpRequest, cwd: Path, environ: Mapping[str, str]) -> int:
+    try:
+        text = _help_text(request, cwd, environ)
+    except PratError as error:
+        _print_diagnostic(error)
+        return error.exit_code
+    sys.stdout.write(text)
+    return 0
+
+
+def _help_text(request: HelpRequest, cwd: Path, environ: Mapping[str, str]) -> str:
+    selector = request.selector
+    if selector is None:
+        return build_parser().format_help()
+    config = load_config(request.config, cwd=cwd, env=environ)
+    if selector in config.workflows:
+        return selector_help(_workflow_entry(config, selector)[1], selector, workflow=True)
+    if selector in config.profiles:
+        return selector_help(_profile_entry(config, selector)[1], selector, workflow=False)
+    agent = BY_SELECTOR.get(selector) or resolve_profile(config, selector).agent
+    return selector_help(_agent_line(agent), selector, workflow=False)
 
 
 def _internal_failure(error: Exception, state: _RunState) -> int:

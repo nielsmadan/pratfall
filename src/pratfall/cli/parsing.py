@@ -1,6 +1,7 @@
 import argparse
 import math
 import os
+import textwrap
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from importlib.metadata import version
@@ -50,6 +51,23 @@ _CONFIG_COMMAND_HELP: Mapping[str, str] = MappingProxyType(
         "validate": (
             "Validate every configured profile, template and workflow without launching an agent."
         ),
+    }
+)
+
+
+_COMMAND_EXAMPLES: Mapping[tuple[str, ...], str] = MappingProxyType(
+    {
+        ("agents",): "prat agents --json",
+        ("profiles",): "prat profiles",
+        ("templates",): "prat templates",
+        ("workflows",): "prat workflows --json",
+        ("doctor",): "prat doctor --versions",
+        ("config",): "prat config validate",
+        ("config", "path"): "prat config path",
+        ("config", "init"): "prat config init --config ./team.toml",
+        ("config", "validate"): "prat config validate --config .pratfile",
+        ("trust",): "prat trust ~/src/team-repo",
+        ("completion",): 'eval "$(prat completion zsh)"',
     }
 )
 
@@ -120,44 +138,151 @@ _WORKFLOW_FLAGS = frozenset(
 )
 
 
-_EPILOG = """run syntax:
-  prat [RUN_OPTIONS] SELECTOR [PROMPT | VALUE...] [-- NATIVE_ARGS]
+@dataclass(frozen=True)
+class _RunOption:
+    label: str
+    flags: tuple[str, ...]
+    help: str
 
-SELECTOR is an agent name (codex, kiro), alias (cx), or profile. See prat agents.
+
+_RUN_OPTIONS: tuple[_RunOption, ...] = (
+    _RunOption(
+        "--prompt=TEXT", ("--prompt",), "Pass prompt text, including text beginning with a dash."
+    ),
+    _RunOption(
+        "-f, --file PATH", ("-f", "--file"), "Read the prompt from a UTF-8 file; use - for stdin."
+    ),
+    _RunOption(
+        "-t, --template NAME",
+        ("-t", "--template"),
+        "Apply a named prompt template; additional input is optional.",
+    ),
+    _RunOption("--param NAME=VALUE", ("--param",), "Fill a prompt parameter; repeat for several."),
+    _RunOption(
+        "--context PATH",
+        ("--context",),
+        "Prepend a UTF-8 context file; repeat to include several.",
+    ),
+    _RunOption(
+        "-x, --extract", ("-x", "--extract"), "Return the first fenced code block from the answer."
+    ),
+    _RunOption(
+        "-e, --edit", ("-e", "--edit"), "Edit the complete prompt in VISUAL, EDITOR, or vi."
+    ),
+    _RunOption("--model MODEL", ("--model",), "Override the profile model."),
+    _RunOption(
+        "--native-agent NAME",
+        ("--native-agent",),
+        "Select a native agent/persona for Claude, Copilot, or Vibe.",
+    ),
+    _RunOption(
+        "--session-id ID",
+        ("--session-id",),
+        "Set the native session id so its transcript can be located. A value matching an "
+        "existing Copilot session resumes it.",
+    ),
+    _RunOption("--effort EFFORT", ("--effort",), "Override the native effort setting."),
+    _RunOption(
+        "--fast / --no-fast",
+        ("--fast", "--no-fast"),
+        "Enable or disable supported native fast mode for this run.",
+    ),
+    _RunOption("--timeout SECONDS", ("--timeout",), "Set the wall-clock deadline."),
+    _RunOption("--max-budget-usd USD", ("--max-budget-usd",), "Set a supported native USD budget."),
+    _RunOption("--max-turns COUNT", ("--max-turns",), "Set a supported native turn limit."),
+    _RunOption(
+        "--max-ai-credits COUNT",
+        ("--max-ai-credits",),
+        "Set Copilot's soft per-response AI-credit limit.",
+    ),
+    _RunOption("--cwd PATH", ("--cwd",), "Set the agent working directory."),
+    _RunOption(
+        "--add-dir PATH",
+        ("--add-dir",),
+        "Add a native workspace directory; repeat to include several.",
+    ),
+    _RunOption(
+        "--attachment PATH",
+        ("--attachment",),
+        "Attach a native image/file; repeat where supported.",
+    ),
+    _RunOption(
+        "--tools NAME", ("--tools",), "Restrict native tool availability; repeat for several."
+    ),
+    _RunOption(
+        "--disabled-tools NAME",
+        ("--disabled-tools",),
+        "Disable native tools or patterns; repeat for several.",
+    ),
+    _RunOption(
+        "--instructions TEXT",
+        ("--instructions",),
+        "Append instructions while preserving native built-in guidance.",
+    ),
+    _RunOption(
+        "--instructions-file PATH",
+        ("--instructions-file",),
+        "Read appended instructions from a UTF-8 file.",
+    ),
+    _RunOption(
+        "--config PATH", ("--config",), "Merge PATH over global config instead of .pratfile."
+    ),
+    _RunOption(
+        "--schema PATH", ("--schema",), "Request native JSON Schema output from a UTF-8 file."
+    ),
+    _RunOption("--json", ("--json",), "Print one normalized JSON result."),
+    _RunOption("--progress", ("--progress",), "Print bounded live activity updates on stderr."),
+    _RunOption("--trace", ("--trace",), "Print captured native stdout on stderr."),
+    _RunOption(
+        "--notify / --no-notify",
+        ("--notify", "--no-notify"),
+        "Show or suppress the completion notification for this run.",
+    ),
+    _RunOption(
+        "--dry-run", ("--dry-run",), "Resolve and print the invocation without launching it."
+    ),
+)
+
+_HELP_WIDTH = 100
+_RUN_USAGE = "prat [RUN_OPTIONS] {selector} [PROMPT | VALUE...] [-- NATIVE_ARGS]"
+_WORKFLOW_USAGE = "prat [RUN_OPTIONS] {selector} [PROMPT | VALUE...]"
+
+
+def run_flag_help() -> dict[str, str]:
+    return {
+        f"{flag}=" if flag == "--prompt" else flag: option.help
+        for option in _RUN_OPTIONS
+        for flag in option.flags
+    }
+
+
+def run_options_text(*, workflow: bool = False) -> str:
+    options = [
+        option for option in _RUN_OPTIONS if not workflow or set(option.flags) <= _WORKFLOW_FLAGS
+    ]
+    column = 2 + max(len(option.label) for option in _RUN_OPTIONS) + 2
+    lines: list[str] = []
+    for option in options:
+        wrapped = textwrap.wrap(option.help, _HELP_WIDTH - column)
+        lines.append(f"  {option.label}".ljust(column) + wrapped[0])
+        lines.extend(" " * column + line for line in wrapped[1:])
+    return "\n".join(lines)
+
+
+def selector_help(header: str, selector: str, *, workflow: bool) -> str:
+    usage = (_WORKFLOW_USAGE if workflow else _RUN_USAGE).format(selector=selector)
+    return f"{header}\n\nusage: {usage}\n\nrun options:\n{run_options_text(workflow=workflow)}\n"
+
+
+_EPILOG = f"""run syntax:
+  {_RUN_USAGE.format(selector="SELECTOR")}
+
+SELECTOR is an agent name (codex, kiro), alias (cx), profile, or workflow. See prat agents,
+prat profiles and prat workflows; prat SELECTOR --help lists the options that SELECTOR takes.
 Redirected stdin precedes prompt text or file contents, separated by two newlines.
 
 run options:
-  --prompt=TEXT           Pass prompt text, including text beginning with a dash.
-  -f, --file PATH         Read the prompt from a UTF-8 file; use - for stdin.
-  -t, --template NAME     Apply a named prompt template; additional input is optional.
-  --param NAME=VALUE      Fill a prompt parameter; repeat for several.
-  --context PATH         Prepend a UTF-8 context file; repeat to include several.
-  -x, --extract           Return the first fenced code block from the answer.
-  -e, --edit              Edit the complete prompt in VISUAL, EDITOR, or vi.
-  --model MODEL           Override the profile model.
-  --native-agent NAME     Select a native agent/persona for Claude, Copilot, or Vibe.
-  --session-id ID         Set the native session id so its transcript can be located.
-                          A value matching an existing Copilot session resumes it.
-  --effort EFFORT         Override the native effort setting.
-  --fast / --no-fast      Enable or disable supported native fast mode for this run.
-  --timeout SECONDS       Set the wall-clock deadline.
-  --max-budget-usd USD    Set a supported native USD budget.
-  --max-turns COUNT       Set a supported native turn limit.
-  --max-ai-credits COUNT  Set Copilot's soft per-response AI-credit limit.
-  --cwd PATH              Set the agent working directory.
-  --add-dir PATH          Add a native workspace directory; repeat to include several.
-  --attachment PATH       Attach a native image/file; repeat where supported.
-  --tools NAME            Restrict native tool availability; repeat for several.
-  --disabled-tools NAME   Disable native tools or patterns; repeat for several.
-  --instructions TEXT     Append instructions while preserving native built-in guidance.
-  --instructions-file PATH  Read appended instructions from a UTF-8 file.
-  --config PATH           Merge PATH over global config instead of .pratfile.
-  --schema PATH           Request native JSON Schema output from a UTF-8 file.
-  --json                  Print one normalized JSON result.
-  --progress              Print bounded live activity updates on stderr.
-  --trace                 Print captured native stdout on stderr.
-  --notify / --no-notify  Show or suppress the completion notification for this run.
-  --dry-run               Resolve and print the invocation without launching it.
+{run_options_text()}
 
 examples:
   prat codex "review this change"
@@ -166,6 +291,9 @@ examples:
   prat cc --file prompt.md
   prat cc --prompt=-leading-dash
   prat cx "how many Rs in strawberry" | prat cx "times 5"
+  prat cc -t rename --param old=foo --param new=bar
+  prat ship "add a --verbose flag"
+  prat cx --json "summarize this diff" < change.diff
 """
 
 
@@ -202,9 +330,17 @@ class _RunScan:
 
 
 class Parser(argparse.ArgumentParser):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *, add_help: bool = True, **kwargs: Any) -> None:
         self.flags: list[str] = []
-        super().__init__(*args, **kwargs)
+        super().__init__(add_help=False, **kwargs)
+        if add_help:
+            self.add_argument(
+                "-h",
+                "--help",
+                action="help",
+                default=argparse.SUPPRESS,
+                help="Show this help and exit.",
+            )
 
     def add_argument(self, *args: Any, **kwargs: Any) -> argparse.Action:
         action = super().add_argument(*args, **kwargs)
@@ -281,11 +417,16 @@ def _parsers() -> dict[tuple[str, ...], Parser]:
     )
     parser.set_defaults(config=None, json=False)
     _common_flags(parser)
-    parser.add_argument("--version", action="version", version=f"prat {version('pratfall')}")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"prat {version('pratfall')}",
+        help="Show the version and exit.",
+    )
     subparsers = parser.add_subparsers(dest="command", parser_class=Parser)
     parsers: dict[tuple[str, ...], Parser] = {(): parser}
     for command in ("agents", "profiles", "templates", "workflows", "doctor"):
-        child = subparsers.add_parser(command, help=_MANAGEMENT_HELP[command], allow_abbrev=False)
+        child = _command_parser(subparsers, (command,), _MANAGEMENT_HELP[command])
         parsers[(command,)] = child
         _common_flags(child)
         if command == "doctor":
@@ -298,17 +439,17 @@ def _parsers() -> dict[tuple[str, ...], Parser]:
                     "configured wrappers may have side effects."
                 ),
             )
-    config = subparsers.add_parser("config", help=_MANAGEMENT_HELP["config"], allow_abbrev=False)
+    config = _command_parser(subparsers, ("config",), _MANAGEMENT_HELP["config"])
     parsers[("config",)] = config
     _common_flags(config)
     config_commands = config.add_subparsers(
         dest="config_command", required=True, parser_class=Parser
     )
     for name, help_text in _CONFIG_COMMAND_HELP.items():
-        child = config_commands.add_parser(name, help=help_text, allow_abbrev=False)
+        child = _command_parser(config_commands, ("config", name), help_text)
         parsers[("config", name)] = child
         _common_flags(child)
-    trust = subparsers.add_parser("trust", help=_MANAGEMENT_HELP["trust"], allow_abbrev=False)
+    trust = _command_parser(subparsers, ("trust",), _MANAGEMENT_HELP["trust"])
     parsers[("trust",)] = trust
     trust.add_argument("--config", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     trust.add_argument(
@@ -327,9 +468,7 @@ def _parsers() -> dict[tuple[str, ...], Parser]:
     trust.add_argument(
         "--revoke", action="store_true", help="Remove DIR's trust entry; DIR need not exist."
     )
-    completion = subparsers.add_parser(
-        "completion", help=_MANAGEMENT_HELP["completion"], allow_abbrev=False
-    )
+    completion = _command_parser(subparsers, ("completion",), _MANAGEMENT_HELP["completion"])
     parsers[("completion",)] = completion
     completion.add_argument(
         "shell",
@@ -338,6 +477,19 @@ def _parsers() -> dict[tuple[str, ...], Parser]:
         help="bash or zsh; default: the basename of $SHELL, else bash.",
     )
     return parsers
+
+
+def _command_parser(
+    subparsers: "argparse._SubParsersAction[Parser]", path: tuple[str, ...], help_text: str
+) -> Parser:
+    return subparsers.add_parser(
+        path[-1],
+        help=help_text,
+        description=help_text,
+        epilog=f"example:\n  {_COMMAND_EXAMPLES[path]}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
 
 
 def _parse_run(arguments: list[str]) -> RunArguments:
@@ -562,6 +714,25 @@ def _run_cwd(value: str | None, invocation_cwd: Path) -> Path:
     if not path.is_dir():
         raise PratError(f"--cwd is not a directory: {path}", code="invalid_arguments")
     return path
+
+
+@dataclass(frozen=True)
+class HelpRequest:
+    selector: str | None
+    config: str | None
+
+
+def help_request(arguments: list[str]) -> HelpRequest | None:
+    tokens = _scan_run(arguments).tokens
+    if not any(token.argument in {"-h", "--help"} for token in tokens):
+        return None
+    words = [
+        token.argument
+        for token in tokens
+        if token.name not in _RUN_VALUE_FLAGS and token.argument[:1] != "-"
+    ]
+    config = next((token.value for token in tokens if token.name == "--config"), None)
+    return HelpRequest(words[0] if words else None, config)
 
 
 def _json_requested(arguments: list[str]) -> bool:

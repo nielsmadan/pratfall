@@ -81,6 +81,10 @@ prat cc --file request.md --timeout 120 --progress
 printf 'summarize this checkout\n' | prat gm
 ```
 
+`prat SELECTOR --help` prints the selector's line from `prat agents`, `prat profiles` or
+`prat workflows`, then the run options it takes; a workflow lists only the options a workflow run
+accepts.
+
 | Parameter | Purpose |
 | --- | --- |
 | `--model MODEL` | Select a native model. |

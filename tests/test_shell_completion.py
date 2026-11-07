@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -11,7 +10,12 @@ import pytest
 
 from pratfall.catalog import AGENTS, BY_SELECTOR, MANAGEMENT_COMMANDS
 from pratfall.cli import main
-from pratfall.cli.parsing import _CONFIG_COMMAND_HELP, _EPILOG, _MANAGEMENT_HELP, build_parser
+from pratfall.cli.parsing import (
+    _CONFIG_COMMAND_HELP,
+    _MANAGEMENT_HELP,
+    build_parser,
+    run_flag_help,
+)
 from pratfall.cli.shell_completion import (
     _DIR_FLAGS,
     _FILE_FLAGS,
@@ -483,11 +487,10 @@ def test_path_and_template_flags_are_run_value_flags() -> None:
     assert (_DIR_FLAGS | _FILE_FLAGS | _TEMPLATE_FLAGS | {"--effort"}) <= set(run_flags)
 
 
-def test_every_help_run_flag_is_completed_with_a_description() -> None:
-    section = _EPILOG.split("run options:\n", 1)[1].split("\n\n", 1)[0]
-    documented = set(re.findall(r"(?<![\w-])--?[a-z][\w-]*=?", section))
+def test_every_help_run_flag_is_completed_with_its_help_text() -> None:
     run_flags = _run_flags()
-    assert documented == set(run_flags)
+    assert run_flags == run_flag_help()
+    assert run_flags["--prompt="] == "Pass prompt text, including text beginning with a dash."
     assert all(run_flags.values())
 
 
