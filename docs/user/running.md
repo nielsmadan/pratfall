@@ -41,6 +41,11 @@ Choose one explicit prompt source:
 dash. Without an explicit source, Prat reads redirected stdin; at a terminal, it reports a missing
 prompt.
 
+Every run needs a selector. Bare `prat` at a terminal prints help and exits 0; any other line
+without a selector or management command, including `generate-notes | prat`, `prat --json` and
+`prat --dry-run`, fails with `a selector is required; run 'prat --help'` (exit 2) without reading
+stdin.
+
 Redirected stdin is also read when you supply inline text or `--file PATH`. Nonempty stdin is
 placed first, followed by two newline bytes and the explicit prompt. Both inputs retain their
 original whitespace. Empty stdin, a terminal, or closed stdin leaves the explicit prompt unchanged.

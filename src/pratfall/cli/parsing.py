@@ -117,6 +117,8 @@ def option_flags(options: Options) -> dict[str, str]:
     return {**_OPTION_FLAGS, **tri_state}
 
 
+SELECTOR_REQUIRED = "a selector is required; run 'prat --help'"
+
 _RUN_FLAG_NAMES = frozenset({*_RUN_VALUE_FLAGS, *_RUN_FLAGS_WITHOUT_VALUE, "--prompt"})
 
 _WORKFLOW_FLAGS = frozenset(
@@ -420,7 +422,7 @@ def _parsers() -> dict[tuple[str, ...], Parser]:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"prat {version('pratfall')}",
+        version=f"prat {prat_version()}",
         help="Show the version and exit.",
     )
     subparsers = parser.add_subparsers(dest="command", parser_class=Parser)
@@ -549,7 +551,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         else:
             words.append(argument)
     if selector is None:
-        raise PratError("a selector is required", code="invalid_arguments")
+        raise PratError(SELECTOR_REQUIRED, code="invalid_arguments")
     if edit and dry_run:
         raise PratError("--edit cannot be combined with --dry-run", code="invalid_arguments")
     options = _run_options(
@@ -733,6 +735,15 @@ def help_request(arguments: list[str]) -> HelpRequest | None:
     ]
     config = next((token.value for token in tokens if token.name == "--config"), None)
     return HelpRequest(words[0] if words else None, config)
+
+
+def version_json_requested(arguments: list[str]) -> bool:
+    flags = {token.argument for token in _scan_run(arguments).tokens}
+    return {"--version", "--json"} <= flags and all(flag[:1] == "-" for flag in flags)
+
+
+def prat_version() -> str:
+    return version("pratfall")
 
 
 def _json_requested(arguments: list[str]) -> bool:

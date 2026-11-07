@@ -14,6 +14,7 @@ from types import FrameType
 
 import pytest
 
+import pratfall.cli as cli_module
 from pratfall import __version__
 from pratfall.catalog import AGENTS
 from pratfall.cli import dispatch as dispatch_module
@@ -65,9 +66,49 @@ def test_version(capsys: pytest.CaptureFixture[str]) -> None:
     assert capsys.readouterr().out == f"prat {__version__}\n"
 
 
-def test_no_arguments_shows_help(capsys: pytest.CaptureFixture[str]) -> None:
+def test_no_arguments_at_a_terminal_shows_help(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli_module, "_stdin_is_tty", lambda: True)
     assert main([]) == 0
-    assert "usage: prat" in capsys.readouterr().out
+    assert capsys.readouterr().out.startswith("usage: prat [-h]")
+
+
+@pytest.mark.parametrize(
+    "arguments", [[], ["--config", "missing.toml"], ["--dry-run"], ["--progress"], ["-f", "x"]]
+)
+def test_missing_selector_is_an_error_without_reading_stdin(
+    arguments: list[str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(arguments) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "prat: a selector is required; run 'prat --help'\n"
+
+
+def test_missing_selector_with_json_is_one_error_object(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli_module, "_stdin_is_tty", lambda: True)
+    assert main(["--json"]) == 2
+    assert json.loads(capsys.readouterr().out) == {
+        "schema_version": 1,
+        "status": "error",
+        "exit_code": 2,
+        "error": {
+            "code": "invalid_arguments",
+            "message": "a selector is required; run 'prat --help'",
+        },
+    }
+
+
+@pytest.mark.parametrize("arguments", [["--version", "--json"], ["--json", "--version"]])
+def test_version_with_json_prints_the_version_object(
+    arguments: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(arguments) == 0
+    assert json.loads(capsys.readouterr().out) == {"schema_version": 1, "version": __version__}
 
 
 @pytest.mark.parametrize("flag", ["--trace", "-x", "--extract"])
@@ -80,7 +121,7 @@ def test_run_flag_without_selector_uses_normalized_run_error(
     assert result["agent"] is None
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "a selector is required",
+        "message": "a selector is required; run 'prat --help'",
     }
 
 
@@ -868,7 +909,7 @@ def test_notify_flags_are_treated_as_run_options_like_fast(
     result = json.loads(capsys.readouterr().out)
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "a selector is required",
+        "message": "a selector is required; run 'prat --help'",
     }
 
 

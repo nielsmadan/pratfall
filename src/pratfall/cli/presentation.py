@@ -218,6 +218,13 @@ def _stderr_is_tty() -> bool:
         return False
 
 
+def _stdin_is_tty() -> bool:
+    try:
+        return sys.stdin.isatty()
+    except (AttributeError, ValueError, OSError):
+        return False
+
+
 def _status_lines(*, progress: bool) -> bool:
     return progress or _stderr_is_tty()
 

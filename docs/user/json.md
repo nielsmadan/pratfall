@@ -273,6 +273,9 @@ Prepared temporary paths are labeled placeholders, not reusable filenames. Promp
 Management commands return separate versioned inventory or config objects. Their errors still
 contain `status`, `exit_code`, and `error`. Agent capability records include `fast`.
 `prat completion` prints shell code and rejects `--json` with `invalid_arguments`.
+`prat --version --json` returns `{"schema_version": 1, "version": "1.1.0"}`. A line with neither a
+selector nor a management command, such as `prat --json`, returns the standard error object with
+`invalid_arguments`.
 
 `prat trust --json` and `prat trust --revoke --json` return `path` and the boolean `trusted`.
 `prat trust --list --json` returns `directories`, an array of `{"path", "exists"}` records sorted by
