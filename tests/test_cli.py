@@ -1907,3 +1907,62 @@ def test_management_help_has_a_description_and_an_example(
     assert "\n  -h, --help" in output
     assert "Show this help and exit." in output
     assert output.endswith(f"\nexample:\n  {_COMMAND_EXAMPLES[path]}\n")
+
+
+def output_of(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, str]:
+    try:
+        code = main(arguments)
+    except SystemExit as caught:
+        code = int(caught.code or 0)
+    return code, capsys.readouterr().out
+
+
+def test_version_command_matches_the_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    assert output_of(["version"], capsys) == output_of(["--version"], capsys)
+    assert output_of(["version"], capsys) == (0, f"prat {__version__}\n")
+    assert output_of(["version", "--json"], capsys) == output_of(["--version", "--json"], capsys)
+
+
+@pytest.mark.parametrize(
+    ("help_command", "help_flag"),
+    [
+        (["help"], ["--help"]),
+        (["help", "cc"], ["cc", "--help"]),
+        (["help", "weekly"], ["weekly", "--help"]),
+        (["help", "ship"], ["ship", "--help"]),
+        (["help", "agents"], ["agents", "--help"]),
+        (["help", "config", "init"], ["config", "init", "--help"]),
+        (["help", "help"], ["help", "--help"]),
+    ],
+)
+def test_help_command_prints_the_same_page_as_the_help_flag(
+    help_command: list[str],
+    help_flag: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = ["--config", str(help_config(tmp_path))]
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    selector = help_flag[0] not in {"--help", "agents", "config", "help"}
+    flag_page = output_of([*help_flag, *(config if selector else [])], capsys)
+    assert flag_page[0] == 0
+    assert flag_page[1].strip()
+    assert output_of([*help_command, *(config if selector else [])], capsys) == flag_page
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["help", "bogus"], "unknown selector 'bogus'"),
+        (["help", "clade"], "unknown selector 'clade'; did you mean 'claude'?"),
+        (["help", "cc", "extra"], "unrecognized argument: extra"),
+        (["help", "agents", "extra"], "unrecognized argument: extra"),
+        (["help", "config", "bogus"], "unknown config command 'bogus'"),
+    ],
+)
+def test_help_command_rejects_unknown_topics(
+    arguments: list[str], message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(arguments) == 2
+    assert capsys.readouterr().err.startswith(f"prat: {message}")

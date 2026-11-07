@@ -41,6 +41,8 @@ _MANAGEMENT_HELP: Mapping[str, str] = MappingProxyType(
         "config": "Manage TOML configuration.",
         "trust": "Trust a directory, and everything under it, to load its .pratfile.",
         "completion": "Print bash or zsh completion code to eval from a shell rc file.",
+        "help": "Show help for prat, a selector, or a management command.",
+        "version": "Show the version and exit.",
     }
 )
 
@@ -68,6 +70,8 @@ _COMMAND_EXAMPLES: Mapping[tuple[str, ...], str] = MappingProxyType(
         ("config", "validate"): "prat config validate --config .pratfile",
         ("trust",): "prat trust ~/src/team-repo",
         ("completion",): 'eval "$(prat completion zsh)"',
+        ("help",): "prat help cc",
+        ("version",): "prat version --json",
     }
 )
 
@@ -359,12 +363,15 @@ def unrecognized_argument(argument: str, flags: Iterable[str]) -> PratError:
     return PratError(f"unrecognized argument: {argument}{suggestion}", code="invalid_arguments")
 
 
+_CONFIG_HELP = "Merge PATH over global config instead of .pratfile (relative to invocation cwd)."
+
+
 def _common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config",
         metavar="PATH",
         default=argparse.SUPPRESS,
-        help="Merge PATH over global config instead of .pratfile (relative to invocation cwd).",
+        help=_CONFIG_HELP,
     )
     parser.add_argument(
         "--json",
@@ -387,6 +394,15 @@ def parse_management(arguments: list[str]) -> argparse.Namespace:
         path = tuple(name for name in command if name is not None)
         raise unrecognized_argument(extras[0], parsers[path].flags)
     return args
+
+
+def command_help(path: tuple[str, ...]) -> str:
+    parsers = _parsers()
+    if path[:1] == ("config",) and len(path) > 1:
+        _check_config_command(list(path))
+    if path not in parsers:
+        raise unrecognized_argument(path[-1], ())
+    return parsers[path].format_help()
 
 
 def _check_config_command(arguments: list[str]) -> None:
@@ -472,6 +488,25 @@ def _parsers() -> dict[tuple[str, ...], Parser]:
     )
     completion = _command_parser(subparsers, ("completion",), _MANAGEMENT_HELP["completion"])
     parsers[("completion",)] = completion
+    help_parser = _command_parser(subparsers, ("help",), _MANAGEMENT_HELP["help"])
+    parsers[("help",)] = help_parser
+    help_parser.add_argument(
+        "--config", metavar="PATH", default=argparse.SUPPRESS, help=_CONFIG_HELP
+    )
+    help_parser.add_argument(
+        "topic",
+        nargs="*",
+        metavar="SELECTOR|COMMAND",
+        help="Selector, or management command and subcommand, to describe.",
+    )
+    version_parser = _command_parser(subparsers, ("version",), _MANAGEMENT_HELP["version"])
+    parsers[("version",)] = version_parser
+    version_parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Print a JSON management result.",
+    )
     completion.add_argument(
         "shell",
         nargs="?",

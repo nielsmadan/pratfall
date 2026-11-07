@@ -674,3 +674,11 @@ def test_completion_reads_profiles_and_config_path_through_the_loader() -> None:
 def test_completion_suggests_the_closest_shell(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["completion", "bassh"]) == 2
     assert capsys.readouterr().err == "prat: unsupported shell 'bassh'; did you mean 'bash'?\n"
+
+
+def test_help_completes_selectors_and_commands(tmp_path: Path) -> None:
+    (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
+    offered = words(["help", ""], tmp_path)
+    assert {"cc", "claude", "cleaner", "agents", "config", "version"} <= set(offered)
+    assert words(["help", "config", ""], tmp_path) == ["init", "path", "validate"]
+    assert words(["version", "--"], tmp_path) == ["--help", "--json"]

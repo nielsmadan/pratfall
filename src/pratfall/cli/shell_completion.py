@@ -149,7 +149,7 @@ def _complete(words: Sequence[str], load: Loader) -> _Completion:
         management = _management_mode(preceding)
         return _words(current, _selectors(preceding, load, management=management))
     if positionals[0] in MANAGEMENT_COMMANDS and _management_mode(preceding):
-        return _management(positionals[0], positionals[1:], current)
+        return _management(positionals[0], positionals[1:], current, preceding, load)
     if current.startswith("-"):
         return _words(current, _run_flags().items())
     return _Completion("files" if _unbound_parameters(preceding, load) else "words")
@@ -263,10 +263,14 @@ def _selectors(preceding: list[str], load: Loader, *, management: bool) -> list[
     return candidates
 
 
-def _management(command: str, rest: list[str], current: str) -> _Completion:
+def _management(
+    command: str, rest: list[str], current: str, preceding: list[str], load: Loader
+) -> _Completion:
     if current.startswith("-"):
         return _words(current, _management_flags(command).items())
-    if not rest and command == "config":
+    if not rest and command == "help":
+        return _words(current, _selectors(preceding, load, management=True))
+    if (not rest and command == "config") or (command == "help" and rest == ["config"]):
         return _words(current, _CONFIG_COMMAND_HELP.items())
     if not rest and command == "trust":
         return _Completion("dirs")
@@ -278,6 +282,10 @@ def _management(command: str, rest: list[str], current: str) -> _Completion:
 def _management_flags(command: str) -> Mapping[str, str]:
     if command == "completion":
         return {key: _MANAGEMENT_FLAGS[key] for key in ("-h", "--help")}
+    if command == "help":
+        return {key: _MANAGEMENT_FLAGS[key] for key in ("-h", "--help", "--config")}
+    if command == "version":
+        return {key: _MANAGEMENT_FLAGS[key] for key in ("-h", "--help", "--json")}
     if command == "doctor":
         return {**_MANAGEMENT_FLAGS, "--versions": "Also run each agent's version command."}
     if command == "trust":

@@ -81,9 +81,10 @@ prat cc --file request.md --timeout 120 --progress
 printf 'summarize this checkout\n' | prat gm
 ```
 
-`prat SELECTOR --help` prints the selector's line from `prat agents`, `prat profiles` or
-`prat workflows`, then the run options it takes; a workflow lists only the options a workflow run
-accepts.
+`prat SELECTOR --help` (or `prat help SELECTOR`) prints the selector's line from `prat agents`,
+`prat profiles` or `prat workflows`, then the run options it takes; a workflow lists only the
+options a workflow run accepts. `prat help` alone equals `prat --help`, `prat help CMD` equals
+`prat CMD --help`, and `prat version` equals `prat --version`.
 
 | Parameter | Purpose |
 | --- | --- |

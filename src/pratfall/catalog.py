@@ -239,7 +239,18 @@ BY_SELECTOR = MappingProxyType(
     {selector: agent for agent in AGENTS for selector in (agent.name, *agent.aliases)}
 )
 MANAGEMENT_COMMANDS = frozenset(
-    {"agents", "profiles", "templates", "workflows", "doctor", "config", "trust", "completion"}
+    {
+        "agents",
+        "profiles",
+        "templates",
+        "workflows",
+        "doctor",
+        "config",
+        "trust",
+        "completion",
+        "help",
+        "version",
+    }
 )
 RESERVED_NAMES = frozenset(BY_SELECTOR) | MANAGEMENT_COMMANDS | {"help", "version"}
 REMOVED_AGENTS = MappingProxyType(dict.fromkeys(("openhands", "oh", "iflow", "if"), "0.9.0"))

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from pratfall.adapters.registry import ADAPTERS, Adapter
-from pratfall.catalog import AGENTS, BY_SELECTOR
+from pratfall.catalog import AGENTS, BY_SELECTOR, MANAGEMENT_COMMANDS
 from pratfall.cli.doctor import RUN_VERSION_TIMEOUT, _doctor, probe_version
 from pratfall.cli.parsing import (
     HelpRequest,
@@ -18,9 +18,12 @@ from pratfall.cli.parsing import (
     _parse_run,
     _run_cwd,
     build_parser,
+    command_help,
     help_request,
     option_flags,
+    prat_version,
     selector_help,
+    unrecognized_argument,
 )
 from pratfall.cli.presentation import (
     _config_warnings,
@@ -353,6 +356,10 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
         _emit({"path": str(path), "created": True}, [f"Created {path}"], json_mode=args.json)
     elif args.command == "trust":
         _trust(args, cwd, environ)
+    elif args.command == "version":
+        _emit({"version": prat_version()}, [f"prat {prat_version()}"], json_mode=args.json)
+    elif args.command == "help":
+        sys.stdout.write(_help_command(args.topic, args.config, cwd, environ))
     else:
         config = load_config(args.config, cwd=cwd, env=environ)
         _validate_config_native_arguments(config)
@@ -628,6 +635,18 @@ def _show_help(request: HelpRequest, cwd: Path, environ: Mapping[str, str]) -> i
         return error.exit_code
     sys.stdout.write(text)
     return 0
+
+
+def _help_command(
+    topic: list[str], config: str | None, cwd: Path, environ: Mapping[str, str]
+) -> str:
+    if not topic:
+        return build_parser().format_help()
+    if topic[0] in MANAGEMENT_COMMANDS:
+        return command_help(tuple(topic))
+    if len(topic) > 1:
+        raise unrecognized_argument(topic[1], ())
+    return _help_text(HelpRequest(topic[0], config), cwd, environ)
 
 
 def _help_text(request: HelpRequest, cwd: Path, environ: Mapping[str, str]) -> str:

@@ -263,6 +263,8 @@ prat cc --timeout 120 --cwd ../project "inspect this failure"
 for an agent, alias or profile, and only the workflow options for a workflow. It exits 0 without
 reading a prompt or launching anything. Other arguments are ignored, except `--config` for the
 lookup; `--help` after `--` stays a native argument, and `--prompt=--help` is a prompt.
+`prat help SELECTOR` prints the same page, `prat help CMD` prints `prat CMD --help`, and
+`prat help` alone prints `prat --help`.
 
 | Control | Flags and behavior |
 | --- | --- |
