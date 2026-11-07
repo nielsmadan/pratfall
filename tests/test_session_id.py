@@ -190,13 +190,13 @@ def test_native_session_id_stays_reserved(
 def test_session_id_inventory_and_profile_listing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert main(["agents", "--json"]) == 0
+    assert main(["list", "agents", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["agents"]
     assert {r["name"] for r in records if r["capabilities"]["session_id"]} == REQUESTING
     (tmp_path / ".pratfile").write_text(
         f'version=1\n[profiles.run]\nagent="claude"\nsession_id="{SESSION}"\n'
     )
-    assert main(["profiles", "--json"]) == 0
+    assert main(["list", "profiles", "--json"]) == 0
     profile = json.loads(capsys.readouterr().out)["profiles"][0]
     assert profile["options"]["session_id"] == SESSION
 
@@ -212,7 +212,7 @@ REPORTING = {name for name, spec in BY_NAME.items() if spec.capabilities.reports
 def test_the_inventory_declares_both_sides_of_the_feature(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["agents", "--json"]) == 0
+    assert main(["list", "agents", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["agents"]
     assert {r["name"] for r in records if r["capabilities"]["session_id"]} == {
         "claude",

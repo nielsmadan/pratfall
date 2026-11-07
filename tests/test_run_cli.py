@@ -2379,7 +2379,7 @@ def _run_with_closed_stdout(
 
 
 def test_management_output_to_early_closed_pipe_returns_one(tmp_path: Path) -> None:
-    completed = _run_with_closed_stdout(tmp_path, ["agents"])
+    completed = _run_with_closed_stdout(tmp_path, ["list", "agents"])
     assert completed.returncode == 1
     assert b"BrokenPipeError" not in completed.stderr
 
@@ -2803,7 +2803,7 @@ def test_unknown_template_fails_before_stdin(
     assert main(["cx", "--template=missing", "--config", str(config), "--json"]) == 2
     assert json.loads(capsys.readouterr().out)["error"] == {
         "code": "invalid_arguments",
-        "message": "unknown template 'missing'; run 'prat templates' to list choices",
+        "message": "unknown template 'missing'; run 'prat list templates' to list choices",
     }
 
 
@@ -3429,7 +3429,7 @@ def test_directory_config_management_does_not_stat_auxiliary_paths(
     )
     assert main(["--config", str(path), "config", "validate"]) == 0
     capsys.readouterr()
-    assert main(["--config", str(path), "profiles", "--json"]) == 0
+    assert main(["--config", str(path), "list", "profiles", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["profiles"]
     assert records[0]["options"]["add_dirs"] == []
     assert records[1]["options"]["add_dirs"] == [str(tmp_path / "missing")]
@@ -3761,9 +3761,7 @@ def test_unknown_selector_wins_over_extra_prompt_words(
     assert main(["missing", "one", "two", "--config", str(config), "--json"]) == 2
     assert json.loads(capsys.readouterr().out)["error"] == {
         "code": "invalid_arguments",
-        "message": (
-            "unknown selector 'missing'; run 'prat agents' or 'prat profiles' to list choices"
-        ),
+        "message": ("unknown selector 'missing'; run 'prat list' to list choices"),
     }
 
 

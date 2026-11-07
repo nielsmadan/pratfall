@@ -2,7 +2,8 @@ import json
 import os
 import shlex
 import sys
-from collections.abc import Callable, Mapping
+import unicodedata
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,57 @@ _CONTROL_ESCAPES = {
 
 def _escape_controls(text: str) -> str:
     return text.translate(_CONTROL_ESCAPES)
+
+
+_TABLE_ESCAPES = _CONTROL_ESCAPES | {ord("\t"): "\\t"}
+_MIN_CUT_WIDTH = 20
+
+
+def display_width(text: str) -> int:
+    return sum(_char_width(char) for char in text)
+
+
+def _char_width(char: str) -> int:
+    if unicodedata.combining(char):
+        return 0
+    return 2 if unicodedata.east_asian_width(char) in {"W", "F"} else 1
+
+
+def _cut(text: str, width: int) -> str:
+    if display_width(text) <= width:
+        return text
+    kept: list[str] = []
+    used = 0
+    for char in text:
+        used += _char_width(char)
+        if used > width - 1:
+            break
+        kept.append(char)
+    return "".join(kept) + "…"
+
+
+def _pad(text: str, width: int) -> str:
+    return text + " " * (width - display_width(text))
+
+
+def render_table(
+    rows: Sequence[Sequence[str]], *, cut: int | None = None, width: int | None = None
+) -> list[str]:
+    cells = [[cell.translate(_TABLE_ESCAPES) or "-" for cell in row] for row in rows]
+    widths = [max(display_width(row[index]) for row in cells) for index in range(len(cells[0]))]
+    if cut is not None and width is not None:
+        others = sum(widths) - widths[cut] + 2 * (len(widths) - 1)
+        widths[cut] = min(widths[cut], max(width - others, _MIN_CUT_WIDTH))
+        cells = [
+            [_cut(cell, widths[cut]) if index == cut else cell for index, cell in enumerate(row)]
+            for row in cells
+        ]
+    return [
+        "  ".join(
+            [*(_pad(cell, size) for cell, size in zip(row[:-1], widths, strict=False)), row[-1]]
+        )
+        for row in cells
+    ]
 
 
 def _print_diagnostic(message: object) -> None:
@@ -221,6 +273,13 @@ def _stderr_is_tty() -> bool:
 def _stdin_is_tty() -> bool:
     try:
         return sys.stdin.isatty()
+    except (AttributeError, ValueError, OSError):
+        return False
+
+
+def _stdout_is_tty() -> bool:
+    try:
+        return sys.stdout.isatty()
     except (AttributeError, ValueError, OSError):
         return False
 

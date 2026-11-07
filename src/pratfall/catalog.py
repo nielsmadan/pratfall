@@ -240,10 +240,7 @@ BY_SELECTOR = MappingProxyType(
 )
 MANAGEMENT_COMMANDS = frozenset(
     {
-        "agents",
-        "profiles",
-        "templates",
-        "workflows",
+        "list",
         "doctor",
         "config",
         "trust",
@@ -254,13 +251,23 @@ MANAGEMENT_COMMANDS = frozenset(
 )
 RESERVED_NAMES = frozenset(BY_SELECTOR) | MANAGEMENT_COMMANDS | {"help", "version"}
 REMOVED_AGENTS = MappingProxyType(dict.fromkeys(("openhands", "oh", "iflow", "if"), "0.9.0"))
+REMOVED_COMMANDS = MappingProxyType(
+    dict.fromkeys(("agents", "profiles", "templates", "workflows"), "1.2.0")
+)
 
 
 def removed_agent(name: str) -> str | None:
     version = REMOVED_AGENTS.get(name)
     if version is None:
         return None
-    return f"agent {name!r} was removed in {version}; run 'prat agents' to list choices"
+    return f"agent {name!r} was removed in {version}; run 'prat list agents' to list choices"
+
+
+def removed_command(name: str) -> str | None:
+    version = REMOVED_COMMANDS.get(name)
+    if version is None:
+        return None
+    return f"'prat {name}' was removed in {version}; run 'prat list {name}'"
 
 
 def get_agent(selector: str) -> AgentSpec:
@@ -270,5 +277,5 @@ def get_agent(selector: str) -> AgentSpec:
         raise PratError(
             removed_agent(selector)
             or f"unknown agent {selector!r}"
-            + did_you_mean(selector, BY_SELECTOR, "run 'prat agents' to list agents")
+            + did_you_mean(selector, BY_SELECTOR, "run 'prat list agents' to list agents")
         ) from None

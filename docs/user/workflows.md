@@ -48,7 +48,8 @@ steps = [
 
 ```sh
 prat write "tide pools"
-prat workflows
+prat list workflows
+prat help write
 ```
 
 Each step names a profile, so a step's prompt is that
@@ -79,10 +80,12 @@ A local workflow replaces a global one of the same name, with a warning on stder
 `bind` references, unknown selectors, and that a step with no prompt and `input = "none"` can
 never receive input. For an `each` step it also checks that the source is an ancestor and not
 itself an `each` step, that `as` is a prompt parameter of the profile and not in `bind`, and that
-`input = "none"` comes with `as`. `prat workflows` lists each workflow's steps, parameters and
-source, and `prat workflows --json` returns the same fields. In the text listing an `each` step
-adds `each=SOURCE`, and `split=json`, `as=NAME`, `max_parallel=N`, `max_items=N` and
-`overflow=truncate` when they differ from the defaults.
+`input = "none"` comes with `as`. `prat list workflows` lists each workflow's step names,
+parameters and FROM (`global`, `local`, or `local, replaces global`), and `prat list workflows
+--json` returns every field. `prat help NAME` shows one row per step with its PROFILE, AFTER and
+OPTIONS: `input=none`, `bind=PARAM:STEP`, and for an `each` step `each=SOURCE`, plus `split=json`,
+`as=NAME`, `max_parallel=N`, `max_items=N` and `overflow=truncate` when they differ from the
+defaults.
 
 ## Order and input
 

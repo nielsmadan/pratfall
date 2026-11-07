@@ -93,7 +93,7 @@ harness spends no inference credits. Python assertions must be enabled; `-O` and
 are rejected.
 
 The harness keeps independent expected catalog values. Source parity tests under `just check`
-catch drift early; installed QA compares the real `prat agents --json` output. Transport and argv
+catch drift early; installed QA compares the real `prat list agents --json` output. Transport and argv
 expectations also include passthrough flags, so they are not catalog mirrors. Extend their parity
 checks against adapter `build()` output rather than adding another manually synchronized table.
 

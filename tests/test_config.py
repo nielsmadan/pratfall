@@ -767,7 +767,7 @@ def test_config_supplied_capability_rejections_stay_invalid_config(
 
 
 def test_unknown_selector_suggests_inventory() -> None:
-    with pytest.raises(PratError, match="prat profiles") as caught:
+    with pytest.raises(PratError, match="run 'prat list' to list choices") as caught:
         resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "unknown")
     assert caught.value.code == "invalid_arguments"
 
@@ -935,8 +935,8 @@ def test_invalid_global_template_is_not_hidden_by_replacement(tmp_path: Path) ->
     assert str(global_path) in str(caught.value)
 
 
-def test_templates_is_reserved_for_profile_names(tmp_path: Path) -> None:
-    path = write_config(tmp_path, 'version=1\n[profiles.templates]\nagent="codex"\n')
+def test_list_is_reserved_for_profile_names(tmp_path: Path) -> None:
+    path = write_config(tmp_path, 'version=1\n[profiles.list]\nagent="codex"\n')
     with pytest.raises(PratError, match="name is reserved"):
         load_config(path, cwd=Path.cwd(), env=os.environ)
 
@@ -1371,7 +1371,7 @@ def test_workflow_validation_errors(tmp_path: Path, body: str, message: str) -> 
 @pytest.mark.parametrize(
     ("name", "message"),
     [
-        ("workflows", "name is reserved"),
+        ("list", "name is reserved"),
         ("doctor", "name is reserved"),
         ("codex", "name is reserved"),
         ("cx", "name is reserved"),
@@ -1397,10 +1397,17 @@ def test_workflow_name_allows_digits_hyphens_and_underscores(tmp_path: Path) -> 
     assert "ok-1_x" in load_config(path, cwd=Path.cwd(), env=os.environ).workflows
 
 
-def test_profile_named_workflows_is_rejected(tmp_path: Path) -> None:
-    path = write_config(tmp_path, 'version=1\n[profiles.workflows]\nagent="codex"\n')
-    with pytest.raises(PratError, match="name is reserved"):
-        load_config(path, cwd=Path.cwd(), env=os.environ)
+@pytest.mark.parametrize("name", ["agents", "profiles", "templates", "workflows"])
+def test_removed_listing_command_names_are_legal_profile_names(tmp_path: Path, name: str) -> None:
+    path = write_config(tmp_path, f'version=1\n[profiles.{name}]\nagent="codex"\n')
+    assert resolve_profile(load_config(path, cwd=Path.cwd(), env=os.environ), name).profile == name
+
+
+def test_removed_listing_command_as_selector_names_its_replacement() -> None:
+    with pytest.raises(PratError) as caught:
+        resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "profiles")
+    assert str(caught.value) == "'prat profiles' was removed in 1.2.0; run 'prat list profiles'"
+    assert caught.value.code == "invalid_arguments"
 
 
 def test_workflow_in_defaults_is_rejected(tmp_path: Path) -> None:
@@ -1570,16 +1577,16 @@ def test_local_workflow_replaces_global_and_checks_global_profiles(
             'version=1\n[profiles.work]\nagent="iflow"',
             (
                 "profiles.work.agent: agent 'iflow' was removed in 0.9.0; "
-                "run 'prat agents' to list choices"
+                "run 'prat list agents' to list choices"
             ),
         ),
         (
             'version=1\n[agents.oh]\ncommand=["oh"]',
-            "agents.oh: agent 'oh' was removed in 0.9.0; run 'prat agents' to list choices",
+            "agents.oh: agent 'oh' was removed in 0.9.0; run 'prat list agents' to list choices",
         ),
         (
             'version=1\n[workflows.w]\nsteps=[{name="a", profile="if"}]',
-            "step 'a'.profile: agent 'if' was removed in 0.9.0; run 'prat agents' to list choices",
+            "step 'a'.profile: agent 'if' was removed in 0.9.0; run 'prat list agents' to list choices",
         ),
         (
             'version=1\n[defaults]\nnotify_method="osc8"',

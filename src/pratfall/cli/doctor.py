@@ -29,6 +29,10 @@ class _DoctorInterrupted(Exception):
     pass
 
 
+def agent_executable(config: Config, agent: AgentSpec) -> str:
+    return config.commands.get(agent.name, agent.command)[0]
+
+
 def _doctor_inventory(
     config: Config, which: Which, interruption: InterruptionState | None = None
 ) -> list[dict[str, object]]:
@@ -36,8 +40,7 @@ def _doctor_inventory(
     for agent in AGENTS:
         if interruption is not None and interruption.received is not None:
             break
-        command = config.commands.get(agent.name, agent.command)
-        executable = command[0]
+        executable = agent_executable(config, agent)
         found = which(executable)
         records.append(
             {

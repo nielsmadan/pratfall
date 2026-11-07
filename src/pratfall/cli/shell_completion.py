@@ -13,6 +13,7 @@ from pratfall.cli.parsing import (
     _MANAGEMENT_HELP,
     _RUN_FLAGS_WITHOUT_VALUE,
     _RUN_VALUE_FLAGS,
+    LIST_SECTIONS,
     _management_mode,
     _scan_run,
     run_flag_help,
@@ -272,6 +273,8 @@ def _management(
         return _words(current, _selectors(preceding, load, management=True))
     if (not rest and command == "config") or (command == "help" and rest == ["config"]):
         return _words(current, _CONFIG_COMMAND_HELP.items())
+    if not rest and command == "list":
+        return _words(current, LIST_SECTIONS.items())
     if not rest and command == "trust":
         return _Completion("dirs")
     if not rest and command == "completion":

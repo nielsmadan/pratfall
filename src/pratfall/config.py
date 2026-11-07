@@ -10,7 +10,14 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, NamedTuple
 
-from pratfall.catalog import BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent, removed_agent
+from pratfall.catalog import (
+    BY_NAME,
+    BY_SELECTOR,
+    RESERVED_NAMES,
+    get_agent,
+    removed_agent,
+    removed_command,
+)
 from pratfall.errors import PratError, did_you_mean
 from pratfall.instructions import validate_instructions
 from pratfall.limits import (
@@ -379,7 +386,9 @@ def option_origins(
     flags: Mapping[str, str] = MappingProxyType({}),
 ) -> dict[str, OptionOrigin]:
     origins = {
-        name: OptionOrigin(f"{source}: defaults.{name} (selector {selector!r})")
+        name: OptionOrigin(
+            f"{source}: defaults.{name} (selector {selector!r})", table="defaults", source=source
+        )
         for name, source in config.default_sources.items()
     }
     profile = config.profiles.get(selector)
@@ -424,7 +433,7 @@ def _agent_settings(
         label = f"{path}: agents.{name}"
         if name not in BY_NAME:
             unknown = removed_agent(name) or f"unknown agent {name!r}" + did_you_mean(
-                name, BY_NAME, "use a canonical name from 'prat agents'"
+                name, BY_NAME, "use a canonical name from 'prat list agents'"
             )
             raise PratError(f"{label}: {unknown}")
         settings = _table(value, label)
@@ -539,7 +548,11 @@ def _resolve_layers(layers: Mapping[str, ProfileLayer]) -> dict[str, Profile]:
 
 def _layer_origin(layer: ProfileLayer, selector: str, field: str) -> OptionOrigin:
     label = f"{layer.source}: profiles.{layer.name}.{field}"
-    return OptionOrigin(label if layer.name == selector else f"{label} (selector {selector!r})")
+    return OptionOrigin(
+        label if layer.name == selector else f"{label} (selector {selector!r})",
+        table=f"profiles.{layer.name}",
+        source=layer.source,
+    )
 
 
 def _templates(table: dict[str, object], path: Path) -> dict[str, PromptTemplate]:
@@ -781,7 +794,7 @@ def _validate_workflow_step(
         ) or f"unknown selector {step.selector!r}" + did_you_mean(
             step.selector,
             [*BY_SELECTOR, *config.profiles],
-            "run 'prat agents' or 'prat profiles' to list choices",
+            "run 'prat list' to list choices",
         )
         raise PratError(f"{label}.profile: {unknown}")
     prompt = step_prompt(config, step)
@@ -909,6 +922,15 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
     default_sources = _without_instruction_peer(
         global_config.default_sources, local_config.defaults
     ) | dict(local_config.default_sources)
+    replaced = {
+        f"{kind}.{name}": global_config.path
+        for kind, names in (
+            ("profiles", collisions),
+            ("templates", template_collisions),
+            ("workflows", workflow_collisions),
+        )
+        for name in names
+    }
     return Config(
         path=local_config.path,
         exists=True,
@@ -925,6 +947,7 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
         sources=global_config.sources + local_config.sources,
         warnings=warnings,
         default_sources=MappingProxyType(default_sources),
+        replaced=MappingProxyType(replaced),
     )
 
 
@@ -972,6 +995,7 @@ def load_config(
         config = replace(
             _merge_configs(_load_file(global_path, required=False), local),
             local_digest=None if contents is None else digest(contents),
+            local_source=local_path if contents is not None and explicit is None else None,
         )
     config = replace(config, profiles=MappingProxyType(_resolve_layers(config.profile_layers)))
     for name, profile in config.profiles.items():
@@ -1051,11 +1075,12 @@ def resolve_profile(
     else:
         raise PratError(
             removed_agent(selector)
+            or removed_command(selector)
             or f"unknown selector {selector!r}"
             + did_you_mean(
                 selector,
                 [*BY_SELECTOR, *config.profiles, *config.workflows],
-                "run 'prat agents' or 'prat profiles' to list choices",
+                "run 'prat list' to list choices",
             ),
             code="invalid_arguments",
         )

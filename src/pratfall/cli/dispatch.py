@@ -4,13 +4,14 @@ import shutil
 import sys
 from collections.abc import Callable, Mapping
 from contextlib import ExitStack, closing, suppress
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO
 
 from pratfall.adapters.registry import ADAPTERS, Adapter
-from pratfall.catalog import AGENTS, BY_SELECTOR, MANAGEMENT_COMMANDS
+from pratfall.catalog import BY_SELECTOR, MANAGEMENT_COMMANDS
 from pratfall.cli.doctor import RUN_VERSION_TIMEOUT, _doctor, probe_version
+from pratfall.cli.listing import View, agent_line, list_view, profile_page, workflow_page
 from pratfall.cli.parsing import (
     HelpRequest,
     RunArguments,
@@ -18,6 +19,7 @@ from pratfall.cli.parsing import (
     _parse_run,
     _run_cwd,
     build_parser,
+    check_list_section,
     command_help,
     help_request,
     option_flags,
@@ -33,12 +35,12 @@ from pratfall.cli.presentation import (
     _emit_result,
     _guard,
     _internal_message,
-    _limit_text,
     _presentation_error,
     _preview,
     _print_diagnostic,
     _status_lines,
     _stderr_is_tty,
+    _stdout_is_tty,
     _StdoutLatch,
     _StreamDiagnostics,
 )
@@ -58,9 +60,8 @@ from pratfall.config import (
 from pratfall.consumer import ByteConsumer, CapturingConsumer
 from pratfall.errors import PratError, did_you_mean
 from pratfall.instructions import read_instructions
-from pratfall.limits import DEFAULT_MAX_PARALLEL, WORKFLOW_SPEC_BYTES
+from pratfall.limits import WORKFLOW_SPEC_BYTES
 from pratfall.models import (
-    AgentSpec,
     Config,
     ConsumedCapture,
     DecodedOutput,
@@ -70,7 +71,6 @@ from pratfall.models import (
     RawCapture,
     ResolvedProfile,
     ResultError,
-    Workflow,
 )
 from pratfall.notify import encode, notification_for, send, should_notify
 from pratfall.option_paths import prepare_attachments, prepare_directories, resolve_path
@@ -81,159 +81,12 @@ from pratfall.prompt_templates import (
     BoundInput,
     bind_run_input,
     render_template,
-    template_parameters,
 )
 from pratfall.runner import ProcessResult, cleanup_process_group, raw_stdout, run
 from pratfall.schema import prepare_schema
-from pratfall.workflow_plan import workflow_parameter_names
-
-_View = tuple[dict[str, object], list[str]]
-
-_JSON_RENDERED_OPTIONS = frozenset(
-    {
-        "native_args",
-        "command_prefix",
-        "add_dirs",
-        "attachments",
-        "instructions",
-        "schema",
-        "instructions_file",
-        "tools",
-        "disabled_tools",
-        "native_agent",
-        "session_id",
-    }
-)
 
 
-def _agents_view() -> _View:
-    records = []
-    lines = []
-    for agent in AGENTS:
-        caps = agent.capabilities
-        capabilities = {
-            "model": caps.model,
-            "effort": caps.effort,
-            "effort_values": list(caps.effort_values) or None,
-            "budgets": sorted(caps.budgets),
-            "fast": caps.fast,
-            "add_dirs": caps.add_dirs,
-            "attachments": caps.attachments,
-            "attachment_types": list(caps.attachment_types) or None,
-            "attachment_max_count": caps.attachment_max_count,
-            "instructions": caps.instructions,
-            "schema": caps.schema,
-            "native_agent": caps.native_agent,
-            "session_id": caps.session_id,
-            "reports_session_id": caps.reports_session_id,
-            "tools": caps.tools,
-            "disabled_tools": caps.disabled_tools,
-            "tools_empty": caps.tools_empty,
-            "tools_scope": caps.tools_scope,
-            "disabled_tools_scope": caps.disabled_tools_scope,
-        }
-        records.append(
-            {
-                "name": agent.name,
-                "label": agent.label,
-                "aliases": list(agent.aliases),
-                "command": list(agent.command),
-                "capabilities": capabilities,
-            }
-        )
-        lines.append(_agent_line(agent))
-    return {"agents": records}, lines
-
-
-def _agent_line(agent: AgentSpec) -> str:
-    caps = agent.capabilities
-    supported = [
-        field
-        for field in (
-            "model",
-            "effort",
-            "fast",
-            "add_dirs",
-            "attachments",
-            "instructions",
-            "schema",
-            "tools",
-            "disabled_tools",
-            "native_agent",
-            "session_id",
-        )
-        if getattr(caps, field)
-    ]
-    supported.extend(sorted(caps.budgets))
-    if caps.attachments:
-        supported.append("attachment_types=" + "/".join(caps.attachment_types))
-        if caps.attachment_max_count is not None:
-            supported.append(f"attachment_max_count={caps.attachment_max_count}")
-    selectors = f"{agent.name} ({', '.join(agent.aliases)})" if agent.aliases else agent.name
-    return f"{selectors}: {', '.join(supported) or 'none'}"
-
-
-def _profiles_view(config: Config) -> _View:
-    entries = [_profile_entry(config, name) for name in sorted(config.profiles)]
-    records = [record for record, _ in entries]
-    lines = [line for _, line in entries]
-    return {"profiles": records}, lines or ["No profiles configured."]
-
-
-def _profile_entry(config: Config, name: str) -> tuple[dict[str, object], str]:
-    resolved = resolve_profile(config, name)
-    options = asdict(resolved.options)
-    template = config.profiles[name].prompt
-    parameters = () if template is None else template_parameters(template.prompt)
-    record: dict[str, object] = {
-        "name": name,
-        "agent": resolved.agent.name,
-        "options": options,
-        "prompt": None if template is None else template.prompt,
-        "prompt_source": None if template is None else str(template.source),
-        "parameters": list(parameters),
-    }
-    rendered = "".join(
-        f" {key}={_rendered_option(key, value)}"
-        for key, value in options.items()
-        if value is not None and (value != () or key == "tools")
-    )
-    prompt = (
-        "" if template is None else f" prompt={json.dumps(template.prompt, ensure_ascii=False)}"
-    )
-    return record, f"{name}: {resolved.agent.name}{rendered}{prompt}{_parameters_text(parameters)}"
-
-
-def _rendered_option(key: str, value: object) -> object:
-    return json.dumps(value, ensure_ascii=False) if key in _JSON_RENDERED_OPTIONS else value
-
-
-def _parameters_text(parameters: tuple[str, ...]) -> str:
-    return f" parameters={','.join(parameters)}" if parameters else ""
-
-
-def _templates_view(config: Config) -> _View:
-    templates = [
-        (name, template, template_parameters(template.prompt))
-        for name, template in sorted(config.templates.items())
-    ]
-    records: list[dict[str, object]] = [
-        {
-            "name": name,
-            "prompt": template.prompt,
-            "source": str(template.source),
-            "parameters": list(parameters),
-        }
-        for name, template, parameters in templates
-    ]
-    lines = [
-        f"{name}: {json.dumps(template.prompt, ensure_ascii=False)}{_parameters_text(parameters)}"
-        for name, template, parameters in templates
-    ]
-    return {"templates": records}, lines or ["No templates configured."]
-
-
-def _config_view(config: Config) -> _View:
+def _config_view(config: Config) -> View:
     return (
         {
             "path": str(config.path),
@@ -247,68 +100,6 @@ def _config_view(config: Config) -> _View:
             else f"No config at {config.path}; using built-in defaults."
         ],
     )
-
-
-def _workflows_view(config: Config) -> _View:
-    entries = [_workflow_entry(config, name) for name in sorted(config.workflows)]
-    records = [record for record, _ in entries]
-    lines = [line for _, line in entries]
-    return {"workflows": records}, lines or ["No workflows configured."]
-
-
-def _workflow_entry(config: Config, name: str) -> tuple[dict[str, object], str]:
-    workflow = config.workflows[name]
-    parameters = workflow_parameter_names(config, workflow)
-    record: dict[str, object] = {
-        "name": name,
-        "parallel": workflow.parallel,
-        "parameters": list(parameters),
-        "source": str(workflow.source),
-        "steps": [
-            {
-                "name": step.name,
-                "profile": step.selector,
-                "after": list(step.after),
-                "input": step.input,
-                "bind": dict(step.bind),
-                "each": step.each,
-                "split": None if step.each is None else step.split,
-                "as": step.as_parameter,
-                "max_parallel": None if step.each is None else step.max_parallel,
-                "max_items": None if step.each is None else step.max_items,
-                "overflow": None if step.each is None else step.overflow,
-            }
-            for step in workflow.steps
-        ],
-    }
-    steps = "; ".join(_workflow_step_text(workflow, i) for i in range(len(workflow.steps)))
-    line = f"{name}: {steps}"
-    line += "" if workflow.parallel else " parallel=false"
-    line += _parameters_text(parameters)
-    return record, f"{line} source={workflow.source}"
-
-
-def _workflow_step_text(workflow: Workflow, index: int) -> str:
-    step = workflow.steps[index]
-    default = (workflow.steps[index - 1].name,) if index else ()
-    text = f"{step.name}={step.selector}"
-    if step.after != default:
-        text += f" after={','.join(step.after) or 'none'}"
-    if step.input == "none":
-        text += " input=none"
-    if step.bind:
-        text += " bind=" + ",".join(f"{key}:{source}" for key, source in step.bind.items())
-    if step.each is not None:
-        text += f" each={step.each}"
-        text += "" if step.split == "lines" else f" split={step.split}"
-        text += "" if step.as_parameter is None else f" as={step.as_parameter}"
-        text += (
-            ""
-            if step.max_parallel == DEFAULT_MAX_PARALLEL
-            else f" max_parallel={step.max_parallel}"
-        )
-        text += _limit_text(step)
-    return text
 
 
 def _validate_native_arguments(
@@ -361,18 +152,18 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
     elif args.command == "help":
         sys.stdout.write(_help_command(args.topic, args.config, cwd, environ))
     else:
+        if args.command == "list":
+            check_list_section(args.section)
         config = load_config(args.config, cwd=cwd, env=environ)
         _validate_config_native_arguments(config)
         _config_warnings(config, _StreamDiagnostics())
         if args.command == "doctor":
             return _doctor(config, args.json, versions=args.versions, cwd=cwd, which=shutil.which)
-        views: dict[str, Callable[[], _View]] = {
-            "agents": _agents_view,
-            "profiles": lambda: _profiles_view(config),
-            "templates": lambda: _templates_view(config),
-            "workflows": lambda: _workflows_view(config),
-        }
-        payload, lines = views.get(args.command, lambda: _config_view(config))()
+        if args.command == "list":
+            width = shutil.get_terminal_size().columns if _stdout_is_tty() else None
+            payload, lines = list_view(config, args.section, width=width, which=shutil.which)
+        else:
+            payload, lines = _config_view(config)
         _emit(payload, lines, json_mode=args.json)
     return 0
 
@@ -655,11 +446,11 @@ def _help_text(request: HelpRequest, cwd: Path, environ: Mapping[str, str]) -> s
         return build_parser().format_help()
     config = load_config(request.config, cwd=cwd, env=environ)
     if selector in config.workflows:
-        return selector_help(_workflow_entry(config, selector)[1], selector, workflow=True)
+        return selector_help(workflow_page(config, selector), selector, workflow=True)
     if selector in config.profiles:
-        return selector_help(_profile_entry(config, selector)[1], selector, workflow=False)
+        return selector_help(profile_page(config, selector), selector, workflow=False)
     agent = BY_SELECTOR.get(selector) or resolve_profile(config, selector).agent
-    return selector_help(_agent_line(agent), selector, workflow=False)
+    return selector_help(agent_line(agent), selector, workflow=False)
 
 
 def _internal_failure(error: Exception, state: _RunState) -> int:
@@ -794,7 +585,7 @@ def _active_template(config: Config, parsed: RunArguments) -> tuple[str, str] | 
             raise PratError(
                 f"unknown template {parsed.template!r}"
                 + did_you_mean(
-                    parsed.template, config.templates, "run 'prat templates' to list choices"
+                    parsed.template, config.templates, "run 'prat list templates' to list choices"
                 ),
                 code="invalid_arguments",
             )

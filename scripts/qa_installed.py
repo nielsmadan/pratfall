@@ -2386,7 +2386,7 @@ def _exercise_a_session(prat: Path, root: Path, config: Path) -> dict[str, objec
 
 def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, object]:
     before = len(_calls(root / "native.jsonl"))
-    completed = _run(prat, root, ["agents", "--json"], config=config)
+    completed = _run(prat, root, ["list", "agents", "--json"], config=config)
     payload = _json_result(completed)
     assert completed.returncode == 0 and payload["schema_version"] == 1
     records = {_text(record["name"]): record for record in _records(payload["agents"])}
@@ -2495,7 +2495,7 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
         encoding="utf-8",
     )
     before = len(_calls(root / "native.jsonl"))
-    profiles = _run(prat, root, ["profiles", "--json"], config=config)
+    profiles = _run(prat, root, ["list", "profiles", "--json"], config=config)
     assert profiles.returncode == 0
     assert _json_result(profiles) == {
         "schema_version": 1,
@@ -2503,6 +2503,8 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
             {
                 "name": "new-profile",
                 "agent": "qwen",
+                "extends": None,
+                "source": str(config),
                 "options": {
                     "model": "profile-model",
                     "effort": None,
@@ -2699,7 +2701,7 @@ def _exercise_completion(prat: Path, root: Path, config: Path) -> dict[str, obje
     fish = _run(prat, root, ["completion", "fish"])
     assert fish.returncode == 2 and fish.stdout == b""
     selectors = _completion_words(_run(prat, root, ["__complete", "--config", str(config), ""]))
-    management = {"agents", "profiles", "templates", "workflows", "doctor", "config", "completion"}
+    management = {"list", "doctor", "config", "completion", "help", "version"}
     assert {*AGENTS, *ALIASES, *management, "simple", "override"} <= selectors
     missing = _run(prat, root, ["__complete", "--config", str(root / "missing.toml"), ""])
     assert "simple" not in _completion_words(missing)
@@ -3428,7 +3430,7 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
     created = _run(prat, root, ["--config", str(init_path), "config", "init"])
     refused = _run(prat, root, ["--config", str(init_path), "config", "init"])
     validated = _run(prat, root, ["--config", str(init_path), "config", "validate"])
-    profiles = _run(prat, root, ["--config", str(init_path), "profiles", "--json"])
+    profiles = _run(prat, root, ["--config", str(init_path), "list", "profiles", "--json"])
     assert (created.returncode, refused.returncode, validated.returncode, profiles.returncode) == (
         0,
         2,
@@ -3699,9 +3701,7 @@ def _exercise_q12(context: _ExerciseContext) -> dict[str, object]:
             status="error",
             native_exit_code=None,
             error_code="invalid_arguments",
-            error_message=(
-                "unknown selector 'unknown'; run 'prat agents' or 'prat profiles' to list choices"
-            ),
+            error_message=("unknown selector 'unknown'; run 'prat list' to list choices"),
         ),
     ]
     assert len(_calls(log)) == calls_before
@@ -4112,7 +4112,7 @@ def _exercise_w_composition(prat: Path, root: Path) -> dict[str, object]:
         "project",
         "--json",
     ]
-    listing = _run(prat, root, ["templates", "--json"], config=config)
+    listing = _run(prat, root, ["list", "templates", "--json"], config=config)
     assert listing.returncode == 0
     assert _json_result(listing) == {
         "schema_version": 1,
@@ -4131,9 +4131,11 @@ def _exercise_w_composition(prat: Path, root: Path) -> dict[str, object]:
             },
         ],
     }
-    text_listing = _run(prat, root, ["templates"], config=config)
+    text_listing = _run(prat, root, ["list", "templates"], config=config)
     assert text_listing.returncode == 0
-    assert text_listing.stdout == b'complete: "Standalone task"\nreview: "Review $$ ${input}"\n'
+    assert text_listing.stdout == (
+        b"NAME      PARAMETERS  FROM\ncomplete  -           global\nreview    -           global\n"
+    )
     preview = _run(prat, root, [*arguments, "--dry-run"], stdin=b"pipeline $input", config=config)
     assert preview.returncode == 0
     preview_result = _json_result(preview)

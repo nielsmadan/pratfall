@@ -31,7 +31,7 @@ credentials. Once your agent is ready, run a prompt:
 prat cx "summarize this checkout"
 ```
 
-Here, `cx` is the alias for Codex. Run `prat agents` to see all supported agents.
+Here, `cx` is the alias for Codex. Run `prat list agents` to see which agents are installed and their aliases.
 
 ## Enable shell completion
 

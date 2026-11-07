@@ -109,7 +109,8 @@ one run. The prompt is validated like a template, even for unused profiles.
   agent = "codex"
   ```
 - `[defaults]` does not accept `prompt`.
-- `prat profiles` shows the prompt and its parameters.
+- `prat list profiles` shows the prompt and its parameters, and `prat help NAME` the full
+  prompt.
 
 ## Choose a config file
 
@@ -325,12 +326,40 @@ selected path. Relative commands still resolve from that path's directory.
 ## Inspect and validate
 
 ```sh
-prat profiles
-prat templates
+prat list
+prat list profiles
+prat help weekly
 prat config validate
-prat --config custom.toml profiles
+prat --config custom.toml list
 prat --config custom.toml config validate
 ```
+
+`prat list` prints profiles, workflows, templates and agents as aligned tables, one row each; `prat
+list SECTION` prints one of them, and `--json` returns every field. A profile row shows NAME,
+AGENT, EXTENDS, SETS (what the profile itself sets) and FROM: `global` for the global or `--config`
+file, `local` for the `.pratfile`, or `local, replaces global` when a `.pratfile` profile replaces
+a global one of the same name. SETS shows short values in full and text or list settings, such as
+`prompt`, `instructions`, `native_args` and `tools`, by key only, with a prompt's parameters in
+brackets: `prompt (topic)`. On a terminal a long SETS cell is cut with `…` to fit the width, never
+below 20 columns; piped output is never cut.
+
+`prat help NAME` shows a profile's resolved settings with the origin of each value:
+
+```text
+weekly: profile for claude, global (/home/u/.config/pratfall/config.toml)
+extends: base
+parameters: topic
+
+SETTING  VALUE                 ORIGIN
+model    claude-opus-5         profiles.base
+effort   high                  profiles.weekly
+timeout  600                   built-in default
+prompt   "Summarise ${topic}"  profiles.weekly
+```
+
+ORIGIN names the profile layer or `defaults` table that set the value, with ` (local)` when it came
+from the `.pratfile`; `agents.NAME` for a `command_prefix` from `[agents.NAME]`; or `built-in
+default`.
 
 `config path` and `config init` target the global file unless `--config PATH` is supplied.
 `config validate` checks the merged configuration and lists the loaded files.
@@ -441,6 +470,14 @@ completion command.
 existing `[profiles.workflows]` and update invocations that select it. A profile and a workflow
 cannot share a name.
 
+One `prat list` command replaces the four listing commands: `prat agents`, `prat profiles`,
+`prat templates` and `prat workflows` are now `prat list agents`, `prat list profiles`, `prat list
+templates` and `prat list workflows`. With `--json` each prints the same key and records as before,
+with new fields added: `extends` and `source` on profiles, `installed` on agents. The text listing
+is now an aligned table. `agents`, `profiles`, `templates` and `workflows` are no longer reserved,
+so they are legal profile and workflow names again; `list` is now reserved, so rename a
+`[profiles.list]` or `[workflows.list]` and update invocations that select it.
+
 A collision reports `profiles.NAME: name is reserved; choose a different profile name.`
 
 Agents with names of four letters or fewer now use their full names. Update commands and profile
@@ -478,7 +515,7 @@ unsupported agents; it does not clear native permission denials.
 `tools = []` actively requests no tools in the [documented native scope](running.md#control-tool-availability).
 Claude, Copilot and Pi can represent it; Qwen, Droid, Vibe and unsupported agents reject it.
 Claude's MCP tools and, while other tools remain, `EndConversation` are outside its empty built-in
-selection. `prat profiles` displays active `tools=[]` and `prat agents --json` exposes `tools`,
+selection. `prat help NAME` displays active `tools=[]` and `prat list agents --json` exposes `tools`,
 `disabled_tools`, `tools_empty`, `tools_scope`, and `disabled_tools_scope` capabilities.
 
 Backend-specific defaults affect every profile that inherits them, including unused profiles
@@ -499,7 +536,7 @@ native_agent = "reviewer"
 existing native persona. Claude, Copilot and Vibe support this string. CLI `--native-agent`
 overrides the profile, local defaults and global defaults, in that order. Omission inherits;
 empty or whitespace-only names do not clear a selection. Names must be NUL-free valid UTF-8
-and are forwarded literally. `prat profiles` includes the resolved selection.
+and are forwarded literally. `prat help NAME` includes the resolved selection.
 
 Backend-specific defaults apply to every profile: putting `native_agent` in `[defaults]` makes
 an unsupported profile invalid even if it is not selected. Config validation and listing do not
@@ -541,7 +578,7 @@ schema = "schemas/answer.json"
 Schemas are supported for Claude, Codex and Qwen (v0.24.0+).
 `schema` is a nonempty path string relative to its defining config file. CLI `--schema PATH`
 overrides it relative to the invocation directory. Prat preserves symlink/`..` traversal and reads
-only the winning selected file, before prompt acquisition. `prat profiles` shows source paths;
+only the winning selected file, before prompt acquisition. `prat help NAME` shows source paths;
 `prat config validate` checks structure and capabilities without opening schema files.
 Schema defaults inherited by an unsupported profile invalidate the configuration even when that
 profile is not selected. Use agent-specific profiles for backend-specific defaults.

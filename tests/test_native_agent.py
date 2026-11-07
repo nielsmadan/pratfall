@@ -197,18 +197,18 @@ def test_vibe_native_agent_remains_reserved(
 def test_native_agent_inventory_and_profile_listing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert main(["agents", "--json"]) == 0
+    assert main(["list", "agents", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["agents"]
     assert {r["name"] for r in records if r["capabilities"]["native_agent"]} == set(AGENTS)
     (tmp_path / ".pratfile").write_text(
         'version=1\n[profiles.review]\nagent="claude"\nnative_agent=" native name "\n'
     )
-    assert main(["profiles", "--json"]) == 0
+    assert main(["list", "profiles", "--json"]) == 0
     profile = json.loads(capsys.readouterr().out)["profiles"][0]
     assert profile["agent"] == "claude"
     assert profile["name"] == "review"
     assert profile["options"]["native_agent"] == " native name "
-    assert main(["profiles"]) == 0
+    assert main(["list", "profiles"]) == 0
     assert 'native_agent=" native name "' in capsys.readouterr().out
 
 

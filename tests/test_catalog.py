@@ -1,7 +1,14 @@
 import pytest
 
 from pratfall.adapters.registry import ADAPTERS
-from pratfall.catalog import AGENTS, BY_NAME, BY_SELECTOR, RESERVED_NAMES, get_agent
+from pratfall.catalog import (
+    AGENTS,
+    BY_NAME,
+    BY_SELECTOR,
+    RESERVED_NAMES,
+    get_agent,
+    removed_command,
+)
 from pratfall.errors import PratError
 
 
@@ -46,7 +53,7 @@ def test_registry_has_completed_agents_and_unique_selectors() -> None:
     assert len(AGENTS) == 24
     assert set(ADAPTERS) == set(BY_NAME)
     assert len(BY_SELECTOR) == sum(len(agent.aliases) + 1 for agent in AGENTS)
-    assert RESERVED_NAMES.issuperset({"agents", "profiles", "doctor", "config", *BY_SELECTOR})
+    assert RESERVED_NAMES.issuperset({"list", "doctor", "config", *BY_SELECTOR})
 
 
 def test_kiro_supports_current_native_model_and_effort_options() -> None:
@@ -69,7 +76,7 @@ def test_only_verified_agents_support_fast_mode() -> None:
 
 
 def test_unknown_agent_is_actionable() -> None:
-    with pytest.raises(PratError, match="prat agents"):
+    with pytest.raises(PratError, match="prat list agents"):
         get_agent("unknown")
 
 
@@ -78,5 +85,11 @@ def test_retired_agents_are_rejected_with_selection_guidance(name: str) -> None:
     with pytest.raises(PratError) as caught:
         get_agent(name)
     assert str(caught.value) == (
-        f"agent '{name}' was removed in 0.9.0; run 'prat agents' to list choices"
+        f"agent '{name}' was removed in 0.9.0; run 'prat list agents' to list choices"
     )
+
+
+@pytest.mark.parametrize("name", ["agents", "profiles", "templates", "workflows"])
+def test_removed_listing_commands_point_to_prat_list(name: str) -> None:
+    assert removed_command(name) == f"'prat {name}' was removed in 1.2.0; run 'prat list {name}'"
+    assert name not in RESERVED_NAMES

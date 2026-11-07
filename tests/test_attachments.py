@@ -299,12 +299,13 @@ def test_attachment_listing_does_not_read_files_and_defaults_validate_unused_pro
     monkeypatch.setattr(dispatch, "prepare_attachments", forbidden)
     assert main(["config", "validate", "--json"]) == 0
     capsys.readouterr()
-    assert main(["profiles", "--json"]) == 0
+    assert main(["list", "profiles", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["profiles"][0]["options"]["attachments"] == [
         str(tmp_path / "missing")
     ]
-    assert main(["profiles"]) == 0
-    assert f'attachments=["{tmp_path / "missing"}"]' in capsys.readouterr().out
+    assert main(["help", "work"]) == 0
+    rows = [line.split() for line in capsys.readouterr().out.splitlines()]
+    assert ["attachments", f'["{tmp_path / "missing"}"]', "profiles.work", "(local)"] in rows
     config.write_text(
         'version=1\n[defaults]\nattachments=["missing"]\n[profiles.unused]\nagent="claude"\n'
     )
@@ -331,7 +332,7 @@ def test_attachment_requires_prompt_and_preserves_stdin_and_template(
 
 
 def test_attachment_inventory(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["agents", "--json"]) == 0
+    assert main(["list", "agents", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["agents"]
     assert {
         r["name"]: (
@@ -348,7 +349,7 @@ def test_attachment_inventory(capsys: pytest.CaptureFixture[str]) -> None:
         "kilo": (["file"], None),
         "pi": (["image", "text file"], None),
     }
-    assert main(["agents"]) == 0
+    assert main(["help", "hermes"]) == 0
     assert "attachment_types=image, attachment_max_count=1" in capsys.readouterr().out
 
 

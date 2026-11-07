@@ -255,7 +255,7 @@ def test_instruction_config_listing_never_reads_files_and_selected_override_wins
     )
     assert main(["config", "validate"]) == 0
     capsys.readouterr()
-    assert main(["profiles", "--json"]) == 0
+    assert main(["list", "profiles", "--json"]) == 0
     options = json.loads(capsys.readouterr().out)["profiles"][0]["options"]
     assert options["instructions_file"] == str(tmp_path / "missing")
     assert options["instructions"] is None
@@ -297,7 +297,7 @@ def test_selected_instruction_file_resolves_symlink_parent_from_invocation_not_r
 
 
 def test_instruction_capability_inventory(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["agents", "--json"]) == 0
+    assert main(["list", "agents", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["agents"]
     assert {item["name"] for item in records if item["capabilities"]["instructions"]} == {
         "claude",

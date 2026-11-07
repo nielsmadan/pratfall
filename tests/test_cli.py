@@ -16,11 +16,12 @@ import pytest
 
 import pratfall.cli as cli_module
 from pratfall import __version__
-from pratfall.catalog import AGENTS
+from pratfall.catalog import AGENTS, BY_SELECTOR
 from pratfall.cli import dispatch as dispatch_module
 from pratfall.cli import doctor as doctor_module
 from pratfall.cli import main
 from pratfall.cli.doctor import Which, _doctor, _doctor_inventory, _doctor_line, _version_result
+from pratfall.cli.listing import agent_line
 from pratfall.cli.parsing import (
     _COMMAND_EXAMPLES,
     _CONFIG_COMMAND_HELP,
@@ -31,6 +32,7 @@ from pratfall.cli.parsing import (
     _parse_run,
     run_options_text,
 )
+from pratfall.cli.presentation import display_width
 from pratfall.config import init_config, load_config, resolve_profile
 from pratfall.errors import PratError
 from pratfall.interruption import InterruptionState
@@ -41,7 +43,8 @@ from test_run_cli import CLAUDE_SUCCESS, UnreadInput, write_agent
 
 
 @pytest.mark.parametrize(
-    "arguments", [["--help"], ["config", "--help"], ["agents", "--help"], ["completion", "--help"]]
+    "arguments",
+    [["--help"], ["config", "--help"], ["list", "agents", "--help"], ["completion", "--help"]],
 )
 def test_help_is_available(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as caught:
@@ -155,7 +158,7 @@ def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str])
 def test_agents_inventory_reports_aliases_and_capabilities(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["agents", "--json"]) == 0
+    assert main(["list", "agents", "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert result["schema_version"] == 1
     assert [agent["name"] for agent in result["agents"]] == [agent.name for agent in AGENTS]
@@ -183,18 +186,46 @@ def test_agents_inventory_reports_aliases_and_capabilities(
     assert kiro["capabilities"]["fast"] is False
 
 
-def test_agents_text(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["agents"]) == 0
-    lines = capsys.readouterr().out.splitlines()
-    assert (
-        "claude (cc): model, effort, fast, add_dirs, instructions, schema, tools, disabled_tools, native_agent, session_id, max_budget_usd, max_turns"
-        in lines
+@pytest.mark.parametrize(
+    ("selector", "header"),
+    [
+        (
+            "cc",
+            (
+                "claude (cc): model, effort, fast, add_dirs, instructions, schema, tools, "
+                "disabled_tools, native_agent, session_id, max_budget_usd, max_turns"
+            ),
+        ),
+        ("kiro", "kiro: model, effort"),
+        ("warp", "warp: model"),
+        ("qwen", "qwen: model, add_dirs, instructions, schema, tools, disabled_tools, max_turns"),
+        ("amp", "amp: none"),
+        ("vibe", "vibe: tools, disabled_tools, native_agent, max_budget_usd, max_turns"),
+    ],
+)
+def test_agent_help_header_lists_supported_settings(
+    selector: str, header: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["help", selector]) == 0
+    assert capsys.readouterr().out.splitlines()[0] == header
+
+
+def test_list_agents_shows_installed_agents_then_the_rest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for name in ("claude", "pi"):
+        executable = tmp_path / name
+        executable.write_text("#!/bin/sh\n", encoding="utf-8")
+        executable.chmod(0o700)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert main(["list", "agents"]) == 0
+    others = ", ".join(agent.name for agent in AGENTS if agent.name not in {"claude", "pi"})
+    assert capsys.readouterr().out == (
+        f"NAME    ALIASES\nclaude  cc\npi      -\nnot installed: {others}\n"
     )
-    assert "kiro: model, effort" in lines
-    assert "warp: model" in lines
-    assert "qwen: model, add_dirs, instructions, schema, tools, disabled_tools, max_turns" in lines
-    assert "amp: none" in lines
-    assert "vibe: tools, disabled_tools, native_agent, max_budget_usd, max_turns" in lines
+    assert main(["list", "agents", "--json"]) == 0
+    records = json.loads(capsys.readouterr().out)["agents"]
+    assert [record["name"] for record in records if record["installed"]] == ["claude", "pi"]
 
 
 @pytest.mark.parametrize(
@@ -274,13 +305,13 @@ def test_management_commands_refuse_untrusted_local_config(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / ".pratfile").write_text('version=1\n[profiles.work]\nagent="cx"\n')
-    assert main(["profiles"]) == 2
+    assert main(["list", "profiles"]) == 2
     assert "local config is not trusted" in capsys.readouterr().err
     assert main(["trust"]) == 0
     assert capsys.readouterr().out == (
         f"Trusted {os.path.realpath(tmp_path)} and everything under it\n"
     )
-    assert main(["profiles"]) == 0
+    assert main(["list", "profiles"]) == 0
 
 
 @pytest.mark.usefixtures("real_trust")
@@ -419,7 +450,7 @@ def test_default_validate_explains_missing_config(capsys: pytest.CaptureFixture[
     assert "using built-in defaults" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("command", [["profiles"], ["config", "validate"], ["doctor"]])
+@pytest.mark.parametrize("command", [["list", "profiles"], ["config", "validate"], ["doctor"]])
 def test_management_merges_configs_and_warns_on_stderr(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], command: list[str]
 ) -> None:
@@ -433,7 +464,7 @@ def test_management_merges_configs_and_warns_on_stderr(
     assert captured.err == (
         f"prat: warning: {local_path}: profile 'simple' replaces the profile from {global_path}\n"
     )
-    if command == ["profiles"]:
+    if command == ["list", "profiles"]:
         assert result["profiles"][0]["agent"] == "claude"
         assert result["profiles"][0]["options"]["model"] == "local-model"
     elif command == ["config", "validate"]:
@@ -586,14 +617,19 @@ def test_profile_native_arguments_replace_invalid_defaults_during_validation(
 
 
 def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[str]) -> None:
-    init_config(cwd=Path.cwd(), env=os.environ)
-    assert main(["profiles"]) == 0
-    assert capsys.readouterr().out == "simple: codex model=gpt-5.6-luna effort=low timeout=600.0\n"
-    assert main(["profiles", "--json"]) == 0
+    path = init_config(cwd=Path.cwd(), env=os.environ)
+    assert main(["list", "profiles"]) == 0
+    assert capsys.readouterr().out == (
+        "NAME    AGENT  EXTENDS  SETS                           FROM\n"
+        "simple  codex  -        model=gpt-5.6-luna effort=low  global\n"
+    )
+    assert main(["list", "profiles", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["profiles"] == [
         {
             "name": "simple",
             "agent": "codex",
+            "extends": None,
+            "source": str(path),
             "options": {
                 "model": "gpt-5.6-luna",
                 "effort": "low",
@@ -641,10 +677,22 @@ native_args=["--permission-mode", "two words"]
 """,
         encoding="utf-8",
     )
-    assert main(["profiles", "--config", str(path)]) == 0
-    assert capsys.readouterr().out == (
-        "inspect: claude model=model-id effort=high timeout=42.0 "
-        'max_budget_usd=2.5 max_turns=3 native_args=["--permission-mode", "two words"]\n'
+    assert main(["list", "profiles", "--config", str(path)]) == 0
+    assert capsys.readouterr().out.splitlines()[1] == (
+        "inspect  claude  -        "
+        "model=model-id effort=high timeout=42 max_budget_usd=2.5 max_turns=3 native_args  global"
+    )
+    assert main(["help", "inspect", "--config", str(path)]) == 0
+    assert capsys.readouterr().out.split("\n\nusage:")[0] == (
+        f"inspect: profile for claude, global ({path})\n"
+        "\n"
+        "SETTING         VALUE                               ORIGIN\n"
+        "model           model-id                            profiles.inspect\n"
+        "effort          high                                profiles.inspect\n"
+        "timeout         42                                  profiles.inspect\n"
+        "max_budget_usd  2.5                                 profiles.inspect\n"
+        "max_turns       3                                   profiles.inspect\n"
+        'native_args     ["--permission-mode", "two words"]  profiles.inspect'
     )
 
 
@@ -657,14 +705,14 @@ def test_profiles_text_shows_notify_settings(
         "notify_after=0\n",
         encoding="utf-8",
     )
-    assert main(["profiles", "--config", str(path)]) == 0
-    assert capsys.readouterr().out == (
-        "quiet: claude timeout=600.0 notify=False notify_method=bel notify_after=0.0\n"
+    assert main(["list", "profiles", "--config", str(path)]) == 0
+    assert capsys.readouterr().out.splitlines()[1] == (
+        "quiet  claude  -        notify=False notify_method=bel notify_after=0  global"
     )
 
 
 def test_empty_profiles(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["profiles"]) == 0
+    assert main(["list", "profiles"]) == 0
     assert capsys.readouterr().out == "No profiles configured.\n"
 
 
@@ -673,8 +721,10 @@ def test_profile_without_optional_settings(
 ) -> None:
     path = tmp_path / "config.toml"
     path.write_text('version=1\n[profiles.basic]\nagent="claude"\n', encoding="utf-8")
-    assert main(["profiles", "--config", str(path)]) == 0
-    assert capsys.readouterr().out == "basic: claude timeout=600.0\n"
+    assert main(["list", "profiles", "--config", str(path)]) == 0
+    assert capsys.readouterr().out == (
+        "NAME   AGENT   EXTENDS  SETS  FROM\nbasic  claude  -        -     global\n"
+    )
 
 
 def test_doctor_locates_wrappers_without_executing(
@@ -1210,7 +1260,7 @@ def test_doctor_version_interruption_after_probe_prevents_next_launch(
 
 
 @pytest.mark.parametrize(
-    "arguments", [["unknown"], ["config"], ["agents", "--bad"], ["--con", "x"]]
+    "arguments", [["unknown"], ["config"], ["list", "agents", "--bad"], ["--con", "x"]]
 )
 def test_syntax_errors_return_two(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     assert main(arguments) == 2
@@ -1227,14 +1277,17 @@ def test_syntax_errors_honor_json(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_config_errors_honor_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     path = tmp_path / "missing.toml"
-    assert main(["profiles", "--config", str(path), "--json"]) == 2
+    assert main(["list", "profiles", "--config", str(path), "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
     assert result["error"]["code"] == "invalid_config"
     assert result["error"]["message"] == f"{path}: config file does not exist"
 
 
 def test_unknown_user_config_path_error_honors_json(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["profiles", "--config", "~definitely_no_such_user_xyz/config.toml", "--json"]) == 2
+    assert (
+        main(["list", "profiles", "--config", "~definitely_no_such_user_xyz/config.toml", "--json"])
+        == 2
+    )
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "error"
     assert result["exit_code"] == 2
@@ -1243,7 +1296,7 @@ def test_unknown_user_config_path_error_honors_json(capsys: pytest.CaptureFixtur
 
 
 def test_json_after_delimiter_is_not_an_output_flag(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["agents", "--", "--json"]) == 2
+    assert main(["list", "agents", "--", "--json"]) == 2
     assert capsys.readouterr().err.startswith("prat: ")
 
 
@@ -1306,7 +1359,7 @@ def test_templates_listing_is_sorted_and_versioned(
         'version=1\n[templates.zed]\nprompt="last"\n[templates.alpha]\nprompt="Review\\n$input"\n',
         encoding="utf-8",
     )
-    assert main(["templates", *(["--json"] if json_mode else [])]) == 0
+    assert main(["list", "templates", *(["--json"] if json_mode else [])]) == 0
     output = capsys.readouterr().out
     if json_mode:
         assert json.loads(output) == {
@@ -1322,18 +1375,20 @@ def test_templates_listing_is_sorted_and_versioned(
             ],
         }
     else:
-        assert output == 'alpha: "Review\\n$input"\nzed: "last"\n'
+        assert output == (
+            "NAME   PARAMETERS  FROM\nalpha  -           local\nzed    -           local\n"
+        )
 
 
 def test_empty_templates_listing(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["templates"]) == 0
+    assert main(["list", "templates"]) == 0
     assert capsys.readouterr().out == "No templates configured.\n"
 
 
 def test_agents_inventory_exposes_extra_directory_support(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["agents", "--json"]) == 0
+    assert main(["list", "agents", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["agents"]
     assert {record["name"] for record in records if record["capabilities"]["add_dirs"]} == {
         "claude",
@@ -1349,9 +1404,9 @@ def test_templates_listing_shows_parameters(capsys: pytest.CaptureFixture[str]) 
     config.write_text(
         'version=1\n[templates.fill]\nprompt="Fix $a in ${b} and $a $input"\n', encoding="utf-8"
     )
-    assert main(["templates"]) == 0
-    assert capsys.readouterr().out == 'fill: "Fix $a in ${b} and $a $input" parameters=a,b\n'
-    assert main(["templates", "--json"]) == 0
+    assert main(["list", "templates"]) == 0
+    assert capsys.readouterr().out == "NAME  PARAMETERS  FROM\nfill  a, b        local\n"
+    assert main(["list", "templates", "--json"]) == 0
     record = json.loads(capsys.readouterr().out)["templates"][0]
     assert record["parameters"] == ["a", "b"]
 
@@ -1365,11 +1420,13 @@ def test_profiles_listing_shows_prompt_and_parameters(
         '[profiles.plain]\nagent="claude"\n',
         encoding="utf-8",
     )
-    assert main(["profiles", "--config", str(path)]) == 0
+    assert main(["list", "profiles", "--config", str(path)]) == 0
     lines = capsys.readouterr().out.splitlines()
-    assert lines[0] == 'base: claude timeout=600.0 prompt="Tidy $folder" parameters=folder'
-    assert lines[1] == "plain: claude timeout=600.0"
-    assert main(["profiles", "--json", "--config", str(path)]) == 0
+    assert lines[1:] == [
+        "base   claude  -        prompt (folder)  global",
+        "plain  claude  -        -                global",
+    ]
+    assert main(["list", "profiles", "--json", "--config", str(path)]) == 0
     records = json.loads(capsys.readouterr().out)["profiles"]
     assert [(r["name"], r["prompt"], r["prompt_source"], r["parameters"]) for r in records] == [
         ("base", "Tidy $folder", str(path), ["folder"]),
@@ -1386,7 +1443,7 @@ def test_profiles_json_shows_inherited_prompt(
         '[profiles.child]\nextends="base"\n',
         encoding="utf-8",
     )
-    assert main(["profiles", "--json", "--config", str(path)]) == 0
+    assert main(["list", "profiles", "--json", "--config", str(path)]) == 0
     records = json.loads(capsys.readouterr().out)["profiles"]
     child = next(r for r in records if r["name"] == "child")
     assert (child["prompt"], child["prompt_source"], child["parameters"]) == (
@@ -1423,7 +1480,7 @@ def test_workflows_listing_is_sorted_and_versioned(
 ) -> None:
     config = tmp_path / ".pratfile"
     config.write_text(FAN_OUT_CONFIG, encoding="utf-8")
-    assert main(["workflows", *(["--json"] if json_mode else [])]) == 0
+    assert main(["list", "workflows", *(["--json"] if json_mode else [])]) == 0
     output = capsys.readouterr().out
     if json_mode:
         assert json.loads(output) == {
@@ -1481,18 +1538,42 @@ def test_workflows_listing_is_sorted_and_versioned(
         }
     else:
         assert output == (
-            f"alpha: s=cx parallel=false source={config}\n"
-            "tidy: clean=clean; pack=pack after=none; "
-            "check=verify after=clean,pack input=none bind=report:pack "
-            f"parameters=folder,level source={config}\n"
+            "NAME   STEPS               PARAMETERS     FROM\n"
+            "alpha  s                   -              local\n"
+            "tidy   clean, pack, check  folder, level  local\n"
         )
+
+
+def test_workflow_help_shows_one_row_per_step(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / ".pratfile"
+    config.write_text(FAN_OUT_CONFIG, encoding="utf-8")
+    assert main(["help", "tidy"]) == 0
+    assert capsys.readouterr().out.split("\n\nusage:")[0] == (
+        f"tidy: workflow, local ({config})\n"
+        "parameters: folder, level\n"
+        "\n"
+        "STEP   PROFILE  AFTER        OPTIONS\n"
+        "clean  clean    -            -\n"
+        "pack   pack     -            -\n"
+        "check  verify   clean, pack  input=none bind=report:pack"
+    )
+    assert main(["alpha", "--help"]) == 0
+    assert capsys.readouterr().out.split("\n\nusage:")[0] == (
+        f"alpha: workflow, local ({config})\n"
+        "parallel: false\n"
+        "\n"
+        "STEP  PROFILE  AFTER  OPTIONS\n"
+        "s     cx       -      -"
+    )
 
 
 EACH_CONFIG = (
     "version=1\n"
-    '[profiles.list]\nagent="codex"\nprompt="List"\n'
+    '[profiles.items]\nagent="codex"\nprompt="List"\n'
     '[profiles.fix]\nagent="codex"\nprompt="Fix $file"\n'
-    '[workflows.w]\nsteps=[{name="list",profile="list"},'
+    '[workflows.w]\nsteps=[{name="list",profile="items"},'
     '{name="a",profile="fix",each="list",as="file"},'
     '{name="b",profile="fix",after=["list"],each="list",split="json",max_parallel=2,as="file"}]\n'
 )
@@ -1503,12 +1584,16 @@ def test_workflows_listing_shows_each_settings(
 ) -> None:
     config = tmp_path / ".pratfile"
     config.write_text(EACH_CONFIG, encoding="utf-8")
-    assert main(["workflows"]) == 0
-    assert capsys.readouterr().out == (
-        "w: list=list; a=fix each=list as=file; "
-        f"b=fix after=list each=list split=json as=file max_parallel=2 source={config}\n"
+    assert main(["list", "workflows"]) == 0
+    assert capsys.readouterr().out.splitlines()[1] == "w     list, a, b  -           local"
+    assert main(["help", "w"]) == 0
+    assert capsys.readouterr().out.split("\n\n")[1] == (
+        "STEP  PROFILE  AFTER  OPTIONS\n"
+        "list  items    -      -\n"
+        "a     fix      list   each=list as=file\n"
+        "b     fix      list   each=list split=json as=file max_parallel=2"
     )
-    assert main(["workflows", "--json"]) == 0
+    assert main(["list", "workflows", "--json"]) == 0
     steps = json.loads(capsys.readouterr().out)["workflows"][0]["steps"]
     assert [{key: step[key] for key in NO_EACH} for step in steps] == [
         NO_EACH,
@@ -1525,22 +1610,24 @@ def test_workflows_listing_shows_item_limits_only_when_set(
     config = tmp_path / ".pratfile"
     config.write_text(
         "version=1\n"
-        '[profiles.list]\nagent="codex"\nprompt="List"\n'
+        '[profiles.items]\nagent="codex"\nprompt="List"\n'
         '[profiles.fix]\nagent="codex"\nprompt="Fix $file"\n'
-        '[workflows.w]\nsteps=[{name="list",profile="list"},'
+        '[workflows.w]\nsteps=[{name="list",profile="items"},'
         '{name="a",profile="fix",each="list",as="file",max_items=10},'
         '{name="b",profile="fix",after=["list"],each="list",as="file",overflow="truncate"},'
         '{name="c",profile="fix",after=["list"],each="list",as="file",max_parallel="all",'
         'max_items=4096,overflow="error"}]\n',
         encoding="utf-8",
     )
-    assert main(["workflows"]) == 0
-    assert capsys.readouterr().out == (
-        "w: list=list; a=fix each=list as=file max_items=10; "
-        "b=fix after=list each=list as=file overflow=truncate; "
-        f"c=fix after=list each=list as=file max_parallel=64 source={config}\n"
+    assert main(["help", "w"]) == 0
+    assert capsys.readouterr().out.split("\n\n")[1] == (
+        "STEP  PROFILE  AFTER  OPTIONS\n"
+        "list  items    -      -\n"
+        "a     fix      list   each=list as=file max_items=10\n"
+        "b     fix      list   each=list as=file overflow=truncate\n"
+        "c     fix      list   each=list as=file max_parallel=64"
     )
-    assert main(["workflows", "--json"]) == 0
+    assert main(["list", "workflows", "--json"]) == 0
     steps = json.loads(capsys.readouterr().out)["workflows"][0]["steps"]
     assert [(step["max_items"], step["overflow"]) for step in steps] == [
         (None, None),
@@ -1551,12 +1638,12 @@ def test_workflows_listing_shows_item_limits_only_when_set(
 
 
 def test_empty_workflows_listing(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["workflows"]) == 0
+    assert main(["list", "workflows"]) == 0
     assert capsys.readouterr().out == "No workflows configured.\n"
 
 
 def test_empty_workflows_listing_as_json(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["workflows", "--json"]) == 0
+    assert main(["list", "workflows", "--json"]) == 0
     assert json.loads(capsys.readouterr().out) == {"schema_version": 1, "workflows": []}
 
 
@@ -1572,14 +1659,18 @@ def test_workflows_listing_reports_the_defining_layer(
     local_path.write_text(
         'version=1\n[workflows.mine]\nsteps=[{name="l",profile="cx"}]\n', encoding="utf-8"
     )
-    assert main(["workflows"]) == 0
+    assert main(["list", "workflows"]) == 0
     assert capsys.readouterr().out == (
-        f"mine: l=cx source={local_path}\nshared: g=cx source={global_path}\n"
+        "NAME    STEPS  PARAMETERS  FROM\n"
+        "mine    l      -           local\n"
+        "shared  g      -           global\n"
     )
+    assert main(["help", "shared"]) == 0
+    assert capsys.readouterr().out.startswith(f"shared: workflow, global ({global_path})\n")
 
 
 def test_workflows_listing_rejects_extra_arguments(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["workflows", "extra"]) == 2
+    assert main(["list", "workflows", "extra"]) == 2
     assert capsys.readouterr().err == "prat: unrecognized argument: extra\n"
 
 
@@ -1627,26 +1718,6 @@ def test_prepare_run_rejects_schema_with_extract_before_reading_the_prompt(
         dispatch_module._prepare_run(parsed, config, resolved, tmp_path, resources)
 
 
-def test_templates_view_lists_sorted_templates_or_a_placeholder() -> None:
-    templates = {
-        "z": PromptTemplate("Last $topic", Path("a.toml")),
-        "a": PromptTemplate("First $input", Path("b.toml")),
-    }
-    payload, lines = dispatch_module._templates_view(
-        Config(Path("config.toml"), templates=templates)
-    )
-    assert payload == {
-        "templates": [
-            {"name": "a", "prompt": "First $input", "source": "b.toml", "parameters": []},
-            {"name": "z", "prompt": "Last $topic", "source": "a.toml", "parameters": ["topic"]},
-        ]
-    }
-    assert lines == ['a: "First $input"', 'z: "Last $topic" parameters=topic']
-    assert dispatch_module._templates_view(Config(Path("config.toml")))[1] == [
-        "No templates configured."
-    ]
-
-
 @pytest.mark.parametrize(
     ("arguments", "message"),
     [
@@ -1659,13 +1730,13 @@ def test_templates_view_lists_sorted_templates_or_a_placeholder() -> None:
             "unrecognized argument: --modle=opus; did you mean '--model'?",
         ),
         (["cc", "--bogus", "hi"], "unrecognized argument: --bogus"),
-        (["agents", "--jsno"], "unrecognized argument: --jsno; did you mean '--json'?"),
-        (["agents", "--bogus"], "unrecognized argument: --bogus"),
-        (["agents", "--bogus", "--other"], "unrecognized argument: --bogus"),
+        (["list", "agents", "--jsno"], "unrecognized argument: --jsno; did you mean '--json'?"),
+        (["list", "agents", "--bogus"], "unrecognized argument: --bogus"),
+        (["list", "agents", "--bogus", "--other"], "unrecognized argument: --bogus"),
         (["doctor", "--version"], "unrecognized argument: --version; did you mean '--versions'?"),
         (["trust", "--lst"], "unrecognized argument: --lst; did you mean '--list'?"),
         (["config", "path", "--jsn"], "unrecognized argument: --jsn; did you mean '--json'?"),
-        (["agents", "extra"], "unrecognized argument: extra"),
+        (["list", "agents", "extra"], "unrecognized argument: extra"),
     ],
 )
 def test_unrecognized_arguments_use_one_wording_with_a_suggestion(
@@ -1715,7 +1786,7 @@ def test_removed_agent_selectors_say_when_they_were_removed(
     assert main([name, "hi", "--dry-run", "--json"]) == 2
     assert json.loads(capsys.readouterr().out)["error"] == {
         "code": "invalid_arguments",
-        "message": f"agent '{name}' was removed in 0.9.0; run 'prat agents' to list choices",
+        "message": f"agent '{name}' was removed in 0.9.0; run 'prat list agents' to list choices",
     }
 
 
@@ -1745,10 +1816,15 @@ def help_config(tmp_path: Path) -> Path:
     return config
 
 
-def listing_line(command: str, name: str, config: Path, capsys: pytest.CaptureFixture[str]) -> str:
-    assert main([command, "--config", str(config)]) == 0
-    lines = capsys.readouterr().out.splitlines()
-    return next(line for line in lines if line.startswith((f"{name}:", f"{name} (")))
+def weekly_page(config: Path) -> str:
+    return (
+        f"weekly: profile for codex, global ({config})\n"
+        "parameters: topic\n"
+        "\n"
+        "SETTING  VALUE                           ORIGIN\n"
+        "timeout  600                             built-in default\n"
+        'prompt   "Summarize ${topic} this week"  profiles.weekly'
+    )
 
 
 def run_option_flags(text: str) -> set[str]:
@@ -1763,52 +1839,42 @@ def run_option_flags(text: str) -> set[str]:
 
 
 @pytest.mark.parametrize(
-    ("arguments", "command", "name"),
-    [
-        (["cc", "--help"], "agents", "claude"),
-        (["-h", "codex"], "agents", "codex"),
-        (["weekly", "-h", "--effort", "high", "some", "words"], "profiles", "weekly"),
-    ],
+    "arguments", [["cc", "--help"], ["-h", "codex"], ["weekly", "-h", "--effort", "high", "x"]]
 )
-def test_selector_help_prints_its_listing_line_and_every_run_option(
+def test_selector_help_prints_its_header_and_every_run_option(
     arguments: list[str],
-    command: str,
-    name: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     config = help_config(tmp_path)
-    header = listing_line(command, name, config, capsys)
+    selector = next(word for word in arguments if not word.startswith("-"))
+    header = weekly_page(config) if selector == "weekly" else agent_line(BY_SELECTOR[selector])
     monkeypatch.setattr(sys, "stdin", UnreadInput())
     assert main([*arguments, "--config", str(config)]) == 0
-    selector = next(word for word in arguments if not word.startswith("-"))
     assert capsys.readouterr().out == (
         f"{header}\n\nusage: prat [RUN_OPTIONS] {selector} [PROMPT | VALUE...] [-- NATIVE_ARGS]"
         f"\n\nrun options:\n{run_options_text()}\n"
     )
 
 
-def test_profile_help_header_names_its_parameters(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    config = help_config(tmp_path)
-    assert main(["weekly", "--help", "--config", str(config)]) == 0
-    header = capsys.readouterr().out.splitlines()[0]
-    assert header.startswith("weekly: codex ")
-    assert header.endswith(" parameters=topic")
-
-
 def test_workflow_help_lists_only_the_workflow_options(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     config = help_config(tmp_path)
-    header = listing_line("workflows", "ship", config, capsys)
     monkeypatch.setattr(sys, "stdin", UnreadInput())
     assert main(["ship", "--help", "--config", str(config)]) == 0
     output = capsys.readouterr().out
-    assert output.startswith(f"{header}\n\nusage: prat [RUN_OPTIONS] ship [PROMPT | VALUE...]\n")
-    assert "parameters=topic" in header
+    assert output.startswith(
+        f"ship: workflow, global ({config})\n"
+        "parameters: topic\n"
+        "\n"
+        "STEP   PROFILE  AFTER  OPTIONS\n"
+        "draft  cx       -      -\n"
+        "check  weekly   draft  -\n"
+        "\n"
+        "usage: prat [RUN_OPTIONS] ship [PROMPT | VALUE...]\n"
+    )
     assert run_option_flags(output) == _WORKFLOW_FLAGS
     assert len(_WORKFLOW_FLAGS) == 13
 
@@ -1844,7 +1910,7 @@ def test_run_option_descriptions_start_in_one_column() -> None:
         (["clade", "--help"], "prat: unknown selector 'clade'; did you mean 'claude'?\n"),
         (
             ["iflow", "-h"],
-            "prat: agent 'iflow' was removed in 0.9.0; run 'prat agents' to list choices\n",
+            "prat: agent 'iflow' was removed in 0.9.0; run 'prat list agents' to list choices\n",
         ),
     ],
 )
@@ -1906,7 +1972,9 @@ def test_management_help_has_a_description_and_an_example(
     assert f"\n\n{description}\n\n" in output
     assert "\n  -h, --help" in output
     assert "Show this help and exit." in output
-    assert output.endswith(f"\nexample:\n  {_COMMAND_EXAMPLES[path]}\n")
+    examples = _COMMAND_EXAMPLES[path]
+    heading = "example" if len(examples) == 1 else "examples"
+    assert output.endswith("".join([f"\n{heading}:\n", *(f"  {line}\n" for line in examples)]))
 
 
 def output_of(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, str]:
@@ -1930,7 +1998,7 @@ def test_version_command_matches_the_version_flag(capsys: pytest.CaptureFixture[
         (["help", "cc"], ["cc", "--help"]),
         (["help", "weekly"], ["weekly", "--help"]),
         (["help", "ship"], ["ship", "--help"]),
-        (["help", "agents"], ["agents", "--help"]),
+        (["help", "list"], ["list", "--help"]),
         (["help", "config", "init"], ["config", "init", "--help"]),
         (["help", "help"], ["help", "--help"]),
     ],
@@ -1966,3 +2034,175 @@ def test_help_command_rejects_unknown_topics(
 ) -> None:
     assert main(arguments) == 2
     assert capsys.readouterr().err.startswith(f"prat: {message}")
+
+
+LIST_CONFIG = """version=1
+[defaults]
+effort="medium"
+[profiles.base]
+agent="claude"
+model="claude-opus-5"
+[profiles.weekly]
+extends="base"
+effort="high"
+[workflows.ship]
+steps=[{name="plan", profile="base"}, {name="build", profile="weekly"}]
+[templates.review]
+prompt="Review ${path}"
+"""
+
+
+@pytest.fixture
+def list_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    config = tmp_path / "config-home/pratfall/config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text(LIST_CONFIG, encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "claude").write_text("#!/bin/sh\n", encoding="utf-8")
+    (bin_dir / "claude").chmod(0o700)
+    monkeypatch.setenv("PATH", str(bin_dir))
+    return config
+
+
+def test_list_prints_every_section_in_order(
+    list_config: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["list"]) == 0
+    others = ", ".join(agent.name for agent in AGENTS if agent.name != "claude")
+    assert capsys.readouterr().out == (
+        "Profiles\n"
+        "NAME    AGENT   EXTENDS  SETS                 FROM\n"
+        "base    claude  -        model=claude-opus-5  global\n"
+        "weekly  claude  base     effort=high          global\n"
+        "\n"
+        "Workflows\n"
+        "NAME  STEPS        PARAMETERS  FROM\n"
+        "ship  plan, build  -           global\n"
+        "\n"
+        "Templates\n"
+        "NAME    PARAMETERS  FROM\n"
+        "review  path        global\n"
+        "\n"
+        "Agents\n"
+        "NAME    ALIASES\n"
+        "claude  cc\n"
+        f"not installed: {others}\n"
+    )
+
+
+def test_list_json_has_one_key_per_section(
+    list_config: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["list", "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert list(result) == ["schema_version", "profiles", "workflows", "templates", "agents"]
+    weekly = result["profiles"][1]
+    assert (weekly["name"], weekly["extends"], weekly["source"]) == (
+        "weekly",
+        "base",
+        str(list_config),
+    )
+    assert [agent["name"] for agent in result["agents"] if agent["installed"]] == ["claude"]
+    assert main(["list", "profiles", "--json"]) == 0
+    assert list(json.loads(capsys.readouterr().out)) == ["schema_version", "profiles"]
+
+
+def test_profile_help_shows_where_each_value_came_from(
+    list_config: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["help", "weekly"]) == 0
+    assert capsys.readouterr().out.split("\n\nusage:")[0] == (
+        f"weekly: profile for claude, global ({list_config})\n"
+        "extends: base\n"
+        "\n"
+        "SETTING  VALUE          ORIGIN\n"
+        "model    claude-opus-5  profiles.base\n"
+        "effort   high           profiles.weekly\n"
+        "timeout  600            built-in default"
+    )
+
+
+def test_list_rejects_an_unknown_section_with_a_suggestion(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["list", "profils"]) == 2
+    assert capsys.readouterr().err == (
+        "prat: unknown section 'profils'; did you mean 'profiles'? "
+        "(choose from profiles, workflows, templates, agents)\n"
+    )
+    assert main(["list", "bogus", "--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == {
+        "code": "invalid_arguments",
+        "message": "unknown section 'bogus' (choose from profiles, workflows, templates, agents)",
+    }
+
+
+@pytest.mark.parametrize("command", ["agents", "profiles", "templates", "workflows"])
+def test_removed_listing_commands_name_their_replacement(
+    command: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main([command]) == 2
+    assert capsys.readouterr().err == (
+        f"prat: 'prat {command}' was removed in 1.2.0; run 'prat list {command}'\n"
+    )
+
+
+def test_profile_named_after_a_removed_command_runs(capsys: pytest.CaptureFixture[str]) -> None:
+    path = init_config(cwd=Path.cwd(), env=os.environ)
+    path.write_text('version=1\n[profiles.agents]\nagent="codex"\n', encoding="utf-8")
+    assert main(["agents", "hi", "--dry-run", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["profile"] == "agents"
+
+
+def test_list_fails_on_a_config_that_does_not_load(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "broken.toml"
+    path.write_text("version=1\n[profiles.p]\n", encoding="utf-8")
+    assert main(["list", "--config", str(path)]) == 2
+    assert capsys.readouterr().err.startswith(f"prat: {path}: profiles.p")
+
+
+def test_list_cuts_sets_with_an_ellipsis_only_on_a_terminal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text(
+        'version=1\n[profiles.busy]\nagent="claude"\nmodel="claude-opus-5"\neffort="high"\n'
+        'timeout=900\nmax_turns=8\nmax_budget_usd=2.5\nnotify_method="bel"\n'
+        '[profiles.wide]\nagent="codex"\nmodel="週報モデル"\n',
+        encoding="utf-8",
+    )
+    sets = (
+        "model=claude-opus-5 effort=high timeout=900 max_budget_usd=2.5 max_turns=8 "
+        "notify_method=bel"
+    )
+    monkeypatch.setenv("COLUMNS", "60")
+    assert main(["list", "profiles", "--config", str(path)]) == 0
+    assert capsys.readouterr().out.splitlines()[1] == f"busy  claude  -        {sets}  global"
+    monkeypatch.setattr(dispatch_module, "_stdout_is_tty", lambda: True)
+    assert main(["list", "profiles", "--config", str(path)]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert [display_width(line) for line in lines] == [58, 60, 60]
+    assert lines[1] == f"busy  claude  -        {sets[:28]}…  global"
+    assert lines[2] == f"wide  codex   -        model=週報モデル{' ' * 15}global"
+
+
+def test_list_overflows_rather_than_cut_sets_below_twenty_cells(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    long_name = "n" * 40
+    path = tmp_path / "config.toml"
+    path.write_text(
+        f'version=1\n[profiles.{long_name}]\nagent="claude"\nmodel="claude-opus-5"\n'
+        'effort="high"\ntimeout=900\nmax_turns=8\nmax_budget_usd=2.5\nnotify_method="bel"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(dispatch_module, "_stdout_is_tty", lambda: True)
+    for columns in ("60", "30"):
+        monkeypatch.setenv("COLUMNS", columns)
+        assert main(["list", "profiles", "--config", str(path)]) == 0
+        assert capsys.readouterr().out.splitlines()[1] == (
+            f"{long_name}  claude  -        model=claude-opus-5…  global"
+        )

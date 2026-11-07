@@ -750,9 +750,9 @@ def test_each_instances_share_one_workflow_result_budget(
     log = tmp_path / "calls.log"
     config = workflow_config(
         tmp_path,
-        {"list": "a\nb\nc\nd\ne", "work": f"@log {log}\n@big 2000\n$file"},
+        {"items": "a\nb\nc\nd\ne", "work": f"@log {log}\n@big 2000\n$file"},
         "[workflows.fan]\nparallel = false\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", as="file"},\n]\n',
     )
     exit_code = exit_code_for(STDOUT_LIMIT_EXCEEDED)
@@ -1483,9 +1483,9 @@ EACH_ENTRY_KEYS = [
 def lines_fan_out(tmp_path: Path) -> Path:
     return workflow_config(
         tmp_path,
-        {"list": "alpha\n\n  beta  ", "review": "Review $file"},
+        {"items": "alpha\n\n  beta  ", "review": "Review $file"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="r", profile="review", each="l", as="file"},\n]\n',
     )
 
@@ -1553,9 +1553,9 @@ def test_each_json_array_items_are_the_input_and_merge_receives_the_labelled_joi
 ) -> None:
     config = workflow_config(
         tmp_path,
-        {"list": '["x", 2, {"k": "v"}, null, " "]', "echo": "E: $input", "merge": "M\n$input"},
+        {"items": '["x", 2, {"k": "v"}, null, " "]', "echo": "E: $input", "merge": "M\n$input"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="e", profile="echo", each="l", split="json"},\n'
         '  {name="m", profile="merge"},\n]\n',
     )
@@ -1574,10 +1574,10 @@ def test_each_uses_the_structured_output_of_a_schema_source(
     config = workflow_config(
         tmp_path,
         {"echo": "E: $input"},
-        f'[profiles.list]\nagent="claude"\nschema={json.dumps(str(schema))}\n'
+        f'[profiles.items]\nagent="claude"\nschema={json.dumps(str(schema))}\n'
         f"prompt={json.dumps(source)}\n\n"
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="e", profile="echo", each="l", split="json"},\n]\n',
     )
     assert main(["fan", "--json", "--config", str(config)]) == 0
@@ -1630,9 +1630,9 @@ def test_each_queue_runs_at_most_max_parallel_instances_in_item_order(
     )
     config = workflow_config(
         tmp_path,
-        {"list": "a\nb\nc\nd\ne", "work": work},
+        {"items": "a\nb\nc\nd\ne", "work": work},
         "[workflows.queue]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", as="name", max_parallel=2},\n]\n',
     )
     turns = [
@@ -1672,9 +1672,9 @@ def test_each_with_no_items_succeeds_and_downstream_runs(
     log = tmp_path / "calls.log"
     config = workflow_config(
         tmp_path,
-        {"list": "@blank", "work": f"@log {log}\nW $input", "tail": "Tail $input"},
+        {"items": "@blank", "work": f"@log {log}\nW $input", "tail": "Tail $input"},
         "[workflows.empty]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l"},\n'
         '  {name="t", profile="tail"},\n]\n',
     )
@@ -1712,9 +1712,9 @@ def test_failed_instance_lets_running_finish_and_skips_queued_and_downstream(
     sources = [f"@wait {b_started}\n@exit 3", f"@touch {b_started}\n@wait {release}\nB", "C", "D"]
     config = workflow_config(
         tmp_path,
-        {"list": json.dumps(sources), "run": "$input", "merge": "M $input"},
+        {"items": json.dumps(sources), "run": "$input", "merge": "M $input"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="run", each="l", split="json", max_parallel=2},\n'
         '  {name="m", profile="merge"},\n]\n',
     )
@@ -1761,12 +1761,12 @@ def test_other_step_failing_leaves_each_step_skipped_with_mixed_items(
     config = workflow_config(
         tmp_path,
         {
-            "list": "a\nb\nc",
+            "items": "a\nb\nc",
             "work": f"@touch {marks}/$name\n@wait {release}\ndone $name",
             "bad": f"@wait {marks}/a\n@exit 5",
         },
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", as="name", max_parallel=1},\n'
         '  {name="x", profile="bad", after=[]},\n]\n',
     )
@@ -1807,9 +1807,9 @@ def test_interrupt_during_fan_out_skips_queued_instances_and_stops_running_ones(
     marks.mkdir()
     config = workflow_config(
         tmp_path,
-        {"list": "a\nb\nc", "work": f"@touch {marks}/$name\n@hang"},
+        {"items": "a\nb\nc", "work": f"@touch {marks}/$name\n@hang"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", as="name", max_parallel=2},\n]\n',
     )
     parent = subprocess.Popen(
@@ -1846,9 +1846,9 @@ def test_interrupt_during_fan_out_skips_queued_instances_and_stops_running_ones(
 def each_dry_run_config(tmp_path: Path) -> Path:
     return workflow_config(
         tmp_path,
-        {"list": "List", "work": "Do $name for $folder", "echo": "E: $input"},
+        {"items": "List", "work": "Do $name for $folder", "echo": "E: $input"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", split="json", as="name", max_parallel=2},\n'
         '  {name="e", profile="echo", after=["l"], each="l"},\n]\n',
     )
@@ -1858,7 +1858,7 @@ def test_dry_run_text_shows_each_keys(tmp_path: Path, capsys: pytest.CaptureFixt
     config = each_dry_run_config(tmp_path)
     assert main(["fan", "src", "--dry-run", "--config", str(config)]) == 0
     assert capsys.readouterr().out == (
-        "l: profile=list after=none input=upstream\n"
+        "l: profile=items after=none input=upstream\n"
         "w: profile=work after=l input=upstream each=l split=json as=name max_parallel=2"
         ' parameters=folder="src"\n'
         "e: profile=echo after=l input=upstream each=l split=lines max_parallel=4\n"
@@ -1904,16 +1904,16 @@ def test_dry_run_shows_item_limits_in_text_and_json(
 ) -> None:
     config = workflow_config(
         tmp_path,
-        {"list": "List", "work": "W $input"},
+        {"items": "List", "work": "W $input"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", max_parallel="all", max_items=7,'
         ' overflow="truncate"},\n'
         '  {name="e", profile="work", after=["l"], each="l", max_items=9},\n]\n',
     )
     assert main(["fan", "--dry-run", "--config", str(config)]) == 0
     assert capsys.readouterr().out == (
-        "l: profile=list after=none input=upstream\n"
+        "l: profile=items after=none input=upstream\n"
         "w: profile=work after=l input=upstream each=l split=lines max_parallel=64"
         " max_items=7 overflow=truncate\n"
         "e: profile=work after=l input=upstream each=l split=lines max_parallel=4 max_items=9\n"
@@ -1933,9 +1933,9 @@ def test_each_items_error_fails_the_step_before_any_instance_launches(
     log = tmp_path / "calls.log"
     config = workflow_config(
         tmp_path,
-        {"list": "not json", "work": f"@log {log}\nW $input"},
+        {"items": "not json", "work": f"@log {log}\nW $input"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", split="json"},\n]\n',
     )
     assert main(["fan", "--json", "--config", str(config)]) == 2
@@ -1963,9 +1963,9 @@ def test_each_overflow_truncate_runs_the_first_items_and_reports_the_rest_droppe
     log = tmp_path / "calls.log"
     config = workflow_config(
         tmp_path,
-        {"list": "a\n\nb\nc\nd\ne\n", "work": f"@log {log}\nW $name"},
+        {"items": "a\n\nb\nc\nd\ne\n", "work": f"@log {log}\nW $name"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", as="name", max_parallel=1, max_items=2,'
         ' overflow="truncate"},\n]\n',
     )
@@ -1988,9 +1988,9 @@ def test_each_overflow_truncate_at_exactly_max_items_writes_no_notice(
 ) -> None:
     config = workflow_config(
         tmp_path,
-        {"list": "a\nb\n", "work": "W $name"},
+        {"items": "a\nb\n", "work": "W $name"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", as="name", max_items=2,'
         ' overflow="truncate"},\n]\n',
     )
@@ -2006,9 +2006,9 @@ def test_each_overflow_error_fails_the_step_before_any_instance_launches(
     log = tmp_path / "calls.log"
     config = workflow_config(
         tmp_path,
-        {"list": "a\nb\nc", "work": f"@log {log}\nW $name"},
+        {"items": "a\nb\nc", "work": f"@log {log}\nW $name"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", as="name", max_items=2},\n]\n',
     )
     assert main(["fan", "--json", "--config", str(config)]) == 2
@@ -2026,9 +2026,9 @@ def test_each_items_error_stops_a_sibling_ready_in_the_same_batch(
     log = tmp_path / "calls.log"
     config = workflow_config(
         tmp_path,
-        {"list": "not json", "work": "W $input", "other": f"@log {log}\nO"},
+        {"items": "not json", "work": "W $input", "other": f"@log {log}\nO"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", split="json"},\n'
         '  {name="x", profile="other", after=["l"]},\n]\n',
     )
@@ -2048,9 +2048,9 @@ def test_each_step_whose_last_instance_fails_skips_downstream(
     log = tmp_path / "calls.log"
     config = workflow_config(
         tmp_path,
-        {"list": json.dumps(["A", "@exit 3"]), "run": "$input", "merge": f"@log {log}\nM"},
+        {"items": json.dumps(["A", "@exit 3"]), "run": "$input", "merge": f"@log {log}\nM"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="run", each="l", split="json", max_parallel=1},\n'
         '  {name="m", profile="merge"},\n]\n',
     )
@@ -2079,9 +2079,9 @@ def test_each_step_over_the_joined_output_cap_stops_later_launches(
     log = tmp_path / "calls.log"
     config = workflow_config(
         tmp_path,
-        {"list": "a\nb", "work": "Review $file", "other": f"@log {log}\nO"},
+        {"items": "a\nb", "work": "Review $file", "other": f"@log {log}\nO"},
         "[workflows.fan]\nparallel = false\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l", as="file"},\n'
         '  {name="x", profile="other", after=["l"]},\n]\n',
     )
@@ -2111,9 +2111,9 @@ def test_each_relay_prefix_uses_the_item_label(
     long_item = "x" * 90
     config = workflow_config(
         tmp_path,
-        {"list": f"short\n{long_item}", "review": "Review $file"},
+        {"items": f"short\n{long_item}", "review": "Review $file"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="r", profile="review", each="l", as="file"},\n]\n',
     )
     assert main(["fan", "--config", str(config)]) == 0
@@ -2128,9 +2128,9 @@ def test_never_started_each_step_reports_an_empty_item_list(
 ) -> None:
     config = workflow_config(
         tmp_path,
-        {"list": "@exit 4", "work": "W $input"},
+        {"items": "@exit 4", "work": "W $input"},
         "[workflows.fan]\nsteps = [\n"
-        '  {name="l", profile="list"},\n'
+        '  {name="l", profile="items"},\n'
         '  {name="w", profile="work", each="l"},\n]\n',
     )
     assert main(["fan", "--json", "--config", str(config)]) == 4

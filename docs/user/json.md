@@ -209,8 +209,7 @@ With `--dry-run --json` the preview is:
 A flag value that fails to parse, such as `--timeout abc`, is rejected before the selector is
 known to be a workflow, so that error uses the plain run shape.
 
-`prat workflows --json` returns `schema_version: 1` and a `workflows` array sorted by name. Each
-record has `name`, `parallel`, `parameters`, the defining file's absolute `source`, and `steps`,
+A `workflows` record has `name`, `parallel`, `parameters`, the defining file's absolute `source`, and `steps`,
 each with `name`, `profile`, `after`, `input`, `bind`, `each`, `split`, `as`, `max_parallel`,
 `max_items` and `overflow`. `each` and `as` are null when unset, and `split`, `max_parallel`,
 `max_items` and `overflow` are null without `each`; with `each` they hold the effective values
@@ -271,7 +270,14 @@ reads a temporary prepared copy. The text preview says `inline JSON` or `tempora
 Prepared temporary paths are labeled placeholders, not reusable filenames. Prompts passed through argv appear in the preview.
 
 Management commands return separate versioned inventory or config objects. Their errors still
-contain `status`, `exit_code`, and `error`. Agent capability records include `fast`.
+contain `status`, `exit_code`, and `error`.
+
+`prat list --json` returns `{"schema_version": 1, "profiles": [...], "workflows": [...],
+"templates": [...], "agents": [...]}`; `prat list SECTION --json` returns only that section's key.
+Each array holds the records described below, sorted by name, except `agents`, which follows
+catalog order. An agent record has `name`, `label`, `aliases`, `command`, `capabilities` (including
+`fast`) and the boolean `installed`: whether the configured executable is found on `PATH`, the same
+lookup `prat doctor` does. An unknown SECTION is `invalid_arguments`.
 `prat completion` prints shell code and rejects `--json` with `invalid_arguments`.
 `prat --version --json` returns `{"schema_version": 1, "version": "1.1.0"}`. A line with neither a
 selector nor a management command, such as `prat --json`, returns the standard error object with
@@ -281,13 +287,12 @@ selector nor a management command, such as `prat --json`, returns the standard e
 `prat trust --list --json` returns `directories`, an array of `{"path", "exists"}` records sorted by
 path.
 
-`prat profiles --json` records add `prompt` and `prompt_source` (the defining file's absolute
-path), both null without a profile `prompt`, and `parameters`, the prompt's parameter names in
-order. In text listings, `prat profiles` appends ` prompt="..."` and ` parameters=a,b`, and
-`prat templates` appends ` parameters=a,b`.
+A `profiles` record has `name`, `agent`, `extends` (the parent profile or null), `source` (the
+defining file's absolute path), `options` (every resolved option), `prompt` and `prompt_source`
+(the file that defines the prompt), both null without a profile `prompt`, and `parameters`, the
+prompt's parameter names in order.
 
-`prat templates --json` returns `schema_version: 1` and a `templates` array sorted by name. Each
-record contains `name`, the unexpanded `prompt`, the defining file's absolute `source` path, and
+A `templates` record contains `name`, the unexpanded `prompt`, the defining file's absolute `source` path, and
 `parameters`, the prompt parameter names in order of first appearance (empty when there are none).
 An empty inventory returns an empty array; replacement warnings remain on stderr.
 

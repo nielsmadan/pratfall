@@ -88,7 +88,7 @@ prompt = "Summarize the current project."
 git diff | prat cc -t review
 prat --template=review cc --file request.md
 prat cc --template summary
-prat templates
+prat list templates
 ```
 
 A template is a prompt for any agent or profile, chosen per run with `-t`. For a saved task, or to give a workflow step a prompt, use a
@@ -96,7 +96,8 @@ A template is a prompt for any agent or profile, chosen per run with `-t`. For a
 
 Use `-t NAME`, `--template NAME`, or `--template=NAME` once, before or after the selector.
 Everything after `--` still belongs to the native agent. Unknown template names fail before stdin
-is read. `prat templates` lists names in sorted order with JSON-quoted prompt strings.
+is read. `prat list templates` lists names in sorted order with their parameters and FROM
+(`global` or `local`); `--json` adds the prompt text.
 
 `$input` and `${input}` substitute the base prompt, including the existing stdin-first combination
 when both redirected stdin and an explicit source are supplied. `$$` produces one literal dollar
@@ -121,7 +122,7 @@ A template, or a profile with its own
 `${name}`. A name starts with an ASCII letter or underscore, continues with ASCII letters, digits
 or underscores, and is case-sensitive. `input` is reserved, and case variants such as `$Input` fail
 configuration loading as likely typos. A name used twice is one parameter, listed in order of first
-appearance by `prat templates` and `prat profiles`.
+appearance by `prat list templates` and `prat list profiles`.
 
 ```toml
 [templates.move]
@@ -258,9 +259,12 @@ prat cx --model gpt-5.6-luna --effort low "review this change"
 prat cc --timeout 120 --cwd ../project "inspect this failure"
 ```
 
-`prat SELECTOR --help` (or `-h`) prints the selector's line from `prat agents`, `prat profiles` or
-`prat workflows`, then the usage line and the run options that selector takes: every run option
-for an agent, alias or profile, and only the workflow options for a workflow. It exits 0 without
+`prat SELECTOR --help` (or `-h`) describes the selector, then prints the usage line and the run
+options that selector takes: every run option for an agent, alias or profile, and only the
+workflow options for a workflow. An agent is described by the settings it supports; a profile by
+its agent, FROM (as in [`prat list`](profiles.md#inspect-and-validate)) with the file path,
+`extends`, parameters and a SETTING, VALUE, ORIGIN table of its resolved settings; a workflow by
+its FROM, parameters, `parallel: false` when set, and a STEP, PROFILE, AFTER, OPTIONS table. It exits 0 without
 reading a prompt or launching anything. Other arguments are ignored, except `--config` for the
 lookup; `--help` after `--` stays a native argument, and `--prompt=--help` is a prompt.
 `prat help SELECTOR` prints the same page, `prat help CMD` prints `prat CMD --help`, and
@@ -597,7 +601,7 @@ requested id is echoed in `native_session_id` on those runs, so the path stays d
 both exist the reported value wins, since it is what the agent actually used.
 
 Claude, Copilot and Grok accept a requested id; Codex and Cursor report one without accepting
-any. Both sides are declared per agent by `prat agents --json` as `session_id` and
+any. Both sides are declared per agent by `prat list agents --json` as `session_id` and
 `reports_session_id`. Which agents support which, and why some similarly named native flags are
 excluded, is in [session ids](agents.md#session-ids). Claude's native `--name`, accepted as a
 passthrough, is a separate thing: a human label for the resume picker, not the id.

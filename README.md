@@ -65,9 +65,10 @@ Choose an agent by name or short alias:
 | Pi | `pi` | none |
 | [17 more](docs/user/agents.md#selectors) | | |
 
-Names of four letters or fewer, such as `kiro`, `qwen` and `amp`, need no alias. `prat agents`
-lists all 24 with the settings each supports; [agents and limitations](docs/user/agents.md) has
-the details. Goose and Kilo are supported; `kimi` targets Kimi Code. Unmaintained OpenHands and
+Names of four letters or fewer, such as `kiro`, `qwen` and `amp`, need no alias. `prat list`
+shows your profiles, workflows and templates, and which of the 24 agents are installed; `prat
+AGENT --help` shows the settings an agent supports, and
+[agents and limitations](docs/user/agents.md) has the details. Goose and Kilo are supported; `kimi` targets Kimi Code. Unmaintained OpenHands and
 iFlow are removed. See [profile migration](docs/user/profiles.md#upgrade-existing-profiles) and the
 [installation/test queue](docs/reference/live-verification.md).
 
@@ -81,9 +82,9 @@ prat cc --file request.md --timeout 120 --progress
 printf 'summarize this checkout\n' | prat gm
 ```
 
-`prat SELECTOR --help` (or `prat help SELECTOR`) prints the selector's line from `prat agents`,
-`prat profiles` or `prat workflows`, then the run options it takes; a workflow lists only the
-options a workflow run accepts. `prat help` alone equals `prat --help`, `prat help CMD` equals
+`prat SELECTOR --help` (or `prat help SELECTOR`) describes the selector, then lists the run
+options it takes: an agent's supported settings; a profile's resolved settings, each with the
+config table it came from; or a workflow's steps, with only the options a workflow run accepts. `prat help` alone equals `prat --help`, `prat help CMD` equals
 `prat CMD --help`, and `prat version` equals `prat --version`.
 
 | Parameter | Purpose |
@@ -149,7 +150,7 @@ prompt = "Review the following for bugs:\n\n$input"
 
 ```sh
 git diff | prat cc -t review
-prat templates
+prat list templates
 ```
 
 A template is a prompt for any agent or profile, chosen per run with `-t`. A profile with a `prompt` is a saved task, and the way to give a workflow step a prompt.
@@ -221,7 +222,8 @@ model   = "claude-opus-5"
 A child profile that `extends` a profile with a `prompt` and sets a different `agent` reuses that
 prompt, so one saved task runs on several agents.
 
-`prat profiles` shows resolved profiles and `prat config validate` checks them. See
+`prat list profiles` shows one row per profile, `prat help NAME` its resolved settings, and
+`prat config validate` checks them. See
 [profiles and configuration](docs/user/profiles.md) for defaults, command wrappers and merging
 rules.
 
@@ -245,7 +247,7 @@ git diff | prat review-all
 ```
 
 Each `profile` names a profile from your config. `security` and `style` run in parallel after
-`scan`, and `report` receives both outputs. Run `prat workflows` to list them. See
+`scan`, and `report` receives both outputs. Run `prat list workflows` to list them. See
 [workflows](docs/user/workflows.md) for parameters, `bind`, failure behavior and JSON output. A
 step can also run once per line or JSON element of an earlier step's output with
 [`each`](docs/user/workflows.md#fan-out-over-items); `max_parallel` sets how many items run at

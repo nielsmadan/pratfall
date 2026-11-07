@@ -399,8 +399,11 @@ def test_native_arguments_delegate_to_shell(tmp_path: Path) -> None:
         (["completion", ""], ["bash", "zsh"]),
         (["completion", "--"], ["--help"]),
         (["doctor", "--"], ["--config", "--help", "--json", "--versions"]),
-        (["agents", "--"], ["--config", "--help", "--json"]),
-        (["agents", ""], []),
+        (["list", ""], ["agents", "profiles", "templates", "workflows"]),
+        (["list", "p"], ["profiles"]),
+        (["li"], ["list"]),
+        (["list", "agents", "--"], ["--config", "--help", "--json"]),
+        (["list", "agents", ""], []),
     ],
 )
 def test_management_choices_and_flags(
@@ -679,6 +682,6 @@ def test_completion_suggests_the_closest_shell(capsys: pytest.CaptureFixture[str
 def test_help_completes_selectors_and_commands(tmp_path: Path) -> None:
     (tmp_path / ".pratfile").write_text(PRATFILE, encoding="utf-8")
     offered = words(["help", ""], tmp_path)
-    assert {"cc", "claude", "cleaner", "agents", "config", "version"} <= set(offered)
+    assert {"cc", "claude", "cleaner", "list", "config", "version"} <= set(offered)
     assert words(["help", "config", ""], tmp_path) == ["init", "path", "validate"]
     assert words(["version", "--"], tmp_path) == ["--help", "--json"]

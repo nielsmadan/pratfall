@@ -181,7 +181,7 @@ def test_schema_inheritance_listing_override_and_extract_rejection(
     local.write_text('version=1\n[profiles.work]\nagent="claude"\nschema="missing.json"\n')
     assert main(["config", "validate"]) == 0
     capsys.readouterr()
-    assert main(["profiles", "--json"]) == 0
+    assert main(["list", "profiles", "--json"]) == 0
     record = json.loads(capsys.readouterr().out)["profiles"][0]
     assert record["options"]["schema"] == str(tmp_path / "missing.json")
     assert load_config(cwd=Path.cwd(), env=os.environ).defaults.schema == str(
@@ -336,7 +336,7 @@ def test_schema_cleanup_failure_is_observable_with_native_exit() -> None:
 
 
 def test_schema_inventory(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["agents", "--json"]) == 0
+    assert main(["list", "agents", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["agents"]
     assert {item["name"] for item in records if item["capabilities"]["schema"]} == {
         "claude",

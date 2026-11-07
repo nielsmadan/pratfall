@@ -7,8 +7,8 @@ prat claude "fix this bug"
 prat cc "fix this bug"
 ```
 
-Both commands run Claude Code. Run `prat agents` to list available names, aliases and supported
-settings. Where model selection is supported, Prat passes model identifiers to the native CLI;
+Both commands run Claude Code. Run `prat list agents` to list available names and aliases, and `prat AGENT --help` for the
+settings an agent supports. Where model selection is supported, Prat passes model identifiers to the native CLI;
 it does not maintain a fixed model catalog.
 
 - [Selectors](#selectors)
@@ -344,7 +344,7 @@ The version diagnostic is `--version`; normal doctor does not execute it.
 Requesting a session and reporting one are separate things, and the sets differ.
 
 **Requesting.** Claude Code, Copilot and Grok support `--session-id ID` / `session_id`, each
-mapped to its own native flag. `prat agents --json` exposes the boolean `session_id` capability;
+mapped to its own native flag. `prat list agents --json` exposes the boolean `session_id` capability;
 other agents reject the setting.
 
 The capability is granted per agent against that CLI's documented behavior, because a
@@ -363,7 +363,7 @@ creating one. A freshly generated UUID always creates.
 **Reporting.** `--json` reports `native_session_id` for these implemented native fields:
 Claude Code (`session_id`), Codex (`thread.started.thread_id`), Copilot (`sessionId`),
 Cursor and Droid (`session_id`), Kimi Code (`session.resume_hint.session_id`), and Grok
-(`sessionId`). `prat agents --json` declares this
+(`sessionId`). `prat list agents --json` declares this
 as the boolean `reports_session_id` capability, separately from `session_id`, because the two
 sets differ. It prefers what the agent reported and falls back to what was requested, so a run
 that dies before reporting still names its session. A reported id that is blank or cannot be
@@ -375,7 +375,7 @@ See [naming a session](running.md#name-the-session).
 ## Native agent selection
 
 Claude Code, Copilot and Vibe support `--native-agent NAME` / `native_agent`, mapped to
-`--agent=NAME`. `prat agents --json` exposes the boolean `native_agent` capability. Other agents
+`--agent=NAME`. `prat list agents --json` exposes the boolean `native_agent` capability. Other agents
 reject public selection, including OpenCode: its native CLI falls back to the default when a
 name is unknown or identifies a subagent-only definition. Existing native-only OpenCode
 `--agent` passthrough remains accepted.
@@ -395,7 +395,7 @@ calls automatically. Prat adds no approval flags. See [selection rules](running.
 | OpenCode / Kilo | Repeated `--file=PATH` | Files; public attachments reject directories. |
 | Pi | Repeated `@PATH` | Images and text files; Pi adds native text wrappers and skips empty files. |
 
-Other agents reject nonempty `attachments`. `prat agents --json` exposes `attachments`,
+Other agents reject nonempty `attachments`. `prat list agents --json` exposes `attachments`,
 `attachment_types` and `attachment_max_count` (one for Hermes; null means no Prat count cap).
 Native formats, model support and limits still apply. Prat only checks regular-file readability;
 it does not decode images or turn attachments into prompt text. Native agents read the canonical

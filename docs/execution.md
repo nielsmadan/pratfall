@@ -17,7 +17,9 @@ the [agent references](reference/overview.md).
 
 - The CLI is a package: [parsing.py](../src/pratfall/cli/parsing.py) turns argv into a run or a
   management command, [dispatch.py](../src/pratfall/cli/dispatch.py) owns run and management
-  dispatch, [doctor.py](../src/pratfall/cli/doctor.py) owns the inventory and version probes, and
+  dispatch, [doctor.py](../src/pratfall/cli/doctor.py) owns the inventory and version probes,
+  [listing.py](../src/pratfall/cli/listing.py) builds the `prat list` sections and the selector
+  help headers, and
   [presentation.py](../src/pratfall/cli/presentation.py) owns diagnostics writers, stdout
   emission and the shared error-guard helpers.
   [workflow_run.py](../src/pratfall/cli/workflow_run.py) prepares and reports workflow runs, and the

@@ -186,8 +186,9 @@ def test_empty_allowlist_has_explicit_native_transport(
     (tmp_path / ".pratfile").write_text(f'version=1\n[profiles.empty]\nagent="{agent}"\ntools=[]\n')
     assert main(["empty", "task", "--dry-run", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["argv"] == [agent, *PREFIXES[agent], *expected]
-    assert main(["profiles"]) == 0
-    assert "tools=[]" in capsys.readouterr().out
+    assert main(["help", "empty"]) == 0
+    rows = [line.split() for line in capsys.readouterr().out.splitlines()]
+    assert ["tools", "[]", "profiles.empty", "(local)"] in rows
 
 
 @pytest.mark.parametrize("agent", ["qwen", "droid", "vibe", "codex"])
@@ -320,7 +321,7 @@ def test_unsupported_tools_rejected_before_input(
 
 
 def test_tool_capability_inventory(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["agents", "--json"]) == 0
+    assert main(["list", "agents", "--json"]) == 0
     records = json.loads(capsys.readouterr().out)["agents"]
     assert {r["name"] for r in records if r["capabilities"]["tools"]} == set(AGENTS) | {"pi"}
     assert {r["name"] for r in records if r["capabilities"]["disabled_tools"]} == set(AGENTS) | {

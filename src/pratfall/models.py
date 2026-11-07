@@ -80,6 +80,8 @@ class Options:
 class OptionOrigin:
     label: str
     code: Code = "invalid_config"
+    table: str | None = None
+    source: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -146,6 +148,8 @@ class Config:
     templates: Mapping[str, PromptTemplate] = field(default_factory=lambda: MappingProxyType({}))
     workflows: Mapping[str, Workflow] = field(default_factory=lambda: MappingProxyType({}))
     local_digest: str | None = None
+    local_source: Path | None = None
+    replaced: Mapping[str, Path] = field(default_factory=lambda: MappingProxyType({}))
 
 
 @dataclass(frozen=True)

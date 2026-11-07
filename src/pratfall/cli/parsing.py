@@ -33,10 +33,7 @@ _RUN_FLAGS_WITHOUT_VALUE = _RUN_SWITCHES | frozenset(_TRI_STATE_FLAGS)
 
 _MANAGEMENT_HELP: Mapping[str, str] = MappingProxyType(
     {
-        "agents": "List built-in agent selectors and supported settings.",
-        "profiles": "List configured profiles and their resolved settings.",
-        "templates": "List configured prompt templates.",
-        "workflows": "List configured workflows and their steps.",
+        "list": "List profiles, workflows, templates and agents.",
         "doctor": "Locate agent executables without running them or checking credentials.",
         "config": "Manage TOML configuration.",
         "trust": "Trust a directory, and everything under it, to load its .pratfile.",
@@ -57,21 +54,27 @@ _CONFIG_COMMAND_HELP: Mapping[str, str] = MappingProxyType(
 )
 
 
-_COMMAND_EXAMPLES: Mapping[tuple[str, ...], str] = MappingProxyType(
+LIST_SECTIONS: Mapping[str, str] = MappingProxyType(
     {
-        ("agents",): "prat agents --json",
-        ("profiles",): "prat profiles",
-        ("templates",): "prat templates",
-        ("workflows",): "prat workflows --json",
-        ("doctor",): "prat doctor --versions",
-        ("config",): "prat config validate",
-        ("config", "path"): "prat config path",
-        ("config", "init"): "prat config init --config ./team.toml",
-        ("config", "validate"): "prat config validate --config .pratfile",
-        ("trust",): "prat trust ~/src/team-repo",
-        ("completion",): 'eval "$(prat completion zsh)"',
-        ("help",): "prat help cc",
-        ("version",): "prat version --json",
+        "profiles": "Configured profiles.",
+        "workflows": "Configured workflows.",
+        "templates": "Configured prompt templates.",
+        "agents": "Built-in agents and their aliases.",
+    }
+)
+
+_COMMAND_EXAMPLES: Mapping[tuple[str, ...], tuple[str, ...]] = MappingProxyType(
+    {
+        ("list",): ("prat list", "prat list profiles --json"),
+        ("doctor",): ("prat doctor --versions",),
+        ("config",): ("prat config validate",),
+        ("config", "path"): ("prat config path",),
+        ("config", "init"): ("prat config init --config ./team.toml",),
+        ("config", "validate"): ("prat config validate --config .pratfile",),
+        ("trust",): ("prat trust ~/src/team-repo",),
+        ("completion",): ('eval "$(prat completion zsh)"',),
+        ("help",): ("prat help cc",),
+        ("version",): ("prat version --json",),
     }
 )
 
@@ -283,8 +286,8 @@ def selector_help(header: str, selector: str, *, workflow: bool) -> str:
 _EPILOG = f"""run syntax:
   {_RUN_USAGE.format(selector="SELECTOR")}
 
-SELECTOR is an agent name (codex, kiro), alias (cx), profile, or workflow. See prat agents,
-prat profiles and prat workflows; prat SELECTOR --help lists the options that SELECTOR takes.
+SELECTOR is an agent name (codex, kiro), alias (cx), profile, or workflow. prat list lists
+them; prat SELECTOR --help lists the options that SELECTOR takes.
 Redirected stdin precedes prompt text or file contents, separated by two newlines.
 
 run options:
@@ -405,6 +408,16 @@ def command_help(path: tuple[str, ...]) -> str:
     return parsers[path].format_help()
 
 
+def check_list_section(section: str | None) -> None:
+    if section is None or section in LIST_SECTIONS:
+        return
+    choices = ", ".join(LIST_SECTIONS)
+    raise PratError(
+        f"unknown section {section!r}{did_you_mean(section, LIST_SECTIONS)} (choose from {choices})",
+        code="invalid_arguments",
+    )
+
+
 def _check_config_command(arguments: list[str]) -> None:
     tokens = _scan_run(arguments).tokens
     if any(token.argument in {"-h", "--help"} for token in tokens):
@@ -443,20 +456,27 @@ def _parsers() -> dict[tuple[str, ...], Parser]:
     )
     subparsers = parser.add_subparsers(dest="command", parser_class=Parser)
     parsers: dict[tuple[str, ...], Parser] = {(): parser}
-    for command in ("agents", "profiles", "templates", "workflows", "doctor"):
-        child = _command_parser(subparsers, (command,), _MANAGEMENT_HELP[command])
-        parsers[(command,)] = child
-        _common_flags(child)
-        if command == "doctor":
-            child.add_argument(
-                "--versions",
-                action="store_true",
-                help=(
-                    "Execute each available configured command prefix with its native version "
-                    "arguments (version for Amp, --version for other agents); "
-                    "configured wrappers may have side effects."
-                ),
-            )
+    listing = _command_parser(subparsers, ("list",), _MANAGEMENT_HELP["list"])
+    parsers[("list",)] = listing
+    _common_flags(listing)
+    listing.add_argument(
+        "section",
+        nargs="?",
+        metavar="SECTION",
+        help="profiles, workflows, templates or agents; default: every section.",
+    )
+    doctor = _command_parser(subparsers, ("doctor",), _MANAGEMENT_HELP["doctor"])
+    parsers[("doctor",)] = doctor
+    _common_flags(doctor)
+    doctor.add_argument(
+        "--versions",
+        action="store_true",
+        help=(
+            "Execute each available configured command prefix with its native version "
+            "arguments (version for Amp, --version for other agents); "
+            "configured wrappers may have side effects."
+        ),
+    )
     config = _command_parser(subparsers, ("config",), _MANAGEMENT_HELP["config"])
     parsers[("config",)] = config
     _common_flags(config)
@@ -523,10 +543,15 @@ def _command_parser(
         path[-1],
         help=help_text,
         description=help_text,
-        epilog=f"example:\n  {_COMMAND_EXAMPLES[path]}",
+        epilog=_examples_text(_COMMAND_EXAMPLES[path]),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         allow_abbrev=False,
     )
+
+
+def _examples_text(examples: tuple[str, ...]) -> str:
+    heading = "example" if len(examples) == 1 else "examples"
+    return "\n".join((f"{heading}:", *(f"  {example}" for example in examples)))
 
 
 def _parse_run(arguments: list[str]) -> RunArguments:

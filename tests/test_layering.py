@@ -160,8 +160,9 @@ SIBLING_IMPORTS_ALLOWED: Mapping[str, Mapping[str, frozenset[str]]] = {
         "shell_completion": frozenset({"parsing"}),
         "doctor": frozenset({"presentation"}),
         "workflow_run": frozenset({"parsing", "presentation"}),
+        "listing": frozenset({"doctor", "parsing", "presentation"}),
         "dispatch": frozenset(
-            {"doctor", "parsing", "presentation", "shell_completion", "workflow_run"}
+            {"doctor", "listing", "parsing", "presentation", "shell_completion", "workflow_run"}
         ),
         "__init__": frozenset({"dispatch", "parsing", "presentation", "shell_completion"}),
     },

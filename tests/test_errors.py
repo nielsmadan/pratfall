@@ -11,8 +11,12 @@ from pratfall.errors import did_you_mean
     ("value", "otherwise", "expected"),
     [
         ("clade", "", "; did you mean 'claude'?"),
-        ("clade", "run 'prat agents' to list agents", "; did you mean 'claude'?"),
-        ("zzzz", "run 'prat agents' to list agents", "; run 'prat agents' to list agents"),
+        ("clade", "run 'prat list agents' to list agents", "; did you mean 'claude'?"),
+        (
+            "zzzz",
+            "run 'prat list agents' to list agents",
+            "; run 'prat list agents' to list agents",
+        ),
         ("zzzz", "", ""),
     ],
 )
