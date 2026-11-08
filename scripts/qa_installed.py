@@ -3325,10 +3325,10 @@ def _exercise_q01_q02(context: _ExerciseContext) -> dict[str, object]:
     assert help_text.startswith("usage: prat ")
     for expected in (
         "One-shot coding agents for scripts and pipes.",
-        "{agents,profiles,templates,workflows,doctor,config,trust,completion}",
+        "{list,doctor,config,trust,completion,help,version}",
         "prat [RUN_OPTIONS] SELECTOR [PROMPT | VALUE...] [-- NATIVE_ARGS]",
-        "--progress              Print bounded live activity updates on stderr.",
-        "--dry-run               Resolve and print the invocation without launching it.",
+        "--progress                Print bounded live activity updates on stderr.",
+        "--dry-run                 Resolve and print the invocation without launching it.",
     ):
         assert expected in help_text
     return {
@@ -3451,6 +3451,8 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
             {
                 "name": "simple",
                 "agent": "codex",
+                "extends": None,
+                "source": str(init_path),
                 "options": {
                     "model": "gpt-5.6-luna",
                     "effort": "low",
