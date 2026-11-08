@@ -2136,3 +2136,22 @@ def test_never_started_each_step_reports_an_empty_item_list(
     assert main(["fan", "--json", "--config", str(config)]) == 4
     steps = steps_of(json_result(capsys))
     assert steps[1] == {"step": "w", "status": "skipped", "items": []}
+
+
+def test_a_step_using_a_shadowed_profile_fails_naming_the_collision(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = workflow_config(
+        tmp_path,
+        {"cc": "Fix $input", "check": "Check $input"},
+        '[workflows.ship]\nsteps = [{name="fix", profile="cc"}, {name="check", profile="check"}]\n',
+    )
+    assert main(["ship", "hi", "--dry-run", "--config", str(config)]) == 2
+    message = (
+        f"{config}: profiles.cc is shadowed by the alias 'cc' of the built-in agent 'claude'; "
+        "rename it"
+    )
+    assert capsys.readouterr().err.splitlines() == [
+        f"prat: warning: {message}",
+        f"prat: workflow 'ship' step 'fix': {message}",
+    ]

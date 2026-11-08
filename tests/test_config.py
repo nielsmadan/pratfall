@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from pratfall.catalog import BY_NAME
+from pratfall.catalog import BY_NAME, BY_SELECTOR
 from pratfall.cli.parsing import option_flags
 from pratfall.config import (
     DEFAULT_TIMEOUT,
@@ -565,10 +565,6 @@ native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", 
         ('version=1\n[agents.codex]\ncommand="codex"', "agents.codex.command"),
         ("version=1\n[agents.codex]\ncommand=[]", "nonempty executable"),
         ('version=1\n[agents.codex]\ncommand=[" "]', "nonempty executable"),
-        ('version=1\n[profiles.cc]\nagent="codex"', "name is reserved"),
-        ('version=1\n[profiles.config]\nagent="codex"', "name is reserved"),
-        ('version=1\n[profiles.completion]\nagent="codex"', "name is reserved"),
-        ('version=1\n[profiles.trust]\nagent="codex"', "name is reserved"),
         ('version=1\n[profiles."-bad"]\nagent="codex"', "profile names"),
         ('version=1\n[profiles."two words"]\nagent="codex"', "profile names"),
         ("version=1\n[profiles]\nwork=[]", "profiles.work: expected a TOML table"),
@@ -854,15 +850,53 @@ def test_init_reports_parent_creation_failure(tmp_path: Path) -> None:
         "co",
     ],
 )
-def test_new_agent_profile_collisions_have_exact_migration_diagnostic(
+def test_a_profile_named_like_an_agent_is_dropped_and_its_name_fails(
     tmp_path: Path, name: str
 ) -> None:
-    path = write_config(tmp_path, f'version=1\n[profiles.{name}]\nagent="codex"\n')
-    with pytest.raises(PratError) as failure:
-        load_config(path, cwd=Path.cwd(), env=os.environ)
-    assert str(failure.value) == (
-        f"{path}: profiles.{name}: name is reserved; choose a different profile name"
+    path = write_config(
+        tmp_path, f'version=1\n[profiles.{name}]\nagent="codex"\n[profiles.kept]\nagent="codex"\n'
     )
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
+    agent = BY_SELECTOR[name].name
+    built_in = (
+        f"the built-in agent {name!r}"
+        if agent == name
+        else f"the alias {name!r} of the built-in agent {agent!r}"
+    )
+    message = f"{path}: profiles.{name} is shadowed by {built_in}; rename it"
+    assert list(config.profiles) == ["kept"]
+    assert config.warnings == (message,)
+    with pytest.raises(PratError) as failure:
+        resolve_profile(config, name)
+    assert (str(failure.value), failure.value.code) == (message, "invalid_config")
+
+
+def test_a_shadowed_profile_is_dropped_without_reading_its_settings(tmp_path: Path) -> None:
+    path = write_config(tmp_path, 'version=1\n[profiles.cc]\nagent="nope"\nbogus=1\n')
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
+    assert config.warnings == (
+        (
+            f"{path}: profiles.cc is shadowed by the alias 'cc' of the built-in agent 'claude'; "
+            "rename it"
+        ),
+    )
+
+
+def test_a_profile_extending_a_shadowed_profile_fails_only_when_selected(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path,
+        'version=1\n[profiles.goose]\nagent="codex"\n[profiles.child]\nextends="goose"\n'
+        '[profiles.grandchild]\nextends="child"\n[profiles.other]\nagent="claude"\n',
+    )
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
+    assert list(config.profiles) == ["other"]
+    for name in ("child", "grandchild"):
+        with pytest.raises(PratError) as failure:
+            resolve_profile(config, name)
+        assert str(failure.value) == (
+            f"{path}: profiles.child.extends: profiles.goose is shadowed by the built-in agent "
+            "'goose'; rename it"
+        )
 
 
 def test_extreme_toml_integer_is_a_normalized_config_error(tmp_path: Path) -> None:
@@ -935,10 +969,47 @@ def test_invalid_global_template_is_not_hidden_by_replacement(tmp_path: Path) ->
     assert str(global_path) in str(caught.value)
 
 
-def test_list_is_reserved_for_profile_names(tmp_path: Path) -> None:
-    path = write_config(tmp_path, 'version=1\n[profiles.list]\nagent="codex"\n')
-    with pytest.raises(PratError, match="name is reserved"):
-        load_config(path, cwd=Path.cwd(), env=os.environ)
+@pytest.mark.parametrize("name", ["list", "help", "version", "trust"])
+def test_a_profile_named_like_a_command_is_dropped_with_a_warning(
+    tmp_path: Path, name: str
+) -> None:
+    path = write_config(tmp_path, f'version=1\n[profiles.{name}]\nagent="codex"\n')
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
+    assert config.profiles == {}
+    assert config.warnings == (
+        f"{path}: profiles.{name} is shadowed by the command {name!r}; rename it",
+    )
+
+
+def test_shadow_warnings_from_both_files_come_before_replacement_warnings(
+    tmp_path: Path,
+) -> None:
+    global_path = init_config(cwd=Path.cwd(), env=os.environ)
+    global_path.write_text(
+        'version=1\n[profiles.cx]\nagent="codex"\n[profiles.work]\nagent="codex"\n',
+        encoding="utf-8",
+    )
+    local = write_config(
+        tmp_path,
+        'version=1\n[workflows.doctor]\nsteps=[{name="a",profile="cx"}]\n'
+        '[profiles.work]\nagent="claude"\n',
+    )
+    config = load_config(local, cwd=Path.cwd(), env=os.environ)
+    assert config.warnings == (
+        (
+            f"{global_path}: profiles.cx is shadowed by the alias 'cx' of the built-in agent "
+            "'codex'; rename it"
+        ),
+        f"{local}: workflows.doctor is shadowed by the command 'doctor'; rename it",
+        f"{local}: profile 'work' replaces the profile from {global_path}",
+    )
+    assert config.workflows == {}
+
+
+def test_templates_named_like_built_ins_stay_available(tmp_path: Path) -> None:
+    path = write_config(tmp_path, 'version=1\n[templates.cc]\nprompt="Review"\n')
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
+    assert (list(config.templates), config.warnings) == (["cc"], ())
 
 
 def test_directory_paths_follow_layer_origins_and_replace_lists(tmp_path: Path) -> None:
@@ -1371,10 +1442,6 @@ def test_workflow_validation_errors(tmp_path: Path, body: str, message: str) -> 
 @pytest.mark.parametrize(
     ("name", "message"),
     [
-        ("list", "name is reserved"),
-        ("doctor", "name is reserved"),
-        ("codex", "name is reserved"),
-        ("cx", "name is reserved"),
         ('"bad.name"', "workflow names"),
         ('"-bad"', "workflow names"),
         ("a", "name is also a profile"),
@@ -1384,6 +1451,39 @@ def test_workflow_name_rules(tmp_path: Path, name: str, message: str) -> None:
     path = workflow_config(tmp_path, f'[workflows.{name}]\nsteps=[{{name="x",profile="a"}}]\n')
     with pytest.raises(PratError, match=message):
         load_config(path, cwd=Path.cwd(), env=os.environ)
+
+
+@pytest.mark.parametrize(
+    ("name", "built_in"),
+    [
+        ("list", "the command 'list'"),
+        ("codex", "the built-in agent 'codex'"),
+        ("cx", "the alias 'cx' of the built-in agent 'codex'"),
+    ],
+)
+def test_a_workflow_named_like_a_built_in_is_dropped_and_its_name_fails(
+    tmp_path: Path, name: str, built_in: str
+) -> None:
+    path = workflow_config(tmp_path, f'[workflows.{name}]\nsteps=[{{name="x",profile="a"}}]\n')
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
+    message = f"{path}: workflows.{name} is shadowed by {built_in}; rename it"
+    assert (dict(config.workflows), config.warnings, config.blocked) == (
+        {},
+        (message,),
+        {name: message},
+    )
+
+
+def test_a_step_using_a_shadowed_profile_loads_and_fails_when_resolved(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path,
+        'version=1\n[profiles.cc]\nagent="codex"\nprompt="Fix $thing"\n'
+        '[workflows.w]\nsteps=[{name="x",profile="cc",bind={thing="y"}},{name="y",profile="cx"}]\n',
+    )
+    config = load_config(path, cwd=Path.cwd(), env=os.environ)
+    assert list(config.workflows) == ["w"]
+    with pytest.raises(PratError, match=r"profiles\.cc is shadowed by the alias 'cc'"):
+        resolve_profile(config, config.workflows["w"].steps[0].selector)
 
 
 def test_workflows_must_be_a_table(tmp_path: Path) -> None:

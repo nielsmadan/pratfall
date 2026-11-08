@@ -13,10 +13,10 @@ from typing import Literal, NamedTuple
 from pratfall.catalog import (
     BY_NAME,
     BY_SELECTOR,
-    RESERVED_NAMES,
     get_agent,
     removed_agent,
     removed_command,
+    shadowed_by,
 )
 from pratfall.errors import PratError, did_you_mean
 from pratfall.instructions import validate_instructions
@@ -469,12 +469,25 @@ def _declared_agent(value: object, label: str, *, required: bool) -> str | None:
         raise PratError(f"{label}.agent: {error}", code=error.code) from error
 
 
+def _shadow_text(key: str) -> str | None:
+    built_in = shadowed_by(key.partition(".")[2])
+    return None if built_in is None else f"{key} is shadowed by {built_in}; rename it"
+
+
+def _shadowed(table: dict[str, object], kind: str, path: Path) -> dict[str, str]:
+    return {
+        f"{kind}.{name}": f"{path}: {text}"
+        for name in table
+        if (text := _shadow_text(f"{kind}.{name}")) is not None
+    }
+
+
 def _profiles(table: dict[str, object], path: Path) -> dict[str, ProfileLayer]:
     layers: dict[str, ProfileLayer] = {}
     for name, value in table.items():
         label = f"{path}: profiles.{name}"
-        if name in RESERVED_NAMES:
-            raise PratError(f"{label}: name is reserved; choose a different profile name")
+        if shadowed_by(name) is not None:
+            continue
         if re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", name) is None:
             raise PratError(
                 f"{label}: use letters, digits, underscores or hyphens in profile names"
@@ -509,7 +522,9 @@ def _profile_prompt(settings: dict[str, object], label: str) -> str | None:
     return prompt
 
 
-def _chain(layers: Mapping[str, ProfileLayer], name: str) -> tuple[ProfileLayer, ...]:
+def _chain(
+    layers: Mapping[str, ProfileLayer], name: str, shadowed: Mapping[str, str]
+) -> tuple[ProfileLayer, ...]:
     chain: list[ProfileLayer] = []
     visited: list[str] = []
     seen: set[str] = set()
@@ -522,6 +537,9 @@ def _chain(layers: Mapping[str, ProfileLayer], name: str) -> tuple[ProfileLayer,
         if layer.extends is None:
             return tuple(reversed(chain))
         label = f"{layer.source}: profiles.{layer.name}.extends"
+        shadow = _shadow_text(f"profiles.{layer.extends}")
+        if shadow is not None and f"profiles.{layer.extends}" in shadowed:
+            raise _ShadowedParent(f"{label}: {shadow}")
         if layer.extends not in layers:
             raise PratError(
                 f"{label}: unknown profile {layer.extends!r}" + did_you_mean(layer.extends, layers)
@@ -531,8 +549,10 @@ def _chain(layers: Mapping[str, ProfileLayer], name: str) -> tuple[ProfileLayer,
         current = layer.extends
 
 
-def _resolve_layer(layers: Mapping[str, ProfileLayer], name: str) -> Profile:
-    chain = _chain(layers, name)
+def _resolve_layer(
+    layers: Mapping[str, ProfileLayer], name: str, shadowed: Mapping[str, str]
+) -> Profile:
+    chain = _chain(layers, name, shadowed)
     agent = next(declared for layer in reversed(chain) if (declared := layer.agent) is not None)
     return Profile(
         agent=agent,
@@ -550,8 +570,32 @@ def _resolve_layer(layers: Mapping[str, ProfileLayer], name: str) -> Profile:
     )
 
 
-def _resolve_layers(layers: Mapping[str, ProfileLayer]) -> dict[str, Profile]:
-    return {name: _resolve_layer(layers, name) for name in layers}
+class _ShadowedParent(PratError):
+    pass
+
+
+def _resolve_layers(
+    layers: Mapping[str, ProfileLayer], shadowed: Mapping[str, str]
+) -> tuple[dict[str, Profile], dict[str, str]]:
+    profiles: dict[str, Profile] = {}
+    blocked: dict[str, str] = {}
+    for name in layers:
+        try:
+            profiles[name] = _resolve_layer(layers, name, shadowed)
+        except _ShadowedParent as error:
+            blocked[name] = str(error)
+    return profiles, blocked
+
+
+def _blocked(shadowed: Mapping[str, str]) -> dict[str, str]:
+    ordered = sorted(shadowed.items(), key=lambda item: item[0].startswith("profiles."))
+    return {key.partition(".")[2]: text for key, text in ordered}
+
+
+def reject_blocked(config: Config, selector: str) -> None:
+    message = config.blocked.get(selector)
+    if message is not None:
+        raise PratError(message)
 
 
 def _layer_origin(layer: ProfileLayer, selector: str, field: str) -> OptionOrigin:
@@ -726,8 +770,8 @@ def _workflows(table: dict[str, object], path: Path) -> dict[str, Workflow]:
     workflows: dict[str, Workflow] = {}
     for name, value in table.items():
         label = f"{path}: workflows.{name}"
-        if name in RESERVED_NAMES:
-            raise PratError(f"{label}: name is reserved; choose a different workflow name")
+        if shadowed_by(name) is not None:
+            continue
         if re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", name) is None:
             raise PratError(
                 f"{label}: use letters, digits, underscores or hyphens in workflow names"
@@ -794,6 +838,8 @@ def _validate_each(
 def _validate_workflow_step(
     config: Config, workflow: Workflow, step: WorkflowStep, label: str
 ) -> None:
+    if step.selector in config.blocked:
+        return
     if step.selector in config.workflows:
         raise PratError(f"{label}.profile: {step.selector!r} is a workflow, not a profile or agent")
     if step.selector not in config.profiles and step.selector not in BY_SELECTOR:
@@ -890,9 +936,14 @@ def _parse_file(path: Path, raw: bytes) -> Config:
         base=path.parent,
     )
     commands, prefixes = _agent_settings(_table(table.get("agents", {}), f"{path}: agents"), path)
-    layers = _profiles(_table(table.get("profiles", {}), f"{path}: profiles"), path)
+    profile_table = _table(table.get("profiles", {}), f"{path}: profiles")
+    workflow_table = _table(table.get("workflows", {}), f"{path}: workflows")
+    layers = _profiles(profile_table, path)
     templates = _templates(_table(table.get("templates", {}), f"{path}: templates"), path)
-    workflows = _workflows(_table(table.get("workflows", {}), f"{path}: workflows"), path)
+    workflows = _workflows(workflow_table, path)
+    shadowed = _shadowed(profile_table, "profiles", path) | _shadowed(
+        workflow_table, "workflows", path
+    )
     return Config(
         path=path,
         exists=True,
@@ -903,9 +954,11 @@ def _parse_file(path: Path, raw: bytes) -> Config:
         templates=MappingProxyType(templates),
         workflows=MappingProxyType(workflows),
         sources=(path,),
+        warnings=tuple(shadowed.values()),
         default_sources=MappingProxyType(
             {name: path for name, value in asdict(defaults).items() if value is not None}
         ),
+        shadowed=MappingProxyType(shadowed),
     )
 
 
@@ -913,7 +966,8 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
     if not local_config.exists:
         return global_config
     collisions = sorted(global_config.profile_layers.keys() & local_config.profile_layers.keys())
-    warnings = tuple(
+    warnings = global_config.warnings + local_config.warnings
+    warnings += tuple(
         f"{local_config.path}: profile {name!r} replaces the profile from {global_config.path}"
         for name in collisions
     )
@@ -956,6 +1010,7 @@ def _merge_configs(global_config: Config, local_config: Config) -> Config:
         warnings=warnings,
         default_sources=MappingProxyType(default_sources),
         replaced=MappingProxyType(replaced),
+        shadowed=MappingProxyType(dict(global_config.shadowed) | dict(local_config.shadowed)),
     )
 
 
@@ -1005,7 +1060,12 @@ def load_config(
             local_digest=None if contents is None else digest(contents),
             local_source=local_path if contents is not None and explicit is None else None,
         )
-    config = replace(config, profiles=MappingProxyType(_resolve_layers(config.profile_layers)))
+    profiles, dependents = _resolve_layers(config.profile_layers, config.shadowed)
+    config = replace(
+        config,
+        profiles=MappingProxyType(profiles),
+        blocked=MappingProxyType(_blocked(config.shadowed) | dependents),
+    )
     for name, profile in config.profiles.items():
         validate_capabilities(
             BY_NAME[profile.agent],
@@ -1071,6 +1131,7 @@ def resolve_profile(
     overrides: Options | None = None,
     flags: Mapping[str, str] = MappingProxyType({}),
 ) -> ResolvedProfile:
+    reject_blocked(config, selector)
     if selector in config.profiles:
         profile = config.profiles[selector]
         agent = BY_NAME[profile.agent]

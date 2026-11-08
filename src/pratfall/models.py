@@ -150,6 +150,8 @@ class Config:
     local_digest: str | None = None
     local_source: Path | None = None
     replaced: Mapping[str, Path] = field(default_factory=lambda: MappingProxyType({}))
+    shadowed: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    blocked: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
 
 
 @dataclass(frozen=True)

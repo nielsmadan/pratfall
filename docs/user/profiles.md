@@ -428,9 +428,13 @@ retaining its built-in guidance. See [content bounds and native mappings](runnin
 
 ## Upgrade existing profiles
 
-Built-in names, aliases, and management commands are reserved profile names. When an upgrade
-introduces a collision, rename your profile, update commands that use it, and run
-`prat config validate`.
+Built-in agent names, aliases and management commands win over profile and workflow names. When an
+upgrade adds a built-in named like one of your profiles or workflows, Prat drops only that entry,
+with one warning per invocation, and everything else keeps working. Using the name fails with the
+same text rather than running the built-in agent with your prompt: `prat NAME`, `prat help NAME`, a
+workflow step whose `profile` is NAME, and a profile that `extends` it. A management command of that
+name runs as usual. `prat config validate` reports every collision and exits 2. Rename the entry
+and update commands that use it.
 
 `prat trust` is now a management command, so `trust` is a reserved name: rename a
 `[profiles.trust]` or `[workflows.trust]`, for example to `[profiles.my-trust]`.
@@ -478,7 +482,9 @@ is now an aligned table. `agents`, `profiles`, `templates` and `workflows` are n
 so they are legal profile and workflow names again; `list` is now reserved, so rename a
 `[profiles.list]` or `[workflows.list]` and update invocations that select it.
 
-A collision reports `profiles.NAME: name is reserved; choose a different profile name.`
+A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
+naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that
+applies, and `workflows.NAME` for a workflow. Templates have their own names and never collide.
 
 Agents with names of four letters or fewer now use their full names. Update commands and profile
 `agent` fields that use these former aliases:

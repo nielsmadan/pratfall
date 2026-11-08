@@ -12,7 +12,7 @@ from pratfall.cli.parsing import (
     selector_usage,
 )
 from pratfall.cli.presentation import _limit_text, render_table
-from pratfall.config import option_origins, resolve_profile, supports_setting
+from pratfall.config import option_origins, reject_blocked, resolve_profile, supports_setting
 from pratfall.limits import DEFAULT_MAX_PARALLEL
 from pratfall.models import AgentSpec, Config, OptionOrigin, ProfileLayer, WorkflowStep
 from pratfall.prompt_templates import template_parameters
@@ -357,6 +357,7 @@ def _step_options(step: WorkflowStep) -> list[str]:
 
 
 def _selected_agent(config: Config, selector: str) -> AgentSpec:
+    reject_blocked(config, selector)
     return BY_SELECTOR.get(selector) or resolve_profile(config, selector).agent
 
 

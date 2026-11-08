@@ -2628,7 +2628,7 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
         collision = root / f"collision-{name}.toml"
         collision.write_text(f'version = 1\n[profiles.{name}]\nagent = "codex"\n', encoding="utf-8")
         completed = _run(
-            prat, root, ["cx", "unused profile blocks invocation", "--json"], config=collision
+            prat, root, [name, "shadowed profile blocks its name", "--json"], config=collision
         )
         _assert_result(
             completed,
@@ -2636,7 +2636,10 @@ def _exercise_a_rejections(prat: Path, root: Path, config: Path) -> dict[str, ob
             status="error",
             native_exit_code=None,
             error_code="invalid_config",
-            error_message=f"{collision}: profiles.{name}: name is reserved; choose a different profile name",
+            error_message=(
+                f"{collision}: profiles.{name} is shadowed by the built-in agent {name!r}; "
+                "rename it"
+            ),
         )
         collisions[name] = _compact_result(completed)
     assert len(_calls(root / "native.jsonl")) == before

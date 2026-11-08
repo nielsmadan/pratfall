@@ -156,6 +156,8 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
             check_list_section(args.section)
         config = load_config(args.config, cwd=cwd, env=environ)
         _validate_config_native_arguments(config)
+        if args.command == "config" and config.shadowed:
+            return _report_shadowed(config, json_mode=args.json)
         _config_warnings(config, _StreamDiagnostics())
         if args.command == "doctor":
             return _doctor(config, args.json, versions=args.versions, cwd=cwd, which=shutil.which)
@@ -390,6 +392,19 @@ class _RunState:
     stdout: _StdoutLatch = field(default_factory=_StdoutLatch)
     resolved: ResolvedProfile | None = None
     process: ProcessResult | None = None
+
+
+def _report_shadowed(config: Config, *, json_mode: bool) -> int:
+    collisions = tuple(config.shadowed.values())
+    others = tuple(warning for warning in config.warnings if warning not in collisions)
+    _config_warnings(replace(config, warnings=others), _StreamDiagnostics())
+    error = PratError("\n".join(collisions))
+    if json_mode:
+        _emit(_error_payload(error), [], json_mode=True)
+    else:
+        for collision in collisions:
+            _print_diagnostic(collision)
+    return error.exit_code
 
 
 @dataclass(frozen=True)

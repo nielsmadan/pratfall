@@ -2332,6 +2332,144 @@ def test_help_json_for_an_unknown_topic_is_the_error_object(
         }
 
 
+SHADOW_CONFIG = """version=1
+[profiles.goose]
+agent="codex"
+[profiles.weekly]
+agent="claude"
+effort="high"
+[profiles.wf-base]
+extends="goose"
+[profiles.dr]
+agent="claude"
+[profiles.list]
+agent="claude"
+"""
+
+
+@pytest.fixture
+def shadow_config(tmp_path: Path) -> tuple[Path, list[str]]:
+    config = tmp_path / "config-home/pratfall/config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text(SHADOW_CONFIG, encoding="utf-8")
+    return config, [
+        f"{config}: profiles.goose is shadowed by the built-in agent 'goose'; rename it",
+        (
+            f"{config}: profiles.dr is shadowed by the alias 'dr' of the built-in agent 'droid'; "
+            "rename it"
+        ),
+        f"{config}: profiles.list is shadowed by the command 'list'; rename it",
+    ]
+
+
+def test_other_profiles_run_with_one_warning_per_shadowed_entry(
+    shadow_config: tuple[Path, list[str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, collisions = shadow_config
+    assert main(["weekly", "--dry-run", "hi"]) == 0
+    output = capsys.readouterr()
+    assert output.out.startswith("command: claude -p --output-format json --effort high\n")
+    assert output.err == "".join(f"prat: warning: {collision}\n" for collision in collisions)
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (
+            ["goose", "--dry-run", "hi"],
+            "{0}: profiles.goose is shadowed by the built-in agent 'goose'; rename it",
+        ),
+        (
+            ["dr", "--dry-run", "hi"],
+            (
+                "{0}: profiles.dr is shadowed by the alias 'dr' of the "
+                "built-in agent 'droid'; rename it"
+            ),
+        ),
+        (
+            ["wf-base", "--dry-run", "hi"],
+            (
+                "{0}: profiles.wf-base.extends: profiles.goose is "
+                "shadowed by the built-in agent 'goose'; rename it"
+            ),
+        ),
+    ],
+)
+def test_selecting_a_shadowed_name_fails_instead_of_running_the_built_in(
+    arguments: list[str],
+    message: str,
+    shadow_config: tuple[Path, list[str]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config, collisions = shadow_config
+    assert main(arguments) == 2
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err.splitlines() == [
+        *(f"prat: warning: {collision}" for collision in collisions),
+        f"prat: {message.format(config)}",
+    ]
+
+
+def test_help_for_a_shadowed_name_reports_the_collision(
+    shadow_config: tuple[Path, list[str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, collisions = shadow_config
+    assert main(["help", "goose"]) == 2
+    assert capsys.readouterr().err == f"prat: {collisions[0]}\n"
+    assert main(["goose", "--help", "--json"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == {
+        "code": "invalid_config",
+        "message": collisions[0],
+    }
+
+
+def test_list_runs_the_command_and_leaves_out_shadowed_profiles(
+    shadow_config: tuple[Path, list[str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, collisions = shadow_config
+    assert main(["list", "profiles"]) == 0
+    output = capsys.readouterr()
+    assert output.out == (
+        "NAME    AGENT   EXTENDS  SETS         FROM\nweekly  claude  -        effort=high  global\n"
+    )
+    assert output.err == "".join(f"prat: warning: {collision}\n" for collision in collisions)
+
+
+def test_config_validate_reports_every_collision_as_an_error(
+    shadow_config: tuple[Path, list[str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, collisions = shadow_config
+    assert main(["config", "validate"]) == 2
+    assert capsys.readouterr() == ("", "".join(f"prat: {collision}\n" for collision in collisions))
+    assert main(["config", "validate", "--json"]) == 2
+    assert json.loads(capsys.readouterr().out) == {
+        "schema_version": 1,
+        "status": "error",
+        "exit_code": 2,
+        "error": {"code": "invalid_config", "message": "\n".join(collisions)},
+    }
+
+
+def test_doctor_shows_the_collision_warnings(
+    shadow_config: tuple[Path, list[str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, collisions = shadow_config
+    assert main(["doctor"]) == 0
+    assert capsys.readouterr().err == "".join(
+        f"prat: warning: {collision}\n" for collision in collisions
+    )
+
+
+def test_completion_prints_no_collision_warning(
+    shadow_config: tuple[Path, list[str]], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["__complete", "we"]) == 0
+    output = capsys.readouterr()
+    assert output.out.splitlines() == ["words", "weekly\tprofile: claude"]
+    assert output.err == ""
+
+
 def test_list_rejects_an_unknown_section_with_a_suggestion(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

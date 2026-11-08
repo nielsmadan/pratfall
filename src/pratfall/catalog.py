@@ -256,6 +256,16 @@ REMOVED_COMMANDS = MappingProxyType(
 )
 
 
+def shadowed_by(name: str) -> str | None:
+    if name in BY_NAME:
+        return f"the built-in agent {name!r}"
+    if name in BY_SELECTOR:
+        return f"the alias {name!r} of the built-in agent {BY_SELECTOR[name].name!r}"
+    if name in RESERVED_NAMES:
+        return f"the command {name!r}"
+    return None
+
+
 def removed_agent(name: str) -> str | None:
     version = REMOVED_AGENTS.get(name)
     if version is None:
