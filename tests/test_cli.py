@@ -1786,7 +1786,7 @@ def test_removed_agent_selectors_say_when_they_were_removed(
     assert main([name, "hi", "--dry-run", "--json"]) == 2
     assert json.loads(capsys.readouterr().out)["error"] == {
         "code": "invalid_arguments",
-        "message": f"agent '{name}' was removed in 0.9.0; run 'prat list agents' to list choices",
+        "message": f"agent '{name}' was removed in 1.2.0; run 'prat list agents' to list choices",
     }
 
 
@@ -1910,7 +1910,7 @@ def test_run_option_descriptions_start_in_one_column() -> None:
         (["clade", "--help"], "prat: unknown selector 'clade'; did you mean 'claude'?\n"),
         (
             ["iflow", "-h"],
-            "prat: agent 'iflow' was removed in 0.9.0; run 'prat list agents' to list choices\n",
+            "prat: agent 'iflow' was removed in 1.2.0; run 'prat list agents' to list choices\n",
         ),
     ],
 )

@@ -250,7 +250,7 @@ MANAGEMENT_COMMANDS = frozenset(
     }
 )
 RESERVED_NAMES = frozenset(BY_SELECTOR) | MANAGEMENT_COMMANDS | {"help", "version"}
-REMOVED_AGENTS = MappingProxyType(dict.fromkeys(("openhands", "oh", "iflow", "if"), "0.9.0"))
+REMOVED_AGENTS = MappingProxyType(dict.fromkeys(("openhands", "oh", "iflow", "if"), "1.2.0"))
 REMOVED_COMMANDS = MappingProxyType(
     dict.fromkeys(("agents", "profiles", "templates", "workflows"), "1.3.0")
 )
