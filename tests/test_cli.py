@@ -2373,41 +2373,33 @@ def test_other_profiles_run_with_one_warning_per_shadowed_entry(
 
 
 @pytest.mark.parametrize(
-    ("arguments", "message"),
+    ("selector", "warned", "error"),
     [
-        (
-            ["goose", "--dry-run", "hi"],
-            "{0}: profiles.goose is shadowed by the built-in agent 'goose'; rename it",
-        ),
-        (
-            ["dr", "--dry-run", "hi"],
-            (
-                "{0}: profiles.dr is shadowed by the alias 'dr' of the "
-                "built-in agent 'droid'; rename it"
-            ),
-        ),
-        (
-            ["wf-base", "--dry-run", "hi"],
-            (
-                "{0}: profiles.wf-base.extends: profiles.goose is "
-                "shadowed by the built-in agent 'goose'; rename it"
-            ),
-        ),
+        ("goose", [1, 2], 0),
+        ("dr", [0, 2], 1),
+        ("wf-base", [0, 1, 2], None),
     ],
 )
 def test_selecting_a_shadowed_name_fails_instead_of_running_the_built_in(
-    arguments: list[str],
-    message: str,
+    selector: str,
+    warned: list[int],
+    error: int | None,
     shadow_config: tuple[Path, list[str]],
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     config, collisions = shadow_config
-    assert main(arguments) == 2
+    message = (
+        collisions[error]
+        if error is not None
+        else f"{config}: profiles.wf-base.extends: profiles.goose is shadowed by the built-in "
+        "agent 'goose'; rename it"
+    )
+    assert main([selector, "--dry-run", "hi"]) == 2
     output = capsys.readouterr()
     assert output.out == ""
     assert output.err.splitlines() == [
-        *(f"prat: warning: {collision}" for collision in collisions),
-        f"prat: {message.format(config)}",
+        *(f"prat: warning: {collisions[index]}" for index in warned),
+        f"prat: {message}",
     ]
 
 
@@ -2447,7 +2439,7 @@ def test_config_validate_reports_every_collision_as_an_error(
         "schema_version": 1,
         "status": "error",
         "exit_code": 2,
-        "error": {"code": "invalid_config", "message": "\n".join(collisions)},
+        "error": {"code": "invalid_config", "message": "; ".join(collisions)},
     }
 
 

@@ -394,11 +394,16 @@ class _RunState:
     process: ProcessResult | None = None
 
 
+def _without_selected_collision(config: Config, selector: str) -> Config:
+    selected = config.blocked.get(selector)
+    return replace(config, warnings=tuple(item for item in config.warnings if item != selected))
+
+
 def _report_shadowed(config: Config, *, json_mode: bool) -> int:
     collisions = tuple(config.shadowed.values())
     others = tuple(warning for warning in config.warnings if warning not in collisions)
     _config_warnings(replace(config, warnings=others), _StreamDiagnostics())
-    error = PratError("\n".join(collisions))
+    error = PratError("; ".join(collisions))
     if json_mode:
         _emit(_error_payload(error), [], json_mode=True)
     else:
@@ -737,7 +742,7 @@ def _run_selected(
                 )
             _validate_config_native_arguments(config)
             if step is None:
-                _config_warnings(config, diagnostics)
+                _config_warnings(_without_selected_collision(config, parsed.selector), diagnostics)
                 if parsed.selector in config.workflows:
                     diagnostics.close()
                     return run_workflow(arguments, parsed, config, invocation_cwd, state.stdout)
