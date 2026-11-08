@@ -172,8 +172,9 @@ adapter or the runner itself.
   items as at ten. An `each` step's aggregate is computed once, when its last instance finishes;
   a failed instance stops new launches, and a split or limit error fails the step before any
   instance starts.
-- **The `__step` protocol.** The hidden `__step` command is intercepted like `__complete`. The
-  parent writes a JSON spec to an unlinked temporary file that becomes the child's stdin: `version`
+- **The `__step` protocol.** The hidden `__step` command is intercepted like `__complete`. With a
+  terminal on stdin it fails at once with `'__step' is internal; workflows run it` (exit 2), since
+  only a person typing it leaves stdin a terminal. The parent writes a JSON spec to an unlinked temporary file that becomes the child's stdin: `version`
   (1), `parent` (the workflow process's pid), `arguments` (a list of strings), `input` (a string
   or null), `config_digest` (the SHA-256 of the local config the parent loaded, or null) and
   `status_lines` (whether the child prints its launch and finish lines; the parent decides once

@@ -4009,6 +4009,12 @@ def test_watch_parent_waits_while_pid_one_parent_is_expected() -> None:
     assert terminated == [True]
 
 
+@pytest.fixture
+def piped_step_spec(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_module, "_stdin_is_tty", lambda: False)
+
+
+@pytest.mark.usefixtures("piped_step_spec")
 def test_step_entry_starts_watchdog_with_spec_parent_and_detaches_stdin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -4042,6 +4048,19 @@ def test_step_command_does_not_start_watchdog_for_invalid_spec(tmp_path: Path) -
     assert watched == []
 
 
+def test_step_entry_at_a_terminal_fails_before_reading_stdin(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def detach() -> io.BytesIO:
+        raise AssertionError("stdin was read")
+
+    monkeypatch.setattr(cli_module, "_stdin_is_tty", lambda: True)
+    monkeypatch.setattr(cli_module, "_detach_stdin", detach)
+    assert cli_module._step_entry() == 2
+    assert capsys.readouterr() == ("", "prat: '__step' is internal; workflows run it\n")
+
+
+@pytest.mark.usefixtures("piped_step_spec")
 def test_step_entry_reports_unusable_stdin_as_json(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -4055,6 +4074,7 @@ def test_step_entry_reports_unusable_stdin_as_json(
     assert result["error"]["code"] == "invalid_arguments"
 
 
+@pytest.mark.usefixtures("piped_step_spec")
 def test_step_entry_reports_unreadable_spec_stream_as_json(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

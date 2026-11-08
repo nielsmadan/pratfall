@@ -70,6 +70,10 @@ def _detach_stdin() -> BinaryIO:
 
 def _step_entry() -> int:
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    if _stdin_is_tty():
+        error = PratError("'__step' is internal; workflows run it", code="invalid_arguments")
+        _print_diagnostic(error)
+        return error.exit_code
     try:
         spec = _detach_stdin()
     except OSError as error:
