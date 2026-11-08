@@ -14,6 +14,7 @@ from pratfall.cli.parsing import (
     _RUN_FLAGS_WITHOUT_VALUE,
     _RUN_VALUE_FLAGS,
     LIST_SECTIONS,
+    SHELLS,
     _management_mode,
     _scan_run,
     run_flag_help,
@@ -23,8 +24,6 @@ from pratfall.errors import PratError, did_you_mean
 from pratfall.models import Config
 from pratfall.prompt_templates import template_parameters
 from pratfall.workflow_plan import workflow_parameter_names
-
-SHELLS = ("bash", "zsh")
 
 _BASH_SCRIPT = r"""_prat() {
     local cur=${COMP_WORDS[COMP_CWORD]} tab=$'\t' line
@@ -286,7 +285,10 @@ def _management_flags(command: str) -> Mapping[str, str]:
     if command == "completion":
         return {key: _MANAGEMENT_FLAGS[key] for key in ("-h", "--help")}
     if command == "help":
-        return {key: _MANAGEMENT_FLAGS[key] for key in ("-h", "--help", "--config")}
+        return {
+            **{key: _MANAGEMENT_FLAGS[key] for key in ("-h", "--help", "--config")},
+            "--json": "Print the help page as one JSON object.",
+        }
     if command == "version":
         return {key: _MANAGEMENT_FLAGS[key] for key in ("-h", "--help", "--json")}
     if command == "doctor":

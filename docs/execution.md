@@ -19,7 +19,7 @@ the [agent references](reference/overview.md).
   management command, [dispatch.py](../src/pratfall/cli/dispatch.py) owns run and management
   dispatch, [doctor.py](../src/pratfall/cli/doctor.py) owns the inventory and version probes,
   [listing.py](../src/pratfall/cli/listing.py) builds the `prat list` sections and the selector
-  help headers, and
+  help pages, text and JSON, from the same records, and
   [presentation.py](../src/pratfall/cli/presentation.py) owns diagnostics writers, stdout
   emission and the shared error-guard helpers.
   [workflow_run.py](../src/pratfall/cli/workflow_run.py) prepares and reports workflow runs, and the

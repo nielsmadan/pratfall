@@ -7,18 +7,26 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import BinaryIO
 
-from pratfall.cli.dispatch import _dispatch, _run_command, _step_command, _step_failure
+from pratfall.cli.dispatch import (
+    _command_help,
+    _dispatch,
+    _run_command,
+    _step_command,
+    _step_failure,
+)
 from pratfall.cli.parsing import (
     SELECTOR_REQUIRED,
     _json_requested,
     _management_mode,
     build_parser,
+    json_help_path,
     parse_management,
     prat_version,
     version_json_requested,
 )
 from pratfall.cli.presentation import (
     _emit,
+    _error_payload,
     _print_diagnostic,
     _silence_broken_stream,
     _stdin_is_tty,
@@ -84,6 +92,10 @@ def _main(argv: Sequence[str] | None = None) -> int:
         if version_json_requested(arguments):
             _emit({"version": prat_version()}, [], json_mode=True)
             return 0
+        help_path = json_help_path(arguments)
+        if help_path is not None:
+            _command_help(help_path, json_mode=True)
+            return 0
         args = parse_management(arguments)
         if args.command is None:
             if arguments or not _stdin_is_tty():
@@ -93,15 +105,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
         return _dispatch(args, Path.cwd(), os.environ)
     except PratError as error:
         if _json_requested(arguments):
-            _emit(
-                {
-                    "status": "error",
-                    "exit_code": error.exit_code,
-                    "error": {"code": error.code, "message": str(error)},
-                },
-                [],
-                json_mode=True,
-            )
+            _emit(_error_payload(error), [], json_mode=True)
         else:
             _print_diagnostic(error)
         return error.exit_code

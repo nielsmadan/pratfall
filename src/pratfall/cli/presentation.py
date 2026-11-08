@@ -34,6 +34,14 @@ ACTIVITY_LABELS: Mapping[Activity, str] = MappingProxyType(
 )
 
 
+def _error_payload(error: PratError) -> dict[str, object]:
+    return {
+        "status": "error",
+        "exit_code": error.exit_code,
+        "error": {"code": error.code, "message": str(error)},
+    }
+
+
 def _emit(payload: dict[str, object], lines: list[str], *, json_mode: bool) -> None:
     if json_mode:
         print(json.dumps({"schema_version": 1, **payload}, ensure_ascii=False))

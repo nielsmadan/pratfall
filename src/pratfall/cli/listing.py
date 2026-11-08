@@ -3,11 +3,16 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
-from pratfall.catalog import AGENTS
+from pratfall.catalog import AGENTS, BY_SELECTOR
 from pratfall.cli.doctor import Which, agent_executable
-from pratfall.cli.parsing import LIST_SECTIONS
+from pratfall.cli.parsing import (
+    LIST_SECTIONS,
+    run_option_records,
+    selector_help,
+    selector_usage,
+)
 from pratfall.cli.presentation import _limit_text, render_table
-from pratfall.config import option_origins, resolve_profile
+from pratfall.config import option_origins, resolve_profile, supports_setting
 from pratfall.limits import DEFAULT_MAX_PARALLEL
 from pratfall.models import AgentSpec, Config, OptionOrigin, ProfileLayer, WorkflowStep
 from pratfall.prompt_templates import template_parameters
@@ -206,12 +211,16 @@ def _templates_section(config: Config) -> _Section:
 
 
 def _agents_section(config: Config, which: Which) -> _Section:
-    installed = {agent.name: which(agent_executable(config, agent)) is not None for agent in AGENTS}
-    records = [{**_agent_record(agent), "installed": installed[agent.name]} for agent in AGENTS]
+    records = [_agent_entry(config, agent, which) for agent in AGENTS]
+    installed = {record["name"]: record["installed"] for record in records}
     rows = [(agent.name, ", ".join(agent.aliases)) for agent in AGENTS if installed[agent.name]]
     missing = [agent.name for agent in AGENTS if not installed[agent.name]]
     lines = _table(("NAME", "ALIASES"), rows, cut=1, width=None)
     return records, lines + ([f"not installed: {', '.join(missing)}"] if missing else [])
+
+
+def _agent_entry(config: Config, agent: AgentSpec, which: Which) -> dict[str, object]:
+    return {**_agent_record(agent), "installed": which(agent_executable(config, agent)) is not None}
 
 
 def _agent_record(agent: AgentSpec) -> dict[str, object]:
@@ -269,24 +278,32 @@ def profile_page(config: Config, name: str) -> str:
     parameters = () if profile.prompt is None else template_parameters(profile.prompt.prompt)
     if parameters:
         lines.append(f"parameters: {', '.join(parameters)}")
-    rows = [("SETTING", "VALUE", "ORIGIN"), *_setting_rows(config, name)]
-    return "\n".join([*lines, "", *render_table(rows)])
-
-
-def _setting_rows(config: Config, name: str) -> list[tuple[str, str, str]]:
-    profile = config.profiles[name]
-    origins = option_origins(config, name)
     rows = [
-        (key, _setting_text(key, value), _origin_text(config, profile.agent, key, origins.get(key)))
-        for key, value in asdict(resolve_profile(config, name).options).items()
+        (
+            key,
+            json.dumps(value, ensure_ascii=False) if key == "prompt" else _setting_text(key, value),
+            origin,
+        )
+        for key, value, origin in _settings(config, name)
+    ]
+    return "\n".join([*lines, "", *render_table([("SETTING", "VALUE", "ORIGIN"), *rows])])
+
+
+def _settings(config: Config, selector: str) -> list[tuple[str, object, str]]:
+    resolved = resolve_profile(config, selector)
+    origins = option_origins(config, selector)
+    rows: list[tuple[str, object, str]] = [
+        (key, value, _origin_text(config, resolved.agent.name, key, origins.get(key)))
+        for key, value in asdict(resolved.options).items()
         if value is not None and (value != () or key == "tools")
     ]
-    if profile.prompt is not None:
+    profile = config.profiles.get(selector)
+    if profile is not None and profile.prompt is not None:
         declaring = next(layer for layer in reversed(profile.layers) if layer.prompt is not None)
         rows.append(
             (
                 "prompt",
-                json.dumps(profile.prompt.prompt, ensure_ascii=False),
+                profile.prompt.prompt,
                 _located(config, f"profiles.{declaring.name}", declaring.source),
             )
         )
@@ -337,3 +354,48 @@ def _step_options(step: WorkflowStep) -> list[str]:
     if step.max_parallel != DEFAULT_MAX_PARALLEL:
         options.append(f"max_parallel={step.max_parallel}")
     return options + _limit_text(step).split()
+
+
+def _selected_agent(config: Config, selector: str) -> AgentSpec:
+    return BY_SELECTOR.get(selector) or resolve_profile(config, selector).agent
+
+
+def help_text(config: Config, selector: str) -> str:
+    if selector in config.workflows:
+        return selector_help(workflow_page(config, selector), selector, workflow=True)
+    if selector in config.profiles:
+        return selector_help(profile_page(config, selector), selector, workflow=False)
+    return selector_help(agent_line(_selected_agent(config, selector)), selector, workflow=False)
+
+
+def help_page(config: Config, selector: str, which: Which) -> dict[str, object]:
+    if selector in config.workflows:
+        return {
+            "kind": "workflow",
+            "name": selector,
+            "entry": _workflow_record(config, selector),
+            "settings": None,
+            "run_options": run_option_records(workflow=True),
+            "usage": selector_usage(selector, workflow=True),
+        }
+    agent = _selected_agent(config, selector)
+    profile = selector in config.profiles
+    return {
+        "kind": "profile" if profile else "agent",
+        "name": selector,
+        "entry": _profile_record(config, selector)
+        if profile
+        else _agent_entry(config, agent, which),
+        "settings": [
+            {
+                "name": key,
+                "value": list(value) if isinstance(value, tuple) else value,
+                "origin": origin,
+            }
+            for key, value, origin in _settings(config, selector)
+        ],
+        "run_options": run_option_records(
+            supports=lambda setting: supports_setting(agent, setting)
+        ),
+        "usage": selector_usage(selector, workflow=False),
+    }

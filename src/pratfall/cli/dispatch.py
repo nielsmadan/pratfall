@@ -9,22 +9,21 @@ from pathlib import Path
 from typing import BinaryIO
 
 from pratfall.adapters.registry import ADAPTERS, Adapter
-from pratfall.catalog import BY_SELECTOR, MANAGEMENT_COMMANDS
+from pratfall.catalog import MANAGEMENT_COMMANDS
 from pratfall.cli.doctor import RUN_VERSION_TIMEOUT, _doctor, probe_version
-from pratfall.cli.listing import View, agent_line, list_view, profile_page, workflow_page
+from pratfall.cli.listing import View, help_page, help_text, list_view
 from pratfall.cli.parsing import (
     HelpRequest,
     RunArguments,
     _json_requested,
     _parse_run,
     _run_cwd,
-    build_parser,
     check_list_section,
     command_help,
+    command_help_page,
     help_request,
     option_flags,
     prat_version,
-    selector_help,
     unrecognized_argument,
 )
 from pratfall.cli.presentation import (
@@ -33,6 +32,7 @@ from pratfall.cli.presentation import (
     _diagnostics_for,
     _emit,
     _emit_result,
+    _error_payload,
     _guard,
     _internal_message,
     _presentation_error,
@@ -150,7 +150,7 @@ def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -
     elif args.command == "version":
         _emit({"version": prat_version()}, [f"prat {prat_version()}"], json_mode=args.json)
     elif args.command == "help":
-        sys.stdout.write(_help_command(args.topic, args.config, cwd, environ))
+        _help_command(args.topic, HelpRequest(None, args.config, args.json), cwd, environ)
     else:
         if args.command == "list":
             check_list_section(args.section)
@@ -420,37 +420,43 @@ def _run_command(
 
 def _show_help(request: HelpRequest, cwd: Path, environ: Mapping[str, str]) -> int:
     try:
-        text = _help_text(request, cwd, environ)
+        _selector_help(request, cwd, environ)
     except PratError as error:
-        _print_diagnostic(error)
+        if request.json:
+            _emit(_error_payload(error), [], json_mode=True)
+        else:
+            _print_diagnostic(error)
         return error.exit_code
-    sys.stdout.write(text)
     return 0
 
 
 def _help_command(
-    topic: list[str], config: str | None, cwd: Path, environ: Mapping[str, str]
-) -> str:
-    if not topic:
-        return build_parser().format_help()
-    if topic[0] in MANAGEMENT_COMMANDS:
-        return command_help(tuple(topic))
-    if len(topic) > 1:
+    topic: list[str], request: HelpRequest, cwd: Path, environ: Mapping[str, str]
+) -> None:
+    if not topic or topic[0] in MANAGEMENT_COMMANDS:
+        _command_help(tuple(topic), json_mode=request.json)
+    elif len(topic) > 1:
         raise unrecognized_argument(topic[1], ())
-    return _help_text(HelpRequest(topic[0], config), cwd, environ)
+    else:
+        _selector_help(replace(request, selector=topic[0]), cwd, environ)
 
 
-def _help_text(request: HelpRequest, cwd: Path, environ: Mapping[str, str]) -> str:
-    selector = request.selector
-    if selector is None:
-        return build_parser().format_help()
+def _command_help(path: tuple[str, ...], *, json_mode: bool) -> None:
+    if json_mode:
+        _emit(command_help_page(path), [], json_mode=True)
+    else:
+        sys.stdout.write(command_help(path))
+
+
+def _selector_help(request: HelpRequest, cwd: Path, environ: Mapping[str, str]) -> None:
+    if request.selector is None:
+        _command_help((), json_mode=request.json)
+        return
     config = load_config(request.config, cwd=cwd, env=environ)
-    if selector in config.workflows:
-        return selector_help(workflow_page(config, selector), selector, workflow=True)
-    if selector in config.profiles:
-        return selector_help(profile_page(config, selector), selector, workflow=False)
-    agent = BY_SELECTOR.get(selector) or resolve_profile(config, selector).agent
-    return selector_help(agent_line(agent), selector, workflow=False)
+    if request.json:
+        _emit(help_page(config, request.selector, shutil.which), [], json_mode=True)
+    else:
+        sys.stdout.write(help_text(config, request.selector))
 
 
 def _internal_failure(error: Exception, state: _RunState) -> int:

@@ -85,7 +85,8 @@ printf 'summarize this checkout\n' | prat gm
 `prat SELECTOR --help` (or `prat help SELECTOR`) describes the selector, then lists the run
 options it takes: an agent's supported settings; a profile's resolved settings, each with the
 config table it came from; or a workflow's steps, with only the options a workflow run accepts. `prat help` alone equals `prat --help`, `prat help CMD` equals
-`prat CMD --help`, and `prat version` equals `prat --version`.
+`prat CMD --help`, and `prat version` equals `prat --version`. Any help form takes `--json` for
+the page as one object ([help pages](docs/user/json.md#help-pages)).
 
 | Parameter | Purpose |
 | --- | --- |

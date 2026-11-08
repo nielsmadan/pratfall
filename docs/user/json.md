@@ -11,13 +11,14 @@ same fields when `--json` is unambiguous.
 - [Workflow results](#workflow-results)
 - [Errors and partial results](#errors-and-partial-results)
 - [Previews and management commands](#previews-and-management-commands)
+- [Help pages](#help-pages)
 
 ## Conventions
 
 Every `--json` output follows these rules:
 
 - `--json` prints exactly one object on stdout, with `schema_version`, for every command that has
-  a result. Only `prat completion` and help are exempt.
+  a result, including help. Only `prat completion` is exempt.
 - Every JSON error carries `status: "error"`, `exit_code` and `error: {code, message}`. A run error
   also carries the other run fields, set to null. Success is the exit code, or an `error` that is
   null or absent.
@@ -300,3 +301,51 @@ Doctor records include `available`, plus nullable `version` and `version_error` 
 `doctor --versions`, both version fields stay null and no configured command is launched.
 Ordinary version-probe failures leave doctor at exit 0. An interrupted probe adds interrupted
 management status and exits with `128 + signal`.
+
+## Help pages
+
+`--json` with any help form prints the page as one object and exits 0. `prat help X --json`,
+`prat X --help --json` and `prat --json help X` print identical bytes for the same topic. An
+unknown topic returns the standard error object with `invalid_arguments` (exit 2).
+
+A selector page, such as `prat help weekly --json`, has:
+
+- `kind`: `agent`, `profile` or `workflow`; `name`: the selector as typed, so `cc` stays `cc`.
+- `entry`: that selector's record from `prat list --json`; for an alias, the agent record.
+- `settings`: the SETTING, VALUE, ORIGIN rows of the text page as `{"name", "value", "origin"}`.
+  `value` is the JSON value (`timeout` stays `600.0`, a list stays a list) and `origin` is the
+  text page's string, such as `profiles.base`, `defaults (local)`, `agents.claude` or `built-in
+  default`. An agent lists its resolved defaults the same way. A workflow has `null`.
+- `run_options`: one record per line of the text page's run options, in the same order: every run
+  option for an agent or profile, the workflow options for a workflow.
+- `usage`: the usage line without the `usage:` prefix.
+
+A run option record is:
+
+```json
+{
+  "flags": ["--model"],
+  "metavar": "MODEL",
+  "setting": "model",
+  "supported": true,
+  "description": "Override the profile model."
+}
+```
+
+`flags` keeps the text order, such as `["-f", "--file"]` or `["--fast", "--no-fast"]`. `metavar`
+is null for a switch. `setting` is the profile setting the option overrides, or null. `supported`
+is false when the selector's agent lacks the capability, so a run with that option would be
+rejected; it is always true for a workflow and on the top-level page.
+
+`prat help --json` returns `kind: "prat"`, `usage`, `commands` (`{"name", "description"}` for each
+management command, in help order) and `run_options` for every run option.
+
+A management command page, such as `prat help list --json`, `prat list --help --json` or `prat help
+config init --json`, returns `kind: "command"`, `name` (`list`, `config init`), `description`,
+`usage`, `options` and `arguments`. An option is `{"flags", "metavar", "description"}`. An argument
+is `{"name", "choices", "description"}`: `choices` lists the accepted values, such as the `prat
+list` sections or the `prat completion` shells, and is null when any value is accepted. `prat help
+config --json` has one `COMMAND` argument whose choices are the config commands and whose
+`description` is null; each config command has its own page.
+
+Descriptions are the strings the text help prints. Read fields by name: help text can be reworded.

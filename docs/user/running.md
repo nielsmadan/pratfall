@@ -268,7 +268,9 @@ its FROM, parameters, `parallel: false` when set, and a STEP, PROFILE, AFTER, OP
 reading a prompt or launching anything. Other arguments are ignored, except `--config` for the
 lookup; `--help` after `--` stays a native argument, and `--prompt=--help` is a prompt.
 `prat help SELECTOR` prints the same page, `prat help CMD` prints `prat CMD --help`, and
-`prat help` alone prints `prat --help`.
+`prat help` alone prints `prat --help`. Add `--json` to any of these forms for the page as one
+object, with each setting's origin and whether the selector's agent supports each run option; see
+[help pages](json.md#help-pages).
 
 | Control | Flags and behavior |
 | --- | --- |

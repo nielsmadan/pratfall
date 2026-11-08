@@ -4,10 +4,11 @@ from pathlib import Path
 import pytest
 
 from pratfall.catalog import AGENTS
-from pratfall.cli.listing import list_view, profile_page
+from pratfall.cli.listing import help_page, help_text, list_view, profile_page
 from pratfall.cli.presentation import display_width, render_table
-from pratfall.config import load_config
-from pratfall.models import Config, PromptTemplate
+from pratfall.config import load_config, supports_setting, validate_capabilities
+from pratfall.errors import PratError
+from pratfall.models import AgentSpec, Config, Options, PromptTemplate
 
 NONE_INSTALLED = ", ".join(agent.name for agent in AGENTS)
 
@@ -171,3 +172,59 @@ def test_profile_page_names_the_origin_of_each_value(tmp_path: Path) -> None:
 def test_an_empty_section_prints_the_configured_placeholder(section: str) -> None:
     _, lines = list_view(Config(Path("c.toml")), section, width=None, which=nothing_installed)
     assert lines == [f"No {section} configured."]
+
+
+def test_agent_help_page_names_the_agent_settings_and_its_list_entry() -> None:
+    config = Config(Path("c.toml"))
+    page = help_page(config, "codex", nothing_installed)
+    entry = list_view(config, "agents", width=None, which=nothing_installed)[0]["agents"]
+    assert isinstance(entry, list)
+    assert page["entry"] == next(record for record in entry if record["name"] == "codex")
+    assert page["settings"] == [{"name": "timeout", "value": 600.0, "origin": "built-in default"}]
+    assert page["usage"] == "prat [RUN_OPTIONS] codex [PROMPT | VALUE...] [-- NATIVE_ARGS]"
+    assert help_text(config, "codex").startswith("codex (cx): ")
+
+
+def test_profile_help_page_settings_keep_list_values_and_the_prompt(tmp_path: Path) -> None:
+    write(
+        tmp_path / ".pratfile",
+        '[profiles.p]\nagent="claude"\ntools=["Read","Grep"]\nprompt="Tidy ${folder}"\n',
+    )
+    page = help_page(load_config(cwd=tmp_path, env=os.environ), "p", nothing_installed)
+    assert page["settings"] == [
+        {"name": "timeout", "value": 600.0, "origin": "built-in default"},
+        {"name": "tools", "value": ["Read", "Grep"], "origin": "profiles.p (local)"},
+        {"name": "prompt", "value": "Tidy ${folder}", "origin": "profiles.p (local)"},
+    ]
+
+
+SAMPLE_SETTINGS: dict[str, object] = {
+    "model": "m",
+    "timeout": 1.0,
+    "max_budget_usd": 1.0,
+    "max_turns": 1,
+    "max_ai_credits": 1.0,
+    "fast": True,
+    "add_dirs": ("d",),
+    "attachments": ("a.png",),
+    "instructions": "x",
+    "instructions_file": "x.md",
+    "tools": ("Read",),
+    "disabled_tools": ("Bash",),
+    "schema": "s.json",
+    "native_agent": "n",
+    "session_id": "s",
+    "notify": True,
+}
+
+
+@pytest.mark.parametrize("agent", AGENTS, ids=lambda agent: agent.name)
+def test_supported_run_options_match_what_validation_accepts(agent: AgentSpec) -> None:
+    samples = {**SAMPLE_SETTINGS, "effort": (agent.capabilities.effort_values or ("high",))[0]}
+    for setting, value in samples.items():
+        try:
+            validate_capabilities(agent, Options(**{setting: value}), "x")  # type: ignore[arg-type]
+            accepted = True
+        except PratError:
+            accepted = False
+        assert supports_setting(agent, setting) is accepted, setting

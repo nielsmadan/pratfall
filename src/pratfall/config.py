@@ -364,6 +364,14 @@ def validate_capabilities(
         raise _rejected(fields["disabled_tools"], f"{agent.label} does not support disabling tools")
 
 
+def supports_setting(agent: AgentSpec, setting: str) -> bool:
+    caps = agent.capabilities
+    if setting in _BUDGETS:
+        return setting in caps.budgets
+    capability = "instructions" if setting == "instructions_file" else setting
+    return bool(getattr(caps, capability, True))
+
+
 def _validate_attachments(agent: AgentSpec, options: Options, origin: OptionOrigin) -> None:
     caps = agent.capabilities
     if options.attachments:

@@ -398,6 +398,7 @@ def test_native_arguments_delegate_to_shell(tmp_path: Path) -> None:
         (["config", "path", ""], []),
         (["completion", ""], ["bash", "zsh"]),
         (["completion", "--"], ["--help"]),
+        (["help", "--"], ["--config", "--help", "--json"]),
         (["doctor", "--"], ["--config", "--help", "--json", "--versions"]),
         (["list", ""], ["agents", "profiles", "templates", "workflows"]),
         (["list", "p"], ["profiles"]),

@@ -2,8 +2,8 @@ import argparse
 import math
 import os
 import textwrap
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, fields
 from importlib.metadata import version
 from pathlib import Path
 from types import MappingProxyType
@@ -62,6 +62,8 @@ LIST_SECTIONS: Mapping[str, str] = MappingProxyType(
         "agents": "Built-in agents and their aliases.",
     }
 )
+
+SHELLS = ("bash", "zsh")
 
 _COMMAND_EXAMPLES: Mapping[tuple[str, ...], tuple[str, ...]] = MappingProxyType(
     {
@@ -278,9 +280,49 @@ def run_options_text(*, workflow: bool = False) -> str:
     return "\n".join(lines)
 
 
+def selector_usage(selector: str, *, workflow: bool) -> str:
+    return (_WORKFLOW_USAGE if workflow else _RUN_USAGE).format(selector=selector)
+
+
 def selector_help(header: str, selector: str, *, workflow: bool) -> str:
-    usage = (_WORKFLOW_USAGE if workflow else _RUN_USAGE).format(selector=selector)
+    usage = selector_usage(selector, workflow=workflow)
     return f"{header}\n\nusage: {usage}\n\nrun options:\n{run_options_text(workflow=workflow)}\n"
+
+
+_OPTION_SETTINGS = frozenset(field.name for field in fields(Options))
+
+
+def _run_option_setting(option: _RunOption) -> str | None:
+    flag = option.flags[-1]
+    tri_state = _TRI_STATE_FLAGS.get(flag)
+    setting = tri_state[0] if tri_state is not None else _RUN_VALUE_FLAGS.get(flag)
+    return setting if setting in _OPTION_SETTINGS else None
+
+
+def _run_option_metavar(option: _RunOption) -> str | None:
+    last = option.flags[-1]
+    return option.label[option.label.rindex(last) + len(last) :].lstrip(" =") or None
+
+
+def _run_option_record(option: _RunOption, supports: Callable[[str], bool]) -> dict[str, object]:
+    setting = _run_option_setting(option)
+    return {
+        "flags": list(option.flags),
+        "metavar": _run_option_metavar(option),
+        "setting": setting,
+        "supported": setting is None or supports(setting),
+        "description": option.help,
+    }
+
+
+def run_option_records(
+    *, workflow: bool = False, supports: Callable[[str], bool] = lambda _setting: True
+) -> list[dict[str, object]]:
+    return [
+        _run_option_record(option, supports)
+        for option in _RUN_OPTIONS
+        if not workflow or set(option.flags) <= _WORKFLOW_FLAGS
+    ]
 
 
 _EPILOG = f"""run syntax:
@@ -341,6 +383,8 @@ class _RunScan:
 class Parser(argparse.ArgumentParser):
     def __init__(self, *, add_help: bool = True, **kwargs: Any) -> None:
         self.flags: list[str] = []
+        self.documented: list[argparse.Action] = []
+        self.listed_choices: dict[str, tuple[str, ...]] = {}
         super().__init__(add_help=False, **kwargs)
         if add_help:
             self.add_argument(
@@ -352,9 +396,18 @@ class Parser(argparse.ArgumentParser):
             )
 
     def add_argument(self, *args: Any, **kwargs: Any) -> argparse.Action:
+        listed_choices = kwargs.pop("listed_choices", None)
         action = super().add_argument(*args, **kwargs)
         if action.help != argparse.SUPPRESS:
             self.flags.extend(action.option_strings)
+            self.documented.append(action)
+        if listed_choices is not None:
+            self.listed_choices[action.dest] = tuple(listed_choices)
+        return action
+
+    def add_subparsers(self, **kwargs: Any) -> "argparse._SubParsersAction[Any]":
+        action = super().add_subparsers(**kwargs)
+        self.documented.append(action)
         return action
 
     def error(self, message: str) -> NoReturn:
@@ -399,13 +452,64 @@ def parse_management(arguments: list[str]) -> argparse.Namespace:
     return args
 
 
-def command_help(path: tuple[str, ...]) -> str:
+def _help_parser(path: tuple[str, ...]) -> Parser:
     parsers = _parsers()
     if path[:1] == ("config",) and len(path) > 1:
         _check_config_command(list(path))
     if path not in parsers:
         raise unrecognized_argument(path[-1], ())
-    return parsers[path].format_help()
+    return parsers[path]
+
+
+def command_help(path: tuple[str, ...]) -> str:
+    return _help_parser(path).format_help()
+
+
+def command_help_page(path: tuple[str, ...]) -> dict[str, object]:
+    parser = _help_parser(path)
+    usage = " ".join(parser.format_usage().removeprefix("usage: ").split())
+    if not path:
+        return {
+            "kind": "prat",
+            "usage": usage,
+            "commands": [
+                {"name": name, "description": description}
+                for name, description in _MANAGEMENT_HELP.items()
+            ],
+            "run_options": run_option_records(),
+        }
+    return {
+        "kind": "command",
+        "name": " ".join(path),
+        "description": parser.description,
+        "usage": usage,
+        "options": [
+            _option_record(action) for action in parser.documented if action.option_strings
+        ],
+        "arguments": [
+            _argument_record(parser, action)
+            for action in parser.documented
+            if not action.option_strings
+        ],
+    }
+
+
+def _option_record(action: argparse.Action) -> dict[str, object]:
+    metavar = None if action.nargs == 0 else action.metavar or action.dest.upper()
+    return {"flags": list(action.option_strings), "metavar": metavar, "description": action.help}
+
+
+def _argument_record(parser: Parser, action: argparse.Action) -> dict[str, object]:
+    choices = (
+        list(action.choices)
+        if action.choices is not None
+        else parser.listed_choices.get(action.dest)
+    )
+    return {
+        "name": action.metavar if isinstance(action.metavar, str) else "COMMAND",
+        "choices": None if choices is None else list(choices),
+        "description": action.help,
+    }
 
 
 def check_list_section(section: str | None) -> None:
@@ -464,6 +568,7 @@ def _parsers() -> dict[tuple[str, ...], Parser]:
         nargs="?",
         metavar="SECTION",
         help="profiles, workflows, templates or agents; default: every section.",
+        listed_choices=LIST_SECTIONS,
     )
     doctor = _command_parser(subparsers, ("doctor",), _MANAGEMENT_HELP["doctor"])
     parsers[("doctor",)] = doctor
@@ -519,6 +624,12 @@ def _parsers() -> dict[tuple[str, ...], Parser]:
         metavar="SELECTOR|COMMAND",
         help="Selector, or management command and subcommand, to describe.",
     )
+    help_parser.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Print the help page as one JSON object.",
+    )
     version_parser = _command_parser(subparsers, ("version",), _MANAGEMENT_HELP["version"])
     parsers[("version",)] = version_parser
     version_parser.add_argument(
@@ -532,6 +643,7 @@ def _parsers() -> dict[tuple[str, ...], Parser]:
         nargs="?",
         metavar="SHELL",
         help="bash or zsh; default: the basename of $SHELL, else bash.",
+        listed_choices=SHELLS,
     )
     return parsers
 
@@ -782,6 +894,7 @@ def _run_cwd(value: str | None, invocation_cwd: Path) -> Path:
 class HelpRequest:
     selector: str | None
     config: str | None
+    json: bool = False
 
 
 def help_request(arguments: list[str]) -> HelpRequest | None:
@@ -794,7 +907,21 @@ def help_request(arguments: list[str]) -> HelpRequest | None:
         if token.name not in _RUN_VALUE_FLAGS and token.argument[:1] != "-"
     ]
     config = next((token.value for token in tokens if token.name == "--config"), None)
-    return HelpRequest(words[0] if words else None, config)
+    json = any(token.argument == "--json" for token in tokens)
+    return HelpRequest(words[0] if words else None, config, json)
+
+
+def json_help_path(arguments: list[str]) -> tuple[str, ...] | None:
+    tokens = _scan_run(arguments).tokens
+    flags = {token.argument for token in tokens}
+    if "--json" not in flags or not flags & {"-h", "--help"}:
+        return None
+    words = [
+        token.argument
+        for token in tokens
+        if token.name not in _RUN_VALUE_FLAGS and token.argument[:1] != "-"
+    ]
+    return tuple(words[:2] if words[:1] == ["config"] else words[:1])
 
 
 def version_json_requested(arguments: list[str]) -> bool:

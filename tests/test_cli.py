@@ -2123,6 +2123,215 @@ def test_profile_help_shows_where_each_value_came_from(
     )
 
 
+@pytest.mark.parametrize(
+    "forms",
+    [
+        [["help", "--json"], ["--help", "--json"], ["--json", "-h"], ["--json", "help"]],
+        [
+            ["help", "weekly", "--json"],
+            ["weekly", "--help", "--json"],
+            ["--json", "help", "weekly"],
+        ],
+        [["help", "ship", "--json"], ["ship", "-h", "--json"], ["--json", "help", "ship"]],
+        [["help", "cc", "--json"], ["cc", "--help", "--json", "--model", "m"]],
+        [["help", "list", "--json"], ["list", "--help", "--json"], ["--json", "help", "list"]],
+        [["help", "config", "init", "--json"], ["config", "init", "--help", "--json"]],
+    ],
+)
+def test_every_help_form_with_json_prints_the_same_object(
+    forms: list[list[str]],
+    list_config: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    outputs = [output_of(form, capsys) for form in forms]
+    assert outputs == [outputs[0]] * len(forms)
+    assert outputs[0][0] == 0
+    assert json.loads(outputs[0][1])["schema_version"] == 1
+
+
+def help_json(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
+    assert main([*arguments, "--json"]) == 0
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    return result
+
+
+def list_record(section: str, name: str, capsys: pytest.CaptureFixture[str]) -> object:
+    records = help_json(["list", section], capsys)[section]
+    assert isinstance(records, list)
+    return next(record for record in records if record["name"] == name)
+
+
+def test_profile_help_json_has_its_list_record_settings_and_run_options(
+    list_config: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    page = help_json(["help", "weekly"], capsys)
+    assert {key: page[key] for key in ("kind", "name", "usage", "settings")} == {
+        "kind": "profile",
+        "name": "weekly",
+        "usage": "prat [RUN_OPTIONS] weekly [PROMPT | VALUE...] [-- NATIVE_ARGS]",
+        "settings": [
+            {"name": "model", "value": "claude-opus-5", "origin": "profiles.base"},
+            {"name": "effort", "value": "high", "origin": "profiles.weekly"},
+            {"name": "timeout", "value": 600.0, "origin": "built-in default"},
+        ],
+    }
+    assert page["entry"] == list_record("profiles", "weekly", capsys)
+    assert isinstance(page["run_options"], list)
+    assert [option["flags"] for option in page["run_options"]] == [
+        list(option.flags) for option in _RUN_OPTIONS
+    ]
+    assert page["run_options"][7] == {
+        "flags": ["--model"],
+        "metavar": "MODEL",
+        "setting": "model",
+        "supported": True,
+        "description": "Override the profile model.",
+    }
+
+
+def test_workflow_help_json_lists_only_the_workflow_options(
+    list_config: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    page = help_json(["help", "ship"], capsys)
+    assert (page["kind"], page["settings"], page["usage"]) == (
+        "workflow",
+        None,
+        "prat [RUN_OPTIONS] ship [PROMPT | VALUE...]",
+    )
+    assert page["entry"] == list_record("workflows", "ship", capsys)
+    assert isinstance(page["run_options"], list)
+    assert len(page["run_options"]) == 11
+    assert {flag for option in page["run_options"] for flag in option["flags"]} == _WORKFLOW_FLAGS
+    assert {option["supported"] for option in page["run_options"]} == {True}
+    assert page["run_options"][1] == {
+        "flags": ["-f", "--file"],
+        "metavar": "PATH",
+        "setting": None,
+        "supported": True,
+        "description": "Read the prompt from a UTF-8 file; use - for stdin.",
+    }
+
+
+def test_agent_help_json_marks_the_options_its_agent_rejects(
+    list_config: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    page = help_json(["help", "cc"], capsys)
+    assert (page["kind"], page["name"]) == ("agent", "cc")
+    assert page["entry"] == list_record("agents", "claude", capsys)
+    assert page["settings"] == [
+        {"name": "effort", "value": "medium", "origin": "defaults"},
+        {"name": "timeout", "value": 600.0, "origin": "built-in default"},
+    ]
+    assert isinstance(page["run_options"], list)
+    rejected = [option["flags"] for option in page["run_options"] if not option["supported"]]
+    assert rejected == [["--max-ai-credits"], ["--attachment"]]
+    assert page["run_options"][11]["flags"] == ["--fast", "--no-fast"]
+    assert page["run_options"][11]["setting"] == "fast"
+
+
+def test_top_level_help_json_lists_commands_and_every_run_option(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    page = help_json(["help"], capsys)
+    assert page["kind"] == "prat"
+    assert page["usage"] == (
+        "prat [-h] [--config PATH] [--json] [--version] "
+        "{list,doctor,config,trust,completion,help,version} ..."
+    )
+    assert page["commands"] == [
+        {"name": name, "description": description} for name, description in _MANAGEMENT_HELP.items()
+    ]
+    assert isinstance(page["run_options"], list)
+    assert len(page["run_options"]) == len(_RUN_OPTIONS)
+    assert {option["supported"] for option in page["run_options"]} == {True}
+    assert page["run_options"][0]["metavar"] == "TEXT"
+
+
+def test_command_help_json_describes_options_and_arguments(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert help_json(["help", "list"], capsys) == {
+        "schema_version": 1,
+        "kind": "command",
+        "name": "list",
+        "description": "List profiles, workflows, templates and agents.",
+        "usage": "prat list [-h] [--config PATH] [--json] [SECTION]",
+        "options": [
+            {"flags": ["-h", "--help"], "metavar": None, "description": "Show this help and exit."},
+            {
+                "flags": ["--config"],
+                "metavar": "PATH",
+                "description": (
+                    "Merge PATH over global config instead of .pratfile "
+                    "(relative to invocation cwd)."
+                ),
+            },
+            {
+                "flags": ["--json"],
+                "metavar": None,
+                "description": "Print a JSON management result.",
+            },
+        ],
+        "arguments": [
+            {
+                "name": "SECTION",
+                "choices": ["profiles", "workflows", "templates", "agents"],
+                "description": "profiles, workflows, templates or agents; default: every section.",
+            }
+        ],
+    }
+    config = help_json(["help", "config"], capsys)
+    assert config["arguments"] == [
+        {"name": "COMMAND", "choices": ["path", "init", "validate"], "description": None}
+    ]
+    init = help_json(["help", "config", "init"], capsys)
+    assert (init["name"], init["arguments"]) == ("config init", [])
+    completion = help_json(["help", "completion"], capsys)
+    assert isinstance(completion["arguments"], list)
+    assert completion["arguments"][0]["choices"] == ["bash", "zsh"]
+
+
+def test_help_command_help_names_its_json_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    code, output = output_of(["help", "--help"], capsys)
+    assert code == 0
+    assert output.startswith(
+        "usage: prat help [-h] [--config PATH] [--json] [SELECTOR|COMMAND ...]"
+    )
+    assert "  --json            Print the help page as one JSON object.\n" in output
+
+
+@pytest.mark.parametrize(
+    ("forms", "message"),
+    [
+        (
+            [
+                ["help", "bogus", "--json"],
+                ["bogus", "--help", "--json"],
+                ["--json", "help", "bogus"],
+            ],
+            "unknown selector 'bogus'; run 'prat list' to list choices",
+        ),
+        (
+            [["help", "config", "bogus", "--json"], ["config", "bogus", "--help", "--json"]],
+            "unknown config command 'bogus' (choose from path, init, validate)",
+        ),
+    ],
+)
+def test_help_json_for_an_unknown_topic_is_the_error_object(
+    forms: list[list[str]], message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for form in forms:
+        assert main(form) == 2
+        assert json.loads(capsys.readouterr().out) == {
+            "schema_version": 1,
+            "status": "error",
+            "exit_code": 2,
+            "error": {"code": "invalid_arguments", "message": message},
+        }
+
+
 def test_list_rejects_an_unknown_section_with_a_suggestion(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
