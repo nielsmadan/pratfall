@@ -60,8 +60,10 @@ installation each require explicit user authorization.
 
 ## Verify artifacts before publication
 
-The workflow's verification job runs without write credentials. It requires an annotated tag whose
-commit is contained in fetched `origin/main`; tag pushes must also match the push-event commit. It
+The workflow's verification job runs without write credentials. The
+[Curtaincall action](https://github.com/nielsmadan/curtaincall/blob/main/docs/release.md#ci-commands)
+puts `curtains` on `PATH`, and `curtains ci validate-tag` requires an annotated tag whose commit is
+contained in fetched `origin/main`; tag pushes must also match the push-event commit. It
 checks out the resolved commit into `release-source`, validates the semantic tag against that source's
 project version, and enforces Ruff, formatting, import-cycle, strict mypy and branch-coverage checks.
 
@@ -162,7 +164,8 @@ gh workflow run release.yml --ref main -f tag=v0.9.0
 ```
 
 In GitHub's Actions tab, the equivalent is **Release → Run workflow**, branch **main**, and tag
-**v0.9.0**. The retry uses the workflow and publication helpers from the triggering `main` commit,
+**v0.9.0**. The retry uses the workflow, the pinned `curtains` version and publication helpers from the
+triggering `main` commit,
 while tests, builds, installed-package QA, version and release notes use the
 original tagged source. Manual retries from other branches are rejected. Never move or recreate
 the tag to repair publication.
@@ -171,13 +174,12 @@ Use a normal rerun only when the workflow itself needs no changes: GitHub reruns
 [event ref and commit](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
 
 A separate minimal `contents: write` job checks out the immutable triggering ref without persisted
-credentials, revalidates the tag, and consumes the verified artifact. It uses `gh` through
-`scripts/release_workflow.py` to manage GitHub release records, draft state, and uploaded assets,
-which Git cannot do.
-[Publication checks](../scripts/release_workflow.py) require existing title, notes, target
-commit and attached asset hashes to match. Identical assets stay in place;
-missing assets are uploaded without clobbering. A matching partial draft is published only after
-its assets are complete. Divergent or unverifiable state stops the workflow.
+credentials, revalidates the tag, and consumes the verified artifact. `curtains ci publish` uses
+`gh` to manage GitHub release records, draft state, and uploaded assets, which Git cannot do. It
+creates a draft, uploads the assets, checks the remote tag again and then publishes. A retry
+requires existing title, notes, tag, prerelease state and attached asset hashes to match. Identical
+assets stay in place; missing assets are uploaded without clobbering. A matching partial draft is
+published only after its assets are complete. Divergent or unverifiable state stops the workflow.
 
 Publication verifies the remote annotated tag's peeled commit against the verified build commit.
 GitHub release creation uses that existing tag with `--verify-tag`. The API's `target_commitish`
