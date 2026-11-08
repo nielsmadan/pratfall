@@ -3,6 +3,34 @@
 All notable user-facing changes to Pratfall. While the project is on `0.x`, breaking changes may
 land in a minor release and are called out explicitly.
 
+## [1.2.0] - 2026-11-08
+
+### Features
+
+- Add prompt parameters to profiles and templates
+- Add workflows with parallel fan-out and merges
+- Fan out workflow steps over output items with a queue
+- Add max_items and overflow to workflow fan-out
+- Refresh native agent integrations
+- Support opencode 2
+- Trust folders with prat trust and find .pratfile in parent directories
+- Add prat trust --list and --revoke and reject --config
+- Rename --attach and --disable-tools to match their config keys
+- Make trust list and schema_transport JSON follow the conventions
+- Show launch and finish lines only when stderr is a terminal
+- Exit 1 when a native status collides with prat's reserved exit codes
+- Name flags and rejected values in errors and suggest near matches
+- Write every error message in one lowercase style without trailing periods
+
+### Bug Fixes
+
+- Keep opencode partial output when the text budget is exceeded
+- Treat pi output token limit as a provider error
+- Ignore qwen child results in plain mode
+- Apply functional review findings
+- Resolve test review findings
+- Require trust for a local .pratfile and harden workflow output
+
 ## [1.1.0] - 2026-10-13
 
 ### Features
@@ -78,6 +106,7 @@ land in a minor release and are called out explicitly.
 - Create pytest basetemp parent so a fresh checkout can run the suite (#1)
 - Harden cli failure handling
 
+[1.2.0]: https://github.com/nielsmadan/pratfall/compare/v1.1.0..v1.2.0
 [1.1.0]: https://github.com/nielsmadan/pratfall/compare/v1.0.0..v1.1.0
 [1.0.0]: https://github.com/nielsmadan/pratfall/compare/v0.9.1..v1.0.0
 [0.9.1]: https://github.com/nielsmadan/pratfall/compare/v0.9.0..v0.9.1
