@@ -436,6 +436,22 @@ workflow step whose `profile` is NAME, and a profile that `extends` it. A manage
 name runs as usual. `prat config validate` reports every collision and exits 2. Rename the entry
 and update commands that use it.
 
+### Upgrading to 1.3.0
+
+One `prat list` command replaces the four listing commands: `prat agents`, `prat profiles`,
+`prat templates` and `prat workflows` are now `prat list agents`, `prat list profiles`, `prat list
+templates` and `prat list workflows`. With `--json` each prints the same key and records as before,
+with new fields added: `extends` and `source` on profiles, `installed` on agents. The text listing
+is now an aligned table. `agents`, `profiles`, `templates` and `workflows` are no longer reserved,
+so they are legal profile and workflow names again; `list` is now reserved, so rename a
+`[profiles.list]` or `[workflows.list]` and update invocations that select it.
+
+A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
+naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that
+applies, and `workflows.NAME` for a workflow. Templates have their own names and never collide.
+
+### Upgrading to 1.2.0
+
 `prat trust` is now a management command, so `trust` is a reserved name: rename a
 `[profiles.trust]` or `[workflows.trust]`, for example to `[profiles.my-trust]`.
 
@@ -466,25 +482,21 @@ OpenHands and iFlow have been removed: delete or retarget any `[agents.openhands
 requires Kimi Code 2.1.1+, not the retired Python package; remove legacy native flags such as
 `--thinking`, `--plan`, and `--final-message-only`. Run `prat config validate` before use.
 
-`templates` is also reserved. Rename an existing `[profiles.templates]` and update invocations
-that select it before upgrading. The same applies to `completion`, reserved for the shell
-completion command.
-
 `workflows` is also reserved, for the command that lists [workflows](workflows.md). Rename an
 existing `[profiles.workflows]` and update invocations that select it. A profile and a workflow
 cannot share a name.
 
-One `prat list` command replaces the four listing commands: `prat agents`, `prat profiles`,
-`prat templates` and `prat workflows` are now `prat list agents`, `prat list profiles`, `prat list
-templates` and `prat list workflows`. With `--json` each prints the same key and records as before,
-with new fields added: `extends` and `source` on profiles, `installed` on agents. The text listing
-is now an aligned table. `agents`, `profiles`, `templates` and `workflows` are no longer reserved,
-so they are legal profile and workflow names again; `list` is now reserved, so rename a
-`[profiles.list]` or `[workflows.list]` and update invocations that select it.
+### Upgrading to 1.1.0
 
-A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
-naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that
-applies, and `workflows.NAME` for a workflow. Templates have their own names and never collide.
+`completion` is also reserved, for the shell completion command. Rename an existing
+`[profiles.completion]` and update invocations that select it before upgrading.
+
+### Upgrading to 0.9.1
+
+`templates` is also reserved. Rename an existing `[profiles.templates]` and update invocations
+that select it before upgrading.
+
+### Upgrading to 0.9.0
 
 Agents with names of four letters or fewer now use their full names. Update commands and profile
 `agent` fields that use these former aliases:

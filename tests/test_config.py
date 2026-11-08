@@ -1506,7 +1506,7 @@ def test_removed_listing_command_names_are_legal_profile_names(tmp_path: Path, n
 def test_removed_listing_command_as_selector_names_its_replacement() -> None:
     with pytest.raises(PratError) as caught:
         resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "profiles")
-    assert str(caught.value) == "'prat profiles' was removed in 1.2.0; run 'prat list profiles'"
+    assert str(caught.value) == "'prat profiles' was removed in 1.3.0; run 'prat list profiles'"
     assert caught.value.code == "invalid_arguments"
 
 

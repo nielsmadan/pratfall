@@ -2483,7 +2483,7 @@ def test_removed_listing_commands_name_their_replacement(
 ) -> None:
     assert main([command]) == 2
     assert capsys.readouterr().err == (
-        f"prat: 'prat {command}' was removed in 1.2.0; run 'prat list {command}'\n"
+        f"prat: 'prat {command}' was removed in 1.3.0; run 'prat list {command}'\n"
     )
 
 

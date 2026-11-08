@@ -91,5 +91,5 @@ def test_retired_agents_are_rejected_with_selection_guidance(name: str) -> None:
 
 @pytest.mark.parametrize("name", ["agents", "profiles", "templates", "workflows"])
 def test_removed_listing_commands_point_to_prat_list(name: str) -> None:
-    assert removed_command(name) == f"'prat {name}' was removed in 1.2.0; run 'prat list {name}'"
+    assert removed_command(name) == f"'prat {name}' was removed in 1.3.0; run 'prat list {name}'"
     assert name not in RESERVED_NAMES
