@@ -2843,7 +2843,7 @@ def _exercise_e03(context: _EnhancementContext) -> _ScenarioObservation:
         ),
         "missing_file": (
             ["cx", "--file", str(missing), "--json"],
-            f"cannot open prompt file {missing}: {os.strerror(errno.ENOENT)}.",
+            f"cannot open prompt file {missing}: {os.strerror(errno.ENOENT)}",
         ),
         "invalid_utf8": (
             ["cx", "--file", str(invalid_utf8), "--json"],
@@ -3325,7 +3325,7 @@ def _exercise_q01_q02(context: _ExerciseContext) -> dict[str, object]:
     assert help_text.startswith("usage: prat ")
     for expected in (
         "One-shot coding agents for scripts and pipes.",
-        "{agents,profiles,templates,workflows,doctor,config,completion}",
+        "{agents,profiles,templates,workflows,doctor,config,trust,completion}",
         "prat [RUN_OPTIONS] SELECTOR [PROMPT | VALUE...] [-- NATIVE_ARGS]",
         "--progress              Print bounded live activity updates on stderr.",
         "--dry-run               Resolve and print the invocation without launching it.",
