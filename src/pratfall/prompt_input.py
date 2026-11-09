@@ -25,6 +25,7 @@ STDIN_CONTEXT = "-"
 class PromptSource:
     kind: Literal["inline", "file", "stdin"]
     value: str | None = None
+    flag: str | None = None
 
 
 class InputInterrupted(Exception):
@@ -57,17 +58,21 @@ def acquire_prompt(
     with _input_signal_handlers(state):
         if source.kind == "inline":
             value = _encode_inline(cast(str, source.value))
-            label = "Prompt"
         elif source.kind == "file" and source.value != "-":
             value = _read_file(cast(str, source.value), invocation_cwd, state)
-            label = "prompt file"
         else:
             value = _read_stdin(stdin, state)
             if implicit and allow_absent and not value:
                 return b""
-            return _validate(value, "standard input prompt", allow_empty=allow_blank)
+            return _validate(value, "standard input", allow_empty=allow_blank)
         _raise_if_interrupted(state)
-        return _validate(value, label, allow_empty=allow_blank)
+        return _validate(value, _source_label(source), allow_empty=allow_blank)
+
+
+def _source_label(source: PromptSource) -> str:
+    if source.kind == "file":
+        return f"prompt file {source.value}"
+    return source.flag or "prompt"
 
 
 def _stdin_is_terminal(stdin: BinaryIO | TextIO | None) -> bool:
@@ -249,7 +254,7 @@ def _validate(value: bytes, label: str, *, allow_empty: bool = False) -> bytes:
     except UnicodeDecodeError as error:
         raise PratError(f"{label} is not valid UTF-8", code="invalid_arguments") from error
     if not allow_empty and not text.strip():
-        raise PratError("prompt must not be empty or whitespace-only", code="invalid_arguments")
+        raise PratError(f"{label} is empty or whitespace-only", code="invalid_arguments")
     return value
 
 

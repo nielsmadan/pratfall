@@ -1,3 +1,4 @@
+import shlex
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from re import Match
@@ -43,25 +44,28 @@ def bind_run_input(
     words: tuple[str, ...],
     named: tuple[str, ...],
     explicit: PromptSource | None,
+    *,
+    selector: str,
 ) -> BoundInput:
     names = () if prompt is None else template_parameters(prompt)
-    return bind_input(names, label, words, named, explicit, active=prompt is not None)
+    active = None if prompt is None else label
+    return bind_input(names, active, words, named, explicit, selector=selector)
 
 
 def bind_input(
     names: tuple[str, ...],
-    label: str,
+    label: str | None,
     words: tuple[str, ...],
     named: tuple[str, ...],
     explicit: PromptSource | None,
     *,
-    active: bool,
+    selector: str,
 ) -> BoundInput:
     if named and not names:
-        target = f"{label} has no parameters" if active else "no template is active"
+        target = "no template is active" if label is None else f"{label} has no parameters"
         raise _argument_error(f"--param needs a prompt with parameters, but {target}")
-    if not names:
-        return BoundInput(_plain_source(words, explicit), MappingProxyType({}))
+    if label is None or not names:
+        return BoundInput(_plain_source(words, explicit, selector), MappingProxyType({}))
     return BoundInput(explicit, MappingProxyType(_bind_parameters(names, label, words, named)))
 
 
@@ -88,7 +92,7 @@ def render_template(
     if not interpolated and base:
         rendered += b"\n\n" + base
     if not allow_blank and not rendered.decode("utf-8").strip():
-        raise PratError("prompt must not be empty or whitespace-only", code="invalid_arguments")
+        raise PratError("prompt is empty or whitespace-only", code="invalid_arguments")
     return rendered
 
 
@@ -110,11 +114,20 @@ def _identifier(match: Match[str]) -> str | None:
     return match.group("named") or match.group("braced")
 
 
-def _plain_source(words: tuple[str, ...], explicit: PromptSource | None) -> PromptSource | None:
+def _plain_source(
+    words: tuple[str, ...], explicit: PromptSource | None, selector: str
+) -> PromptSource | None:
     if not words:
         return explicit
-    if len(words) > 1 or explicit is not None:
-        raise _argument_error("provide exactly one prompt source")
+    if explicit is not None:
+        raise _argument_error(
+            f"provide exactly one prompt source; got {explicit.flag} and a prompt word"
+        )
+    if len(words) > 1:
+        raise _argument_error(
+            f"{selector} takes one prompt but got {len(words)} words; quote it: "
+            f"prat {selector} {shlex.quote(' '.join(words))}"
+        )
     return PromptSource("stdin") if words[0] == "-" else PromptSource("inline", words[0])
 
 

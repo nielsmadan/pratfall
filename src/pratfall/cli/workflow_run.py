@@ -107,7 +107,12 @@ def _prepare(
     names = workflow_parameters(workflow, prompts)
     label = f"workflow '{name}'"
     bound = bind_input(
-        names, label, parsed.words, parsed.parameters, parsed.prompt_source, active=True
+        names,
+        label,
+        parsed.words,
+        parsed.parameters,
+        parsed.prompt_source,
+        selector=name,
     )
     consumes = any(not step.after and step.input == "upstream" for step in workflow.steps)
     if not consumes and bound.source is not None:

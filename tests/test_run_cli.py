@@ -1007,16 +1007,18 @@ print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "re
 
 
 @pytest.mark.parametrize(
-    "sources",
+    ("sources", "given"),
     [
-        ["inline", "--file", "prompt.md"],
-        ["--file", "one.md", "--file", "two.md"],
-        ["inline", "--prompt=other"],
-        ["-", "--file=-"],
+        (["inline", "--file", "prompt.md"], "--file and a prompt word"),
+        (["--file", "one.md", "-f", "two.md"], "--file and -f"),
+        (["inline", "--prompt=other"], "--prompt and a prompt word"),
+        (["--prompt", "a", "--file", "b.md"], "--prompt and --file"),
+        (["-", "--file=-"], "--file and a prompt word"),
     ],
 )
 def test_prompt_source_conflicts_are_normalized_without_opening_input(
     sources: list[str],
+    given: str,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -1027,7 +1029,7 @@ def test_prompt_source_conflicts_are_normalized_without_opening_input(
     assert result["exit_code"] == 2
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "provide exactly one prompt source",
+        "message": f"provide exactly one prompt source; got {given}",
     }
 
 
@@ -2379,10 +2381,10 @@ def test_missing_and_nonexecutable_agents_map_to_shell_exit_codes(
     ("arguments", "message"),
     [
         (["cx"], "exactly one prompt"),
-        (["cx", "one", "two"], "exactly one prompt"),
+        (["cx", "one", "two"], "cx takes one prompt but got 2 words; quote it: prat cx 'one two'"),
         (["cx", "--prompt", "-x"], "write --prompt=-x if it is"),
         (["cx", "--prompt", "hi", "there"], "exactly one prompt"),
-        (["cx", ""], "must not be empty"),
+        (["cx", ""], "prompt is empty or whitespace-only"),
         (["cx", "a\0b"], "NUL"),
         (["--timeout=nan", "cx", "prompt"], "finite positive"),
         (["--max-turns=1.5", "cc", "prompt"], "positive integer"),
@@ -2986,9 +2988,17 @@ def test_invalid_template_flags_fail_before_stdin(
     assert json.loads(capsys.readouterr().out)["error"]["code"] == "invalid_arguments"
 
 
-@pytest.mark.parametrize("source", [["--prompt="], ["-"], ["--file", "empty.md"]])
+@pytest.mark.parametrize(
+    ("source", "name"),
+    [
+        (["--prompt="], "--prompt"),
+        (["-"], "standard input"),
+        (["-f", "empty.md"], "prompt file empty.md"),
+    ],
+)
 def test_template_keeps_explicit_empty_source_invalid(
     source: list[str],
+    name: str,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -3001,7 +3011,7 @@ def test_template_keeps_explicit_empty_source_invalid(
     assert main(["cx", "-t", "work", *source, "--config", str(config), "--json"]) == 2
     assert (
         json.loads(capsys.readouterr().out)["error"]["message"]
-        == "prompt must not be empty or whitespace-only"
+        == f"{name} is empty or whitespace-only"
     )
 
 
@@ -3348,7 +3358,7 @@ def test_edit_validates_initial_draft_before_opening_editor(
     assert main(["cx", "--edit", "--json"]) == 2
     result = json.loads(capsys.readouterr().out)
     assert result["error"]["message"] in {
-        "standard input prompt is not valid UTF-8",
+        "standard input is not valid UTF-8",
         "prompt must not contain NUL bytes",
         f"prompt exceeds the {PROMPT_LIMIT} byte limit",
     }
@@ -3858,7 +3868,10 @@ def test_dry_run_shows_prompt_rendered_with_parameters(
             ["cx", "--param", "folder=src"],
             "--param needs a prompt with parameters, but no template is active",
         ),
-        (["plain", "one", "two"], "provide exactly one prompt source"),
+        (
+            ["plain", "one", "two"],
+            "plain takes one prompt but got 2 words; quote it: prat plain 'one two'",
+        ),
         (
             ["remove-empty", "--param", ""],
             "profile 'remove-empty' prompt: --param '' must have the form NAME=VALUE",
@@ -4117,7 +4130,7 @@ def test_step_input_with_prompt_argument_is_rejected(
     assert run_step(spec, tmp_path) == 2
     assert step_result(capsys)["error"] == {
         "code": "invalid_arguments",
-        "message": "provide exactly one prompt source",
+        "message": "provide exactly one prompt source; got --prompt and workflow input",
     }
 
 

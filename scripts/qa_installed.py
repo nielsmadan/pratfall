@@ -2851,11 +2851,11 @@ def _exercise_e03(context: _EnhancementContext) -> _ScenarioObservation:
     invalid_specs = {
         "inline_and_file": (
             ["cx", "inline", "--file", prompt_file.name, "--json"],
-            "provide exactly one prompt source",
+            "provide exactly one prompt source; got --file and a prompt word",
         ),
         "two_files": (
             ["cx", "--file", prompt_file.name, "--file", prompt_file.name, "--json"],
-            "provide exactly one prompt source",
+            "provide exactly one prompt source; got --file and --file",
         ),
         "missing_file": (
             ["cx", "--file", str(missing), "--json"],
@@ -2863,7 +2863,7 @@ def _exercise_e03(context: _EnhancementContext) -> _ScenarioObservation:
         ),
         "invalid_utf8": (
             ["cx", "--file", str(invalid_utf8), "--json"],
-            "prompt file is not valid UTF-8",
+            f"prompt file {invalid_utf8} is not valid UTF-8",
         ),
         "oversize": (
             ["cx", "--file", str(oversized), "--json"],
@@ -4361,7 +4361,7 @@ def _exercise_w_editor(prat: Path, root: Path) -> dict[str, object]:
     assert calls[0]["cwd"] == str(consumer / "project")
     rejected, rejected_editor = _run_editor_workflow(prat, root, config, "empty")
     assert rejected_editor["draft"] == draft
-    rejected_result = _assert_input_failure(rejected, "prompt must not be empty or whitespace-only")
+    rejected_result = _assert_input_failure(rejected, "edited prompt is empty or whitespace-only")
     assert _calls(root / "native.jsonl") == calls
     return {
         "status": "Pass",

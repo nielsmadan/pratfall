@@ -693,10 +693,12 @@ def _parse_run(arguments: list[str]) -> RunArguments:
         if field is not None:
             value = _run_token_value(token)
             if field == "prompt":
-                prompt_source = _add_prompt_source(prompt_source, PromptSource("inline", value))
+                prompt_source = _add_prompt_source(
+                    prompt_source, PromptSource("inline", value, token.name)
+                )
             elif field == "file":
                 prompt_source = _add_prompt_source(
-                    prompt_source, PromptSource("file", _text_option(value, token.name))
+                    prompt_source, PromptSource("file", _text_option(value, token.name), token.name)
                 )
             elif field in {*repeated, "context"}:
                 _text_option(value if field != "parameters" else None, token.name)
@@ -839,7 +841,10 @@ def _run_token_value(token: _RunToken) -> str:
 
 def _add_prompt_source(current: PromptSource | None, added: PromptSource) -> PromptSource:
     if current is not None:
-        raise PratError("provide exactly one prompt source", code="invalid_arguments")
+        raise PratError(
+            f"provide exactly one prompt source; got {current.flag} and {added.flag}",
+            code="invalid_arguments",
+        )
     return added
 
 

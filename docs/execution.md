@@ -66,9 +66,9 @@ the [agent references](reference/overview.md).
   Any identifier other than `input` is a named parameter. Dispatch binds positional words and
   `--param` values to the active template (`-t`, else the profile `prompt`) before input
   acquisition, so binding errors precede any stdin read; `template_parameters` scans placeholders
-  once in linear time. The binder applies the "exactly one prompt source" check to positional
-  words after config and selector resolution; duplicate `--file`/`--prompt` sources still fail in
-  the parser. Substituted values are not re-expanded.
+  once in linear time. The binder applies the one-prompt check to positional words after config
+  and selector resolution, suggesting the quoted words; duplicate `--file`/`--prompt` sources
+  still fail in the parser. Empty-input errors name their source. Substituted values are not re-expanded.
 - [prompt_input.py](../src/pratfall/prompt_input.py) reads invocation-relative regular files
   nonblocking under the shared input signal handlers. Context files are prepended after template
   rendering, preserving order, duplicate paths and content bytes. JSON-quoted label and separator

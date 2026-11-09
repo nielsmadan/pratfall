@@ -64,7 +64,9 @@ With `--edit`, the initial draft may be empty or whitespace-only; all other inpu
 Otherwise, an explicit prompt must be valid on its own; the composed prompt, including context
 blocks, must also fit within that limit.
 Files must be regular files or symlinks to regular files. Invalid input fails with exit 2 before
-an agent starts. Relative file paths resolve from the invocation directory, independently of
+an agent starts, and the message names the input: `standard input is empty or whitespace-only`,
+`prompt file notes.md is empty or whitespace-only` or `--prompt is empty or whitespace-only`.
+Relative file paths resolve from the invocation directory, independently of
 `--cwd`.
 
 Gemini, Copilot, Cursor, Kiro, Kimi Code, Warp, Devin, and Grok receive prompts as command
@@ -157,9 +159,11 @@ These fail with `invalid_arguments` before stdin is read, naming the template or
 - `--param` when the active prompt has no parameters or no template is active;
 - an empty, whitespace-only, NUL-containing or non-UTF-8 value.
 
-Without parameters, one word after the selector is the prompt, or `-` for stdin, as before. More
-than one word, or a word beside `--prompt`/`--file`, fails with "Provide exactly one prompt
-source." after configuration and selector resolution.
+Without parameters, one word after the selector is the prompt, or `-` for stdin, as before.
+Unquoted words fail after configuration and selector resolution with a quoted suggestion:
+`prat cc takes one prompt but got 3 words; quote it: prat cc 'explain this code'`. A word beside
+`--prompt` or `--file`, or two of those flags, fails with `provide exactly one prompt source`
+followed by what was given, such as `; got --file and a prompt word`.
 
 `$input` works alongside parameters. With a `$input` placeholder, an explicit source or, without
 one, redirected stdin fills it; without a placeholder, nonempty base input is appended as usual.

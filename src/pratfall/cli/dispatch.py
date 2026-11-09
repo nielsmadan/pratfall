@@ -631,7 +631,14 @@ def _active_template(config: Config, parsed: RunArguments) -> tuple[str, str] | 
 def _bind_run_input(config: Config, parsed: RunArguments) -> tuple[str | None, BoundInput]:
     active = _active_template(config, parsed)
     template, label = active if active is not None else (None, "")
-    bound = bind_run_input(template, label, parsed.words, parsed.parameters, parsed.prompt_source)
+    bound = bind_run_input(
+        template,
+        label,
+        parsed.words,
+        parsed.parameters,
+        parsed.prompt_source,
+        selector=parsed.selector,
+    )
     return template, bound
 
 
@@ -642,8 +649,11 @@ def _with_step(parsed: RunArguments, step: _StepRun | None) -> RunArguments:
     if step.input is None:
         return parsed
     if parsed.prompt_source is not None:
-        raise PratError("provide exactly one prompt source", code="invalid_arguments")
-    return replace(parsed, prompt_source=PromptSource("inline", step.input))
+        raise PratError(
+            f"provide exactly one prompt source; got {parsed.prompt_source.flag} and workflow input",
+            code="invalid_arguments",
+        )
+    return replace(parsed, prompt_source=PromptSource("inline", step.input, "workflow input"))
 
 
 @dataclass(frozen=True)
@@ -687,7 +697,9 @@ def _check_stdin_context(
         )
     if count == 0:
         return
-    if source is not None and (source.kind == "stdin" or source == PromptSource("file", "-")):
+    if source is not None and (
+        source.kind == "stdin" or (source.kind == "file" and source.value == "-")
+    ):
         raise PratError(
             "--context -: standard input is already the prompt", code="invalid_arguments"
         )

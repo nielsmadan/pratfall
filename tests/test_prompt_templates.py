@@ -124,7 +124,7 @@ def bind(
     prompt: str | None = TWO,
     explicit: PromptSource | None = None,
 ) -> BoundInput:
-    return bind_run_input(prompt, LABEL, words, named, explicit)
+    return bind_run_input(prompt, LABEL, words, named, explicit, selector="cc")
 
 
 def binding_error(
@@ -150,7 +150,7 @@ def test_parameters_bind_positionally_and_by_name(
     words: tuple[str, ...], named: tuple[str, ...]
 ) -> None:
     file_source = PromptSource("file", "notes.md")
-    bound = bind_run_input(TWO, LABEL, words, named, file_source)
+    bound = bind_run_input(TWO, LABEL, words, named, file_source, selector="cc")
     assert bound.source == file_source
     assert dict(bound.parameters) == {"src": "a", "dst": "b"}
     assert list(bound.parameters) == ["src", "dst"]
@@ -272,20 +272,47 @@ def test_words_become_one_prompt_source_without_parameters(
 
 
 @pytest.mark.parametrize(
-    ("words", "explicit"),
+    ("words", "explicit", "message"),
     [
-        (("a", "b"), None),
-        (("a",), PromptSource("inline", "b")),
-        (("-",), PromptSource("file", "x")),
+        (
+            ("a", "b"),
+            None,
+            "cc takes one prompt but got 2 words; quote it: prat cc 'a b'",
+        ),
+        (
+            ("explain", "this", "code"),
+            None,
+            "cc takes one prompt but got 3 words; quote it: prat cc 'explain this code'",
+        ),
+        (
+            ("it's", "$HOME"),
+            None,
+            "cc takes one prompt but got 2 words; quote it: prat cc 'it'\"'\"'s $HOME'",
+        ),
+        (
+            ("a",),
+            PromptSource("inline", "b", "--prompt"),
+            "provide exactly one prompt source; got --prompt and a prompt word",
+        ),
+        (
+            ("-",),
+            PromptSource("file", "x", "-f"),
+            "provide exactly one prompt source; got -f and a prompt word",
+        ),
+        (
+            ("a", "b"),
+            PromptSource("file", "x", "--file"),
+            "provide exactly one prompt source; got --file and a prompt word",
+        ),
     ],
 )
 def test_more_than_one_prompt_source_is_rejected_without_parameters(
-    words: tuple[str, ...], explicit: PromptSource | None
+    words: tuple[str, ...], explicit: PromptSource | None, message: str
 ) -> None:
     with pytest.raises(PratError) as caught:
         bind(words, (), None, explicit)
     assert caught.value.code == "invalid_arguments"
-    assert str(caught.value) == "provide exactly one prompt source"
+    assert str(caught.value) == message
 
 
 @pytest.mark.parametrize(
@@ -330,28 +357,33 @@ def test_parameter_values_count_utf8_bytes_toward_limit(
 
 
 @pytest.mark.parametrize(
-    ("active", "message"),
+    ("label", "message"),
     [
-        (False, "--param needs a prompt with parameters, but no template is active"),
-        (True, "--param needs a prompt with parameters, but workflow 'tidy' has no parameters"),
+        (None, "--param needs a prompt with parameters, but no template is active"),
+        (
+            "workflow 'tidy'",
+            "--param needs a prompt with parameters, but workflow 'tidy' has no parameters",
+        ),
     ],
 )
-def test_bind_input_rejects_named_values_without_parameters(active: bool, message: str) -> None:
+def test_bind_input_rejects_named_values_without_parameters(
+    label: str | None, message: str
+) -> None:
     with pytest.raises(PratError) as caught:
-        bind_input((), "workflow 'tidy'", (), ("src=a",), None, active=active)
+        bind_input((), label, (), ("src=a",), None, selector="tidy")
     assert caught.value.code == "invalid_arguments"
     assert str(caught.value) == message
 
 
 def test_bind_input_binds_the_given_names_without_a_prompt() -> None:
     bound = bind_input(
-        ("folder", "level"), "workflow 'tidy'", ("src",), ("level=3",), None, active=True
+        ("folder", "level"), "workflow 'tidy'", ("src",), ("level=3",), None, selector="tidy"
     )
     assert bound.source is None
     assert list(bound.parameters.items()) == [("folder", "src"), ("level", "3")]
 
 
 def test_bind_input_without_names_uses_one_word_as_the_prompt() -> None:
-    bound = bind_input((), "workflow 'tidy'", ("fix it",), (), None, active=True)
+    bound = bind_input((), "workflow 'tidy'", ("fix it",), (), None, selector="tidy")
     assert bound.source == PromptSource("inline", "fix it")
     assert dict(bound.parameters) == {}
