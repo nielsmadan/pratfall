@@ -99,7 +99,7 @@ the page as one object ([help pages](docs/user/json.md#help-pages)).
 | `-t NAME` / `--template NAME` | Apply a named prompt template. |
 | `--param NAME=VALUE` | Fill a prompt parameter; repeat for several. |
 | `-e` / `--edit` | Edit the complete prompt in `VISUAL`, `EDITOR`, or `vi`. |
-| `--context PATH` | Prepend a context file; repeat to include several. |
+| `--context PATH` | Prepend a context file, or `-` for stdin; repeat to include several. |
 | `-x` / `--extract` | Return the body of the first fenced code block. |
 | `--schema PATH` | Request native JSON Schema output. |
 | `--json` | Return one JSON result with output, status, and available usage. |
@@ -130,12 +130,12 @@ fires and how to configure it.
 
 ## Composing prompts
 
-A prompt comes from text, a file, or redirected stdin. When stdin is piped in alongside text or
-`--file`, Prat combines them: stdin first, two newlines, then the explicit prompt. That is what
-makes pipelines work:
+A prompt comes from text, a file, or redirected stdin. To pipe input in alongside text or
+`--file`, add `--context -`: Prat puts stdin first as a context block, then the explicit prompt.
+That is what makes pipelines work:
 
 ```sh
-prat cc "how many Rs are in strawberry" | prat cx "times 5"
+prat cc "how many Rs are in strawberry" | prat cx --context - "times 5"
 prat cc -x "write a Python function that parses ISO dates" > parse.py
 prat cc --schema answer.schema.json --json "summarize this project"
 prat cc "review this" --context notes.md --context design.md

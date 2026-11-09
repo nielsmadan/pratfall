@@ -305,7 +305,7 @@ def test_version_failure_oracle_rejects_swapped_and_generic_diagnostics() -> Non
 
 def _input_entry_point(path: Path) -> None:
     path.write_text(
-        "import json, signal\n"
+        "import json, select, signal\n"
         "from pathlib import Path\n"
         "def interrupted(signum, _frame):\n"
         f"    assert list(Path({str(path.parent)!r}).glob('input-signal-*.ready'))\n"
@@ -313,6 +313,7 @@ def _input_entry_point(path: Path) -> None:
         "    raise SystemExit(128 + signum)\n"
         'interrupted.__module__ = "pratfall.interruption"\n'
         "signal.signal(signal.SIGTERM, interrupted)\n"
+        "select.select([0], [], [], 0)\n"
         "signal.pause()\n",
         encoding="utf-8",
     )

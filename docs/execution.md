@@ -73,8 +73,9 @@ the [agent references](reference/overview.md).
   nonblocking under the shared input signal handlers. Context files are prepended after template
   rendering, preserving order, duplicate paths and content bytes. JSON-quoted label and separator
   space is reserved before any context files are read; each read uses the remaining aggregate
-  1 MiB budget and final assembly stays within that bound. Explicit prompt plus stdin acquisition
-  also limits the second read to its remaining budget. Preserve filesystem resolution of `..`
+  1 MiB budget and final assembly stays within that bound. `--context -` reads stdin as one of
+  those blocks under the same budget; an explicit prompt source never reads or inspects stdin.
+  Preserve filesystem resolution of `..`
   through directory symlinks: lexical normalization such as `abspath` can select a different file.
 - [prompt_editor.py](../src/pratfall/prompt_editor.py) edits the fully composed draft only when
   requested. It uses a private temporary directory and Markdown file, reopens the saved path for

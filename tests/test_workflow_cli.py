@@ -1,4 +1,5 @@
 import errno
+import io
 import json
 import os
 import re
@@ -23,7 +24,7 @@ from pratfall.codes import STDOUT_LIMIT_EXCEEDED, exit_code_for
 from pratfall.errors import PratError
 from pratfall.local_trust import digest, trust
 from pratfall.prompt_input import InputInterrupted
-from test_run_cli import _lock_is_available, isolate_notify_env, write_agent
+from test_run_cli import UnreadInput, _lock_is_available, isolate_notify_env, write_agent
 
 FAKE = """import json, os, sys, time
 from pathlib import Path
@@ -346,6 +347,7 @@ def test_missing_parameter_fails_before_any_step_starts(
         (["-t", "tpl"], "-t"),
         (["-x"], "-x"),
         (["--fast"], "--fast"),
+        (["--context", "-"], "--context"),
         (["--", "--native"], "--"),
     ],
 )
@@ -365,6 +367,30 @@ def test_workflow_takes_prompt_text_in_the_space_form(
     config = chain_config(tmp_path)
     assert main(["chain", "--prompt", "hello", "--config", str(config)]) == 0
     assert capsys.readouterr().out == "second: first: hello\n"
+
+
+@pytest.mark.parametrize("source", [["hello"], ["--prompt", "hello"], ["-f", "prompt.md"]])
+def test_workflow_with_a_prompt_source_leaves_stdin_unread(
+    source: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = chain_config(tmp_path)
+    (tmp_path / "prompt.md").write_text("hello", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["chain", *source, "--config", str(config)]) == 0
+    assert capsys.readouterr().out == "second: first: hello\n"
+
+
+def test_workflow_without_a_prompt_source_reads_stdin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = chain_config(tmp_path)
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b"piped"))
+    assert main(["chain", "--config", str(config)]) == 0
+    assert capsys.readouterr().out == "second: first: piped\n"
 
 
 def test_workflow_option_value_starting_with_a_dash_is_refused(

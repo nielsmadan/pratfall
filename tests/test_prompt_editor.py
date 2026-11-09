@@ -358,6 +358,8 @@ path.write_bytes(path.read_bytes() + addition)
             "review",
             "--context",
             "context.md",
+            "--context",
+            "-",
             "--cwd",
             "project",
             "--json",
@@ -374,7 +376,10 @@ path.write_bytes(path.read_bytes() + addition)
         time.sleep(1.1)
         os.write(session.master, b" + edited\n")
         report, stdout, stderr = session.finish()
-    draft = '# Context: "context.md"\n\n$input context\n\n\nReview pipeline input\n\ntask'
+    draft = (
+        '# Context: "context.md"\n\n$input context\n\n\n'
+        "# Context: stdin\n\npipeline input\n\nReview task"
+    )
     editor = json.loads((tmp_path / "editor.json").read_text())
     assert editor["draft"] == draft
     assert editor["cwd"] == str(tmp_path)

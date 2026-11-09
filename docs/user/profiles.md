@@ -450,6 +450,13 @@ A separate value that starts with a dash is now refused rather than taken as the
 -name` and `--add-dir -dir` fail with `--tools requires a value; '-name' is not a value; write
 --tools=-name if it is`. Write `--tools=-name` and `--add-dir=-dir`. A lone `-` is still a value.
 
+Piped stdin beside an explicit prompt is no longer read: `git diff | prat cc "review"` no longer
+reads the diff; write `git diff | prat cc --context - "review"`. The diff now arrives under a
+`# Context: stdin` header. `--context -` now means stdin, so write `--context ./-` for a file named
+`-`. A workflow given text, `--prompt` or `--file` no longer reads stdin either. A template run
+with no explicit prompt still takes stdin as `$input`, so `git diff | prat cc -t review` is
+unchanged.
+
 A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
 naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that
 applies, and `workflows.NAME` for a workflow. Templates have their own names and never collide.

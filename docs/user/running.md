@@ -40,30 +40,29 @@ Choose one explicit prompt source:
 `-f PATH` and `--file=PATH` also read files; `--file -` reads stdin. Text starting with a dash
 needs the `=` form, as in `prat cc --prompt=-leading-dash`. `--prompt -` passes a literal dash.
 Without an explicit source, Prat reads redirected stdin; at a terminal, it reports a missing
-prompt.
+prompt. With an explicit source (text, `--prompt` or `--file PATH`), Prat neither reads nor
+inspects stdin, so an open stdin that never closes cannot hold up a run.
 
 Every run needs a selector. Bare `prat` at a terminal prints help and exits 0; any other line
 without a selector or management command, including `generate-notes | prat`, `prat --json` and
 `prat --dry-run`, fails with `a selector is required; run 'prat --help'` (exit 2) without reading
 stdin.
 
-Redirected stdin is also read when you supply inline text or `--file PATH`. Nonempty stdin is
-placed first, followed by two newline bytes and the explicit prompt. Both inputs retain their
-original whitespace. Empty stdin, a terminal, or closed stdin leaves the explicit prompt unchanged.
-An open stdin stream that cannot be read is an input error.
+To send piped input together with an explicit prompt, ask for it with
+[`--context -`](#include-context-files). Prat then reads stdin to end-of-file and places it before
+the task under a `# Context: stdin` header:
 
 ```sh
-prat cx "how many Rs in strawberry" | prat cx "times 5"
-git diff | prat cc "Review these changes"
+prat cx "how many Rs in strawberry" | prat cx --context - "times 5"
+git diff | prat cc --context - "Review these changes"
 ```
 
-Use `< /dev/null` when an explicit prompt should run without inherited stdin. The `-` and
-`--file -` forms read stdin once, without adding a separator or another copy of the input.
+The `-` and `--file -` forms read stdin once, without adding a header or another copy of the input.
 
 Prompts must be valid UTF-8, contain non-whitespace text, have no NUL bytes, and fit within 1 MiB.
 With `--edit`, the initial draft may be empty or whitespace-only; all other input checks still apply.
-Otherwise, an explicit prompt must be valid on its own; the combined prompt, including the separator, must
-also fit within that limit.
+Otherwise, an explicit prompt must be valid on its own; the composed prompt, including context
+blocks, must also fit within that limit.
 Files must be regular files or symlinks to regular files. Invalid input fails with exit 2 before
 an agent starts. Relative file paths resolve from the invocation directory, independently of
 `--cwd`.
@@ -100,9 +99,8 @@ Everything after `--` still belongs to the native agent. Unknown template names 
 is read. `prat list templates` lists names in sorted order with their parameters and FROM
 (`global` or `local`); `--json` adds the prompt text.
 
-`$input` and `${input}` substitute the base prompt, including the existing stdin-first combination
-when both redirected stdin and an explicit source are supplied. `$$` produces one literal dollar
-sign. Other valid `$name` or `${name}` placeholders are
+`$input` and `${input}` substitute the base prompt: the explicit source, or redirected stdin when
+there is none. `$$` produces one literal dollar sign. Other valid `$name` or `${name}` placeholders are
 [prompt parameters](#fill-prompt-parameters); malformed dollar expressions are invalid, so use `$$`
 wherever a literal dollar is needed.
 Substitution happens once: dollar expressions in input text remain literal. Without an input
@@ -163,9 +161,10 @@ Without parameters, one word after the selector is the prompt, or `-` for stdin,
 than one word, or a word beside `--prompt`/`--file`, fails with "Provide exactly one prompt
 source." after configuration and selector resolution.
 
-`$input` works alongside parameters. With a `$input` placeholder, redirected stdin or an explicit
-source fills it; without one, nonempty base input is appended as usual. A loop over files should
-close stdin so the agent does not consume the loop's input:
+`$input` works alongside parameters. With a `$input` placeholder, an explicit source or, without
+one, redirected stdin fills it; without a placeholder, nonempty base input is appended as usual.
+Parameter words are not a prompt source, so a loop over files should close stdin to keep Prat from
+reading the loop's input as base input:
 
 ```sh
 for dir in src tests; do prat remove-empty "$dir" </dev/null; done
@@ -183,14 +182,26 @@ prat --context=notes.md cc -t review --file request.md
 
 Repeat `--context PATH` or `--context=PATH` before or after the selector. Files are included in
 argument order, including duplicates. Paths resolve from the invocation directory, independently
-of `--cwd`; `--context -` reads a file named `-`. Files must be local regular files (symlinks to
-regular files are accepted), valid UTF-8 and NUL-free. Empty and whitespace-only context files
-are allowed. Content bytes, including original line endings, are preserved.
+of `--cwd`. Files must be local regular files (symlinks to regular files are accepted), valid UTF-8
+and NUL-free. Empty and whitespace-only context files are allowed. Content bytes, including
+original line endings, are preserved.
 
-Each file adds `# Context: <JSON-quoted supplied path>\n\n<file bytes>\n\n` before the task.
-Labels use JSON escaping, including escapes for non-ASCII characters and newlines. They are
-presentation labels, not a security boundary. Context is added after template expansion and
-remains outside substitution. A context file does not supply a missing task.
+`--context -` reads stdin as one more context block, in argument order with the files. It reads
+to end-of-file with no time limit, because you asked for it; empty stdin gives an empty block.
+Give it once, and not together with `-` or `--file -` as the prompt, which already read stdin.
+With `--context -`, stdin is never the prompt, so the task comes from text, `--prompt`, `--file`,
+a template or `--edit`. A file named `-` is `--context ./-`.
+
+Each file adds `# Context: <JSON-quoted supplied path>\n\n<file bytes>\n\n` before the task, and
+stdin adds `# Context: stdin\n\n<stdin bytes>\n\n`; a quoted path cannot collide with the unquoted
+`stdin` label. Labels use JSON escaping, including escapes for non-ASCII characters and newlines.
+They are presentation labels, not a security boundary. Context is added after template expansion
+and remains outside substitution. A context block does not supply a missing task.
+
+```sh
+git diff | prat cc --context - "Review these changes"
+git diff | prat cc --context - --context notes.md -t review
+```
 
 The shared 1 MiB limit includes the rendered task, all context content, labels and separators.
 Prat reserves label space before reading context files, reads only up to the remaining budget
@@ -202,6 +213,7 @@ same composition and validation.
 ```sh
 prat cx --edit
 git diff | prat cc -t review --context notes.md --edit
+git diff | prat cc --context - --edit
 VISUAL='code --wait' prat cx -e "Review this draft"
 ```
 

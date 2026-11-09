@@ -16,6 +16,9 @@ PROMPT_LIMIT = 1024 * 1024
 _READ_SIZE = 64 * 1024
 _CONTEXT_PREFIX = b"# Context: "
 _CONTEXT_OVERHEAD = len(_CONTEXT_PREFIX) + 4
+_STDIN_LABEL = b"stdin"
+_PROMPT_ADVICE = "; provide exactly one prompt another way"
+STDIN_CONTEXT = "-"
 
 
 @dataclass(frozen=True)
@@ -64,16 +67,7 @@ def acquire_prompt(
                 return b""
             return _validate(value, "standard input prompt", allow_empty=allow_blank)
         _raise_if_interrupted(state)
-        value = _validate(value, label, allow_empty=allow_blank)
-        if stdin is not None and not stdin.closed and not _stdin_is_terminal(stdin):
-            remaining = max(0, PROMPT_LIMIT - len(value) - 2)
-            piped = _read_stdin(stdin, state, limit=remaining)
-            if piped:
-                _check_size(len(value) + 2 + len(piped))
-                value = _validate(
-                    piped + b"\n\n" + value, "combined prompt", allow_empty=allow_blank
-                )
-        return value
+        return _validate(value, label, allow_empty=allow_blank)
 
 
 def _stdin_is_terminal(stdin: BinaryIO | TextIO | None) -> bool:
@@ -90,7 +84,12 @@ def _encode_inline(value: str) -> bytes:
         raise PratError("prompt is not valid UTF-8", code="invalid_arguments") from error
 
 
-def prepend_contexts(paths: tuple[str, ...], prompt: bytes, invocation_cwd: Path) -> bytes:
+def prepend_contexts(
+    paths: tuple[str, ...],
+    prompt: bytes,
+    invocation_cwd: Path,
+    stdin: BinaryIO | TextIO | None = None,
+) -> bytes:
     if not paths:
         return prompt
     state = InterruptionState()
@@ -99,23 +98,34 @@ def prepend_contexts(paths: tuple[str, ...], prompt: bytes, invocation_cwd: Path
         headers: list[bytes] = []
         for path in paths:
             _raise_if_interrupted(state)
-            label_size = 2
-            for character in path:
+            label_size = len(_STDIN_LABEL) if path == STDIN_CONTEXT else 2
+            for character in "" if path == STDIN_CONTEXT else path:
                 label_size += len(json.dumps(character)) - 2
                 _check_size(PROMPT_LIMIT - remaining + label_size + _CONTEXT_OVERHEAD)
             remaining -= label_size + _CONTEXT_OVERHEAD
             _check_size(PROMPT_LIMIT - remaining)
-            headers.append(_CONTEXT_PREFIX + json.dumps(path).encode("ascii") + b"\n\n")
+            headers.append(_CONTEXT_PREFIX + _context_label(path) + b"\n\n")
         parts: list[bytes] = []
         for path, header in zip(paths, headers, strict=True):
             _raise_if_interrupted(state)
-            content = _read_file(path, invocation_cwd, state, limit=remaining, label="context file")
+            if path == STDIN_CONTEXT:
+                content = _read_stdin(stdin, state, limit=remaining, advice="")
+                label = "standard input context"
+            else:
+                content = _read_file(
+                    path, invocation_cwd, state, limit=remaining, label="context file"
+                )
+                label = "context file"
             _check_size(PROMPT_LIMIT - remaining + len(content))
-            _validate(content, "context file", allow_empty=True)
+            _validate(content, label, allow_empty=True)
             remaining -= len(content)
             parts.extend((header, content, b"\n\n"))
         parts.append(prompt)
         return b"".join(parts)
+
+
+def _context_label(path: str) -> bytes:
+    return _STDIN_LABEL if path == STDIN_CONTEXT else json.dumps(path).encode("ascii")
 
 
 def _check_size(size: int) -> None:
@@ -156,31 +166,35 @@ def _read_file(
 
 
 def _read_stdin(
-    stdin: BinaryIO | TextIO | None, state: InterruptionState, *, limit: int = PROMPT_LIMIT
+    stdin: BinaryIO | TextIO | None,
+    state: InterruptionState,
+    *,
+    limit: int = PROMPT_LIMIT,
+    advice: str = _PROMPT_ADVICE,
 ) -> bytes:
     stream = cast(BinaryIO | TextIO, getattr(stdin, "buffer", stdin))
     if stream is None:
-        raise PratError(
-            "cannot read standard input; provide exactly one prompt another way",
-            code="invalid_arguments",
-        )
+        raise PratError(f"cannot read standard input{advice}", code="invalid_arguments")
     try:
         descriptor = stream.fileno()
     except (AttributeError, OSError, ValueError):
-        return _read_stream(stream, state, limit=limit)
+        return _read_stream(stream, state, limit=limit, advice=advice)
     return _read_descriptor(descriptor, state, wait=True, label="standard input", limit=limit)
 
 
 def _read_stream(
-    stream: BinaryIO | TextIO, state: InterruptionState, *, limit: int = PROMPT_LIMIT
+    stream: BinaryIO | TextIO,
+    state: InterruptionState,
+    *,
+    limit: int = PROMPT_LIMIT,
+    advice: str = _PROMPT_ADVICE,
 ) -> bytes:
     _raise_if_interrupted(state)
     try:
         value = stream.read(limit + 1)
     except (OSError, ValueError) as error:
         raise PratError(
-            f"cannot read standard input; provide exactly one prompt another way: {error}",
-            code="invalid_arguments",
+            f"cannot read standard input{advice}: {error}", code="invalid_arguments"
         ) from error
     _raise_if_interrupted(state)
     if isinstance(value, str):

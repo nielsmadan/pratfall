@@ -732,12 +732,28 @@ def test_redirected_stdin_is_the_implicit_prompt_source(
 
 
 @pytest.mark.parametrize("agent", ["codex", "gemini"])
-def test_piped_stdin_and_inline_prompt_reach_native_agent(tmp_path: Path, agent: str) -> None:
+@pytest.mark.parametrize(
+    ("flags", "prompt"),
+    [([], "times 5"), (["--context", "-"], "# Context: stdin\n\n3\n\n\ntimes 5")],
+)
+def test_piped_stdin_reaches_native_agent_only_through_stdin_context(
+    tmp_path: Path, agent: str, flags: list[str], prompt: str
+) -> None:
     config = write_agent(
         tmp_path, agent, CODEX_SUCCESS if agent == "codex" else NEW_ADAPTER_FIXTURES[agent]
     )
     completed = subprocess.run(
-        [sys.executable, "-m", "pratfall", agent, "times 5", "--config", str(config), "--json"],
+        [
+            sys.executable,
+            "-m",
+            "pratfall",
+            agent,
+            "times 5",
+            *flags,
+            "--config",
+            str(config),
+            "--json",
+        ],
         input=b"3\n",
         capture_output=True,
         cwd=tmp_path,
@@ -752,17 +768,84 @@ def test_piped_stdin_and_inline_prompt_reach_native_agent(tmp_path: Path, agent:
     assert completed.returncode == 0, completed.stderr
     result = json.loads(completed.stdout)
     assert result["status"] == "success"
-    assert json.loads(result["output"])["prompt"] == "3\n\n\ntimes 5"
+    assert json.loads(result["output"])["prompt"] == prompt
 
 
-def test_combined_prompt_dry_run_counts_all_bytes(
+def test_stdin_context_dry_run_counts_all_bytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     config = write_agent(tmp_path, "codex", "raise SystemExit('must not launch')")
     monkeypatch.setattr(sys, "stdin", io.BytesIO("雪".encode()))
-    assert main(["cx", "times 5", "--config", str(config), "--dry-run", "--json"]) == 0
+    arguments = ["cx", "--context", "-", "times 5", "--config", str(config), "--dry-run", "--json"]
+    assert main(arguments) == 0
     result = json.loads(capsys.readouterr().out)
-    assert result["stdin_bytes"] == len("雪\n\ntimes 5".encode())
+    assert result["stdin_bytes"] == len("# Context: stdin\n\n雪\n\ntimes 5".encode())
+
+
+@pytest.mark.parametrize(
+    "source", [["times 5"], ["--prompt", "times 5"], ["-f", "prompt.md"], ["-t", "work", "x"]]
+)
+def test_explicit_prompt_source_leaves_stdin_unread(
+    source: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", "raise SystemExit('must not launch')")
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write('\n[templates.work]\nprompt="Review $input"\n')
+    (tmp_path / "prompt.md").write_text("times 5", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", *source, "--config", str(config), "--dry-run", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["stdin_bytes"] == len(
+        "Review x" if "-t" in source else "times 5"
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        (["--context", "-", "--context=-", "task"], "--context - can be given once"),
+        (["--context", "-", "-"], "--context -: standard input is already the prompt"),
+        (["--context", "-", "-f", "-"], "--context -: standard input is already the prompt"),
+        (["--context", "-"], "--context - reads standard input; give the prompt as text"),
+    ],
+)
+def test_stdin_context_conflicts_fail_before_reading(
+    source: list[str],
+    message: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", "raise SystemExit('must not launch')")
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
+    assert main(["cx", *source, "--config", str(config), "--dry-run", "--json"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["code"] == "invalid_arguments"
+    assert error["message"].startswith(message)
+
+
+@pytest.mark.parametrize("flags", [["-t", "work"], ["-e"]])
+def test_stdin_context_leaves_the_task_absent_for_templates_and_edit(
+    flags: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write('\n[templates.work]\nprompt="Review this"\n')
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b"diff"))
+    monkeypatch.setattr(dispatch_module, "edit_prompt", lambda draft, *_: draft + b"!")
+    assert main(["cx", "--context", "-", *flags, "--config", str(config), "--json"]) == 0
+    prompt = json.loads(json.loads(capsys.readouterr().out)["output"])["prompt"]
+    assert prompt == (
+        "# Context: stdin\n\ndiff\n\nReview this"
+        if "-t" in flags
+        else "# Context: stdin\n\ndiff\n\n!"
+    )
 
 
 @pytest.mark.parametrize("form", ["short", "long", "equals"])
@@ -818,7 +901,7 @@ def test_file_dash_reads_stdin(
     assert json.loads(result["output"])["prompt"] == "file dash\n"
 
 
-def test_explicit_file_combines_redirected_stdin(
+def test_explicit_file_leaves_redirected_stdin_to_the_agent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -826,10 +909,10 @@ def test_explicit_file_combines_redirected_stdin(
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
     prompt_file = tmp_path / "prompt.md"
     prompt_file.write_text("chosen", encoding="utf-8")
-    monkeypatch.setattr(sys, "stdin", io.BytesIO(b"context\n"))
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
     assert main(["cx", "--file", str(prompt_file), "--config", str(config), "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert json.loads(result["output"])["prompt"] == "context\n\n\nchosen"
+    assert json.loads(result["output"])["prompt"] == "chosen"
 
 
 def test_relative_prompt_file_uses_invocation_directory_not_run_cwd(
@@ -1134,7 +1217,7 @@ def test_stdin_closed_before_startup_is_normalized_and_explicit_sources_work(
 
 
 @pytest.mark.parametrize("chosen", [signal.SIGINT, signal.SIGTERM])
-@pytest.mark.parametrize("source", [[], ["times 5"]])
+@pytest.mark.parametrize("source", [[], ["--context", "-", "times 5"]])
 def test_signal_while_reading_stdin_is_normalized_without_spawning(
     tmp_path: Path, chosen: signal.Signals, source: list[str]
 ) -> None:
@@ -1145,21 +1228,18 @@ def test_signal_while_reading_stdin_is_normalized_without_spawning(
     )
     bootstrap = """
 import sys
-from contextlib import contextmanager
 from pathlib import Path
 
 from pratfall import prompt_input
 from pratfall.cli import main
 
-original_handlers = prompt_input._input_signal_handlers
+original_read = prompt_input._read_stdin
 
-@contextmanager
-def ready_handlers(state):
-    with original_handlers(state):
-        Path(sys.argv[1]).touch()
-        yield
+def ready_read(*arguments, **options):
+    Path(sys.argv[1]).touch()
+    return original_read(*arguments, **options)
 
-prompt_input._input_signal_handlers = ready_handlers
+prompt_input._read_stdin = ready_read
 raise SystemExit(main(sys.argv[2:]))
 """
     env = {
@@ -1215,10 +1295,10 @@ def test_prompt_option_can_pass_a_literal_dash(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
-    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"context")))
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
     assert main(["cx", "--prompt=-", "--config", str(config), "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert json.loads(result["output"])["prompt"] == "context\n\n-"
+    assert json.loads(result["output"])["prompt"] == "-"
 
 
 @pytest.mark.parametrize("extract", [False, True])
@@ -2854,11 +2934,11 @@ def test_template_options_reach_fake_agent(
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
     with config.open("a", encoding="utf-8") as stream:
         stream.write('\n[templates.work]\nprompt="Review ${input} then $$input"\n')
-    monkeypatch.setattr(sys, "stdin", io.BytesIO("雪\n".encode()))
+    monkeypatch.setattr(sys, "stdin", UnreadInput())
     args = [*flags, "cx", "code $input"] if before_selector else ["cx", "code $input", *flags]
     assert main([*args, "--config", str(config), "--json"]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert json.loads(result["output"])["prompt"] == "Review 雪\n\n\ncode $input then $input"
+    assert json.loads(result["output"])["prompt"] == "Review code $input then $input"
 
 
 @pytest.mark.parametrize("stdin", [None, b""])
@@ -2989,6 +3069,7 @@ def test_context_options_compose_outside_template_from_invocation_directory(
                 "context.md",
                 "cx",
                 "task",
+                "--context=./-",
                 "--context=-",
                 "--template=work",
                 "--context",
@@ -3005,8 +3086,9 @@ def test_context_options_compose_outside_template_from_invocation_directory(
     )
     result = json.loads(capsys.readouterr().out)
     expected = (
-        b'# Context: "context.md"\n\n$input\r\n\n\n# Context: "-"\n\n\n\n'
-        b'# Context: "context.md"\n\n$input\r\n\n\nReview pipe\n\ntask then pipe\n\ntask'
+        b'# Context: "context.md"\n\n$input\r\n\n\n# Context: "./-"\n\n\n\n'
+        b"# Context: stdin\n\npipe\n\n"
+        b'# Context: "context.md"\n\n$input\r\n\n\nReview task then task'
     )
     if dry_run:
         assert result["stdin_bytes"] == len(expected)
@@ -3066,16 +3148,18 @@ def test_context_flag_after_native_boundary_stays_native(
     assert "native argument" in result["error"]["message"]
 
 
-def test_explicit_prompt_rejects_over_budget_pipe_without_waiting_for_eof(tmp_path: Path) -> None:
+def test_stdin_context_rejects_over_budget_pipe_without_waiting_for_eof(tmp_path: Path) -> None:
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
     prompt_file = tmp_path / "prompt.md"
-    prompt_file.write_bytes(b"x" * (PROMPT_LIMIT - 3))
+    prompt_file.write_bytes(b"x" * (PROMPT_LIMIT - len("# Context: stdin\n\n\n\n") - 1))
     with subprocess.Popen(
         [
             sys.executable,
             "-m",
             "pratfall",
             "cx",
+            "--context",
+            "-",
             "--file",
             str(prompt_file),
             "--config",

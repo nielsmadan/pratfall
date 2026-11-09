@@ -2,6 +2,7 @@ import io
 import os
 import signal
 from pathlib import Path
+from typing import BinaryIO, cast
 
 import pytest
 
@@ -10,13 +11,22 @@ from pratfall.errors import PratError
 from pratfall.prompt_input import PROMPT_LIMIT, InputInterrupted, PromptSource, acquire_prompt
 
 
-@pytest.mark.parametrize("stdin", [b"", b"3", "café\n雪\n".encode(), b" \n"])
-def test_combines_stdin_before_inline_prompt_preserving_bytes(
-    stdin: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    stdin_stream = io.BytesIO(stdin)
-    expected = stdin + b"\n\ntimes 5" if stdin else b"times 5"
-    assert acquire_prompt(PromptSource("inline", "times 5"), tmp_path, stdin_stream) == expected
+class UntouchableStdin:
+    def __getattr__(self, name: str) -> object:
+        raise AssertionError(f"standard input was used: {name}")
+
+
+def untouchable() -> BinaryIO:
+    return cast(BinaryIO, UntouchableStdin())
+
+
+@pytest.mark.parametrize("kind", ["inline", "file"])
+def test_explicit_prompt_neither_reads_nor_inspects_stdin(tmp_path: Path, kind: str) -> None:
+    (tmp_path / "prompt.md").write_bytes(b"times 5")
+    source = (
+        PromptSource("inline", "times 5") if kind == "inline" else PromptSource("file", "prompt.md")
+    )
+    assert acquire_prompt(source, tmp_path, untouchable()) == b"times 5"
 
 
 @pytest.mark.parametrize("kind", ["terminal", "closed", "unavailable"])
@@ -34,30 +44,56 @@ def test_inline_prompt_works_without_redirected_stdin(
         assert stream.tell() == 0
 
 
+STDIN_HEADER = b"# Context: stdin\n\n"
+
+
+@pytest.mark.parametrize("stdin", [b"diff\n", "café\n雪\n".encode(), b" \n", b""])
+def test_stdin_context_is_a_block_headed_stdin(tmp_path: Path, stdin: bytes) -> None:
+    assert prompt_input.prepend_contexts(("-",), b"review", tmp_path, io.BytesIO(stdin)) == (
+        STDIN_HEADER + stdin + b"\n\nreview"
+    )
+
+
+def test_stdin_context_keeps_argument_order(tmp_path: Path) -> None:
+    (tmp_path / "a").write_bytes(b"one")
+    stdin = io.BytesIO(b"piped")
+    assert prompt_input.prepend_contexts(("a", "-", "a"), b"task", tmp_path, stdin) == (
+        b'# Context: "a"\n\none\n\n' + STDIN_HEADER + b'piped\n\n# Context: "a"\n\none\n\ntask'
+    )
+
+
 @pytest.mark.parametrize(
     ("stdin", "message"),
-    [(b"\xff", "valid UTF-8"), (b"x\0y", "NUL"), (b"x" * PROMPT_LIMIT, "byte limit")],
+    [
+        (b"\xff", "standard input context is not valid UTF-8"),
+        (b"x\0y", "NUL"),
+        (b"x" * PROMPT_LIMIT, "byte limit"),
+    ],
 )
-def test_combined_prompt_rejects_invalid_stdin(
-    stdin: bytes, message: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    stdin_stream = io.BytesIO(stdin)
+def test_stdin_context_rejects_invalid_input(tmp_path: Path, stdin: bytes, message: str) -> None:
     with pytest.raises(PratError, match=message):
-        acquire_prompt(PromptSource("inline", "prompt"), tmp_path, stdin_stream)
+        prompt_input.prepend_contexts(("-",), b"task", tmp_path, io.BytesIO(stdin))
+
+
+def test_stdin_context_without_stdin_is_an_input_error(tmp_path: Path) -> None:
+    with pytest.raises(PratError) as raised:
+        prompt_input.prepend_contexts(("-",), b"task", tmp_path, None)
+    assert str(raised.value) == "cannot read standard input"
 
 
 @pytest.mark.parametrize("excess", [0, 1])
-def test_combined_prompt_byte_limit_includes_separator(
-    excess: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_stdin_context_limit_includes_header_separator_and_task(
+    tmp_path: Path, excess: int
 ) -> None:
-    stdin = b"x" * (PROMPT_LIMIT - len("é".encode()) - 2 + excess)
-    stdin_stream = io.BytesIO(stdin)
+    task = "é".encode()
+    stdin = b"x" * (PROMPT_LIMIT - len(STDIN_HEADER) - 2 - len(task) + excess)
     if excess:
         with pytest.raises(PratError, match="byte limit"):
-            acquire_prompt(PromptSource("inline", "é"), tmp_path, stdin_stream)
+            prompt_input.prepend_contexts(("-",), task, tmp_path, io.BytesIO(stdin))
     else:
-        expected = stdin + "\n\né".encode()
-        assert acquire_prompt(PromptSource("inline", "é"), tmp_path, stdin_stream) == expected
+        assert prompt_input.prepend_contexts(("-",), task, tmp_path, io.BytesIO(stdin)) == (
+            STDIN_HEADER + stdin + b"\n\n" + task
+        )
 
 
 def test_named_file_is_opened_nonblocking_and_handlers_are_restored(
@@ -124,13 +160,13 @@ def test_optional_base_still_validates_provided_implicit_input(
         acquire_prompt(None, tmp_path, stdin_stream, allow_absent=True)
 
 
-@pytest.mark.parametrize("path", ['notes "one"\\two\n雪😀\x7f.md', "-", "empty.md"])
+@pytest.mark.parametrize("path", ['notes "one"\\two\n雪😀\x7f.md', "./-", "empty.md"])
 def test_context_preserves_content_and_quotes_supplied_label(tmp_path: Path, path: str) -> None:
     content = b"" if path == "empty.md" else " \r\n$input 雪\r\n".encode()
     (tmp_path / path).write_bytes(content)
     expected_label = {
         'notes "one"\\two\n雪😀\x7f.md': b'"notes \\"one\\"\\\\two\\n\\u96ea\\ud83d\\ude00\\u007f.md"',
-        "-": b'"-"',
+        "./-": b'"./-"',
         "empty.md": b'"empty.md"',
     }[path]
     assert prompt_input.prepend_contexts((path,), b"task", tmp_path) == (
@@ -222,13 +258,11 @@ def test_context_budget_stops_reading_before_later_files(
     assert reads == [9]
 
 
-def test_combined_prompt_reads_only_remaining_budget(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_stdin_context_reads_only_remaining_budget(tmp_path: Path) -> None:
     stream = io.BytesIO(b"x" * PROMPT_LIMIT)
-    stdin_stream = stream
+    task = b"y" * (PROMPT_LIMIT - len(STDIN_HEADER) - 2 - 1)
     with pytest.raises(PratError, match="byte limit"):
-        acquire_prompt(PromptSource("inline", "y" * (PROMPT_LIMIT - 3)), tmp_path, stdin_stream)
+        prompt_input.prepend_contexts(("-",), task, tmp_path, stream)
     assert stream.tell() == 2
 
 

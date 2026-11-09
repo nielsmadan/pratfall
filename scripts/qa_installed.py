@@ -25,19 +25,26 @@ HARNESS_TIMEOUT = 15.0
 CLEANUP_TIMEOUT = 2.0
 INPUT_READINESS_TIMEOUT = 5.0
 
-_INPUT_BOOTSTRAP = """import runpy,signal,sys,time
+_INPUT_BOOTSTRAP = """import runpy,select,signal,sys,time
 from pathlib import Path
 ready = Path(sys.argv[1])
 entry_point = sys.argv[2]
 delay = float(sys.argv[3])
 arguments = sys.argv[4:]
 original_signal = signal.signal
+original_select = select.select
+handled = [False]
 def observe_signal(chosen, handler):
     previous = original_signal(chosen, handler)
-    if chosen == signal.SIGTERM and getattr(handler, "__module__", None) == "pratfall.interruption":
-        ready.write_text("ready\\n", encoding="utf-8")
+    if chosen == signal.SIGTERM:
+        handled[0] = getattr(handler, "__module__", None) == "pratfall.interruption"
     return previous
+def observe_select(readable, *rest):
+    if handled[0] and 0 in readable:
+        ready.write_text("ready\\n", encoding="utf-8")
+    return original_select(readable, *rest)
 signal.signal = observe_signal
+select.select = observe_select
 if delay:
     time.sleep(delay)
 sys.argv = [entry_point, *arguments]
@@ -2802,16 +2809,25 @@ def _exercise_e02(context: _EnhancementContext) -> _ScenarioObservation:
         stdin=b"incidental pipe",
         config=config,
     )
-    for case in (explicit_inline, explicit_file):
+    requested_pipe = _run(
+        prat,
+        root,
+        ["cx", "--context", "-", "explicit inline", "--json"],
+        stdin=b"requested pipe",
+        config=config,
+    )
+    for case in (explicit_inline, explicit_file, requested_pipe):
         _assert_result(case, returncode=0, status="success", native_exit_code=0, error_code=None)
-    explicit_calls = _calls(log)[-2:]
-    assert explicit_calls[0]["prompt"] == "incidental pipe\n\nexplicit inline"
-    assert explicit_calls[1]["prompt"] == "incidental pipe\n\n" + prompt_bytes.decode()
+    explicit_calls = _calls(log)[-3:]
+    assert explicit_calls[0]["prompt"] == "explicit inline"
+    assert explicit_calls[1]["prompt"] == prompt_bytes.decode()
+    assert explicit_calls[2]["prompt"] == "# Context: stdin\n\nrequested pipe\n\nexplicit inline"
     return "E02", {
         "status": "Pass",
         "forms": ["automatic_pipe", "positional_dash", "file_dash"],
         "prompt_sha256": hashlib.sha256(piped_prompt).hexdigest(),
-        "explicit_sources_combined_with_pipe": True,
+        "explicit_sources_leave_pipe_unread": True,
+        "stdin_context_precedes_prompt": True,
     }
 
 
@@ -2888,7 +2904,7 @@ def _exercise_e04(context: _EnhancementContext) -> _ScenarioObservation:
         ("implicit_sigint", [], signal.SIGINT),
         ("positional_sigterm", ["-"], signal.SIGTERM),
         ("file_dash_sigint", ["--file", "-"], signal.SIGINT),
-        ("combined_sigterm", ["times 5"], signal.SIGTERM),
+        ("context_sigterm", ["--context", "-", "times 5"], signal.SIGTERM),
     ):
         completed, pending, before = _stdin_pending_run(prat, root, config, source, chosen)
         result = _assert_result(
@@ -4103,7 +4119,7 @@ def _exercise_w_composition(prat: Path, root: Path) -> dict[str, object]:
     (consumer / "project").mkdir(exist_ok=True)
     label = 'context "雪".md'
     block = '# Context: "context \\"\\u96ea\\".md"\n\n$input context\r\n\n\n'
-    draft = block + block + "Review $ pipeline $input\n\ntask"
+    draft = block + block + "# Context: stdin\n\npipeline $input\n\nReview $ task"
     arguments = [
         "gm",
         "task",
@@ -4113,6 +4129,8 @@ def _exercise_w_composition(prat: Path, root: Path) -> dict[str, object]:
         label,
         "--context",
         label,
+        "--context",
+        "-",
         "--cwd",
         "project",
         "--json",
@@ -4271,6 +4289,8 @@ def _run_editor_workflow(
         "review",
         "--context",
         "context.md",
+        "--context",
+        "-",
         "--cwd",
         "project",
         "-e",
@@ -4327,7 +4347,10 @@ def _exercise_w_editor(prat: Path, root: Path) -> dict[str, object]:
     consumer = root / "consumer"
     (consumer / "context.md").write_bytes(b"$input context\r\n")
     (consumer / "project").mkdir(exist_ok=True)
-    draft = '# Context: "context.md"\n\n$input context\r\n\n\nReview $ pipeline input\n\ntask'
+    draft = (
+        '# Context: "context.md"\n\n$input context\r\n\n\n'
+        "# Context: stdin\n\npipeline input\n\nReview $ task"
+    )
     completed, editor = _run_editor_workflow(prat, root, config, "append")
     assert editor["draft"] == draft and editor["cwd"] == str(consumer)
     prompt = "QA_WORKFLOW_FENCE\n" + draft + " + edited café\n"
@@ -4486,7 +4509,8 @@ def _assert_control_call(
 def _exercise_w_controls(prat: Path, root: Path) -> dict[str, object]:
     root, config = _controls_root(prat, root, "controls")
     prompt = (
-        '# Context: "context.md"\n\ncontext $input\r\n\n\nReview $ pipeline\n\nQA_CONTROLS task'
+        '# Context: "context.md"\n\ncontext $input\r\n\n\n'
+        "# Context: stdin\n\npipeline\n\nReview $ QA_CONTROLS task"
     )
     observations: dict[str, object] = {"status": "Pass"}
     for agent, flags, expected in _control_cases(root):
@@ -4500,6 +4524,8 @@ def _exercise_w_controls(prat: Path, root: Path) -> dict[str, object]:
                 "review",
                 "--context",
                 "context.md",
+                "--context",
+                "-",
                 "--cwd",
                 "project",
                 "--json",

@@ -76,7 +76,13 @@ from pratfall.notify import encode, notification_for, send, should_notify
 from pratfall.option_paths import prepare_attachments, prepare_directories, resolve_path
 from pratfall.output import extract_code, normalize, result_dict, validation_error
 from pratfall.prompt_editor import edit_prompt
-from pratfall.prompt_input import InputInterrupted, PromptSource, acquire_prompt, prepend_contexts
+from pratfall.prompt_input import (
+    STDIN_CONTEXT,
+    InputInterrupted,
+    PromptSource,
+    acquire_prompt,
+    prepend_contexts,
+)
 from pratfall.prompt_templates import (
     BoundInput,
     bind_run_input,
@@ -663,10 +669,34 @@ def _prepare_run(
     resolved = _prepare_run_paths(resolved, origins, label)
     cwd = _run_cwd(parsed.cwd, invocation_cwd)
     template, bound = _bind_run_input(config, parsed)
+    _check_stdin_context(parsed, bound.source, absent=template is not None or parsed.edit)
     adapter = _run_adapter(resolved, cwd, label, origins)
     resolved = _prepare_run_schema(adapter, resolved, origins, resources)
     resolved = _prepare_run_instructions(resolved, origins)
     return _PreparedRun(resolved, adapter, template, bound, cwd)
+
+
+def _check_stdin_context(
+    parsed: RunArguments, source: PromptSource | None, *, absent: bool
+) -> None:
+    count = parsed.contexts.count(STDIN_CONTEXT)
+    if count > 1:
+        raise PratError(
+            "--context - can be given once; standard input is read only once",
+            code="invalid_arguments",
+        )
+    if count == 0:
+        return
+    if source is not None and (source.kind == "stdin" or source == PromptSource("file", "-")):
+        raise PratError(
+            "--context -: standard input is already the prompt", code="invalid_arguments"
+        )
+    if source is None and not absent:
+        raise PratError(
+            "--context - reads standard input; give the prompt as text, --prompt TEXT or "
+            "--file PATH",
+            code="invalid_arguments",
+        )
 
 
 def _run_prompt(
@@ -676,10 +706,11 @@ def _run_prompt(
     environ: Mapping[str, str],
 ) -> bytes:
     template = prepared.template
+    stdin_context = STDIN_CONTEXT in parsed.contexts
     prompt = acquire_prompt(
         prepared.bound.source,
         invocation_cwd,
-        sys.stdin,
+        None if stdin_context else sys.stdin,
         allow_absent=template is not None or parsed.edit,
         allow_blank=parsed.edit,
     )
@@ -687,7 +718,7 @@ def _run_prompt(
         prompt = render_template(
             template, prompt, parameters=prepared.bound.parameters, allow_blank=parsed.edit
         )
-    prompt = prepend_contexts(parsed.contexts, prompt, invocation_cwd)
+    prompt = prepend_contexts(parsed.contexts, prompt, invocation_cwd, sys.stdin)
     return edit_prompt(prompt, invocation_cwd, environ) if parsed.edit else prompt
 
 

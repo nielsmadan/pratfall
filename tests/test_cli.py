@@ -1964,7 +1964,7 @@ def test_help_without_a_selector_prints_the_top_level_help(
     assert "profile, or workflow" in output
     assert "  prat cc -t rename --param old=foo --param new=bar\n" in output
     assert '  prat ship "add a --verbose flag"\n' in output
-    assert '  prat cx --json "summarize this diff" < change.diff\n' in output
+    assert '  prat cx --json --context - "summarize this diff" < change.diff\n' in output
 
 
 @pytest.mark.parametrize("path", list(_COMMAND_EXAMPLES))

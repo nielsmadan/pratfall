@@ -327,8 +327,10 @@ def test_attachment_requires_prompt_and_preserves_stdin_and_template(
     assert json.loads(capsys.readouterr().out)["argv"][-1] == "--prompt=stdin task"
     monkeypatch.setattr(sys, "stdin", io.StringIO("context"))
     (tmp_path / ".pratfile").write_text('version=1\n[templates.work]\nprompt="Review $input"\n')
-    assert main([*common, "--template=work", "task"]) == 0
-    assert json.loads(capsys.readouterr().out)["argv"][-1] == "--prompt=Review context\n\ntask"
+    assert main([*common, "--template=work", "--context", "-", "task"]) == 0
+    assert json.loads(capsys.readouterr().out)["argv"][-1] == (
+        "--prompt=# Context: stdin\n\ncontext\n\nReview task"
+    )
 
 
 def test_attachment_inventory(capsys: pytest.CaptureFixture[str]) -> None:

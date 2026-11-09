@@ -171,7 +171,7 @@ _RUN_OPTIONS: tuple[_RunOption, ...] = (
     _RunOption(
         "--context PATH",
         ("--context",),
-        "Prepend a UTF-8 context file; repeat to include several.",
+        "Prepend a UTF-8 context file, or - for stdin; repeat to include several.",
     ),
     _RunOption(
         "-x, --extract", ("-x", "--extract"), "Return the first fenced code block from the answer."
@@ -325,7 +325,7 @@ _EPILOG = f"""run syntax:
 
 SELECTOR is an agent name (codex, kiro), alias (cx), profile, or workflow. prat list lists
 them; prat SELECTOR --help lists the options that SELECTOR takes.
-Redirected stdin precedes prompt text or file contents, separated by two newlines.
+Redirected stdin is the prompt when no other source is given; --context - adds it to one.
 
 run options:
 {run_options_text()}
@@ -336,10 +336,10 @@ examples:
   printf 'multiline prompt\\n' | prat cc -
   prat cc --file prompt.md
   prat cc --prompt=-leading-dash
-  prat cx "how many Rs in strawberry" | prat cx "times 5"
+  prat cx "how many Rs in strawberry" | prat cx --context - "times 5"
   prat cc -t rename --param old=foo --param new=bar
   prat ship "add a --verbose flag"
-  prat cx --json "summarize this diff" < change.diff
+  prat cx --json --context - "summarize this diff" < change.diff
 """
 
 
