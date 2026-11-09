@@ -867,7 +867,9 @@ def _number_option(value: str | None, flag: str) -> float | None:
     except ValueError:
         number = math.nan
     if not math.isfinite(number) or number <= 0:
-        raise PratError(f"{flag} requires a finite positive number", code="invalid_arguments")
+        raise PratError(
+            f"{flag} {value!r}: expected a finite positive number", code="invalid_arguments"
+        )
     return number
 
 
@@ -879,7 +881,7 @@ def _integer_option(value: str | None, flag: str) -> int | None:
     except ValueError:
         number = 0
     if str(number) != value or not 0 < number <= MAX_TURNS:
-        raise PratError(f"{flag} requires a positive integer", code="invalid_arguments")
+        raise PratError(f"{flag} {value!r}: expected a positive integer", code="invalid_arguments")
     return number
 
 

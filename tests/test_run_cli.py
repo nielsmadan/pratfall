@@ -2318,6 +2318,24 @@ def test_run_argument_errors_use_full_json_contract_when_requested(
     assert message in result["error"]["message"]
 
 
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["--timeout", "5abc"], "--timeout '5abc': expected a finite positive number"),
+        (["--timeout=0"], "--timeout '0': expected a finite positive number"),
+        (["--max-budget-usd", "inf"], "--max-budget-usd 'inf': expected a finite positive number"),
+        (["--max-ai-credits", "x"], "--max-ai-credits 'x': expected a finite positive number"),
+        (["--max-turns", "0"], "--max-turns '0': expected a positive integer"),
+        (["--max-turns", "1.5"], "--max-turns '1.5': expected a positive integer"),
+    ],
+)
+def test_number_errors_name_the_rejected_value(
+    arguments: list[str], message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["cc", "prompt", *arguments, "--dry-run"]) == 2
+    assert capsys.readouterr().err == f"prat: {message}\n"
+
+
 def test_json_token_consumed_as_an_option_value_is_not_an_output_flag(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
