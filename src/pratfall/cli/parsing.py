@@ -372,6 +372,7 @@ class _RunToken:
     argument: str
     name: str
     value: str | None = None
+    refused: str | None = None
 
 
 @dataclass(frozen=True)
@@ -828,12 +829,22 @@ def _scan_run(arguments: list[str]) -> _RunScan:
             index += 1
             continue
         value = prat_arguments[index + 1] if index + 1 < len(prat_arguments) else None
+        if value is not None and value.startswith("-") and value != "-":
+            tokens.append(_RunToken(argument, name, refused=value))
+            index += 1
+            continue
         tokens.append(_RunToken(argument, name, value))
         index += 2
     return _RunScan(tuple(tokens), native_arguments)
 
 
 def _run_token_value(token: _RunToken) -> str:
+    if token.refused is not None:
+        raise PratError(
+            f"{token.name} requires a value; {token.refused!r} is not a value; "
+            f"write {token.name}={token.refused} if it is",
+            code="invalid_arguments",
+        )
     if token.value is None:
         raise PratError(f"{token.name} requires a value", code="invalid_arguments")
     return token.value

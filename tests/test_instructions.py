@@ -68,8 +68,8 @@ def test_instruction_fake_process_receives_literal_argv_and_prompt(
     )
     path = tmp_path / "rules.txt"
     path.write_text(TEXT, encoding="utf-8", newline="")
-    flag, value = ("--instructions-file", str(path)) if file_form else ("--instructions", TEXT)
-    assert main([agent, flag, value, "task", "--json"]) == 0
+    option = f"--instructions-file={path}" if file_form else f"--instructions={TEXT}"
+    assert main([agent, option, "task", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["output"] == "ok"
     argv, prompt = json.loads(log.read_text())
     if agent == "codex":

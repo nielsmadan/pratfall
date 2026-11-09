@@ -259,6 +259,11 @@ prat cx --model gpt-5.6-luna --effort low "review this change"
 prat cc --timeout 120 --cwd ../project "inspect this failure"
 ```
 
+A flag that takes a value accepts `--flag VALUE` and `--flag=VALUE`. A value that starts with a
+dash needs the `=` form: `--model --dry-run` fails with `--model requires a value; '--dry-run' is
+not a value; write --model=--dry-run if it is` before anything launches, so a flag can never be
+taken as the value of the one before it. A lone `-` is still a value, as in `--file -`.
+
 `prat SELECTOR --help` (or `-h`) describes the selector, then prints the usage line and the run
 options that selector takes: every run option for an agent, alias or profile, and only the
 workflow options for a workflow. An agent is described by the settings it supports; a profile by
@@ -455,7 +460,8 @@ prat cx --add-dir ../shared --add-dir "../other project" "review the integration
 `add_dirs` with the supplied list, preserving order and duplicates. Relative CLI paths use the
 invocation directory, independently of `--cwd`; config paths use their defining file's directory.
 `~` expands to the user's home. Symlinks and `..` retain filesystem traversal semantics.
-Spaces and leading dashes in names are supported; `--add-dir=-directory` is also accepted.
+Spaces and leading dashes in names are supported; a name that starts with a dash needs the `=`
+form, as in `--add-dir=-directory`.
 
 The selected paths must exist as directories, including for `--dry-run`. Unsupported settings,
 native flag collisions and invalid directories fail before prompt files, stdin, context or editor
@@ -513,7 +519,7 @@ prat vibe --tools 'read*' --disabled-tools 're:^bash$' "review this checkout"
 
 Repeat `--tools NAME` and `--disabled-tools NAME` before or after the selector. Each occurrence is
 one native name or pattern; Prat preserves order and duplicates. CLI lists replace configured
-lists. Use `--tools=-name` when a value starts with a dash. Config `tools=[]` is an active empty
+lists. A value that starts with a dash needs the `=` form: `--tools=-name`. Config `tools=[]` is an active empty
 allowlist; an empty CLI string is invalid. The names, patterns and effective tool set belong to
 the native agent, and an unknown name can fail or match nothing according to that agent.
 

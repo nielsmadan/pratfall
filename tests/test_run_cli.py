@@ -773,7 +773,7 @@ def test_file_prompt_forms_preserve_unicode_and_newlines(
     form: str,
 ) -> None:
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
-    prompt_file = tmp_path / "- prompt file.md"
+    prompt_file = tmp_path / "prompt file.md"
     prompt_file.write_bytes("first\n雪\n".encode())
     monkeypatch.chdir(tmp_path)
     if form == "short":
@@ -2321,10 +2321,57 @@ def test_run_argument_errors_use_full_json_contract_when_requested(
 def test_json_token_consumed_as_an_option_value_is_not_an_output_flag(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert main(["cx", "prompt", "--model", "--json", "--dry-run"]) == 0
+    assert main(["cx", "prompt", "--model=--json", "--dry-run"]) == 0
     captured = capsys.readouterr()
     assert captured.out.startswith("command: ")
     assert not captured.out.startswith("{")
+
+
+@pytest.mark.parametrize(
+    "flag",
+    [
+        "--model",
+        "--native-agent",
+        "--session-id",
+        "--tools",
+        "--disabled-tools",
+        "--instructions",
+        "--timeout",
+        "-t",
+        "-f",
+    ],
+)
+def test_separate_value_starting_with_a_dash_is_refused_before_launch(
+    flag: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    launched = tmp_path / "launched"
+    config = write_agent(tmp_path, "claude", f"open({str(launched)!r}, 'w').close()")
+    assert main(["cc", flag, "--dry-run", "hi", "--config", str(config)]) == 2
+    assert capsys.readouterr().err == (
+        f"prat: {flag} requires a value; '--dry-run' is not a value; "
+        f"write {flag}=--dry-run if it is\n"
+    )
+    assert not launched.exists()
+
+
+def test_equals_value_may_start_with_a_dash(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["cc", "--model=--dry-run", "--dry-run", "--json", "hi"]) == 0
+    assert json.loads(capsys.readouterr().out)["model"] == "--dry-run"
+
+
+def test_separate_value_refusal_is_reported_as_json(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["cc", "--tools", "-x", "--json", "--dry-run", "hi"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == {
+        "code": "invalid_arguments",
+        "message": "--tools requires a value; '-x' is not a value; write --tools=-x if it is",
+    }
+
+
+def test_value_flag_at_the_end_of_the_line_requires_a_value(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["cc", "--dry-run", "hi", "--model"]) == 2
+    assert capsys.readouterr().err == "prat: --model requires a value\n"
 
 
 def test_prompt_byte_limit_and_invalid_stdin_utf8(

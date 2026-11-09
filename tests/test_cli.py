@@ -1932,9 +1932,7 @@ def test_help_after_the_native_boundary_stays_native(
     )
 
 
-@pytest.mark.parametrize(
-    "arguments", [["--prompt=--help", "cx"], ["cx", "--model", "--help", "hi"]]
-)
+@pytest.mark.parametrize("arguments", [["--prompt=--help", "cx"], ["cx", "--model=--help", "hi"]])
 def test_help_as_a_flag_value_is_not_a_help_request(
     arguments: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

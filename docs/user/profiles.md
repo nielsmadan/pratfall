@@ -446,6 +446,10 @@ is now an aligned table. `agents`, `profiles`, `templates` and `workflows` are n
 so they are legal profile and workflow names again; `list` is now reserved, so rename a
 `[profiles.list]` or `[workflows.list]` and update invocations that select it.
 
+A separate value that starts with a dash is now refused rather than taken as the value: `--tools
+-name` and `--add-dir -dir` fail with `--tools requires a value; '-name' is not a value; write
+--tools=-name if it is`. Write `--tools=-name` and `--add-dir=-dir`. A lone `-` is still a value.
+
 A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
 naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that
 applies, and `workflows.NAME` for a workflow. Templates have their own names and never collide.

@@ -359,6 +359,18 @@ def test_unsupported_flags_are_rejected_in_the_users_spelling(
     assert captured.err == f"prat: {flag} is not supported for workflows\n"
 
 
+def test_workflow_option_value_starting_with_a_dash_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = chain_config(tmp_path)
+    assert main(["chain", "--timeout", "--dry-run", "hi", "--config", str(config)]) == 2
+    captured = capsys.readouterr()
+    assert captured.err == (
+        "prat: --timeout requires a value; '--dry-run' is not a value; "
+        "write --timeout=--dry-run if it is\n"
+    )
+
+
 def test_base_input_for_workflow_without_input_is_rejected(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
