@@ -920,9 +920,7 @@ def test_doctor_version_timeout_is_diagnostic(
     assert "0.05 second timeout" in codex["version_error"]
 
 
-def test_run_fast_flags_are_tri_state_and_conflicts_are_rejected(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_run_fast_flags_are_tri_state(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     config = tmp_path / "fast.toml"
     config.write_text("version=1\n[defaults]\nfast=false\n", encoding="utf-8")
     assert main(["cx", "prompt", "--config", str(config), "--dry-run", "--json"]) == 0
@@ -931,8 +929,16 @@ def test_run_fast_flags_are_tri_state_and_conflicts_are_rejected(
     enabled = json.loads(capsys.readouterr().out)
     assert enabled["fast"] is True
     assert 'service_tier="priority"' in enabled["argv"]
-    assert main(["cx", "prompt", "--fast", "--no-fast", "--dry-run", "--json"]) == 2
-    assert json.loads(capsys.readouterr().out)["error"]["code"] == "invalid_arguments"
+
+
+@pytest.mark.parametrize(
+    ("flags", "fast"), [(["--fast", "--no-fast"], False), (["--no-fast", "--fast"], True)]
+)
+def test_run_last_fast_flag_wins(
+    flags: list[str], fast: bool, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["cx", "prompt", *flags, "--dry-run", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["fast"] is fast
 
 
 def test_run_rejects_fast_override_for_unsupported_agent(
@@ -944,11 +950,17 @@ def test_run_rejects_fast_override_for_unsupported_agent(
     assert "does not support a fast-mode override" in result["error"]["message"]
 
 
-def test_run_notify_flags_are_tri_state_and_conflicts_are_rejected() -> None:
+def test_run_notify_flags_are_tri_state() -> None:
     assert _parse_run(["cx", "prompt", "--notify"]).options.notify is True
     assert _parse_run(["cx", "prompt", "--no-notify"]).options.notify is False
-    with pytest.raises(PratError, match="--notify and --no-notify cannot be used together"):
-        _parse_run(["cx", "prompt", "--notify", "--no-notify"])
+
+
+@pytest.mark.parametrize(
+    ("flags", "notify"),
+    [(["--notify", "--no-notify"], False), (["--no-notify", "--notify"], True)],
+)
+def test_run_last_notify_flag_wins(flags: list[str], notify: bool) -> None:
+    assert _parse_run(["cx", "prompt", *flags]).options.notify is notify
 
 
 @pytest.mark.parametrize("flag", ["--notify", "--no-notify"])

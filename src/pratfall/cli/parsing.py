@@ -16,12 +16,12 @@ from pratfall.instructions import validate_instructions
 from pratfall.models import MAX_TURNS, OptionOrigin, Options
 from pratfall.prompt_input import PromptSource
 
-_TRI_STATE_FLAGS: Mapping[str, tuple[str, bool, str]] = MappingProxyType(
+_TRI_STATE_FLAGS: Mapping[str, tuple[str, bool]] = MappingProxyType(
     {
-        "--fast": ("fast", True, "--fast and --no-fast"),
-        "--no-fast": ("fast", False, "--fast and --no-fast"),
-        "--notify": ("notify", True, "--notify and --no-notify"),
-        "--no-notify": ("notify", False, "--notify and --no-notify"),
+        "--fast": ("fast", True),
+        "--no-fast": ("fast", False),
+        "--notify": ("notify", True),
+        "--no-notify": ("notify", False),
     }
 )
 
@@ -120,7 +120,7 @@ _OPTION_FLAGS: Mapping[str, str] = MappingProxyType(
 def option_flags(options: Options) -> dict[str, str]:
     tri_state = {
         field: flag
-        for flag, (field, value, _) in _TRI_STATE_FLAGS.items()
+        for flag, (field, value) in _TRI_STATE_FLAGS.items()
         if getattr(options, field) is value
     }
     return {**_OPTION_FLAGS, **tri_state}
@@ -691,10 +691,7 @@ def _parse_run(arguments: list[str]) -> RunArguments:
             continue
         tri_state_flag = _TRI_STATE_FLAGS.get(argument)
         if tri_state_flag is not None:
-            key, flag_value, label = tri_state_flag
-            current = tri_state[key]
-            if current is not None and current != flag_value:
-                raise PratError(f"{label} cannot be used together", code="invalid_arguments")
+            key, flag_value = tri_state_flag
             tri_state[key] = flag_value
             continue
         if argument == "--prompt":

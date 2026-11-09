@@ -280,7 +280,7 @@ object, with each setting's origin and whether the selector's agent supports eac
 | Control | Flags and behavior |
 | --- | --- |
 | Model and effort | `--model`, `--effort`; support depends on the agent. |
-| Fast mode | `--fast` or `--no-fast` for Claude and Codex. Omitting both preserves native settings; combining them fails before launch. |
+| Fast mode | `--fast` or `--no-fast` for Claude and Codex. Omitting both preserves native settings; when both are given, the last one wins. |
 | Execution deadline | `--timeout SECONDS`; defaults to 600 seconds. |
 | Native budgets | `--max-budget-usd`, `--max-turns`, `--max-ai-credits`; support and counting depend on the agent. |
 | Working directory | `--cwd PATH`; changes the agent's directory, not prompt-file resolution or config discovery. |
@@ -383,7 +383,8 @@ is not `interrupted`, stderr is a terminal, and the run took at least `notify_af
 failure to write it is silent and never changes output or the exit code.
 
 Disable it with `--no-notify` for one run, or `notify = false` in `[defaults]` of the global
-config, a `.pratfile`, or a profile. `--notify` and `--no-notify` cannot be combined.
+config, a `.pratfile`, or a profile. When `--notify` and `--no-notify` are both given, the last
+one wins.
 
 `notify_method` and `notify_after` are config-only settings, resolved with the same
 CLI → profile → local defaults → global defaults precedence as other options:
