@@ -26,9 +26,10 @@ from pratfall.cli import doctor as doctor_module
 from pratfall.cli import main
 from pratfall.cli.presentation import _presentation_error
 from pratfall.config import init_config
+from pratfall.limits import WORKFLOW_SPEC_BYTES
 from pratfall.local_trust import digest
 from pratfall.models import ConsumedCapture, DecodedOutput, RawCapture, ResultError, Usage
-from pratfall.prompt_input import PROMPT_LIMIT
+from pratfall.prompt_input import ARGUMENT_PROMPT_LIMIT, STDIN_PROMPT_LIMIT
 from pratfall.runner import ProcessResult, RunLimits
 
 NOTIFY_ENV_KEYS = (
@@ -1080,7 +1081,10 @@ def test_terminal_without_prompt_is_an_actionable_usage_error(
         (" \n\t\u2003".encode(), "empty or whitespace-only"),
         (b"nul\0byte", "NUL"),
         (b"\xff", "not valid UTF-8"),
-        (b"x" * (PROMPT_LIMIT + 1), "byte limit"),
+        (
+            b"x" * (STDIN_PROMPT_LIMIT + 1),
+            "prompt is 8388609 bytes; the limit for Codex is 8388608 (8 MiB)",
+        ),
     ],
 )
 def test_invalid_file_content_is_normalized_and_dry_run_does_not_launch(
@@ -2493,12 +2497,67 @@ def test_value_flag_at_the_end_of_the_line_requires_a_value(
     assert capsys.readouterr().err == "prat: --model requires a value\n"
 
 
+@pytest.mark.parametrize(
+    ("agent", "selector", "message"),
+    [
+        ("codex", "cx", None),
+        ("claude", "cc", None),
+        ("gemini", "gm", "prompt is 1100001 bytes; the limit for Gemini is 1048576 (1 MiB)"),
+        ("kiro", "kiro", "prompt is 1100001 bytes; the limit for Kiro is 1048576 (1 MiB)"),
+    ],
+)
+def test_prompt_limit_follows_how_the_agent_takes_its_prompt(
+    agent: str,
+    selector: str,
+    message: str | None,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(tmp_path, agent, "raise SystemExit('must not launch')")
+    big = tmp_path / "big"
+    big.write_bytes(b"x" * 1100001)
+    arguments = [selector, "-f", str(big), "--config", str(config), "--dry-run", "--json"]
+    if message is None:
+        assert main(arguments) == 0
+        assert json.loads(capsys.readouterr().out)["stdin_bytes"] == 1100001
+        return
+    assert main(arguments) == 2
+    assert json.loads(capsys.readouterr().out)["error"] == {
+        "code": "invalid_arguments",
+        "message": message,
+    }
+
+
+@pytest.mark.parametrize("excess", [0, 1])
+def test_argument_agent_limit_covers_contexts(
+    excess: int, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "gemini", "raise SystemExit('must not launch')")
+    header = b'# Context: "notes.md"\n\n'
+    (tmp_path / "notes.md").write_bytes(
+        b"x" * (ARGUMENT_PROMPT_LIMIT - len(header) - 2 - len(b"task") + excess)
+    )
+    arguments = ["gm", "task", "--context", "notes.md", "--config", str(config), "--dry-run"]
+    with pytest.MonkeyPatch.context() as patch:
+        patch.chdir(tmp_path)
+        code = main([*arguments, "--json"])
+    result = json.loads(capsys.readouterr().out)
+    if excess:
+        assert code == 2
+        assert result["error"]["message"] == (
+            "prompt is 1048577 bytes; the limit for Gemini is 1048576 (1 MiB)"
+        )
+    else:
+        assert code == 0
+        assert len(result["argv"][-1].removeprefix("--prompt=")) == ARGUMENT_PROMPT_LIMIT
+
+
 def test_prompt_byte_limit_and_invalid_stdin_utf8(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    exact = "é" * (PROMPT_LIMIT // 2)
+    exact = "é" * (STDIN_PROMPT_LIMIT // 2)
     assert main(["cx", exact, "--dry-run", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)["stdin_bytes"] == PROMPT_LIMIT
+    assert json.loads(capsys.readouterr().out)["stdin_bytes"] == STDIN_PROMPT_LIMIT
     assert main(["cx", exact + "é", "--dry-run", "--json"]) == 2
     assert json.loads(capsys.readouterr().out)["error"]["code"] == "invalid_arguments"
     monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"\xff")))
@@ -3161,7 +3220,7 @@ def test_context_flag_after_native_boundary_stays_native(
 def test_stdin_context_rejects_over_budget_pipe_without_waiting_for_eof(tmp_path: Path) -> None:
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
     prompt_file = tmp_path / "prompt.md"
-    prompt_file.write_bytes(b"x" * (PROMPT_LIMIT - len("# Context: stdin\n\n\n\n") - 1))
+    prompt_file.write_bytes(b"x" * (STDIN_PROMPT_LIMIT - len("# Context: stdin\n\n\n\n") - 1))
     with subprocess.Popen(
         [
             sys.executable,
@@ -3189,7 +3248,7 @@ def test_stdin_context_rejects_over_budget_pipe_without_waiting_for_eof(tmp_path
             result = json.loads(process.stdout.read())
             assert result["error"] == {
                 "code": "invalid_arguments",
-                "message": f"prompt exceeds the {PROMPT_LIMIT} byte limit",
+                "message": "prompt is more than 8388608 bytes; the limit for Codex is 8388608 (8 MiB)",
             }
         finally:
             if process.poll() is None:
@@ -3349,7 +3408,7 @@ def test_edit_after_native_boundary_stays_native(
     assert flag in result["error"]["message"]
 
 
-@pytest.mark.parametrize("value", [b"\xff", b"\0", b"x" * (PROMPT_LIMIT + 1)])
+@pytest.mark.parametrize("value", [b"\xff", b"\0", b"x" * (STDIN_PROMPT_LIMIT + 1)])
 def test_edit_validates_initial_draft_before_opening_editor(
     value: bytes, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -3360,7 +3419,7 @@ def test_edit_validates_initial_draft_before_opening_editor(
     assert result["error"]["message"] in {
         "standard input is not valid UTF-8",
         "prompt must not contain NUL bytes",
-        f"prompt exceeds the {PROMPT_LIMIT} byte limit",
+        "prompt is more than 8388608 bytes; the limit for Codex is 8388608 (8 MiB)",
     }
 
 
@@ -3921,7 +3980,7 @@ def test_parameter_prompt_is_rendered_before_the_editor(
     context.write_text("background")
     drafts: list[bytes] = []
 
-    def fake_editor(draft: bytes, invocation_cwd: Path, environ: object) -> bytes:
+    def fake_editor(draft: bytes, invocation_cwd: Path, environ: object, limit: object) -> bytes:
         drafts.append(draft)
         return draft + b"!"
 
@@ -4072,8 +4131,8 @@ BAD_PARENT = "workflow step spec parent must be an integer"
             + "Expecting property name enclosed in double quotes: line 1 column 36 (char 35)",
         ),
         (
-            b" " * (8 * PROMPT_LIMIT + 1),
-            f"workflow step spec exceeds the {8 * PROMPT_LIMIT} byte limit",
+            b" " * (WORKFLOW_SPEC_BYTES + 1),
+            f"workflow step spec exceeds the {WORKFLOW_SPEC_BYTES} byte limit",
         ),
         (
             b"[" * 200000,

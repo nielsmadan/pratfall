@@ -373,7 +373,7 @@ def test_attachment_editor_task_and_later_native_file_read(
     )
     drafts: list[bytes] = []
 
-    def edit(draft: bytes, _cwd: Path, _environ: Mapping[str, str]) -> bytes:
+    def edit(draft: bytes, _cwd: Path, _environ: Mapping[str, str], _limit: object) -> bytes:
         drafts.append(draft)
         image.write_bytes(b"\xff\x00after")
         return b"edited task"

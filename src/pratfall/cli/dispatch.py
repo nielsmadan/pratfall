@@ -79,8 +79,10 @@ from pratfall.prompt_editor import edit_prompt
 from pratfall.prompt_input import (
     STDIN_CONTEXT,
     InputInterrupted,
+    PromptLimit,
     PromptSource,
     acquire_prompt,
+    delivery_limit,
     prepend_contexts,
 )
 from pratfall.prompt_templates import (
@@ -718,6 +720,7 @@ def _run_prompt(
     environ: Mapping[str, str],
 ) -> bytes:
     template = prepared.template
+    limit = _prompt_limit(prepared.adapter, prepared.resolved)
     stdin_context = STDIN_CONTEXT in parsed.contexts
     prompt = acquire_prompt(
         prepared.bound.source,
@@ -725,13 +728,22 @@ def _run_prompt(
         None if stdin_context else sys.stdin,
         allow_absent=template is not None or parsed.edit,
         allow_blank=parsed.edit,
+        limit=limit,
     )
     if template is not None:
         prompt = render_template(
-            template, prompt, parameters=prepared.bound.parameters, allow_blank=parsed.edit
+            template,
+            prompt,
+            parameters=prepared.bound.parameters,
+            allow_blank=parsed.edit,
+            limit=limit,
         )
-    prompt = prepend_contexts(parsed.contexts, prompt, invocation_cwd, sys.stdin)
-    return edit_prompt(prompt, invocation_cwd, environ) if parsed.edit else prompt
+    prompt = prepend_contexts(parsed.contexts, prompt, invocation_cwd, sys.stdin, limit=limit)
+    return edit_prompt(prompt, invocation_cwd, environ, limit) if parsed.edit else prompt
+
+
+def _prompt_limit(adapter: Adapter, resolved: ResolvedProfile) -> PromptLimit:
+    return PromptLimit(delivery_limit(adapter.prompt_delivery), resolved.agent.label)
 
 
 def _run_plan(

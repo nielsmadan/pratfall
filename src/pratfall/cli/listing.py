@@ -3,6 +3,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
+from pratfall.adapters.registry import ADAPTERS
 from pratfall.catalog import AGENTS, BY_SELECTOR
 from pratfall.cli.doctor import Which, agent_executable
 from pratfall.cli.parsing import (
@@ -15,6 +16,7 @@ from pratfall.cli.presentation import _limit_text, render_table
 from pratfall.config import option_origins, reject_blocked, resolve_profile, supports_setting
 from pratfall.limits import DEFAULT_MAX_PARALLEL
 from pratfall.models import AgentSpec, Config, OptionOrigin, ProfileLayer, WorkflowStep
+from pratfall.prompt_input import delivery_limit, mib_text
 from pratfall.prompt_templates import template_parameters
 from pratfall.workflow_plan import workflow_parameter_names
 
@@ -262,6 +264,9 @@ def agent_line(agent: AgentSpec) -> str:
         supported.append("attachment_types=" + "/".join(caps.attachment_types))
         if caps.attachment_max_count is not None:
             supported.append(f"attachment_max_count={caps.attachment_max_count}")
+    supported.append(
+        "prompt_limit=" + mib_text(delivery_limit(ADAPTERS[agent.name].prompt_delivery))
+    )
     selectors = f"{agent.name} ({', '.join(agent.aliases)})" if agent.aliases else agent.name
     return f"{selectors}: {', '.join(supported) or 'none'}"
 

@@ -155,14 +155,27 @@ _RESERVED_CASES: tuple[tuple[str, str], ...] = tuple(
 
 def test_adapter_requires_exactly_one_whole_document_or_consumer() -> None:
     with pytest.raises(TypeError, match="exactly one"):
-        Adapter(build=claude.build, validate=claude.validate)
+        Adapter(build=claude.build, validate=claude.validate, prompt_delivery="stdin")
     with pytest.raises(TypeError, match="exactly one"):
         Adapter(
             build=codex.build,
             validate=codex.validate,
+            prompt_delivery="stdin",
             whole_document=codex.decode,
             consumer=codex.consumer,
         )
+
+
+@pytest.mark.parametrize("name", sorted(_NAMED_ADAPTERS))
+def test_declared_prompt_delivery_matches_where_the_prompt_goes(name: str) -> None:
+    agent, adapter = _NAMED_ADAPTERS[name]
+    marker = "prat-prompt-marker"
+    invocation = adapter.build(resolved(agent, Options(timeout=_TIMEOUT)), marker.encode())
+    placement = (
+        any(marker in argument for argument in invocation.argv),
+        marker.encode() in invocation.stdin,
+    )
+    assert placement == ((True, False) if adapter.prompt_delivery == "argument" else (False, True))
 
 
 @pytest.mark.parametrize("name", sorted(_NAMED_ADAPTERS))

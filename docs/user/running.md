@@ -59,7 +59,8 @@ git diff | prat cc --context - "Review these changes"
 
 The `-` and `--file -` forms read stdin once, without adding a header or another copy of the input.
 
-Prompts must be valid UTF-8, contain non-whitespace text, have no NUL bytes, and fit within 1 MiB.
+Prompts must be valid UTF-8, contain non-whitespace text, have no NUL bytes, and fit within the
+selected agent's prompt limit (see below).
 With `--edit`, the initial draft may be empty or whitespace-only; all other input checks still apply.
 Otherwise, an explicit prompt must be valid on its own; the composed prompt, including context
 blocks, must also fit within that limit.
@@ -69,8 +70,16 @@ an agent starts, and the message names the input: `standard input is empty or wh
 Relative file paths resolve from the invocation directory, independently of
 `--cwd`.
 
-Gemini, Copilot, Cursor, Kiro, Kimi Code, Warp, Devin, and Grok receive prompts as command
-arguments, so the operating system's argument-size limit may be lower than 1 MiB.
+The limit depends on how the agent receives the prompt. Gemini, Copilot, Cursor, Kiro, Kimi Code,
+Warp, Devin, and Grok receive it as a command argument, and their limit is 1 MiB (1,048,576 bytes);
+the operating system's argument-size limit may be lower still. Every other agent reads the prompt
+from stdin, and its limit is 8 MiB (8,388,608 bytes), so a large diff or log can reach a
+long-context model. The agent enforces its own context window; Prat's limit only guards against
+accidental input. `prat AGENT --help` shows the agent's `prompt_limit`. An oversized prompt fails
+before launch with its size, the agent and the limit:
+`prompt is 1100001 bytes; the limit for Gemini is 1048576 (1 MiB)`. When stdin overflows, Prat stops
+reading one byte past the limit and reports `prompt is more than 8388608 bytes; …`. A size reported
+for a file covers the parts composed when the check fired.
 Reasonix, Vibe, and Grok trim surrounding whitespace natively. Crush 0.98.1 adds two trailing
 newlines to the original input. Prat supplies the same prompt bytes before these native changes.
 
@@ -112,8 +121,8 @@ are preserved.
 A template can provide the complete task when no base input is supplied. Terminal, closed or
 unavailable stdin and an empty implicit stdin stream count as absent input. Explicit empty sources
 (`--prompt ''`, an empty file, or explicit `-`/`--file -` stdin) still fail; whitespace-only implicit
-stdin also fails. The final rendered task must be nonempty, valid UTF-8, NUL-free and at most 1 MiB.
-Template definitions also have a 1 MiB UTF-8 limit, and repeated substitutions are checked against
+stdin also fails. The final rendered task must be nonempty, valid UTF-8, NUL-free and within the
+agent's prompt limit. Template definitions have their own 1 MiB UTF-8 limit, and repeated substitutions are checked against
 the final limit before allocating their expanded text. `--dry-run` uses the same rendered prompt.
 
 ### Fill prompt parameters
@@ -207,9 +216,10 @@ git diff | prat cc --context - "Review these changes"
 git diff | prat cc --context - --context notes.md -t review
 ```
 
-The shared 1 MiB limit includes the rendered task, all context content, labels and separators.
-Prat reserves label space before reading context files, reads only up to the remaining budget
-plus one overflow byte, and stops on overflow before opening later files. `--dry-run` uses the
+The agent's prompt limit includes the rendered task, all context content, labels and separators.
+Prat reserves label space before reading context files, fails before reading a file that is larger
+than the remaining budget, reads stdin only up to the remaining budget plus one overflow byte, and
+stops on overflow before opening later files. `--dry-run` uses the
 same composition and validation.
 
 ## Edit the prompt
@@ -223,7 +233,8 @@ VISUAL='code --wait' prat cx -e "Review this draft"
 
 `-e` or `--edit` opens the complete draft after stdin acquisition, template expansion and context
 composition. You can start with no input or a blank draft, including an explicitly empty file or
-an input-only template. The initial draft still must be UTF-8, NUL-free and within 1 MiB. After the
+an input-only template. The initial draft still must be UTF-8, NUL-free and within the agent's prompt limit, as must the
+saved file. After the
 editor exits successfully, the saved file must also contain non-whitespace text before an agent
 can run. Saving by replacing the file is supported.
 
@@ -510,7 +521,7 @@ Codex sets `developer_instructions` for this run, replacing a value from native 
 rather than concatenating with it. Native settings files are never changed.
 
 Text and file content must be nonempty UTF-8 without NUL bytes and at most **1 MiB (1,048,576
-bytes)**, independently of the prompt's 1 MiB limit. Whitespace-only content is rejected. Prat
+bytes)**, independently of the agent's prompt limit. Whitespace-only content is rejected. Prat
 preserves newlines and all accepted text exactly. It reads the winning file once, with a bounded
 read from a regular file, before acquiring prompt stdin or starting an editor. Missing,
 unreadable, nonregular, oversized and invalid UTF-8 files fail with the setting's source.

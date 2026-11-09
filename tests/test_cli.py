@@ -193,14 +193,27 @@ def test_agents_inventory_reports_aliases_and_capabilities(
             "cc",
             (
                 "claude (cc): model, effort, fast, add_dirs, instructions, schema, tools, "
-                "disabled_tools, native_agent, session_id, max_budget_usd, max_turns"
+                "disabled_tools, native_agent, session_id, max_budget_usd, max_turns, "
+                "prompt_limit=8 MiB"
             ),
         ),
-        ("kiro", "kiro: model, effort"),
-        ("warp", "warp: model"),
-        ("qwen", "qwen: model, add_dirs, instructions, schema, tools, disabled_tools, max_turns"),
-        ("amp", "amp: none"),
-        ("vibe", "vibe: tools, disabled_tools, native_agent, max_budget_usd, max_turns"),
+        ("kiro", "kiro: model, effort, prompt_limit=1 MiB"),
+        ("warp", "warp: model, prompt_limit=1 MiB"),
+        (
+            "qwen",
+            (
+                "qwen: model, add_dirs, instructions, schema, tools, disabled_tools, max_turns, "
+                "prompt_limit=8 MiB"
+            ),
+        ),
+        ("amp", "amp: prompt_limit=8 MiB"),
+        (
+            "vibe",
+            (
+                "vibe: tools, disabled_tools, native_agent, max_budget_usd, max_turns, "
+                "prompt_limit=8 MiB"
+            ),
+        ),
     ],
 )
 def test_agent_help_header_lists_supported_settings(

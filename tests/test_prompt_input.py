@@ -8,7 +8,14 @@ import pytest
 
 from pratfall import prompt_input
 from pratfall.errors import PratError
-from pratfall.prompt_input import PROMPT_LIMIT, InputInterrupted, PromptSource, acquire_prompt
+from pratfall.prompt_input import (
+    ARGUMENT_PROMPT_LIMIT,
+    STDIN_PROMPT_LIMIT,
+    InputInterrupted,
+    PromptLimit,
+    PromptSource,
+    acquire_prompt,
+)
 
 
 class UntouchableStdin:
@@ -67,7 +74,7 @@ def test_stdin_context_keeps_argument_order(tmp_path: Path) -> None:
     [
         (b"\xff", "standard input context is not valid UTF-8"),
         (b"x\0y", "NUL"),
-        (b"x" * PROMPT_LIMIT, "byte limit"),
+        (b"x" * STDIN_PROMPT_LIMIT, "the limit is"),
     ],
 )
 def test_stdin_context_rejects_invalid_input(tmp_path: Path, stdin: bytes, message: str) -> None:
@@ -86,9 +93,9 @@ def test_stdin_context_limit_includes_header_separator_and_task(
     tmp_path: Path, excess: int
 ) -> None:
     task = "é".encode()
-    stdin = b"x" * (PROMPT_LIMIT - len(STDIN_HEADER) - 2 - len(task) + excess)
+    stdin = b"x" * (STDIN_PROMPT_LIMIT - len(STDIN_HEADER) - 2 - len(task) + excess)
     if excess:
-        with pytest.raises(PratError, match="byte limit"):
+        with pytest.raises(PratError, match="the limit is"):
             prompt_input.prepend_contexts(("-",), task, tmp_path, io.BytesIO(stdin))
     else:
         assert prompt_input.prepend_contexts(("-",), task, tmp_path, io.BytesIO(stdin)) == (
@@ -223,10 +230,10 @@ def test_context_limit_includes_every_label_separator_and_task(tmp_path: Path, e
     (tmp_path / "a").write_bytes(b"first")
     prefix = b'# Context: "a"\n\nfirst\n\n# Context: "b"\n\n'
     task = "雪".encode()
-    content = b"x" * (PROMPT_LIMIT - len(prefix) - 2 - len(task) + excess)
+    content = b"x" * (STDIN_PROMPT_LIMIT - len(prefix) - 2 - len(task) + excess)
     (tmp_path / "b").write_bytes(content)
     if excess:
-        with pytest.raises(PratError, match="byte limit"):
+        with pytest.raises(PratError, match="the limit is"):
             prompt_input.prepend_contexts(("a", "b"), task, tmp_path)
     else:
         assert prompt_input.prepend_contexts(("a", "b"), task, tmp_path) == (
@@ -235,16 +242,16 @@ def test_context_limit_includes_every_label_separator_and_task(tmp_path: Path, e
 
 
 def test_context_label_overflow_fails_before_opening_files(tmp_path: Path) -> None:
-    with pytest.raises(PratError, match="byte limit"):
+    with pytest.raises(PratError, match="the limit is"):
         prompt_input.prepend_contexts(
-            ("missing", "also-missing"), b"x" * (PROMPT_LIMIT - 30), tmp_path
+            ("missing", "also-missing"), b"x" * (STDIN_PROMPT_LIMIT - 30), tmp_path
         )
 
 
-def test_context_budget_stops_reading_before_later_files(
+def test_oversized_context_file_fails_before_reading_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    (tmp_path / "a").write_bytes(b"x" * PROMPT_LIMIT)
+    (tmp_path / "a").write_bytes(b"x" * STDIN_PROMPT_LIMIT)
     reads: list[int] = []
     original_read = os.read
 
@@ -253,15 +260,18 @@ def test_context_budget_stops_reading_before_later_files(
         return original_read(descriptor, size)
 
     monkeypatch.setattr(os, "read", record_read)
-    with pytest.raises(PratError, match="byte limit"):
-        prompt_input.prepend_contexts(("a", "missing"), b"x" * (PROMPT_LIMIT - 50), tmp_path)
-    assert reads == [9]
+    with pytest.raises(PratError) as caught:
+        prompt_input.prepend_contexts(("a", "missing"), b"x" * (STDIN_PROMPT_LIMIT - 50), tmp_path)
+    assert str(caught.value) == (
+        f"prompt is {2 * STDIN_PROMPT_LIMIT - 8} bytes; the limit is 8388608 (8 MiB)"
+    )
+    assert reads == []
 
 
 def test_stdin_context_reads_only_remaining_budget(tmp_path: Path) -> None:
-    stream = io.BytesIO(b"x" * PROMPT_LIMIT)
-    task = b"y" * (PROMPT_LIMIT - len(STDIN_HEADER) - 2 - 1)
-    with pytest.raises(PratError, match="byte limit"):
+    stream = io.BytesIO(b"x" * STDIN_PROMPT_LIMIT)
+    task = b"y" * (STDIN_PROMPT_LIMIT - len(STDIN_HEADER) - 2 - 1)
+    with pytest.raises(PratError, match="the limit is"):
         prompt_input.prepend_contexts(("-",), task, tmp_path, stream)
     assert stream.tell() == 2
 
@@ -301,4 +311,74 @@ def test_edit_draft_allows_blank_sources(tmp_path: Path, value: bytes, kind: str
         source = PromptSource("inline", value.decode())
     assert (
         acquire_prompt(source, tmp_path, stdin_stream, allow_absent=True, allow_blank=True) == value
+    )
+
+
+GEMINI = PromptLimit(ARGUMENT_PROMPT_LIMIT, "Gemini")
+CONTEXT_A = b'# Context: "a"\n\n\n\n'
+
+
+def test_oversized_prompt_file_reports_its_size_without_reading_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "big").write_bytes(b"x" * 1100001)
+    reads: list[int] = []
+    original_read = os.read
+
+    def record_read(descriptor: int, size: int) -> bytes:
+        reads.append(size)
+        return original_read(descriptor, size)
+
+    monkeypatch.setattr(os, "read", record_read)
+    with pytest.raises(PratError) as caught:
+        acquire_prompt(PromptSource("file", "big"), tmp_path, untouchable(), limit=GEMINI)
+    assert str(caught.value) == "prompt is 1100001 bytes; the limit for Gemini is 1048576 (1 MiB)"
+    assert reads == []
+
+
+@pytest.mark.parametrize(
+    ("limit", "accepted"),
+    [(GEMINI, False), (PromptLimit(STDIN_PROMPT_LIMIT, "Claude Code"), True)],
+)
+def test_prompt_file_limit_follows_the_agent(
+    tmp_path: Path, limit: PromptLimit, accepted: bool
+) -> None:
+    (tmp_path / "big").write_bytes(b"x" * 1100001)
+    source = PromptSource("file", "big")
+    if accepted:
+        assert len(acquire_prompt(source, tmp_path, None, limit=limit)) == 1100001
+    else:
+        with pytest.raises(PratError, match="the limit for Gemini"):
+            acquire_prompt(source, tmp_path, None, limit=limit)
+
+
+def test_oversized_stdin_reports_that_it_exceeds_the_limit() -> None:
+    stream = io.BytesIO(b"x" * (ARGUMENT_PROMPT_LIMIT + 10))
+    with pytest.raises(PratError) as caught:
+        acquire_prompt(None, Path(), stream, limit=GEMINI)
+    assert str(caught.value) == (
+        "prompt is more than 1048576 bytes; the limit for Gemini is 1048576 (1 MiB)"
+    )
+    assert stream.tell() == ARGUMENT_PROMPT_LIMIT + 1
+
+
+@pytest.mark.parametrize("excess", [0, 1])
+def test_inline_prompt_is_checked_against_the_agent_limit(tmp_path: Path, excess: int) -> None:
+    text = "x" * (ARGUMENT_PROMPT_LIMIT + excess)
+    if not excess:
+        assert len(acquire_prompt(PromptSource("inline", text), tmp_path, None, limit=GEMINI)) == (
+            ARGUMENT_PROMPT_LIMIT
+        )
+        return
+    with pytest.raises(PratError) as caught:
+        acquire_prompt(PromptSource("inline", text), tmp_path, None, limit=GEMINI)
+    assert str(caught.value) == "prompt is 1048577 bytes; the limit for Gemini is 1048576 (1 MiB)"
+
+
+def test_context_limit_follows_the_agent(tmp_path: Path) -> None:
+    (tmp_path / "a").write_bytes(b"x" * ARGUMENT_PROMPT_LIMIT)
+    with pytest.raises(PratError) as caught:
+        prompt_input.prepend_contexts(("a",), b"task", tmp_path, limit=GEMINI)
+    assert str(caught.value) == (
+        f"prompt is {ARGUMENT_PROMPT_LIMIT + len(CONTEXT_A) + len(b'task')} bytes; the limit for Gemini is 1048576 (1 MiB)"
     )

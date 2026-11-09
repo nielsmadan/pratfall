@@ -121,8 +121,9 @@ receives no input and has no prompt fails with `invalid_arguments` before it lau
 `bind` passes an ancestor's output as a named parameter instead of as input. Bound parameters are
 removed from the workflow's own parameters, and the bound step is left out of the step's joined
 input. A bound output with trailing newlines removed fills the parameter literally. Binding to an
-empty output fails the step with `invalid_arguments`, as does an input plus bound values over the
-1 MiB prompt limit.
+empty output fails the step with `invalid_arguments`, as does an input plus bound values over
+8 MiB. Each step then checks its own agent's [prompt limit](running.md#supply-a-prompt) at launch,
+so a step on an agent that takes the prompt as an argument fails above 1 MiB.
 
 ```toml
 { name = "check", profile = "verify", after = ["clean", "pack"], bind = { report = "pack" } }
@@ -197,8 +198,8 @@ parameter is removed from the workflow's own parameters, as for `bind`, and cann
 `each` source.
 
 Because the item is the only input without `as`, `input = "none"` on an `each` step needs `as`.
-An instance with no prompt and no input, or whose input, item and bound values exceed the 1 MiB
-prompt limit, fails with `invalid_arguments`.
+An instance with no prompt and no input, or whose input, item and bound values exceed 8 MiB, fails
+with `invalid_arguments`; its agent's own prompt limit also applies at launch.
 
 ### Labels and joined output
 

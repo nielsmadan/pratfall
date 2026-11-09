@@ -3,7 +3,13 @@ from string import Template
 import pytest
 
 from pratfall.errors import PratError
-from pratfall.prompt_input import PROMPT_LIMIT, PromptSource
+from pratfall.prompt_input import (
+    ARGUMENT_PROMPT_LIMIT,
+    STDIN_PROMPT_LIMIT,
+    TEMPLATE_LIMIT,
+    PromptLimit,
+    PromptSource,
+)
 from pratfall.prompt_templates import (
     BoundInput,
     bind_input,
@@ -83,10 +89,23 @@ def test_template_must_produce_a_task(prompt: str) -> None:
         render_template(prompt, b"")
 
 
-@pytest.mark.parametrize("prompt", ["x" * (PROMPT_LIMIT + 1), "é" * (PROMPT_LIMIT // 2 + 1)])
+@pytest.mark.parametrize("prompt", ["x" * (TEMPLATE_LIMIT + 1), "é" * (TEMPLATE_LIMIT // 2 + 1)])
 def test_template_definition_has_utf8_byte_limit(prompt: str) -> None:
-    with pytest.raises(PratError, match="byte limit"):
+    with pytest.raises(PratError) as caught:
         validate_template(prompt, "template")
+    assert str(caught.value) == "template: template exceeds the 1048576 byte limit"
+
+
+@pytest.mark.parametrize(("excess", "size"), [(0, None), (1, ARGUMENT_PROMPT_LIMIT + 1)])
+def test_rendered_prompt_is_checked_against_the_agent_limit(excess: int, size: int | None) -> None:
+    limit = PromptLimit(ARGUMENT_PROMPT_LIMIT, "Gemini")
+    base = b"x" * (ARGUMENT_PROMPT_LIMIT - 6 + excess)
+    if size is None:
+        assert len(render_template("Task", base, limit=limit)) == ARGUMENT_PROMPT_LIMIT
+        return
+    with pytest.raises(PratError) as caught:
+        render_template("Task", base, limit=limit)
+    assert str(caught.value) == (f"prompt is {size} bytes; the limit for Gemini is 1048576 (1 MiB)")
 
 
 @pytest.mark.parametrize("prompt", ["$input$input", "Task"])
@@ -95,7 +114,9 @@ def test_expansion_limit_is_checked_before_substitution(
     prompt: str, excess: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = b"x" * (
-        PROMPT_LIMIT // 2 + excess if prompt == "$input$input" else PROMPT_LIMIT - 6 + excess
+        STDIN_PROMPT_LIMIT // 2 + excess
+        if prompt == "$input$input"
+        else STDIN_PROMPT_LIMIT - 6 + excess
     )
     if excess:
 
@@ -103,7 +124,7 @@ def test_expansion_limit_is_checked_before_substitution(
             pytest.fail("oversized expansion must fail before substitution")
 
         monkeypatch.setattr(Template, "substitute", unexpected_substitution)
-        with pytest.raises(PratError, match="byte limit"):
+        with pytest.raises(PratError, match="the limit is"):
             render_template(prompt, base)
     else:
         expected = base + base if prompt == "$input$input" else b"Task\n\n" + base
@@ -341,19 +362,19 @@ def test_parameter_placeholder_without_value_is_a_programming_error() -> None:
 def test_parameter_values_count_utf8_bytes_toward_limit(
     excess: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    value = "\u00e9" * (PROMPT_LIMIT // 4) + "x" * excess
+    value = "\u00e9" * (STDIN_PROMPT_LIMIT // 4) + "x" * excess
     if excess:
 
         def unexpected_substitution(_self: Template, *_args: object, **_kwargs: str) -> str:
             pytest.fail("oversized expansion must fail before substitution")
 
         monkeypatch.setattr(Template, "substitute", unexpected_substitution)
-        with pytest.raises(PratError, match="byte limit") as caught:
+        with pytest.raises(PratError, match="the limit is") as caught:
             render_template("$a$a", b"", parameters={"a": value})
         assert caught.value.code == "invalid_arguments"
     else:
         rendered = render_template("$a$a", b"", parameters={"a": value})
-        assert len(rendered) == PROMPT_LIMIT
+        assert len(rendered) == STDIN_PROMPT_LIMIT
 
 
 @pytest.mark.parametrize(

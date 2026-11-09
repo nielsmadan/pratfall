@@ -13,7 +13,7 @@ from pathlib import Path
 from pratfall.errors import PratError
 from pratfall.interruption import InterruptionState, handler_for, handling
 from pratfall.limits import FINAL_DRAIN_GRACE, TERMINATE_GRACE
-from pratfall.prompt_input import InputInterrupted, read_edited_prompt
+from pratfall.prompt_input import MAX_PROMPT, InputInterrupted, PromptLimit, read_edited_prompt
 
 _EDITOR_LAUNCH = """
 import os, signal, sys
@@ -30,7 +30,12 @@ except OSError as error:
 """
 
 
-def edit_prompt(draft: bytes, invocation_cwd: Path, environ: Mapping[str, str]) -> bytes:
+def edit_prompt(
+    draft: bytes,
+    invocation_cwd: Path,
+    environ: Mapping[str, str],
+    limit: PromptLimit = MAX_PROMPT,
+) -> bytes:
     state = InterruptionState()
     with handling(handler_for(state)):
         try:
@@ -40,7 +45,7 @@ def edit_prompt(draft: bytes, invocation_cwd: Path, environ: Mapping[str, str]) 
                     file.write(draft)
                     path = Path(file.name)
                 _edit([*command, str(path)], invocation_cwd, state)
-                return read_edited_prompt(path, state)
+                return read_edited_prompt(path, state, limit)
         except (OSError, ValueError, termios.error) as error:
             raise PratError(f"cannot edit prompt: {error}", code="invalid_arguments") from error
         finally:

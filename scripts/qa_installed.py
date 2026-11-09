@@ -2842,7 +2842,9 @@ def _exercise_e03(context: _EnhancementContext) -> _ScenarioObservation:
     invalid_utf8 = consumer / "invalid-prompt.bin"
     invalid_utf8.write_bytes(b"\xff")
     oversized = consumer / "oversized-prompt.txt"
-    oversized.write_bytes(b"x" * (1024 * 1024 + 1))
+    oversized.write_bytes(b"x" * (8 * 1024 * 1024 + 1))
+    argument_oversized = consumer / "argument-oversized-prompt.txt"
+    argument_oversized.write_bytes(b"x" * (1024 * 1024 + 1))
     fifo = consumer / "prompt.fifo"
     fifo.unlink(missing_ok=True)
     os.mkfifo(fifo)
@@ -2867,7 +2869,11 @@ def _exercise_e03(context: _EnhancementContext) -> _ScenarioObservation:
         ),
         "oversize": (
             ["cx", "--file", str(oversized), "--json"],
-            "prompt exceeds the 1048576 byte limit",
+            "prompt is 8388609 bytes; the limit for Codex is 8388608 (8 MiB)",
+        ),
+        "argument_agent_oversize": (
+            ["gm", "--file", str(argument_oversized), "--json"],
+            "prompt is 1048577 bytes; the limit for Gemini is 1048576 (1 MiB)",
         ),
         "fifo": (
             ["cx", "--file", str(fifo), "--json"],
@@ -3920,7 +3926,7 @@ def _exercise_q17(context: _ExerciseContext) -> dict[str, object]:
         prat,
         root,
         ["cx", "-", "--json"],
-        stdin=b"p" * (1024 * 1024 + 1),
+        stdin=b"p" * (8 * 1024 * 1024 + 1),
         config=config,
     )
     invalid_utf8_result = _assert_result(
@@ -3937,7 +3943,7 @@ def _exercise_q17(context: _ExerciseContext) -> dict[str, object]:
         status="error",
         native_exit_code=None,
         error_code="invalid_arguments",
-        error_message="prompt exceeds the 1048576 byte limit",
+        error_message="prompt is more than 8388608 bytes; the limit for Codex is 8388608 (8 MiB)",
     )
     assert limit_pending and limit_released and limit_result["output"] == ""
     assert stderr_pending and stderr_released and stderr_result["output"] == ""

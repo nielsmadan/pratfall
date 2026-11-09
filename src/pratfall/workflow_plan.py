@@ -22,7 +22,7 @@ from pratfall.errors import PratError
 from pratfall.fences import extract_code
 from pratfall.limits import WORKFLOW_RESULT_BYTES
 from pratfall.models import Config, JsonValue, ResultError, Usage, Workflow, WorkflowStep
-from pratfall.prompt_input import PROMPT_LIMIT
+from pratfall.prompt_input import STDIN_PROMPT_LIMIT
 from pratfall.prompt_templates import template_parameters
 
 _USAGE_FIELDS = tuple(field.name for field in fields(Usage))
@@ -179,8 +179,8 @@ def input_problem(
     parameter = () if item is None or step.as_parameter is None else (item,)
     bound = tuple(trimmed_output(outputs[source]) for source in step.bind.values())
     values = (text or "", *parameter, *bound)
-    if sum(len(value.encode("utf-8")) for value in values) > PROMPT_LIMIT:
-        return f"input and bound parameters exceed the {PROMPT_LIMIT} byte limit"
+    if sum(len(value.encode("utf-8")) for value in values) > STDIN_PROMPT_LIMIT:
+        return f"input and bound parameters exceed the {STDIN_PROMPT_LIMIT} byte limit"
     return None
 
 

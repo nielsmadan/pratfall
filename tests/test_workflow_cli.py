@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import suppress
 from functools import partial
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -982,19 +983,23 @@ def test_runtime_check_rejects_bind_to_whitespace_only_output(
     }
 
 
-@pytest.mark.parametrize(("size", "status"), [(1048576, 0), (1048577, 2)])
-def test_bound_parameters_at_the_prompt_limit(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], size: int, status: int
+def test_bound_parameters_over_the_prompt_limit_fail_the_step(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     config = workflow_config(
         tmp_path,
-        {"big": f"@big {size}", "use": "$report"},
+        {"half": "@big 4194304", "big": "@big 4194305", "use": "$first$second"},
         "[workflows.bound]\nsteps = [\n"
-        '  {name="r", profile="big"},\n'
-        '  {name="m", profile="use", input="none", bind={report="r"}},\n]\n',
+        '  {name="r", profile="half"},\n'
+        '  {name="s", profile="big", after=[]},\n'
+        '  {name="m", profile="use", input="none", after=["r", "s"],'
+        ' bind={first="r", second="s"}},\n]\n',
     )
-    assert main(["bound", "--json", "--config", str(config)]) == status
-    assert json_result(capsys)["exit_code"] == status
+    assert main(["bound", "--json", "--config", str(config)]) == 2
+    assert json_result(capsys)["error"] == {
+        "code": "invalid_arguments",
+        "message": "step 'm': input and bound parameters exceed the 8388608 byte limit",
+    }
 
 
 def test_runtime_check_rejects_oversized_step_input(
@@ -1002,7 +1007,7 @@ def test_runtime_check_rejects_oversized_step_input(
 ) -> None:
     config = workflow_config(
         tmp_path,
-        {"big": "@big 600000", "use": "Use $report\n$input"},
+        {"big": "@big 4500000", "use": "Use $report\n$input"},
         "[workflows.huge]\nsteps = [\n"
         '  {name="r", profile="big"},\n'
         '  {name="x", profile="big", after=[]},\n'
@@ -1012,8 +1017,41 @@ def test_runtime_check_rejects_oversized_step_input(
     result = json_result(capsys)
     assert result["error"] == {
         "code": "invalid_arguments",
-        "message": "step 'm': input and bound parameters exceed the 1048576 byte limit",
+        "message": "step 'm': input and bound parameters exceed the 8388608 byte limit",
     }
+
+
+def test_each_step_checks_its_own_agents_prompt_limit(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = workflow_config(
+        tmp_path,
+        {"first": "first: $input"},
+        '[profiles.second]\nagent="gemini"\nprompt="$input"\n'
+        "[workflows.mixed]\nsteps = [\n"
+        '  {name="a", profile="first"},\n'
+        '  {name="b", profile="second"},\n]\n',
+    )
+    log = tmp_path / "gemini.log"
+    gemini = tmp_path / "gemini_fake.py"
+    gemini.write_text(f"open({str(log)!r}, 'a').write('called')\n", encoding="utf-8")
+    with config.open("a", encoding="utf-8") as stream:
+        stream.write(f"\n[agents.gemini]\ncommand={json.dumps([sys.executable, str(gemini)])}\n")
+    text = "x" * 2_000_000
+    assert main(["mixed", "--prompt", text, "--json", "--config", str(config)]) == 2
+    result = json_result(capsys)
+    assert [step["status"] for step in cast(list[dict[str, object]], result["steps"])] == [
+        "success",
+        "error",
+    ]
+    assert result["error"] == {
+        "code": "invalid_arguments",
+        "message": (
+            f"step 'b': prompt is {len('first: ') + len(text)} bytes; "
+            "the limit for Gemini is 1048576 (1 MiB)"
+        ),
+    }
+    assert not log.exists()
 
 
 def test_project_json_module_does_not_shadow_child_imports(

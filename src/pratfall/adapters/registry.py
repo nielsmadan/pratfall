@@ -44,6 +44,7 @@ def _whole_document(factory: ConsumerFactory) -> Callable[[str], DecodedOutput]:
 class Adapter:
     build: Callable[[ResolvedProfile, bytes], Invocation]
     validate: Callable[[ResolvedProfile], None]
+    prompt_delivery: Literal["stdin", "argument"]
     whole_document: Callable[[str], DecodedOutput] | None = None
     consumer: ConsumerFactory | None = None
     schema_transport: Literal["inline", "file"] | None = None
@@ -78,11 +79,13 @@ def _opencode_for_version(version: str) -> Adapter:
 _OPENCODE_V2 = Adapter(
     build=opencode.build_v2,
     validate=opencode.validate_v2,
+    prompt_delivery="stdin",
     consumer=opencode.v2_consumer,
 )
 _OPENCODE = Adapter(
     build=opencode.build,
     validate=opencode.validate,
+    prompt_delivery="stdin",
     consumer=opencode.consumer,
     for_version=_opencode_for_version,
 )
@@ -93,6 +96,7 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
         "claude": Adapter(
             build=claude.build,
             validate=claude.validate,
+            prompt_delivery="stdin",
             whole_document=claude.decode,
             schema_transport="inline",
             schema_whole_document=claude.decode_schema,
@@ -100,6 +104,7 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
         "codex": Adapter(
             build=codex.build,
             validate=codex.validate,
+            prompt_delivery="stdin",
             consumer=codex.consumer,
             schema_transport="file",
             schema_consumer=codex.schema_consumer,
@@ -107,68 +112,127 @@ ADAPTERS: Mapping[str, Adapter] = MappingProxyType(
         "gemini": Adapter(
             build=gemini.build,
             validate=gemini.validate,
+            prompt_delivery="argument",
             whole_document=gemini.decode,
         ),
         "antigravity": Adapter(
             build=antigravity.build,
             validate=antigravity.validate,
+            prompt_delivery="stdin",
             consumer=antigravity.consumer,
         ),
         "copilot": Adapter(
             build=copilot.build,
             validate=copilot.validate,
+            prompt_delivery="argument",
             consumer=copilot.consumer,
         ),
         "kiro": Adapter(
             build=kiro.build,
             validate=kiro.validate,
+            prompt_delivery="argument",
             whole_document=kiro.decode,
         ),
         "cursor": Adapter(
             build=cursor.build,
             validate=cursor.validate,
+            prompt_delivery="argument",
             whole_document=cursor.decode,
         ),
         "openclaw": Adapter(
             build=openclaw.build,
             validate=openclaw.validate,
+            prompt_delivery="stdin",
             whole_document=openclaw.decode,
         ),
         "hermes": Adapter(
             build=hermes.build,
             validate=hermes.validate,
+            prompt_delivery="stdin",
             whole_document=hermes.decode,
         ),
         "opencode": _OPENCODE,
-        "kimi": Adapter(build=kimi.build, validate=kimi.validate, consumer=kimi.consumer),
-        "goose": Adapter(build=goose.build, validate=goose.validate, whole_document=goose.decode),
-        "kilo": Adapter(build=kilo.build, validate=kilo.validate, consumer=kilo.consumer),
+        "kimi": Adapter(
+            build=kimi.build,
+            validate=kimi.validate,
+            prompt_delivery="argument",
+            consumer=kimi.consumer,
+        ),
+        "goose": Adapter(
+            build=goose.build,
+            validate=goose.validate,
+            prompt_delivery="stdin",
+            whole_document=goose.decode,
+        ),
+        "kilo": Adapter(
+            build=kilo.build,
+            validate=kilo.validate,
+            prompt_delivery="stdin",
+            consumer=kilo.consumer,
+        ),
         "warp": Adapter(
             build=warp.build,
             validate=warp.validate,
+            prompt_delivery="argument",
             consumer=warp.consumer,
         ),
         "qwen": Adapter(
             build=qwen.build,
             validate=qwen.validate,
+            prompt_delivery="stdin",
             consumer=qwen.consumer,
             schema_transport="file",
             schema_consumer=qwen.schema_consumer,
             validate_schema=qwen.validate_schema,
         ),
-        "pi": Adapter(build=pi.build, validate=pi.validate, consumer=pi.consumer),
-        "amp": Adapter(build=amp.build, validate=amp.validate, consumer=amp.consumer),
+        "pi": Adapter(
+            build=pi.build, validate=pi.validate, prompt_delivery="stdin", consumer=pi.consumer
+        ),
+        "amp": Adapter(
+            build=amp.build, validate=amp.validate, prompt_delivery="stdin", consumer=amp.consumer
+        ),
         "reasonix": Adapter(
-            build=reasonix.build, validate=reasonix.validate, whole_document=reasonix.decode
+            build=reasonix.build,
+            validate=reasonix.validate,
+            prompt_delivery="stdin",
+            whole_document=reasonix.decode,
         ),
-        "droid": Adapter(build=droid.build, validate=droid.validate, whole_document=droid.decode),
-        "vibe": Adapter(build=vibe.build, validate=vibe.validate, whole_document=vibe.decode),
-        "crush": Adapter(build=crush.build, validate=crush.validate, whole_document=crush.decode),
-        "devin": Adapter(build=devin.build, validate=devin.validate, whole_document=devin.decode),
+        "droid": Adapter(
+            build=droid.build,
+            validate=droid.validate,
+            prompt_delivery="stdin",
+            whole_document=droid.decode,
+        ),
+        "vibe": Adapter(
+            build=vibe.build,
+            validate=vibe.validate,
+            prompt_delivery="stdin",
+            whole_document=vibe.decode,
+        ),
+        "crush": Adapter(
+            build=crush.build,
+            validate=crush.validate,
+            prompt_delivery="stdin",
+            whole_document=crush.decode,
+        ),
+        "devin": Adapter(
+            build=devin.build,
+            validate=devin.validate,
+            prompt_delivery="argument",
+            whole_document=devin.decode,
+        ),
         "cortex": Adapter(
-            build=cortex.build, validate=cortex.validate, whole_document=cortex.decode
+            build=cortex.build,
+            validate=cortex.validate,
+            prompt_delivery="stdin",
+            whole_document=cortex.decode,
         ),
-        "grok": Adapter(build=grok.build, validate=grok.validate, whole_document=grok.decode),
+        "grok": Adapter(
+            build=grok.build,
+            validate=grok.validate,
+            prompt_delivery="argument",
+            whole_document=grok.decode,
+        ),
     }
 )
 

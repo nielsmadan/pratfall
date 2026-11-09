@@ -61,22 +61,27 @@ the [agent references](reference/overview.md).
 - [prompt_templates.py](../src/pratfall/prompt_templates.py) validates the restricted dollar
   placeholder syntax at config load and renders after base prompt acquisition. Template definitions
   retain their source files in immutable config records. Expansion size is checked before repeated
-  substitution; rendered prompts use the same 1 MiB input limit. Unknown template names fail before
-  input acquisition, while selected templates may supply the task without a base prompt.
+  substitution; rendered prompts use the selected agent's prompt limit. Unknown template names
+  fail before input acquisition, while selected templates may supply the task without a base
+  prompt.
   Any identifier other than `input` is a named parameter. Dispatch binds positional words and
   `--param` values to the active template (`-t`, else the profile `prompt`) before input
   acquisition, so binding errors precede any stdin read; `template_parameters` scans placeholders
   once in linear time. The binder applies the one-prompt check to positional words after config
   and selector resolution, suggesting the quoted words; duplicate `--file`/`--prompt` sources
-  still fail in the parser. Empty-input errors name their source. Substituted values are not re-expanded.
+  still fail in the parser. Empty-input errors name their source. Substituted values are not
+  re-expanded.
 - [prompt_input.py](../src/pratfall/prompt_input.py) reads invocation-relative regular files
   nonblocking under the shared input signal handlers. Context files are prepended after template
   rendering, preserving order, duplicate paths and content bytes. JSON-quoted label and separator
   space is reserved before any context files are read; each read uses the remaining aggregate
-  1 MiB budget and final assembly stays within that bound. `--context -` reads stdin as one of
-  those blocks under the same budget; an explicit prompt source never reads or inspects stdin.
-  Preserve filesystem resolution of `..`
-  through directory symlinks: lexical normalization such as `abspath` can select a different file.
+  budget of the agent's prompt limit and final assembly stays within that bound. Each adapter
+  declares `prompt_delivery` (`stdin` or `argument`) in the registry; dispatch maps it to 8 MiB or
+  1 MiB once the selector resolves, before any input is read. Regular files are sized with `fstat`
+  before reading, so an oversized file is reported with its size and never read. `--context -`
+  reads stdin as one of those blocks under the same budget; an explicit prompt source never reads
+  or inspects stdin. Preserve filesystem resolution of `..` through directory symlinks: lexical
+  normalization such as `abspath` can select a different file.
 - [prompt_editor.py](../src/pratfall/prompt_editor.py) edits the fully composed draft only when
   requested. It uses a private temporary directory and Markdown file, reopens the saved path for
   bounded validation, and runs the configured editor with argv in the invocation directory.

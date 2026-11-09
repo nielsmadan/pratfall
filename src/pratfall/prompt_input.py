@@ -3,7 +3,7 @@ import json
 import os
 import select
 import stat
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +12,10 @@ from typing import BinaryIO, Literal, TextIO, cast
 from pratfall.errors import PratError
 from pratfall.interruption import InterruptionState, handler_for, handling
 
-PROMPT_LIMIT = 1024 * 1024
+_MIB = 1024 * 1024
+STDIN_PROMPT_LIMIT = 8 * _MIB
+ARGUMENT_PROMPT_LIMIT = _MIB
+TEMPLATE_LIMIT = _MIB
 _READ_SIZE = 64 * 1024
 _CONTEXT_PREFIX = b"# Context: "
 _CONTEXT_OVERHEAD = len(_CONTEXT_PREFIX) + 4
@@ -28,6 +31,32 @@ class PromptSource:
     flag: str | None = None
 
 
+@dataclass(frozen=True)
+class PromptLimit:
+    size: int
+    agent: str | None = None
+
+
+MAX_PROMPT = PromptLimit(STDIN_PROMPT_LIMIT)
+
+
+def delivery_limit(delivery: Literal["stdin", "argument"]) -> int:
+    return STDIN_PROMPT_LIMIT if delivery == "stdin" else ARGUMENT_PROMPT_LIMIT
+
+
+def mib_text(size: int) -> str:
+    return f"{size // _MIB} MiB"
+
+
+def prompt_too_large(size: int | None, limit: PromptLimit) -> PratError:
+    amount = f"more than {limit.size}" if size is None else str(size)
+    owner = "" if limit.agent is None else f" for {limit.agent}"
+    return PratError(
+        f"prompt is {amount} bytes; the limit{owner} is {limit.size} ({mib_text(limit.size)})",
+        code="invalid_arguments",
+    )
+
+
 class InputInterrupted(Exception):
     def __init__(self, signum: int) -> None:
         super().__init__(f"interrupted by signal {signum}")
@@ -41,6 +70,7 @@ def acquire_prompt(
     *,
     allow_absent: bool = False,
     allow_blank: bool = False,
+    limit: PromptLimit = MAX_PROMPT,
 ) -> bytes:
     implicit = source is None
     if source is None:
@@ -58,10 +88,19 @@ def acquire_prompt(
     with _input_signal_handlers(state):
         if source.kind == "inline":
             value = _encode_inline(cast(str, source.value))
+            _check_size(len(value), limit)
         elif source.kind == "file" and source.value != "-":
-            value = _read_file(cast(str, source.value), invocation_cwd, state)
+            value = _read_file(
+                cast(str, source.value),
+                invocation_cwd,
+                state,
+                limit=limit.size,
+                label="prompt file",
+                sized=_size_check(0, limit),
+            )
+            _check_read(value, 0, limit)
         else:
-            value = _read_stdin(stdin, state)
+            value = _check_read(_read_stdin(stdin, state, limit=limit.size), 0, limit)
             if implicit and allow_absent and not value:
                 return b""
             return _validate(value, "standard input", allow_empty=allow_blank)
@@ -94,36 +133,43 @@ def prepend_contexts(
     prompt: bytes,
     invocation_cwd: Path,
     stdin: BinaryIO | TextIO | None = None,
+    *,
+    limit: PromptLimit = MAX_PROMPT,
 ) -> bytes:
     if not paths:
         return prompt
     state = InterruptionState()
     with _input_signal_handlers(state):
-        remaining = PROMPT_LIMIT - len(prompt)
+        consumed = len(prompt)
         headers: list[bytes] = []
         for path in paths:
             _raise_if_interrupted(state)
             label_size = len(_STDIN_LABEL) if path == STDIN_CONTEXT else 2
             for character in "" if path == STDIN_CONTEXT else path:
                 label_size += len(json.dumps(character)) - 2
-                _check_size(PROMPT_LIMIT - remaining + label_size + _CONTEXT_OVERHEAD)
-            remaining -= label_size + _CONTEXT_OVERHEAD
-            _check_size(PROMPT_LIMIT - remaining)
+                _check_size(consumed + label_size + _CONTEXT_OVERHEAD, limit)
+            consumed += label_size + _CONTEXT_OVERHEAD
+            _check_size(consumed, limit)
             headers.append(_CONTEXT_PREFIX + _context_label(path) + b"\n\n")
         parts: list[bytes] = []
         for path, header in zip(paths, headers, strict=True):
             _raise_if_interrupted(state)
+            budget = limit.size - consumed
             if path == STDIN_CONTEXT:
-                content = _read_stdin(stdin, state, limit=remaining, advice="")
+                content = _read_stdin(stdin, state, limit=budget, advice="")
                 label = "standard input context"
             else:
                 content = _read_file(
-                    path, invocation_cwd, state, limit=remaining, label="context file"
+                    path,
+                    invocation_cwd,
+                    state,
+                    limit=budget,
+                    label="context file",
+                    sized=_size_check(consumed, limit),
                 )
                 label = "context file"
-            _check_size(PROMPT_LIMIT - remaining + len(content))
-            _validate(content, label, allow_empty=True)
-            remaining -= len(content)
+            _validate(_check_read(content, consumed, limit), label, allow_empty=True)
+            consumed += len(content)
             parts.extend((header, content, b"\n\n"))
         parts.append(prompt)
         return b"".join(parts)
@@ -133,9 +179,19 @@ def _context_label(path: str) -> bytes:
     return _STDIN_LABEL if path == STDIN_CONTEXT else json.dumps(path).encode("ascii")
 
 
-def _check_size(size: int) -> None:
-    if size > PROMPT_LIMIT:
-        raise PratError(f"prompt exceeds the {PROMPT_LIMIT} byte limit", code="invalid_arguments")
+def _check_size(size: int, limit: PromptLimit) -> None:
+    if size > limit.size:
+        raise prompt_too_large(size, limit)
+
+
+def _size_check(consumed: int, limit: PromptLimit) -> Callable[[int], None]:
+    return lambda size: _check_size(consumed + size, limit)
+
+
+def _check_read(content: bytes, consumed: int, limit: PromptLimit) -> bytes:
+    if consumed + len(content) > limit.size:
+        raise prompt_too_large(None, limit)
+    return content
 
 
 def _read_file(
@@ -143,8 +199,9 @@ def _read_file(
     invocation_cwd: Path,
     state: InterruptionState,
     *,
-    limit: int = PROMPT_LIMIT,
-    label: str = "prompt file",
+    limit: int,
+    label: str,
+    sized: Callable[[int], None] = lambda _size: None,
 ) -> bytes:
     path = invocation_cwd / value
     flags = os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
@@ -157,14 +214,15 @@ def _read_file(
         ) from error
     try:
         try:
-            mode = os.fstat(descriptor).st_mode
+            info = os.fstat(descriptor)
         except OSError as error:
             raise PratError(
                 f"cannot inspect {label} {path}: {error.strerror or error}",
                 code="invalid_arguments",
             ) from error
-        if not stat.S_ISREG(mode):
+        if not stat.S_ISREG(info.st_mode):
             raise PratError(f"{label} is not a regular file: {path}", code="invalid_arguments")
+        sized(info.st_size)
         return _read_descriptor(descriptor, state, wait=False, label=f"{label} {path}", limit=limit)
     finally:
         os.close(descriptor)
@@ -174,7 +232,7 @@ def _read_stdin(
     stdin: BinaryIO | TextIO | None,
     state: InterruptionState,
     *,
-    limit: int = PROMPT_LIMIT,
+    limit: int,
     advice: str = _PROMPT_ADVICE,
 ) -> bytes:
     stream = cast(BinaryIO | TextIO, getattr(stdin, "buffer", stdin))
@@ -191,7 +249,7 @@ def _read_stream(
     stream: BinaryIO | TextIO,
     state: InterruptionState,
     *,
-    limit: int = PROMPT_LIMIT,
+    limit: int,
     advice: str = _PROMPT_ADVICE,
 ) -> bytes:
     _raise_if_interrupted(state)
@@ -215,7 +273,7 @@ def _read_descriptor(
     *,
     wait: bool,
     label: str,
-    limit: int = PROMPT_LIMIT,
+    limit: int,
 ) -> bytes:
     value = bytearray()
     while len(value) <= limit:
@@ -246,7 +304,6 @@ def _read_descriptor(
 
 
 def _validate(value: bytes, label: str, *, allow_empty: bool = False) -> bytes:
-    _check_size(len(value))
     if b"\0" in value:
         raise PratError("prompt must not contain NUL bytes", code="invalid_arguments")
     try:
@@ -272,11 +329,18 @@ def _input_signal_handlers(state: InterruptionState) -> Iterator[None]:
         _raise_if_interrupted(state)
 
 
-def read_edited_prompt(path: Path, state: InterruptionState) -> bytes:
+def read_edited_prompt(path: Path, state: InterruptionState, limit: PromptLimit) -> bytes:
     _raise_if_interrupted(state)
-    value = _read_file(str(path), path.parent, state, label="edited prompt")
+    value = _read_file(
+        str(path),
+        path.parent,
+        state,
+        limit=limit.size,
+        label="edited prompt",
+        sized=_size_check(0, limit),
+    )
     _raise_if_interrupted(state)
-    return _validate(value, "edited prompt")
+    return _validate(_check_read(value, 0, limit), "edited prompt")
 
 
 def read_bounded_file(path: Path, *, limit: int, label: str) -> bytes:

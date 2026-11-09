@@ -6,7 +6,13 @@ from string import Template
 from types import MappingProxyType
 
 from pratfall.errors import PratError, did_you_mean
-from pratfall.prompt_input import PROMPT_LIMIT, PromptSource
+from pratfall.prompt_input import (
+    MAX_PROMPT,
+    TEMPLATE_LIMIT,
+    PromptLimit,
+    PromptSource,
+    prompt_too_large,
+)
 
 _INPUT = "input"
 
@@ -29,8 +35,8 @@ def validate_template(prompt: str, label: str) -> None:
                 f"{label}: placeholder '{identifier}' differs from 'input' only in case; "
                 "use $input or ${input} for the base prompt"
             )
-    if len(prompt.encode("utf-8")) > PROMPT_LIMIT:
-        raise PratError(f"{label}: template exceeds the {PROMPT_LIMIT} byte limit")
+    if len(prompt.encode("utf-8")) > TEMPLATE_LIMIT:
+        raise PratError(f"{label}: template exceeds the {TEMPLATE_LIMIT} byte limit")
 
 
 def template_parameters(prompt: str) -> tuple[str, ...]:
@@ -75,6 +81,7 @@ def render_template(
     *,
     parameters: Mapping[str, str] | None = None,
     allow_blank: bool = False,
+    limit: PromptLimit = MAX_PROMPT,
 ) -> bytes:
     values = dict(parameters or {})
     lengths = {name: len(value.encode("utf-8")) for name, value in values.items()}
@@ -85,8 +92,8 @@ def render_template(
     )
     if not interpolated and base:
         size += 2 + len(base)
-    if size > PROMPT_LIMIT:
-        raise PratError(f"prompt exceeds the {PROMPT_LIMIT} byte limit", code="invalid_arguments")
+    if size > limit.size:
+        raise prompt_too_large(size, limit)
     values[_INPUT] = base.decode("utf-8")
     rendered = Template(prompt).substitute(values).encode("utf-8")
     if not interpolated and base:

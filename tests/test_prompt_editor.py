@@ -226,7 +226,7 @@ def test_invalid_editor_command_is_normalized(tmp_path: Path, command: str) -> N
         ("path.write_bytes(b' \\n')", "whitespace"),
         ("path.write_bytes(b'\\xff')", "UTF-8"),
         ("path.write_bytes(b'a\\0b')", "NUL"),
-        ("path.write_bytes(b'x' * (1048576 + 1))", "byte limit"),
+        ("path.write_bytes(b'x' * (8388608 + 1))", "the limit is 8388608"),
         ("path.unlink()", "cannot open"),
         ("path.unlink(); path.mkdir()", "regular file"),
         ("sys.exit(7)", "status 7"),
@@ -320,10 +320,10 @@ def test_editor_immediate_exit_restores_foreground(tmp_path: Path, code: int) ->
 
 
 def test_edited_prompt_accepts_exact_byte_limit(tmp_path: Path) -> None:
-    with editor_session(tmp_path, "path.write_bytes(b'x' * 1048576)") as session:
+    with editor_session(tmp_path, "path.write_bytes(b'x' * 8388608)") as session:
         report, _, _ = session.finish()
     assert report["code"] == 0
-    assert report["value"] == "x" * 1048576
+    assert report["value"] == "x" * 8388608
 
 
 def test_edit_cli_composes_draft_and_keeps_pipelines_separate(tmp_path: Path) -> None:

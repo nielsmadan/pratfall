@@ -12,7 +12,7 @@ from pratfall.config import load_config
 from pratfall.errors import PratError
 from pratfall.limits import STDOUT_BYTES, WORKFLOW_EACH_ITEMS, WORKFLOW_RESULT_BYTES
 from pratfall.models import ResultError, Workflow, WorkflowStep
-from pratfall.prompt_input import PROMPT_LIMIT
+from pratfall.prompt_input import STDIN_PROMPT_LIMIT
 from pratfall.workflow_plan import (
     EachItems,
     StepOutcome,
@@ -637,16 +637,16 @@ def test_instance_arguments_without_as_carry_only_the_user_parameters() -> None:
 
 def test_prompt_limit_counts_the_as_item() -> None:
     step = fan("fix", "list", as_parameter="file")
-    text = "x" * (PROMPT_LIMIT - 3)
+    text = "x" * (STDIN_PROMPT_LIMIT - 3)
     outputs = {"list": "a\n"}
     assert input_problem(step, "Fix $file", text, outputs, "abc") is None
     assert input_problem(step, "Fix $file", text, outputs, "abcd") == (
-        f"input and bound parameters exceed the {PROMPT_LIMIT} byte limit"
+        f"input and bound parameters exceed the {STDIN_PROMPT_LIMIT} byte limit"
     )
 
 
 def test_prompt_limit_counts_an_item_without_as_once() -> None:
-    item = "x" * PROMPT_LIMIT
+    item = "x" * STDIN_PROMPT_LIMIT
     assert input_problem(fan("fix", "list"), None, item, {"list": "a\n"}, item) is None
 
 
