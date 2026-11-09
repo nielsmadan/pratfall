@@ -106,6 +106,7 @@ _RUN_VALUE_FLAGS: Mapping[str, str] = MappingProxyType(
         "--template": "template",
         "-t": "template",
         "--param": "parameters",
+        "--prompt": "prompt",
     }
 )
 
@@ -128,7 +129,7 @@ def option_flags(options: Options) -> dict[str, str]:
 
 SELECTOR_REQUIRED = "a selector is required; run 'prat --help'"
 
-_RUN_FLAG_NAMES = frozenset({*_RUN_VALUE_FLAGS, *_RUN_FLAGS_WITHOUT_VALUE, "--prompt"})
+_RUN_FLAG_NAMES = frozenset({*_RUN_VALUE_FLAGS, *_RUN_FLAGS_WITHOUT_VALUE})
 
 _WORKFLOW_FLAGS = frozenset(
     {
@@ -157,9 +158,7 @@ class _RunOption:
 
 
 _RUN_OPTIONS: tuple[_RunOption, ...] = (
-    _RunOption(
-        "--prompt=TEXT", ("--prompt",), "Pass prompt text, including text beginning with a dash."
-    ),
+    _RunOption("--prompt TEXT", ("--prompt",), "Pass the prompt as text."),
     _RunOption(
         "-f, --file PATH", ("-f", "--file"), "Read the prompt from a UTF-8 file; use - for stdin."
     ),
@@ -260,11 +259,7 @@ _WORKFLOW_USAGE = "prat [RUN_OPTIONS] {selector} [PROMPT | VALUE...]"
 
 
 def run_flag_help() -> dict[str, str]:
-    return {
-        f"{flag}=" if flag == "--prompt" else flag: option.help
-        for option in _RUN_OPTIONS
-        for flag in option.flags
-    }
+    return {flag: option.help for option in _RUN_OPTIONS for flag in option.flags}
 
 
 def run_options_text(*, workflow: bool = False) -> str:
@@ -694,17 +689,12 @@ def _parse_run(arguments: list[str]) -> RunArguments:
             key, flag_value = tri_state_flag
             tri_state[key] = flag_value
             continue
-        if argument == "--prompt":
-            raise PratError("--prompt requires the --prompt=TEXT form", code="invalid_arguments")
-        if argument.startswith("--prompt="):
-            prompt_source = _add_prompt_source(
-                prompt_source, PromptSource("inline", argument.removeprefix("--prompt="))
-            )
-            continue
         field = _RUN_VALUE_FLAGS.get(token.name)
         if field is not None:
             value = _run_token_value(token)
-            if field == "file":
+            if field == "prompt":
+                prompt_source = _add_prompt_source(prompt_source, PromptSource("inline", value))
+            elif field == "file":
                 prompt_source = _add_prompt_source(
                     prompt_source, PromptSource("file", _text_option(value, token.name))
                 )
@@ -954,7 +944,7 @@ def _management_mode(arguments: list[str]) -> bool:
         if token.name in _RUN_VALUE_FLAGS:
             run_option = run_option or token.name != "--config"
             continue
-        if argument in _RUN_FLAGS_WITHOUT_VALUE or argument.startswith("--prompt="):
+        if argument in _RUN_FLAGS_WITHOUT_VALUE:
             run_option = run_option or argument != "--json"
             continue
         if argument.startswith("-"):

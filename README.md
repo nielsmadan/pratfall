@@ -141,8 +141,8 @@ prat cc --schema answer.schema.json --json "summarize this project"
 prat cc "review this" --context notes.md --context design.md
 ```
 
-Use `--prompt=TEXT` for text starting with a dash. Save reusable prompts as templates, where
-`$input` marks where piped input goes:
+`--prompt TEXT` also passes text; text starting with a dash needs `--prompt=TEXT`. Save reusable
+prompts as templates, where `$input` marks where piped input goes:
 
 ```toml
 [templates.review]

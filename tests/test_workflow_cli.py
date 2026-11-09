@@ -359,6 +359,14 @@ def test_unsupported_flags_are_rejected_in_the_users_spelling(
     assert captured.err == f"prat: {flag} is not supported for workflows\n"
 
 
+def test_workflow_takes_prompt_text_in_the_space_form(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = chain_config(tmp_path)
+    assert main(["chain", "--prompt", "hello", "--config", str(config)]) == 0
+    assert capsys.readouterr().out == "second: first: hello\n"
+
+
 def test_workflow_option_value_starting_with_a_dash_is_refused(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

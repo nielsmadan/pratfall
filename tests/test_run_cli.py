@@ -788,6 +788,24 @@ def test_file_prompt_forms_preserve_unicode_and_newlines(
     assert json.loads(result["output"])["prompt"] == "first\n雪\n"
 
 
+@pytest.mark.parametrize(
+    ("source", "prompt"),
+    [
+        (["--prompt", "hi"], "hi"),
+        (["--prompt=hi"], "hi"),
+        (["--prompt", "-"], "-"),
+        (["--prompt=-x"], "-x"),
+    ],
+)
+def test_prompt_flag_takes_its_text_in_both_forms(
+    source: list[str], prompt: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
+    assert main(["cx", *source, "--config", str(config), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert json.loads(result["output"])["prompt"] == prompt
+
+
 def test_file_dash_reads_stdin(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2282,7 +2300,8 @@ def test_missing_and_nonexecutable_agents_map_to_shell_exit_codes(
     [
         (["cx"], "exactly one prompt"),
         (["cx", "one", "two"], "exactly one prompt"),
-        (["cx", "--prompt", "text"], "--prompt=TEXT"),
+        (["cx", "--prompt", "-x"], "write --prompt=-x if it is"),
+        (["cx", "--prompt", "hi", "there"], "exactly one prompt"),
         (["cx", ""], "must not be empty"),
         (["cx", "a\0b"], "NUL"),
         (["--timeout=nan", "cx", "prompt"], "finite positive"),

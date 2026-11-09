@@ -35,10 +35,11 @@ Choose one explicit prompt source:
 | File | `prat cx --file request.md` |
 | Explicit stdin | `cat request.md \| prat cc -` |
 | Redirected stdin | `cat request.md \| prat cc` |
-| Text starting with a dash | `prat cc --prompt=-leading-dash` |
+| Text as a flag | `prat cx --prompt "review this change"` |
 
-`-f PATH` and `--file=PATH` also read files; `--file -` reads stdin. `--prompt=-` passes a literal
-dash. Without an explicit source, Prat reads redirected stdin; at a terminal, it reports a missing
+`-f PATH` and `--file=PATH` also read files; `--file -` reads stdin. Text starting with a dash
+needs the `=` form, as in `prat cc --prompt=-leading-dash`. `--prompt -` passes a literal dash.
+Without an explicit source, Prat reads redirected stdin; at a terminal, it reports a missing
 prompt.
 
 Every run needs a selector. Bare `prat` at a terminal prints help and exits 0; any other line
@@ -110,7 +111,7 @@ are preserved.
 
 A template can provide the complete task when no base input is supplied. Terminal, closed or
 unavailable stdin and an empty implicit stdin stream count as absent input. Explicit empty sources
-(`--prompt=`, an empty file, or explicit `-`/`--file -` stdin) still fail; whitespace-only implicit
+(`--prompt ''`, an empty file, or explicit `-`/`--file -` stdin) still fail; whitespace-only implicit
 stdin also fails. The final rendered task must be nonempty, valid UTF-8, NUL-free and at most 1 MiB.
 Template definitions also have a 1 MiB UTF-8 limit, and repeated substitutions are checked against
 the final limit before allocating their expanded text. `--dry-run` uses the same rendered prompt.
@@ -146,7 +147,7 @@ mixed, but each parameter takes one value. Values are substituted literally and 
 expanded again.
 
 With parameters, every word after the selector is a value, so free text goes through
-`--prompt=TEXT` or `--file PATH`, which fill `$input`. A lone `-` cannot be a value; use
+`--prompt TEXT` or `--file PATH`, which fill `$input`. A lone `-` cannot be a value; use
 `--param NAME=-` for a literal dash. `--param` is also the way to pass a value beginning with a
 dash. After `--`, `--param` stays a native argument and is rejected by native validation.
 

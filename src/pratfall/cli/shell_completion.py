@@ -318,7 +318,7 @@ def _config_for(preceding: list[str], load: Loader) -> Config | None:
 
 
 def _run_flags() -> dict[str, str]:
-    flags = [*_RUN_VALUE_FLAGS, *_RUN_FLAGS_WITHOUT_VALUE, "--prompt="]
+    flags = [*_RUN_VALUE_FLAGS, *_RUN_FLAGS_WITHOUT_VALUE]
     help_text = run_flag_help()
     return {flag: help_text.get(flag, "") for flag in flags}
 

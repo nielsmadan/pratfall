@@ -217,7 +217,13 @@ _prat
     ("line", "expected"),
     [
         ("prat cl", "_describe claude:Claude Code|claw:OpenClaw"),
-        ("prat cc --pro", "_describe --progress:Print bounded live activity updates on stderr."),
+        (
+            "prat cc --pro",
+            (
+                "_describe --progress:Print bounded live activity updates on stderr."
+                "|--prompt:Pass the prompt as text."
+            ),
+        ),
         ("prat cc --add-dir ", "_files -/"),
         ("prat cc -f ", "_files"),
     ],
@@ -251,16 +257,16 @@ def test_zsh_glue_keeps_equals_flags_open(
     path.write_text(script("zsh", capsys), encoding="utf-8")
     driver = tmp_path / "driver.zsh"
     driver.write_text(ZSH_DRIVER, encoding="utf-8")
+    config = tmp_path / "config.toml"
+    config.write_text(PRATFILE, encoding="utf-8")
     result = subprocess.run(
-        ["zsh", "-f", str(driver), str(path), "prat cc --prom"],
+        ["zsh", "-f", str(driver), str(path), f"prat cc --config {config} -t move --param "],
         capture_output=True,
         text=True,
         check=True,
         env={"PATH": f"{shim}:/usr/bin:/bin", "XDG_CONFIG_HOME": str(tmp_path / "config-home")},
     )
-    assert result.stdout.splitlines() == [
-        "_describe --prompt=:Pass prompt text, including text beginning with a dash. -S ''"
-    ]
+    assert result.stdout.splitlines() == ["_describe source=:parameter|target=:parameter -S ''"]
 
 
 def test_selector_slot_offers_agents_aliases_and_management(tmp_path: Path) -> None:
@@ -326,12 +332,16 @@ def test_top_level_flags_include_help_and_version(tmp_path: Path) -> None:
 
 def test_run_flags_after_selector(tmp_path: Path) -> None:
     assert words(["cc", "--no-"], tmp_path) == ["--no-fast", "--no-notify"]
-    assert {"-f", "-t", "--prompt="} <= set(words(["cc", "-"], tmp_path))
+    assert {"-f", "-t", "--prompt"} <= set(words(["cc", "-"], tmp_path))
     assert "--version" not in words(["cc", "-"], tmp_path)
 
 
 def test_prompt_slot_offers_nothing(tmp_path: Path) -> None:
     assert words(["cc", "hel"], tmp_path) == []
+
+
+def test_prompt_flag_value_slot_offers_nothing(tmp_path: Path) -> None:
+    assert words(["cc", "--prompt", ""], tmp_path) == []
 
 
 def test_template_values_from_config(tmp_path: Path) -> None:
@@ -494,7 +504,7 @@ def test_path_and_template_flags_are_run_value_flags() -> None:
 def test_every_help_run_flag_is_completed_with_its_help_text() -> None:
     run_flags = _run_flags()
     assert run_flags == run_flag_help()
-    assert run_flags["--prompt="] == "Pass prompt text, including text beginning with a dash."
+    assert run_flags["--prompt"] == "Pass the prompt as text."
     assert all(run_flags.values())
 
 

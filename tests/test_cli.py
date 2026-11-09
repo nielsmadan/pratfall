@@ -136,7 +136,7 @@ def test_top_level_help_exposes_run_contract(capsys: pytest.CaptureFixture[str])
     assert "prat [RUN_OPTIONS] SELECTOR [PROMPT | VALUE...] [-- NATIVE_ARGS]" in output
     assert "  --param NAME=VALUE        Fill a prompt parameter; repeat for several." in output
     for flag in (
-        "--prompt=TEXT",
+        "--prompt TEXT",
         "-f, --file PATH",
         "--model MODEL",
         "--effort EFFORT",

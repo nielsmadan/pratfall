@@ -67,7 +67,7 @@ the [agent references](reference/overview.md).
   `--param` values to the active template (`-t`, else the profile `prompt`) before input
   acquisition, so binding errors precede any stdin read; `template_parameters` scans placeholders
   once in linear time. The binder applies the "exactly one prompt source" check to positional
-  words after config and selector resolution; duplicate `--file`/`--prompt=` sources still fail in
+  words after config and selector resolution; duplicate `--file`/`--prompt` sources still fail in
   the parser. Substituted values are not re-expanded.
 - [prompt_input.py](../src/pratfall/prompt_input.py) reads invocation-relative regular files
   nonblocking under the shared input signal handlers. Context files are prepended after template
