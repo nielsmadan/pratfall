@@ -86,7 +86,6 @@ _RUN_VALUE_FLAGS: Mapping[str, str] = MappingProxyType(
         "--config": "config",
         "--cwd": "cwd",
         "--effort": "effort",
-        "--max-ai-credits": "max_ai_credits",
         "--max-budget-usd": "max_budget_usd",
         "--max-turns": "max_turns",
         "--model": "model",
@@ -200,11 +199,6 @@ _RUN_OPTIONS: tuple[_RunOption, ...] = (
     _RunOption("--timeout SECONDS", ("--timeout",), "Set the wall-clock deadline."),
     _RunOption("--max-budget-usd USD", ("--max-budget-usd",), "Set a supported native USD budget."),
     _RunOption("--max-turns COUNT", ("--max-turns",), "Set a supported native turn limit."),
-    _RunOption(
-        "--max-ai-credits COUNT",
-        ("--max-ai-credits",),
-        "Set Copilot's soft per-response AI-credit limit.",
-    ),
     _RunOption("--cwd PATH", ("--cwd",), "Set the agent working directory."),
     _RunOption(
         "--add-dir PATH",
@@ -765,7 +759,6 @@ def _run_options(
         timeout=_number_option(values.get("timeout"), "--timeout"),
         max_budget_usd=_number_option(values.get("max_budget_usd"), "--max-budget-usd"),
         max_turns=_integer_option(values.get("max_turns"), "--max-turns"),
-        max_ai_credits=_number_option(values.get("max_ai_credits"), "--max-ai-credits"),
         fast=fast,
         add_dirs=tuple(repeated["add_dirs"]) or None,
         attachments=tuple(repeated["attachments"]) or None,

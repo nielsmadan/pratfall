@@ -56,6 +56,7 @@ _ALLOWED: Mapping[str, Flag] = MappingProxyType(
             "--disable-mcp-server",
             "--enable-mcp-server",
             "--log-level",
+            "--max-ai-credits",
             "--max-autopilot-continues",
             "--mode",
             "--plugin-dir",
@@ -95,7 +96,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--effort",
             "-i",
             "--interactive",
-            "--max-ai-credits",
             "--model",
             "-n",
             "--name",
@@ -161,8 +161,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append(f"--model={options.model}")
     if options.effort is not None:
         argv.append(f"--effort={options.effort}")
-    if options.max_ai_credits is not None:
-        argv.append(f"--max-ai-credits={options.max_ai_credits}")
     if options.session_id is not None:
         argv.append(f"--session-id={options.session_id}")
     argv.extend(f"--add-dir={directory}" for directory in options.add_dirs or ())

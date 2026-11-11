@@ -649,7 +649,6 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
                 "timeout": 600.0,
                 "max_budget_usd": None,
                 "max_turns": None,
-                "max_ai_credits": None,
                 "fast": None,
                 "add_dirs": None,
                 "attachments": None,
@@ -2249,7 +2248,7 @@ def test_agent_help_json_marks_the_options_its_agent_rejects(
     ]
     assert isinstance(page["run_options"], list)
     rejected = [option["flags"] for option in page["run_options"] if not option["supported"]]
-    assert rejected == [["--max-ai-credits"], ["--attachment"]]
+    assert rejected == [["--attachment"]]
     assert page["run_options"][11]["flags"] == ["--fast", "--no-fast"]
     assert page["run_options"][11]["setting"] == "fast"
 

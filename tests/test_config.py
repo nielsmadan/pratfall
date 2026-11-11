@@ -557,7 +557,7 @@ native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", 
         ("version=1\n[defaults]\nmax_turns=0", "defaults.max_turns"),
         ("version=1\n[defaults]\nmax_turns=4294967296", "defaults.max_turns"),
         ("version=1\n[defaults]\nmax_budget_usd=nan", "defaults.max_budget_usd"),
-        ("version=1\n[defaults]\nmax_ai_credits=-1", "defaults.max_ai_credits"),
+        ("version=1\n[defaults]\nmax_ai_credits=5", "unknown field 'max_ai_credits'"),
         ("version=1\n[agents.cx]", "canonical name"),
         ("version=1\n[agents.unknown]", "canonical name"),
         ("version=1\n[agents]\ncodex=[]", "agents.codex: expected a TOML table"),
@@ -588,8 +588,8 @@ native_args=["--profile", "$DATA", "--output-schema", "`literal`", "--add-dir", 
             "profiles.work.max_budget_usd",
         ),
         (
-            'version=1\n[profiles.work]\nagent="claude"\nmax_ai_credits=1',
-            "profiles.work.max_ai_credits",
+            'version=1\n[profiles.work]\nagent="copilot"\nmax_ai_credits=5',
+            "profiles.work: unknown field 'max_ai_credits'",
         ),
         ('version=1\n[profiles.work]\nagent="codex"\nmax_turns=1', "profiles.work.max_turns"),
         ('version=1\n[profiles.work]\nagent="gemini"\nfast=false', "profiles.work.fast"),
@@ -629,16 +629,12 @@ def test_supported_native_budgets_are_resolved(tmp_path: Path) -> None:
     path = write_config(
         tmp_path,
         """version=1
-[profiles.credit]
-agent="copilot"
-max_ai_credits=2.5
 [profiles.turns]
 agent="hermes"
 max_turns=3
 """,
     )
     config = load_config(path, cwd=Path.cwd(), env=os.environ)
-    assert resolve_profile(config, "credit").options.max_ai_credits == 2.5
     assert resolve_profile(config, "turns").options.max_turns == 3
 
 
@@ -724,11 +720,6 @@ def test_notify_after_zero_is_accepted(tmp_path: Path) -> None:
             "--max-budget-usd: Codex does not support a USD budget",
         ),
         ("rx", Options(max_turns=3), "--max-turns: Reasonix does not support a turn limit"),
-        (
-            "cx",
-            Options(max_ai_credits=5.0),
-            "--max-ai-credits: Codex does not support an AI-credit",
-        ),
         ("gm", Options(fast=True), "--fast: Gemini does not support a fast-mode override"),
         ("gm", Options(fast=False), "--no-fast: Gemini does not support a fast-mode override"),
     ],

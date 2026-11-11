@@ -58,7 +58,6 @@ class Options:
     timeout: float | None = None
     max_budget_usd: float | None = None
     max_turns: int | None = None
-    max_ai_credits: float | None = None
     fast: bool | None = None
     add_dirs: tuple[str, ...] | None = None
     attachments: tuple[str, ...] | None = None

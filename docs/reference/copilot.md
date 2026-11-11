@@ -28,7 +28,12 @@ but no tokens, so normalized usage is null. The prompt uses documented `--prompt
 subject to the operating system's argv-size limit.
 Root completed `assistant.message.data.model` identifies an observed model. Prat keeps distinct IDs
 in order and excludes model fields on deltas, subagent messages, and unrelated request/config data.
-The terminal credits metric is not USD and is not exposed as `cost_usd`.
+The terminal credits metric is not exposed as `cost_usd`. GitHub's
+[session limit guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/set-session-limit)
+publishes a rate (checked 2026-11-11): "each credit equals $0.01 USD". Prat does not convert
+credits, because that rate is GitHub's to change. Copilot's own `--max-ai-credits` is a soft
+limit ("that response completes before the session stops") of at least 30 credits; Prat has no
+flag for it and passes it as a native argument.
 
 Copilot's tool and URL allow/deny lists, tool visibility lists, and secret environment-variable
 list accept zero or more values per occurrence. A bare `--available-tools` disables all visible

@@ -7,14 +7,13 @@ from pratfall.errors import PratError
 from pratfall.models import Options, ResultError
 
 
-def test_copilot_builds_equals_prompt_and_native_soft_credit_limit() -> None:
+def test_copilot_builds_equals_prompt_and_native_arguments() -> None:
     invocation = copilot.build(
         resolved(
             "copilot",
             Options(
                 model="copilot-model",
                 effort="xhigh",
-                max_ai_credits=2.5,
                 native_args=("--allow-tool", "shell(git status)"),
             ),
         ),
@@ -26,7 +25,6 @@ def test_copilot_builds_equals_prompt_and_native_soft_credit_limit() -> None:
         "--output-format=json",
         "--model=copilot-model",
         "--effort=xhigh",
-        "--max-ai-credits=2.5",
         "--allow-tool",
         "shell(git status)",
         "--prompt=-leading prompt",
@@ -279,3 +277,13 @@ def test_copilot_empty_subagent_markers_preserve_root_answer() -> None:
     )
     assert decoded.output == "root answer"
     assert decoded.error is None
+
+
+@pytest.mark.parametrize(
+    "native_args", [("--max-ai-credits=5",), ("--max-ai-credits", "5")], ids=["joined", "spaced"]
+)
+def test_copilot_passes_the_native_credit_limit(native_args: tuple[str, ...]) -> None:
+    options = Options(native_args=native_args)
+    copilot.validate(resolved("copilot", options))
+    argv = copilot.build(resolved("copilot", options), b"task").argv
+    assert argv[-1 - len(native_args) : -1] == native_args

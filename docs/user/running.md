@@ -310,7 +310,7 @@ object, with each setting's origin and whether the selector's agent supports eac
 | Model and effort | `--model`, `--effort`; support depends on the agent. |
 | Fast mode | `--fast` or `--no-fast` for Claude and Codex. Omitting both preserves native settings; when both are given, the last one wins. |
 | Execution deadline | `--timeout SECONDS`; defaults to 600 seconds. |
-| Native budgets | `--max-budget-usd`, `--max-turns`, `--max-ai-credits`; support and counting depend on the agent. |
+| Native budgets | `--max-budget-usd`, `--max-turns`; support and counting depend on the agent. |
 | Working directory | `--cwd PATH`; changes the agent's directory, not prompt-file resolution or config discovery. |
 | Configuration | `--config PATH`; selects a local file to merge over global config. |
 

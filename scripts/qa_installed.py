@@ -122,7 +122,6 @@ _EFFORT_VALUES = {
 _BUDGETS = {
     "goose": ["max_turns"],
     "claude": ["max_budget_usd", "max_turns"],
-    "copilot": ["max_ai_credits"],
     "hermes": ["max_turns"],
     "qwen": ["max_turns"],
     "vibe": ["max_budget_usd", "max_turns"],
@@ -2526,7 +2525,6 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "timeout": 7.0,
                     "max_turns": 3,
                     "max_budget_usd": None,
-                    "max_ai_credits": None,
                     "native_agent": None,
                     "session_id": None,
                     "native_args": ["--debug"],
@@ -3481,7 +3479,6 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "timeout": 600.0,
                     "max_budget_usd": None,
                     "max_turns": None,
-                    "max_ai_credits": None,
                     "fast": None,
                     "add_dirs": None,
                     "attachments": None,

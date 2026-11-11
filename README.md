@@ -114,8 +114,8 @@ the page as one object ([help pages](docs/user/json.md#help-pages)).
 | `--notify` / `--no-notify` | Show or suppress the completion notification for this run. |
 | `--dry-run` | Preview the resolved invocation without launching the agent; OpenCode still runs `opencode --version`. |
 
-Budgets are available through `--max-budget-usd`, `--max-turns` and `--max-ai-credits` where the
-agent supports them. Support for each setting varies by agent, and unsupported settings are
+Budgets are available through `--max-budget-usd` and `--max-turns` where the agent supports
+them. Support for each setting varies by agent, and unsupported settings are
 rejected rather than ignored. Native arguments go after `--`:
 
 ```sh

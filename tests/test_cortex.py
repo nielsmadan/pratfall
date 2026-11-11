@@ -117,9 +117,7 @@ def test_cortex_rejects_unverified_effort(native_contract_config: Path) -> None:
         )
 
 
-@pytest.mark.parametrize(
-    "options", [Options(fast=False), Options(max_budget_usd=1), Options(max_ai_credits=1)]
-)
+@pytest.mark.parametrize("options", [Options(fast=False), Options(max_budget_usd=1)])
 def test_cortex_unsupported_controls(native_contract_config: Path, options: Options) -> None:
     with pytest.raises(PratError, match="does not support"):
         resolve_profile(

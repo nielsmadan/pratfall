@@ -127,7 +127,6 @@ def test_grok_accepts_verified_native_arguments(arguments: tuple[str, ...]) -> N
     [
         Options(fast=False),
         Options(max_budget_usd=1),
-        Options(max_ai_credits=1),
     ],
 )
 def test_grok_unsupported_controls(native_contract_config: Path, options: Options) -> None:

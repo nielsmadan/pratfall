@@ -61,7 +61,6 @@ AGENTS = (
             session_id=True,
             effort=True,
             effort_values=("low", "medium", "high", "xhigh", "max"),
-            budgets=frozenset({"max_ai_credits"}),
             attachments=True,
             attachment_types=("image", "native document"),
             add_dirs=True,

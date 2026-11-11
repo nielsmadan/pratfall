@@ -77,7 +77,6 @@ _CAPABILITY_CASES: tuple[tuple[str, Options, str | Mapping[str, str]], ...] = (
     ("effort", Options(timeout=_TIMEOUT, effort="conformance-effort"), "conformance-effort"),
     ("max_budget_usd", Options(timeout=_TIMEOUT, max_budget_usd=12.5), "12.5"),
     ("max_turns", Options(timeout=_TIMEOUT, max_turns=97), "97"),
-    ("max_ai_credits", Options(timeout=_TIMEOUT, max_ai_credits=13.75), "13.75"),
     ("fast", Options(timeout=_TIMEOUT, fast=True), _FAST_MARKERS),
 )
 _EVERY_CAPABILITY = Options(
@@ -86,7 +85,6 @@ _EVERY_CAPABILITY = Options(
     effort="conformance-effort",
     max_budget_usd=12.5,
     max_turns=97,
-    max_ai_credits=13.75,
     fast=True,
 )
 
@@ -119,8 +117,6 @@ def _without(option: str) -> Options:
         return replace(_EVERY_CAPABILITY, max_budget_usd=None)
     if option == "max_turns":
         return replace(_EVERY_CAPABILITY, max_turns=None)
-    if option == "max_ai_credits":
-        return replace(_EVERY_CAPABILITY, max_ai_credits=None)
     return replace(_EVERY_CAPABILITY, fast=None)
 
 

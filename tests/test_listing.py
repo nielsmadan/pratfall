@@ -203,7 +203,6 @@ SAMPLE_SETTINGS: dict[str, object] = {
     "timeout": 1.0,
     "max_budget_usd": 1.0,
     "max_turns": 1,
-    "max_ai_credits": 1.0,
     "fast": True,
     "add_dirs": ("d",),
     "attachments": ("a.png",),

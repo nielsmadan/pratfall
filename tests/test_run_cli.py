@@ -2429,7 +2429,6 @@ def test_run_argument_errors_use_full_json_contract_when_requested(
         (["--timeout", "5abc"], "--timeout '5abc': expected a finite positive number"),
         (["--timeout=0"], "--timeout '0': expected a finite positive number"),
         (["--max-budget-usd", "inf"], "--max-budget-usd 'inf': expected a finite positive number"),
-        (["--max-ai-credits", "x"], "--max-ai-credits 'x': expected a finite positive number"),
         (["--max-turns", "0"], "--max-turns '0': expected a positive integer"),
         (["--max-turns", "1.5"], "--max-turns '1.5': expected a positive integer"),
     ],

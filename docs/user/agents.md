@@ -73,8 +73,8 @@ See [schema output rules](running.md#request-schema-output) and the verified con
 ### Budgets
 
 There is no verified hard token cap shared by all agents. Claude and Vibe expose native USD and
-turn budgets. Copilot's `max_ai_credits` is a soft per-response limit and may not stop exactly at
-the requested amount. Hermes, Qwen, Cortex and Grok support native turn counts. Prat forwards these controls with their
+turn budgets. Copilot's soft per-response AI-credit limit is a native argument:
+`prat copilot "…" -- --max-ai-credits=50`. Hermes, Qwen, Cortex and Grok support native turn counts. Prat forwards these controls with their
 native guarantees.
 
 ### Fast mode

@@ -223,11 +223,6 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
         max_turns=(
             _integer(table["max_turns"], f"{label}.max_turns") if "max_turns" in table else None
         ),
-        max_ai_credits=(
-            _number(table["max_ai_credits"], f"{label}.max_ai_credits")
-            if "max_ai_credits" in table
-            else None
-        ),
         fast=_boolean(table["fast"], f"{label}.fast") if "fast" in table else None,
         add_dirs=_paths(table["add_dirs"], f"{label}.add_dirs", base)
         if "add_dirs" in table
@@ -309,7 +304,6 @@ _BUDGETS: Mapping[str, str] = MappingProxyType(
     {
         "max_budget_usd": "a USD budget",
         "max_turns": "a turn limit",
-        "max_ai_credits": "an AI-credit limit",
     }
 )
 

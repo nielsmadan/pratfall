@@ -52,7 +52,7 @@ Each profile requires an `agent`, given as a [full name or alias](agents.md). Op
 `model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `attachments`, `instructions`,
 `instructions_file`, `prompt`, `schema`, `tools`, `disabled_tools`, `native_agent`, `session_id`,
 `notify`, `notify_method`, `notify_after`, `command_prefix`, and the agent's supported budget
-fields.
+fields (`max_budget_usd`, `max_turns`).
 Use `[defaults]` for shared settings.
 
 `fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
@@ -456,6 +456,11 @@ reads the diff; write `git diff | prat cc --context - "review"`. The diff now ar
 `-`. A workflow given text, `--prompt` or `--file` no longer reads stdin either. A template run
 with no explicit prompt still takes stdin as `$input`, so `git diff | prat cc -t review` is
 unchanged.
+
+`--max-ai-credits` and the `max_ai_credits` setting are removed; only Copilot supported them. A
+config file that still sets `max_ai_credits` fails as an unknown field naming the file and key.
+Pass Copilot's own flag instead: `native_args = ["--max-ai-credits=50"]` in a Copilot profile, or
+`prat copilot "…" -- --max-ai-credits=50`.
 
 A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
 naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that

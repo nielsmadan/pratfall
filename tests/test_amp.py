@@ -87,7 +87,6 @@ def test_amp_reserved_and_unknown_arguments(arguments: tuple[str, ...]) -> None:
         Options(fast=False),
         Options(max_turns=3),
         Options(max_budget_usd=1),
-        Options(max_ai_credits=1),
     ],
 )
 def test_amp_unsupported_controls(native_contract_config: Path, options: Options) -> None:

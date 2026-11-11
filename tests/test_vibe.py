@@ -88,7 +88,6 @@ def test_vibe_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:
         Options(model="model-x"),
         Options(effort="high"),
         Options(fast=False),
-        Options(max_ai_credits=1),
     ],
 )
 def test_vibe_unsupported_controls(native_contract_config: Path, options: Options) -> None:
