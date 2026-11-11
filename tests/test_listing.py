@@ -161,7 +161,7 @@ def test_profile_page_names_the_origin_of_each_value(tmp_path: Path) -> None:
         "SETTING         VALUE                 ORIGIN\n"
         "model           claude-opus-5         profiles.base\n"
         "effort          high                  profiles.weekly (local)\n"
-        "timeout         600                   built-in default\n"
+        "timeout         3600                  built-in default\n"
         "notify          False                 defaults (local)\n"
         'command_prefix  ["nice"]              agents.claude\n'
         'prompt          "Summarise ${topic}"  profiles.weekly (local)'
@@ -180,7 +180,7 @@ def test_agent_help_page_names_the_agent_settings_and_its_list_entry() -> None:
     entry = list_view(config, "agents", width=None, which=nothing_installed)[0]["agents"]
     assert isinstance(entry, list)
     assert page["entry"] == next(record for record in entry if record["name"] == "codex")
-    assert page["settings"] == [{"name": "timeout", "value": 600.0, "origin": "built-in default"}]
+    assert page["settings"] == [{"name": "timeout", "value": 3600.0, "origin": "built-in default"}]
     assert page["usage"] == "prat [RUN_OPTIONS] codex [PROMPT | VALUE...] [-- NATIVE_ARGS]"
     assert help_text(config, "codex").startswith("codex (cx): ")
 
@@ -192,7 +192,7 @@ def test_profile_help_page_settings_keep_list_values_and_the_prompt(tmp_path: Pa
     )
     page = help_page(load_config(cwd=tmp_path, env=os.environ), "p", nothing_installed)
     assert page["settings"] == [
-        {"name": "timeout", "value": 600.0, "origin": "built-in default"},
+        {"name": "timeout", "value": 3600.0, "origin": "built-in default"},
         {"name": "tools", "value": ["Read", "Grep"], "origin": "profiles.p (local)"},
         {"name": "prompt", "value": "Tidy ${folder}", "origin": "profiles.p (local)"},
     ]

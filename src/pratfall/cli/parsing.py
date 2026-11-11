@@ -13,7 +13,7 @@ from pratfall.catalog import MANAGEMENT_COMMANDS
 from pratfall.config import validate_native_agent, validate_session_id
 from pratfall.errors import PratError, did_you_mean
 from pratfall.instructions import validate_instructions
-from pratfall.models import MAX_TURNS, OptionOrigin, Options
+from pratfall.models import MAX_TURNS, NO_TIMEOUT, OptionOrigin, Options
 from pratfall.prompt_input import PromptSource
 
 _TRI_STATE_FLAGS: Mapping[str, tuple[str, bool]] = MappingProxyType(
@@ -195,7 +195,9 @@ _RUN_OPTIONS: tuple[_RunOption, ...] = (
         ("--fast", "--no-fast"),
         "Enable or disable supported native fast mode for this run.",
     ),
-    _RunOption("--timeout SECONDS", ("--timeout",), "Set the wall-clock deadline."),
+    _RunOption(
+        "--timeout SECONDS", ("--timeout",), "Set the wall-clock deadline in seconds, or none."
+    ),
     _RunOption("--max-budget-usd USD", ("--max-budget-usd",), "Set a supported native USD budget."),
     _RunOption("--max-turns COUNT", ("--max-turns",), "Set a supported native turn limit."),
     _RunOption("--cwd PATH", ("--cwd",), "Set the agent working directory."),
@@ -755,7 +757,7 @@ def _run_options(
         instructions_file=_text_option(values.get("instructions_file"), "--instructions-file"),
         model=_text_option(values.get("model"), "--model"),
         effort=_text_option(values.get("effort"), "--effort"),
-        timeout=_number_option(values.get("timeout"), "--timeout"),
+        timeout=_timeout_option(values.get("timeout")),
         max_budget_usd=_number_option(values.get("max_budget_usd"), "--max-budget-usd"),
         max_turns=_integer_option(values.get("max_turns"), "--max-turns"),
         fast=fast,
@@ -856,6 +858,22 @@ def _number_option(value: str | None, flag: str) -> float | None:
     if not math.isfinite(number) or number <= 0:
         raise PratError(
             f"{flag} {value!r}: expected a finite positive number", code="invalid_arguments"
+        )
+    return number
+
+
+def _timeout_option(value: str | None) -> float | None:
+    if value is None:
+        return None
+    if value == "none":
+        return NO_TIMEOUT
+    try:
+        number = float(value)
+    except ValueError:
+        number = math.nan
+    if not math.isfinite(number) or number < 0:
+        raise PratError(
+            f"--timeout {value!r}: expected a positive number, 0 or none", code="invalid_arguments"
         )
     return number
 

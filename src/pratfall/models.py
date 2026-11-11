@@ -49,6 +49,7 @@ class AgentSpec:
 
 
 MAX_TURNS = 4_294_967_295
+NO_TIMEOUT = 0.0
 
 
 @dataclass(frozen=True)

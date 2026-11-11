@@ -33,7 +33,7 @@ Both global and local files use the same TOML format:
 version = 1
 
 [defaults]
-timeout = 600
+timeout = 3600
 
 [profiles.simple]
 agent = "codex"
@@ -53,7 +53,9 @@ Each profile requires an `agent`, given as a [full name or alias](agents.md). Op
 `instructions_file`, `prompt`, `schema`, `tools`, `disabled_tools`, `native_agent`, `session_id`,
 `notify`, `notify_method`, `notify_after`, `command_prefix`, and the agent's supported budget
 fields (`max_budget_usd`, `max_turns`).
-Use `[defaults]` for shared settings.
+Use `[defaults]` for shared settings. `timeout` is in seconds and defaults to 3600; `timeout =
+"none"` or `timeout = 0` turns the deadline off, and like any value it overrides lower layers, so
+`--timeout 600` on the command line restores one.
 
 `fast` accepts `true` or `false` for Claude, Codex and Amp. Both values override the native
 setting (Amp's execute mode already starts in Standard, so `false` adds nothing); omitting the
@@ -354,7 +356,7 @@ parameters: topic
 SETTING  VALUE                 ORIGIN
 model    claude-opus-5         profiles.base
 effort   high                  profiles.weekly
-timeout  600                   built-in default
+timeout  3600                  built-in default
 prompt   "Summarise ${topic}"  profiles.weekly
 ```
 
@@ -467,6 +469,11 @@ Copilot no longer takes `--session-id` or `session_id`: an id matching an earlie
 resumed that conversation instead of starting a new one. A Copilot run, profile or `[defaults]`
 that sets it now fails with `--session-id: Copilot does not support a session id` (or the config
 file and key). Copilot still reports `native_session_id`. Claude Code and Grok keep the setting.
+
+The default `timeout` rises from 600 to 3600 seconds, so ordinary long agent tasks are no longer
+cut off at ten minutes. Set `timeout = 600` in `[defaults]` to keep the old deadline. `timeout =
+"none"` (or `0`, or `--timeout none`) now turns the deadline off; a workflow applies it to every
+step and drops the step backstop too.
 
 A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
 naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that

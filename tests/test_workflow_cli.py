@@ -1,5 +1,6 @@
 import errno
 import io
+import itertools
 import json
 import os
 import re
@@ -12,6 +13,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import suppress
 from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -129,6 +131,10 @@ elif mode == "stubborn":
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
     open(sys.argv[2], "w").close()
     time.sleep(60)
+elif mode == "slow":
+    time.sleep(0.3)
+    result["output"] = json.dumps(spec)
+    print(json.dumps(result))
 elif mode == "lines":
     sys.stderr.write("one\\ntwo\\n")
     sys.stderr.flush()
@@ -2239,3 +2245,29 @@ def test_a_step_using_a_shadowed_profile_fails_naming_the_collision(
         f"prat: warning: {message}",
         f"prat: workflow 'ship' step 'fix': {message}",
     ]
+
+
+@pytest.mark.parametrize(("timeout", "exit_code"), [("none", 0), ("5", 124)])
+def test_workflow_timeout_none_drops_the_step_backstop(
+    timeout: str,
+    exit_code: int,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    ticks = itertools.count()
+    clock = SimpleNamespace(
+        monotonic=lambda: time.monotonic() + 100_000.0 * next(ticks), sleep=time.sleep
+    )
+    monkeypatch.setattr(supervisor_module, "time", clock)
+    config = workflow_config(
+        tmp_path, {"first": "A $input"}, '[workflows.solo]\nsteps = [{name="a", profile="first"}]\n'
+    )
+    with_launcher(monkeypatch, tmp_path, "slow")
+    arguments = ["solo", "--prompt=x", "--timeout", timeout, "--config", str(config), "--json"]
+    assert main(arguments) == exit_code
+    step = steps_of(json_result(capsys))[0]
+    if exit_code == 0:
+        assert "--timeout=0.0" in json.loads(cast(str, step["output"]))["arguments"]
+    else:
+        assert step["status"] == "timeout"

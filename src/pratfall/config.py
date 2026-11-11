@@ -36,6 +36,7 @@ from pratfall.local_trust import (
 )
 from pratfall.models import (
     MAX_TURNS,
+    NO_TIMEOUT,
     NOTIFY_METHODS,
     AgentSpec,
     Config,
@@ -52,13 +53,13 @@ from pratfall.models import (
 from pratfall.option_paths import resolve_path
 from pratfall.prompt_templates import template_parameters, validate_template
 
-DEFAULT_TIMEOUT = 600.0
+DEFAULT_TIMEOUT = 3600.0
 LOCAL_CONFIG_NAME = ".pratfile"
 OPTION_FIELDS = frozenset(Options.__dataclass_fields__)
 SAMPLE_CONFIG = """version = 1
 
 [defaults]
-timeout = 600
+timeout = 3600
 
 [agents.codex]
 command = ["codex"]
@@ -141,6 +142,20 @@ def _number(value: object, label: str) -> float:
     return number
 
 
+def _timeout(value: object, label: str) -> float:
+    if value == "none":
+        return NO_TIMEOUT
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise PratError(f'{label}: expected a positive number, 0 or "none"')
+    try:
+        number = float(value)
+    except OverflowError:
+        raise PratError(f'{label}: expected a positive number, 0 or "none"') from None
+    if not math.isfinite(number) or number < 0:
+        raise PratError(f'{label}: expected a positive number, 0 or "none"')
+    return number
+
+
 def _integer(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= MAX_TURNS:
         raise PratError(f"{label}: expected a positive integer within the native u32 range")
@@ -214,7 +229,7 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
         instructions_file=instructions_file,
         model=_string(table["model"], f"{label}.model") if "model" in table else None,
         effort=_string(table["effort"], f"{label}.effort") if "effort" in table else None,
-        timeout=_number(table["timeout"], f"{label}.timeout") if "timeout" in table else None,
+        timeout=_timeout(table["timeout"], f"{label}.timeout") if "timeout" in table else None,
         max_budget_usd=(
             _number(table["max_budget_usd"], f"{label}.max_budget_usd")
             if "max_budget_usd" in table

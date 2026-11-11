@@ -309,7 +309,7 @@ object, with each setting's origin and whether the selector's agent supports eac
 | --- | --- |
 | Model and effort | `--model`, `--effort`; support depends on the agent. |
 | Fast mode | `--fast` or `--no-fast` for Claude, Codex and Amp. Omitting both preserves native settings; when both are given, the last one wins. |
-| Execution deadline | `--timeout SECONDS`; defaults to 600 seconds. |
+| Execution deadline | `--timeout SECONDS`; defaults to 3600 seconds. `--timeout none` or `--timeout 0` runs with no deadline (as with `timeout(1)`); the preview then shows `timeout: none`, and JSON `"timeout": null`. Negative numbers, `inf` and `nan` are rejected. |
 | Native budgets | `--max-budget-usd`, `--max-turns`; support and counting depend on the agent. |
 | Working directory | `--cwd PATH`; changes the agent's directory, not prompt-file resolution or config discovery. |
 | Configuration | `--config PATH`; selects a local file to merge over global config. |

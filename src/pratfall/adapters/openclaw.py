@@ -61,7 +61,7 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--model", options.model))
     if options.effort is not None:
         argv.extend(("--thinking", options.effort))
-    if options.timeout is not None:
+    if options.timeout:
         argv.extend(("--timeout", str(math.ceil(options.timeout))))
     argv.extend(arguments)
     return Invocation(tuple(argv), prompt)

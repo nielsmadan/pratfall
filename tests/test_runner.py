@@ -1,4 +1,5 @@
 import fcntl
+import itertools
 import os
 import selectors
 import signal
@@ -7,6 +8,7 @@ import sys
 import time
 from contextlib import suppress
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,6 +17,7 @@ from pratfall.adapters import codex
 from pratfall.consumer import ConsumerLimits
 from pratfall.limits import STDERR_BYTES, STDOUT_BYTES
 from pratfall.models import (
+    NO_TIMEOUT,
     Activity,
     ConsumedCapture,
     DecodedOutput,
@@ -581,3 +584,20 @@ def test_progress_category_coalesces_activity_and_emits_idle_heartbeat(
     pending: Activity | None, elapsed: float, expected: Activity | None
 ) -> None:
     assert runner_module._progress_category(pending, elapsed) == expected
+
+
+def _jumping_clock(step: float) -> SimpleNamespace:
+    ticks = itertools.count()
+    return SimpleNamespace(monotonic=lambda: time.monotonic() + step * next(ticks))
+
+
+@pytest.mark.parametrize(("timeout", "timed_out"), [(NO_TIMEOUT, False), (3600.0, True)])
+def test_no_timeout_never_expires_however_far_the_clock_moves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, timeout: float, timed_out: bool
+) -> None:
+    monkeypatch.setattr(runner_module, "time", _jumping_clock(100_000.0))
+    result = run(python("import time;time.sleep(0.3);print('done')"), tmp_path, timeout)
+    assert result.timed_out is timed_out
+    if not timed_out:
+        assert result.native_exit_code == 0
+        assert raw_stdout(result.capture) == b"done\n"

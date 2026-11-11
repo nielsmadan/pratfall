@@ -3476,7 +3476,7 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                 "options": {
                     "model": "gpt-5.6-luna",
                     "effort": "low",
-                    "timeout": 600.0,
+                    "timeout": 3600.0,
                     "max_budget_usd": None,
                     "max_turns": None,
                     "fast": None,

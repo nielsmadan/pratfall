@@ -28,6 +28,8 @@ nonfinite numbers and invalid Unicode anywhere in the document.
 Prat passes its exact positive deadline to the process runner. Because current `agent exec`
 accepts only whole-second timeout strings and internally ceilings milliseconds, its native timeout
 hint is the configured value rounded upward; the wrapper's exact deadline remains authoritative.
+With `--timeout none` (or `0`) Prat sets no deadline and passes no `--timeout`, so OpenClaw's own
+default applies.
 Explicit native fallback entries require an explicit model and stay under OpenClaw's ordered
 fallback behavior. Prat does not add fallbacks or retry a completed invocation.
 

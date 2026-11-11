@@ -30,7 +30,9 @@ Every `--json` output follows these rules:
   `workflow`, `step` or `item`.
 - `null` means the agent decides. A default that Prat applies shows its value.
 - Durations are integers in milliseconds with an `_ms` suffix. Settings keep their config units,
-  such as `timeout` in seconds.
+  such as `timeout` in seconds. A timeout that is turned off is `0.0` in profile options and help
+  settings, where `null` already means not set; the dry-run preview, which always shows a
+  resolved deadline, reports it as `null`.
 - `error.message` is the same text Prat prints on stderr without `--json`: lowercase, no trailing
   period, naming the flag or config key and the rejected value, such as `--effort 'ultra': Claude
   Code accepts low, medium, high, xhigh, max`. Its wording can change; match `error.code`.
@@ -264,8 +266,8 @@ result was already written, Prat reports the failure only on stderr to keep stdo
 
 ## Previews and management commands
 
-`--dry-run --json` returns a preview containing `dry_run`, resolved identity, argv, cwd, timeout,
-and stdin byte count, rather than a run status. Active schemas add the original `schema` path and
+`--dry-run --json` returns a preview containing `dry_run`, resolved identity, argv, cwd, timeout
+(`null` when it is off), and stdin byte count, rather than a run status. Active schemas add the original `schema` path and
 `schema_transport`: `inline` when the schema's JSON is passed as an argument, `file` when the agent
 reads a temporary prepared copy. The text preview says `inline JSON` or `temporary prepared file`.
 Prepared temporary paths are labeled placeholders, not reusable filenames. Prompts passed through argv appear in the preview.
@@ -313,7 +315,7 @@ A selector page, such as `prat help weekly --json`, has:
 - `kind`: `agent`, `profile` or `workflow`; `name`: the selector as typed, so `cc` stays `cc`.
 - `entry`: that selector's record from `prat list --json`; for an alias, the agent record.
 - `settings`: the SETTING, VALUE, ORIGIN rows of the text page as `{"name", "value", "origin"}`.
-  `value` is the JSON value (`timeout` stays `600.0`, a list stays a list) and `origin` is the
+  `value` is the JSON value (`timeout` stays `3600.0`, a list stays a list) and `origin` is the
   text page's string, such as `profiles.base`, `defaults (local)`, `agents.claude` or `built-in
   default`. An agent lists its resolved defaults the same way. A workflow has `null`.
 - `run_options`: one record per line of the text page's run options, in the same order: every run

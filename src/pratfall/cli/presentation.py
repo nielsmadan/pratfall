@@ -329,7 +329,7 @@ def _preview(
         "fast": resolved.options.fast,
         "argv": argv,
         "cwd": str(cwd),
-        "timeout": resolved.options.timeout,
+        "timeout": resolved.options.timeout or None,
         "stdin_bytes": len(invocation.stdin),
     }
     if invocation.env:
@@ -357,7 +357,7 @@ def _preview(
                     else []
                 ),
                 f"cwd: {cwd}",
-                f"timeout: {resolved.options.timeout:g}s",
+                f"timeout: {_timeout_text(resolved.options.timeout)}",
                 f"fast: {fast}",
                 f"stdin: {len(invocation.stdin)} bytes",
             )
@@ -406,3 +406,7 @@ def _silence_broken_stream(name: Literal["stdout", "stderr"]) -> None:
     finally:
         if descriptor != target:
             os.close(descriptor)
+
+
+def _timeout_text(timeout: float | None) -> str:
+    return f"{timeout:g}s" if timeout else "none"

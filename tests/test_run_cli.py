@@ -1341,7 +1341,7 @@ def test_dry_run_is_a_single_versioned_preview_and_does_not_launch(
             "-",
         ],
         "cwd": str(Path.cwd()),
-        "timeout": 600.0,
+        "timeout": 3600.0,
         "stdin_bytes": 6,
     }
     assert main(["safe", "prompt", "--config", str(config), "--dry-run", "--json", "--"]) == 0
@@ -2390,7 +2390,7 @@ def test_missing_and_nonexecutable_agents_map_to_shell_exit_codes(
         (["cx", "--prompt", "hi", "there"], "exactly one prompt"),
         (["cx", ""], "prompt is empty or whitespace-only"),
         (["cx", "a\0b"], "NUL"),
-        (["--timeout=nan", "cx", "prompt"], "finite positive"),
+        (["--timeout=nan", "cx", "prompt"], "expected a positive number, 0 or none"),
         (["--max-turns=1.5", "cc", "prompt"], "positive integer"),
         (["--max-turns=4294967296", "cc", "prompt"], "positive integer"),
         (["cx", "prompt", "--cwd=/missing-prat-directory"], "not a directory"),
@@ -2426,8 +2426,10 @@ def test_run_argument_errors_use_full_json_contract_when_requested(
 @pytest.mark.parametrize(
     ("arguments", "message"),
     [
-        (["--timeout", "5abc"], "--timeout '5abc': expected a finite positive number"),
-        (["--timeout=0"], "--timeout '0': expected a finite positive number"),
+        (["--timeout", "5abc"], "--timeout '5abc': expected a positive number, 0 or none"),
+        (["--timeout=-1"], "--timeout '-1': expected a positive number, 0 or none"),
+        (["--timeout=inf"], "--timeout 'inf': expected a positive number, 0 or none"),
+        (["--timeout=off"], "--timeout 'off': expected a positive number, 0 or none"),
         (["--max-budget-usd", "inf"], "--max-budget-usd 'inf': expected a finite positive number"),
         (["--max-turns", "0"], "--max-turns '0': expected a positive integer"),
         (["--max-turns", "1.5"], "--max-turns '1.5': expected a positive integer"),
@@ -4525,3 +4527,69 @@ def test_opencode_interrupted_version_probe_reports_signal(
     monkeypatch.setattr(doctor_module, "run", lambda *_args, **_kwargs: interrupted)
     assert main(["oc", "task", "--json"]) == 128 + signal.SIGINT
     assert json.loads(capsys.readouterr().out)["error"]["code"] == "interrupted"
+
+
+@pytest.mark.parametrize("value", ["none", "0", "0.0"])
+def test_timeout_none_or_zero_turns_the_deadline_off(
+    value: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", "raise AssertionError('dry run launched agent')")
+    arguments = ["cx", "hi", "--config", str(config), "--dry-run", "--timeout", value]
+    assert main(arguments) == 0
+    assert "\ntimeout: none\n" in capsys.readouterr().out
+    assert main([*arguments, "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["timeout"] is None
+
+
+def test_default_timeout_is_an_hour(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    config = write_agent(tmp_path, "codex", "raise AssertionError('dry run launched agent')")
+    assert main(["cx", "hi", "--config", str(config), "--dry-run"]) == 0
+    assert "\ntimeout: 3600s\n" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("settings", "flags", "expected"),
+    [
+        ('timeout = "none"', ["--timeout", "5"], 5.0),
+        ("timeout = 0", ["--timeout", "5"], 5.0),
+        ('timeout = "none"', [], None),
+        ("timeout = 30", ["--timeout", "none"], None),
+    ],
+)
+def test_an_off_timeout_overrides_like_any_value(
+    settings: str,
+    flags: list[str],
+    expected: float | None,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = write_agent(
+        tmp_path,
+        "codex",
+        "raise AssertionError('dry run launched agent')",
+        profile="work",
+        settings=settings,
+    )
+    assert main(["work", "hi", "--config", str(config), "--dry-run", "--json", *flags]) == 0
+    assert json.loads(capsys.readouterr().out)["timeout"] == expected
+
+
+def test_defaults_timeout_none_reaches_the_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "codex", "raise AssertionError('dry run launched agent')")
+    config.write_text(config.read_text() + '[defaults]\ntimeout = "none"\n')
+    assert main(["cx", "hi", "--config", str(config), "--dry-run", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["timeout"] is None
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected"), [([], ["--timeout", "3600"]), (["--timeout", "none"], [])]
+)
+def test_openclaw_gets_a_native_timeout_only_while_one_is_set(
+    flags: list[str], expected: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(tmp_path, "openclaw", "raise AssertionError('dry run launched agent')")
+    assert main(["openclaw", "hi", "--config", str(config), "--dry-run", "--json", *flags]) == 0
+    argv = json.loads(capsys.readouterr().out)["argv"]
+    assert argv[argv.index("-") + 1 :] == expected

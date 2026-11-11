@@ -267,6 +267,7 @@ Prat's memory or the workflow result with every instance.
 
 `--timeout` applies to each step, not to the workflow. A step that is still running after its
 timeout plus twice the termination grace plus 10 seconds is torn down and reported as `timeout`.
+`--timeout none` (or `0`) gives each step no deadline and no backstop.
 
 SIGINT, SIGTERM and SIGHUP stop the workflow. Prat forwards the signal to each running step (SIGHUP
 as SIGTERM), starts no further step, and exits with `128 + signal` and status `interrupted`. A

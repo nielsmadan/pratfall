@@ -646,7 +646,7 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
             "options": {
                 "model": "gpt-5.6-luna",
                 "effort": "low",
-                "timeout": 600.0,
+                "timeout": 3600.0,
                 "max_budget_usd": None,
                 "max_turns": None,
                 "fast": None,
@@ -1846,7 +1846,7 @@ def weekly_page(config: Path) -> str:
         "parameters: topic\n"
         "\n"
         "SETTING  VALUE                           ORIGIN\n"
-        "timeout  600                             built-in default\n"
+        "timeout  3600                            built-in default\n"
         'prompt   "Summarize ${topic} this week"  profiles.weekly'
     )
 
@@ -2141,7 +2141,7 @@ def test_profile_help_shows_where_each_value_came_from(
         "SETTING  VALUE          ORIGIN\n"
         "model    claude-opus-5  profiles.base\n"
         "effort   high           profiles.weekly\n"
-        "timeout  600            built-in default"
+        "timeout  3600           built-in default"
     )
 
 
@@ -2196,7 +2196,7 @@ def test_profile_help_json_has_its_list_record_settings_and_run_options(
         "settings": [
             {"name": "model", "value": "claude-opus-5", "origin": "profiles.base"},
             {"name": "effort", "value": "high", "origin": "profiles.weekly"},
-            {"name": "timeout", "value": 600.0, "origin": "built-in default"},
+            {"name": "timeout", "value": 3600.0, "origin": "built-in default"},
         ],
     }
     assert page["entry"] == list_record("profiles", "weekly", capsys)
@@ -2244,7 +2244,7 @@ def test_agent_help_json_marks_the_options_its_agent_rejects(
     assert page["entry"] == list_record("agents", "claude", capsys)
     assert page["settings"] == [
         {"name": "effort", "value": "medium", "origin": "defaults"},
-        {"name": "timeout", "value": 600.0, "origin": "built-in default"},
+        {"name": "timeout", "value": 3600.0, "origin": "built-in default"},
     ]
     assert isinstance(page["run_options"], list)
     rejected = [option["flags"] for option in page["run_options"] if not option["supported"]]

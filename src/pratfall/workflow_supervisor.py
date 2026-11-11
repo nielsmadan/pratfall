@@ -1,5 +1,6 @@
 import errno
 import json
+import math
 import os
 import selectors
 import signal
@@ -222,7 +223,8 @@ def _start(state: _Supervision, step: WorkflowStep, item: int | None) -> None:
     except OSError as error:
         _record(state, step, item, _spawn_failure(error, state.launcher[0]))
         return
-    deadline = time.monotonic() + prepared.timeouts[step.name] + 2 * TERMINATE_GRACE
+    timeout = prepared.timeouts[step.name]
+    deadline = time.monotonic() + timeout + 2 * TERMINATE_GRACE if timeout else math.inf
     order = (prepared.workflow.steps.index(step), -1 if item is None else item)
     child = _Child(step, item, order, prefix.encode(), process, deadline + BACKSTOP_SLACK)
     state.running[step.name, item] = child

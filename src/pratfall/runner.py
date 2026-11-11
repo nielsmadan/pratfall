@@ -1,4 +1,5 @@
 import errno
+import math
 import os
 import selectors
 import signal
@@ -169,7 +170,7 @@ def _collect(
     context: _RunContext,
     consumer_state: "_ConsumerState",
 ) -> ProcessResult:
-    deadline = context.started + context.timeout
+    deadline = context.started + context.timeout if context.timeout else math.inf
     output = _OutputState({"stdout": bytearray(), "stderr": bytearray()}, consumer_state.consumer)
     selector = selectors.DefaultSelector()
     stdout = cast(BinaryIO, process.stdout)
