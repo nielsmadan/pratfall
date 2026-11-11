@@ -206,7 +206,7 @@ def test_agents_inventory_reports_aliases_and_capabilities(
                 "prompt_limit=8 MiB"
             ),
         ),
-        ("amp", "amp: prompt_limit=8 MiB"),
+        ("amp", "amp: fast, prompt_limit=8 MiB"),
         (
             "vibe",
             (

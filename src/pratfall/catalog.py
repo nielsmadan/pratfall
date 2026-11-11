@@ -146,7 +146,9 @@ AGENTS = (
             disabled_tools_scope="native deny rules, including schema tool",
         ),
     ),
-    AgentSpec("amp", "Amp", (), ("amp",), Capabilities(model=False), version_args=("version",)),
+    AgentSpec(
+        "amp", "Amp", (), ("amp",), Capabilities(model=False, fast=True), version_args=("version",)
+    ),
     AgentSpec("reasonix", "Reasonix", ("rx",), ("reasonix",), Capabilities(effort=True)),
     AgentSpec(
         "droid",

@@ -92,7 +92,7 @@ the page as one object ([help pages](docs/user/json.md#help-pages)).
 | --- | --- |
 | `--model MODEL` | Select a native model. |
 | `--effort EFFORT` | Set reasoning effort. |
-| `--fast` / `--no-fast` | Override fast mode for Claude or Codex. |
+| `--fast` / `--no-fast` | Override fast mode for Claude, Codex or Amp. |
 | `--timeout SECONDS` | Set the execution deadline; default: 600 seconds. |
 | `--cwd PATH` | Choose the agent's working directory. |
 | `-f PATH` / `--file PATH` | Read a prompt from a UTF-8 file; `-` reads stdin. |

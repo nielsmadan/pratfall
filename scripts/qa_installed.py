@@ -129,7 +129,7 @@ _BUDGETS = {
     "grok": ["max_turns"],
 }
 _NO_MODEL = frozenset({"amp", "vibe"})
-_FAST = frozenset({"claude", "codex"})
+_FAST = frozenset({"claude", "codex", "amp"})
 _ADD_DIRS = frozenset({"claude", "codex", "gemini", "qwen", "copilot"})
 _ATTACHMENT_TYPES = {
     "pi": ["image", "text file"],

@@ -84,7 +84,6 @@ def test_amp_reserved_and_unknown_arguments(arguments: tuple[str, ...]) -> None:
     [
         Options(model="model"),
         Options(effort="high"),
-        Options(fast=False),
         Options(max_turns=3),
         Options(max_budget_usd=1),
     ],
@@ -324,3 +323,42 @@ def test_amp_native_failure_outranks_malformed_optional_usage() -> None:
     assert decoded.output == "partial" and decoded.usage is None
     assert decoded.error is not None and decoded.error.code == "provider_error"
     assert decoded.error.message == "native failed"
+
+
+@pytest.mark.parametrize(
+    ("fast", "expected"),
+    [
+        (
+            True,
+            (
+                "amp-wrapper",
+                "native",
+                "--execute",
+                "--stream-json",
+                "--fast",
+                "--dangerously-allow-all",
+            ),
+        ),
+        (False, ("amp-wrapper", "native", "--execute", "--stream-json", "--dangerously-allow-all")),
+        (None, ("amp-wrapper", "native", "--execute", "--stream-json", "--dangerously-allow-all")),
+    ],
+)
+def test_amp_fast_mode_adds_the_native_flag(fast: bool | None, expected: tuple[str, ...]) -> None:
+    options = Options(fast=fast, native_args=("--dangerously-allow-all",))
+    amp.validate(resolved_profile("amp", options))
+    assert amp.build(resolved_profile("amp", options), b"task").argv == expected
+
+
+@pytest.mark.parametrize("fast", [True, False])
+@pytest.mark.parametrize("argument", ["--fast", "--features=fast"])
+def test_amp_reserves_native_fast_while_the_public_option_is_set(fast: bool, argument: str) -> None:
+    options = Options(fast=fast, native_args=(argument,))
+    with pytest.raises(PratError, match="controlled by prat"):
+        amp.validate(resolved_profile("amp", options))
+
+
+@pytest.mark.parametrize("argument", ["--fast", "--features=fast", "--max-turns=3"])
+def test_amp_passes_native_fast_and_turns_without_a_public_option(argument: str) -> None:
+    options = Options(native_args=(argument,))
+    amp.validate(resolved_profile("amp", options))
+    assert amp.build(resolved_profile("amp", options), b"task").argv[-1] == argument

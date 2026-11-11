@@ -31,7 +31,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--resume",
             "--output-format",
             "--prompt",
-            "--max-turns",
         )
     }
     | {
@@ -62,11 +61,17 @@ _AMP_SYSTEM_ERRORS = {"error_during_execution", "error_max_turns"}
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
-    return Invocation((*resolved.command, "--execute", "--stream-json", *arguments), prompt)
+    fast = ("--fast",) if resolved.options.fast else ()
+    return Invocation((*resolved.command, "--execute", "--stream-json", *fast, *arguments), prompt)
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("Amp", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    reserved = (
+        _RESERVED
+        if resolved.options.fast is None
+        else {**_RESERVED, "--fast": Flag(0), "--features": Flag(1)}
+    )
+    validate_flags("Amp", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
 def decode(stdout: str) -> DecodedOutput:

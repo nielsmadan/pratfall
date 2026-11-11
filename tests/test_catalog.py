@@ -68,7 +68,7 @@ def test_kiro_supports_current_native_model_and_effort_options() -> None:
 
 
 def test_only_verified_agents_support_fast_mode() -> None:
-    assert {agent.name for agent in AGENTS if agent.capabilities.fast} == {"claude", "codex"}
+    assert {agent.name for agent in AGENTS if agent.capabilities.fast} == {"claude", "codex", "amp"}
     assert {agent.name: agent.version_args for agent in AGENTS} == {
         name: (("version",) if name == "amp" else ("--version",)) for name in BY_NAME
     }

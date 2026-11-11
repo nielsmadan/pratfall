@@ -55,8 +55,9 @@ Each profile requires an `agent`, given as a [full name or alias](agents.md). Op
 fields (`max_budget_usd`, `max_turns`).
 Use `[defaults]` for shared settings.
 
-`fast` accepts `true` or `false` for Claude and Codex. Both values override the native setting;
-omitting the field preserves it. Other agents reject either value.
+`fast` accepts `true` or `false` for Claude, Codex and Amp. Both values override the native
+setting (Amp's execute mode already starts in Standard, so `false` adds nothing); omitting the
+field preserves it. Other agents reject either value.
 
 ## Define prompt templates
 

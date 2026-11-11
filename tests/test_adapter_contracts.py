@@ -71,6 +71,7 @@ _TIMEOUT = 30.0
 _FAST_MARKERS: Mapping[str, str] = {
     "claude": '{"fastMode": true}',
     "codex": 'service_tier="priority"',
+    "amp": "--fast",
 }
 _CAPABILITY_CASES: tuple[tuple[str, Options, str | Mapping[str, str]], ...] = (
     ("model", Options(timeout=_TIMEOUT, model="conformance-model"), "conformance-model"),

@@ -30,6 +30,8 @@ noninteractive `--settings '{"fastMode": true}'`, and its
 settings apply to that session; Prat passes the same single-key object with either boolean. Omission
 adds no override. Native account and model restrictions still apply, and settings files are never
 changed.
+Amp fast mode was added on 2026-11-11: true appends Amp's per-invocation `--fast`, and false adds
+nothing because execute mode starts in Standard mode; see the [Amp reference](amp.md#fast-mode-verified-2026-11-11).
 
 Catalog entries use `--version` except Amp, whose diagnostic is the `version` subcommand. The
 configured prefix is kept literal. Prat treats the stripped stdout, or stderr when stdout is empty,

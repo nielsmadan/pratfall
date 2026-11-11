@@ -80,7 +80,9 @@ native guarantees.
 ### Fast mode
 
 Claude fast mode is passed as an inline `fastMode` setting for the current invocation. Codex fast
-mode is passed as `service_tier="priority"`; false selects `service_tier="default"`. Pratfall does
+mode is passed as `service_tier="priority"`; false selects `service_tier="default"`. Amp fast mode
+is passed as `--fast`; false adds nothing, because Amp's execute mode starts in Standard mode on
+every run. Pratfall does
 not edit native settings, choose a different model, or infer account eligibility or pricing.
 
 ### Extra directories
@@ -187,8 +189,9 @@ Amp uses `--execute --stream-json` with plain stdin and one terminal result.
 
 - **Permissions:** Amp defaults to automatic tool approval unless existing native settings enable
   permissions. Prat preserves that behavior.
-- **Controls:** model, effort, fast and budget overrides are unsupported. The only optional native
-  argument is `--stream-json-thinking`; thinking stays excluded from final output.
+- **Controls:** fast mode maps to `--fast`; model, effort and budget overrides are unsupported.
+  Native flags pass unless Prat controls them; with `--stream-json-thinking`, thinking stays
+  excluded from final output.
 - **Output:** native error strings and system errors remain failures. Usage is optional, and
   native mode does not identify a model. The version diagnostic is `amp version`.
 
