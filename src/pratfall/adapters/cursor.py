@@ -14,7 +14,6 @@ _ALLOWED: Mapping[str, Flag] = MappingProxyType(
             "-f",
             "--plan",
             "--skip-worktree-setup",
-            "--trust",
             "--yolo",
         )
     }
@@ -44,6 +43,28 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--workspace",
             "--worktree",
             "-w",
+        )
+    }
+    | {
+        name: Flag(0, joined=name in {"-b", "-c", "-v"})
+        for name in (
+            "--background",
+            "--cloud",
+            "--disable-project-configs",
+            "--list-models",
+            "--show-thinking",
+            "--trust",
+            "-b",
+            "-c",
+            "-v",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--conversation-history-file",
+            "--data-dir",
+            "--new-session-id",
         )
     }
 )

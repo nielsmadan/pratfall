@@ -47,6 +47,41 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--remote",
         )
     }
+    | {
+        name: Flag(0)
+        for name in (
+            "--allow-remote-control",
+            "--auto-update",
+            "--background-agent",
+            "--desktop-sidecar",
+            "--fips-status",
+            "--fork-session",
+            "--include-partial-messages",
+            "--server",
+            "--snowflake-sandbox",
+            "--swarm",
+            "--ui",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-o"})
+        for name in (
+            "--channels",
+            "--config-file",
+            "--fork",
+            "--goal",
+            "--input-format",
+            "--output-last-message",
+            "--profile",
+            "--resume-session-at",
+            "--session-id",
+            "--setting-sources",
+            "--skills",
+            "--worktree",
+            "--worktree-base",
+            "-o",
+        )
+    }
 )
 
 
@@ -64,7 +99,13 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("Cortex Code", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    validate_flags(
+        "Cortex Code",
+        resolved.options.native_args or (),
+        _ALLOWED,
+        _RESERVED,
+        attached_short_values=False,
+    )
 
 
 def decode(stdout: str) -> DecodedOutput:

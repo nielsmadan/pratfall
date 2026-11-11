@@ -44,6 +44,24 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--config",
         )
     }
+    | {
+        name: Flag(0, joined=name in {"-C", "-c", "-y"})
+        for name in (
+            "--auto-approve",
+            "--yes",
+            "-C",
+            "-c",
+            "-y",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-S"})
+        for name in (
+            "--environment",
+            "--environment-cwd",
+            "-S",
+        )
+    }
 )
 
 

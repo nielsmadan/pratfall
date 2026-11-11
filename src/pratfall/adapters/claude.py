@@ -28,7 +28,6 @@ _ALLOWED: Mapping[str, Flag] = MappingProxyType(
             "--restricted",
             "--safe-mode",
             "--strict-mcp-config",
-            "--verbose",
         )
     }
     | {
@@ -93,6 +92,55 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--session-id",
             "--worktree",
             "-w",
+        )
+    }
+    | {
+        name: Flag(0, joined=name in {"-v"})
+        for name in (
+            "--await-claim",
+            "--await-initialize",
+            "--background",
+            "--bg",
+            "--deep-link-origin",
+            "--desktop",
+            "--enable-auth-status",
+            "--ide",
+            "--reply-on-resume",
+            "--session-mirror",
+            "--tmux",
+            "--verbose",
+            "-v",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--attach-serve",
+            "--client-data-url",
+            "--cloud",
+            "--dangerously-load-development-channels",
+            "--deep-link-cwd-b64",
+            "--deep-link-last-fetch",
+            "--deep-link-repo",
+            "--fast-mode",
+            "--from-pr",
+            "--handle-uri",
+            "--managed-settings",
+            "--parent-session-id",
+            "--pool",
+            "--prefill",
+            "--prefill-b64",
+            "--project-config-root",
+            "--prompt-suggestions",
+            "--rc",
+            "--remote",
+            "--remote-control-session-name-prefix",
+            "--resume-drops-turn",
+            "--resume-session-at",
+            "--rewind-files",
+            "--sdk-url",
+            "--session-began-as-copy",
+            "--teleport",
         )
     }
 )

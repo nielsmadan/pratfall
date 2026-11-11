@@ -41,6 +41,15 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--remote",
         )
     }
+    | {
+        name: Flag(1)
+        for name in (
+            "--calling-session-id",
+            "--calling-tool-use-id",
+            "--init-session-id",
+            "--settings",
+        )
+    }
 )
 
 
@@ -69,9 +78,21 @@ def validate(resolved: ResolvedProfile) -> None:
         resolved.options.disabled_tools, "disabled_tools", comma=True, whitespace=True, trim=True
     )
     if resolved.options.tools is not None:
-        reserved |= {"--restrict-tools": Flag(1), "--additional-tools": Flag(1)}
+        reserved |= {
+            name: Flag(1)
+            for name in (
+                "--restrict-tools",
+                "--additional-tools",
+                "--only-tools",
+                "--add-tools",
+                "--enabled-tools",
+            )
+        }
     if resolved.options.disabled_tools:
-        reserved |= {"--disabled-tools": Flag(1), "--additional-tools": Flag(1)}
+        reserved |= {
+            name: Flag(1)
+            for name in ("--disabled-tools", "--additional-tools", "--add-tools", "--remove-tools")
+        }
     validate_flags("Droid", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

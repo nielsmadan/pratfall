@@ -36,6 +36,20 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "-m",
         )
     }
+    | {
+        name: Flag(0, joined=name in {"-V"})
+        for name in (
+            "--dev",
+            "-V",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--container",
+            "--profile",
+        )
+    }
 )
 
 

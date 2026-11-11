@@ -72,7 +72,6 @@ def test_devin_defaults_preserve_native_trust_and_permissions() -> None:
         ("auth",),
         ("setup",),
         ("--", "prompt"),
-        ("--unknown",),
         ("@args",),
         ("--permission-mode",),
         ("--permission-mode", "--continue"),

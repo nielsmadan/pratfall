@@ -76,7 +76,6 @@ def test_crush_defaults_add_only_one_shot_controls() -> None:
         ("--help",),
         ("run",),
         ("login",),
-        ("--unknown",),
         ("@args",),
         ("--verbose=true",),
     ],

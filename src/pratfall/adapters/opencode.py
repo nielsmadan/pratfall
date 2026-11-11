@@ -60,6 +60,24 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--variant",
         )
     }
+    | {
+        name: Flag(0, joined=name in {"-v"})
+        for name in (
+            "--demo",
+            "--get-yargs-completions",
+            "--mini",
+            "--wizard",
+            "-v",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-w"})
+        for name in (
+            "--completions",
+            "--worktree",
+            "-w",
+        )
+    }
 )
 
 
@@ -129,7 +147,13 @@ def _validate_flags(resolved: ResolvedProfile, allowed: Mapping[str, Flag]) -> N
     reserved = dict(_RESERVED) | (
         {name: allowed[name] for name in ("--file", "-f")} if resolved.options.attachments else {}
     )
-    validate_flags("OpenCode", resolved.options.native_args or (), allowed, reserved)
+    validate_flags(
+        "OpenCode",
+        resolved.options.native_args or (),
+        allowed,
+        reserved,
+        attached_short_values=False,
+    )
 
 
 def decode(stdout: str) -> DecodedOutput:

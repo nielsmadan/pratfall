@@ -29,8 +29,8 @@ and [session filtering](https://github.com/earendil-works/pi/blob/v0.85.1/packag
 
 Native passthrough supports provider selection, system/append prompts, tool filters, disabling
 extensions/skills/prompt templates/context files, `--offline`, and `--no-session`. Prat reserves
-prompt, output, model, thinking and session-resumption controls. Unknown options and positional
-arguments require a trusted executable wrapper. Active public tool controls reserve equivalent
+prompt, output, model, thinking and session-resumption controls. Other options pass as single
+tokens (Pi hands unknown `--NAME=VALUE` flags to extensions); positional arguments are rejected. Active public tool controls reserve equivalent
 native flags. Native session saving, authentication, extensions and permission behavior remain
 Pi's own; no automatic approval flag is added.
 

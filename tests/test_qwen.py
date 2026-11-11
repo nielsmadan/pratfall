@@ -89,7 +89,6 @@ def test_qwen_literal_stdin_and_controls() -> None:
         ("--effort=high",),
         ("serve",),
         ("login",),
-        ("--unknown",),
         ("@args",),
         ("--debug=true",),
         ("--approval-mode",),

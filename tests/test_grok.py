@@ -92,7 +92,6 @@ def test_grok_literal_argv_prompt_and_native_controls() -> None:
         ("--worktree=x",),
         ("--no-auto-update",),
         ("--version",),
-        ("--unknown",),
         ("agent",),
         ("@args",),
         ("--rules",),

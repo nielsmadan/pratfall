@@ -622,7 +622,7 @@ def test_profile_native_arguments_replace_invalid_defaults_during_validation(
     path = tmp_path / "config.toml"
     path.write_text(
         'version=1\n[defaults]\nnative_args=["--output-format", "text"]\n'
-        '[profiles.safe]\nagent="claude"\nnative_args=["--verbose"]\n',
+        '[profiles.safe]\nagent="claude"\nnative_args=["--bare"]\n',
         encoding="utf-8",
     )
     assert main(["config", "validate", "--config", str(path)]) == 0
@@ -1952,8 +1952,8 @@ def test_help_after_the_native_boundary_stays_native(
     config = help_config(tmp_path)
     assert main(["cx", "x", "--config", str(config), "--dry-run", "--", "--help"]) == 2
     assert capsys.readouterr().err == (
-        "prat: arguments after --: Codex native argument '--help': unknown native option; "
-        "use a trusted executable wrapper for unsupported native arguments\n"
+        "prat: arguments after --: Codex native argument '--help': this option is controlled by "
+        "prat; use a trusted executable wrapper for unsupported native arguments\n"
     )
 
 

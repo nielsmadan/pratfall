@@ -44,6 +44,13 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--prompt-interactive",
         )
     }
+    | {
+        name: Flag(0)
+        for name in (
+            "--remote-agent",
+            "--remote-control",
+        )
+    }
 )
 
 
@@ -66,7 +73,13 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    validate_flags("Antigravity", resolved.options.native_args or (), _ALLOWED, _RESERVED)
+    validate_flags(
+        "Antigravity",
+        resolved.options.native_args or (),
+        _ALLOWED,
+        _RESERVED,
+        single_dash_long=True,
+    )
 
 
 def decode(stdout: str) -> DecodedOutput:

@@ -31,6 +31,7 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--trajectory",
         )
     }
+    | {name: Flag(1) for name in ("--agent-composition",)}
 )
 _COMPLETIONS = {
     "success": False,

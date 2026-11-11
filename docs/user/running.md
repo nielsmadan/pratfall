@@ -158,7 +158,7 @@ expanded again.
 With parameters, every word after the selector is a value, so free text goes through
 `--prompt TEXT` or `--file PATH`, which fill `$input`. A lone `-` cannot be a value; use
 `--param NAME=-` for a literal dash. `--param` is also the way to pass a value beginning with a
-dash. After `--`, `--param` stays a native argument and is rejected by native validation.
+dash. After `--`, `--param` stays a native argument and is passed to the agent.
 
 These fail with `invalid_arguments` before stdin is read, naming the template or profile:
 
@@ -321,7 +321,7 @@ Prat's `--timeout` remains the outer deadline.
 
 ## Pass native arguments
 
-Put supported native options after `--`:
+Put native options after `--`:
 
 ```sh
 prat cx "inspect this change" -- --sandbox read-only --ephemeral
@@ -329,13 +329,27 @@ prat cc "make the requested edit" -- --permission-mode acceptEdits
 prat cx --effort high "review this" -- -c shell_environment_policy.inherit=all
 ```
 
-These arguments replace the profile's `native_args`. Prat accepts a documented set of native
-options and rejects positional arguments and controls that conflict with its prompt, output,
-session, working directory, model, effort, fast mode, or budget settings. Codex's `-c` / `--config`
+These arguments replace the profile's `native_args`. Any native flag passes except the ones Prat
+controls: its prompt, output format, interactive mode, session, working directory, config file,
+and the native flags behind its model, effort, fast mode, budget and other run options. An unknown
+long flag that abbreviates a controlled one, such as `--out` for `--output-format`, counts as
+controlled.
+
+Prat knows the value count of each agent's documented flags, so `--sandbox read-only` works.
+For any other flag it cannot tell a value from a stray word, so an unknown flag is passed as one
+token and its value is joined with `=`, as in `--some-flag=value` (or `-xVALUE` for a short flag).
+A bare word that is not a known flag's value is rejected rather than sent on, because an agent may
+read it as part of the prompt:
+
+```text
+prat: arguments after --: Codex native argument 'bar': positional arguments are not accepted; if it is the value of --foo, write --foo=bar
+```
+
+Response files (`@file`) and a second `--` are rejected too. Codex's `-c` / `--config`
 overrides are accepted; only the individual keys Prat sets are rejected, and only while the
 matching public option is active. See [agent-specific options](agents.md#native-behavior) and the
 [Codex configuration contract](../reference/codex.md#configuration-overrides-verified-2026-09-19).
-Other options can be supplied through a trusted
+A controlled option can still be supplied through a trusted
 [command wrapper](profiles.md#configure-commands-and-wrappers).
 
 Prat preserves native permission defaults and inherits authentication and settings. It does not

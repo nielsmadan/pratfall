@@ -72,7 +72,6 @@ def test_vibe_bare_prompt_stdin_and_native_budgets() -> None:
         ("--check-upgrade",),
         ("--legacy-harness",),
         ("update",),
-        ("--unknown",),
         ("@args",),
         ("--max-tokens",),
         ("--enabled-tools",),

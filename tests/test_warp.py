@@ -66,7 +66,6 @@ def test_warp_builder_keeps_model_native_options_and_literal_prompt() -> None:
         ("--share",),
         ("run-cloud",),
         ("login",),
-        ("--unknown",),
         ("@args",),
         ("--name",),
         ("--strict-mcp-startup=true",),

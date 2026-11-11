@@ -126,6 +126,16 @@ filters, not an OS sandbox or a permission approval mechanism.
 
 ## Native behavior
 
+Native flags after `--` pass unless Prat controls them; see
+[Pass native arguments](running.md#pass-native-arguments). The flags listed per agent below are
+the ones Prat knows, with their value counts, so they also accept a value as the next word. Any
+other flag passes as one token, with its value joined by `=`.
+
+Every supported agent's parser accepts `--flag=value` (checked 2026-11-11). Short flags differ:
+Gemini, Qwen, Kilo, Cortex and OpenCode read `-xVALUE` as a group of short flags, so use the long
+form or `-x=VALUE` there. Antigravity's Go parser treats `-name` and `--name` as the same flag.
+`--help`, `-h` and `--version` are reserved for every agent, since they replace the run's output.
+
 ### Pi
 
 Requires Pi v0.85.1 or newer. `prat pi "review this checkout"` uses `pi --print --mode json`

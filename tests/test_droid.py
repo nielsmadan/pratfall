@@ -62,7 +62,6 @@ def test_droid_literal_stdin_and_native_controls() -> None:
         ("--mission",),
         ("--list-tools",),
         ("--remote=x",),
-        ("--unknown",),
         ("login",),
         ("@args",),
         ("--auto",),

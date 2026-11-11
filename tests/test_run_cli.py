@@ -3106,11 +3106,10 @@ def test_template_flag_after_native_boundary_stays_native(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
-    monkeypatch.setattr(sys, "stdin", UnreadInput())
-    assert main(["cx", "--config", str(config), "--json", "--", "--template=work"]) == 2
-    assert json.loads(capsys.readouterr().out)["error"]["message"].startswith(
-        "arguments after --: Codex native argument '--template=work'"
-    )
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b"task"))
+    arguments = ["cx", "--config", str(config), "--json", "--dry-run", "--", "--template=work"]
+    assert main(arguments) == 0
+    assert "--template=work" in json.loads(capsys.readouterr().out)["argv"]
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
@@ -3211,10 +3210,10 @@ def test_context_flag_after_native_boundary_stays_native(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     config = write_agent(tmp_path, "codex", CODEX_SUCCESS)
-    monkeypatch.setattr(sys, "stdin", UnreadInput())
-    assert main(["cx", "--config", str(config), "--json", "--", "--context=missing"]) == 2
-    result = json.loads(capsys.readouterr().out)
-    assert "native argument" in result["error"]["message"]
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b"task"))
+    arguments = ["cx", "--config", str(config), "--json", "--dry-run", "--", "--context=missing"]
+    assert main(arguments) == 0
+    assert "--context=missing" in json.loads(capsys.readouterr().out)["argv"]
 
 
 def test_stdin_context_rejects_over_budget_pipe_without_waiting_for_eof(tmp_path: Path) -> None:
@@ -3354,11 +3353,11 @@ def test_extract_flag_after_native_boundary_stays_native(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], flag: str
 ) -> None:
     config = write_agent(tmp_path, "codex", "raise AssertionError('must not launch')")
-    monkeypatch.setattr(sys, "stdin", UnreadInput())
-    assert main(["cx", "--config", str(config), "--json", "--", flag]) == 2
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b"task"))
+    assert main(["cx", "--config", str(config), "--json", "--dry-run", "--", flag]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert result["error"]["code"] == "invalid_arguments"
-    assert flag in result["error"]["message"]
+    assert flag in result["argv"]
+    assert result["stdin_bytes"] == len(b"task")
 
 
 @pytest.mark.parametrize("extract", [False, True])
@@ -3402,10 +3401,11 @@ def test_edit_rejects_preview_before_reading_input(
 def test_edit_after_native_boundary_stays_native(
     flag: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "stdin", UnreadInput())
-    assert main(["cx", "--json", "--", flag]) == 2
+    monkeypatch.setattr(sys, "stdin", io.BytesIO(b"task"))
+    assert main(["cx", "--json", "--dry-run", "--", flag]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert flag in result["error"]["message"]
+    assert flag in result["argv"]
+    assert result["stdin_bytes"] == len(b"task")
 
 
 @pytest.mark.parametrize("value", [b"\xff", b"\0", b"x" * (STDIN_PROMPT_LIMIT + 1)])
@@ -3862,8 +3862,9 @@ def test_param_after_native_boundary_stays_native(
     monkeypatch.setattr(sys, "stdin", UnreadInput())
     arguments = ["remove-empty", "src", "--config", str(config), "--json"]
     assert main([*arguments, "--", "--param", "folder=lib"]) == 2
-    assert json.loads(capsys.readouterr().out)["error"]["message"].startswith(
-        "arguments after --: Codex native argument '--param': "
+    assert json.loads(capsys.readouterr().out)["error"]["message"] == (
+        "arguments after --: Codex native argument 'folder=lib': positional arguments are not "
+        "accepted; if it is the value of --param, write --param=folder=lib"
     )
 
 
@@ -4492,7 +4493,6 @@ def test_opencode_missing_executable_reports_not_found(capsys: pytest.CaptureFix
     [
         (["oc", "--effort=high"], "", ("invalid_arguments", "--effort: ")),
         (["work"], 'effort = "high"', ("invalid_config", "profiles.work.effort")),
-        (["oc", "--", "--pure"], "", ("invalid_arguments", "--pure")),
     ],
 )
 def test_opencode_two_rejects_unsupported_options_before_reading_input(

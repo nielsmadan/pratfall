@@ -87,7 +87,6 @@ def test_pi_build_preserves_literal_stdin_and_separate_values() -> None:
         ("--thinking=high",),
         ("@secret",),
         ("--extension", "x"),
-        ("--unknown",),
         ("auth",),
         ("--provider",),
     ],

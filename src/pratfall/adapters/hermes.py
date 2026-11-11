@@ -67,6 +67,21 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "-z",
         )
     }
+    | {
+        name: Flag(0)
+        for name in (
+            "--native",
+            "--tui-native",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-p"})
+        for name in (
+            "--format",
+            "--profile",
+            "-p",
+        )
+    }
 )
 
 

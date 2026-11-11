@@ -26,6 +26,20 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--cloud",
         )
     }
+    | {
+        name: Flag(0, joined=name in {"-V"})
+        for name in (
+            "--login",
+            "-V",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--refusal-fallback",
+            "--verbosity",
+        )
+    }
 )
 
 

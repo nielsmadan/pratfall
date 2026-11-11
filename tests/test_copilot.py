@@ -58,7 +58,7 @@ def test_copilot_builds_optional_variadic_native_arguments() -> None:
     ("--bash-env", "--bash-env=on", "--bash-envon", "--no-bash-env", "--no-bash-env=true"),
 )
 def test_copilot_rejects_native_flags_that_persist_configuration(argument: str) -> None:
-    with pytest.raises(PratError, match="unknown native option"):
+    with pytest.raises(PratError, match="controlled by prat"):
         copilot.validate(resolved("copilot", Options(native_args=(argument,))))
 
 

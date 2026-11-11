@@ -34,6 +34,28 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--max-turns",
         )
     }
+    | {
+        name: Flag(0, joined=name in {"-V", "-v"})
+        for name in (
+            "--daemon",
+            "--interactive",
+            "--orb-execute",
+            "--stats",
+            "-V",
+            "-v",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-m"})
+        for name in (
+            "--format",
+            "--headless",
+            "--observe",
+            "--output-tool",
+            "--runner-dir",
+            "-m",
+        )
+    }
 )
 _AMP_SYSTEM_ERRORS = {"error_during_execution", "error_max_turns"}
 

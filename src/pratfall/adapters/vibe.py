@@ -39,6 +39,8 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--remote",
         )
     }
+    | {name: Flag(0, joined=name in {"-v"}) for name in ("-v",)}
+    | {name: Flag(1) for name in ("--prompt-file",)}
 )
 _IGNORED = frozenset({"reasoning", "effect", "callback", "checkpoint", "notice"})
 

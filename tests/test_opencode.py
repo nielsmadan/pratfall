@@ -143,11 +143,10 @@ def test_opencode_two_rejects_effort_it_cannot_express(options: Options, message
 
 
 @pytest.mark.parametrize("flag", ["--pure", "--log-level=DEBUG"])
-def test_opencode_two_rejects_flags_only_one_accepts(flag: str) -> None:
+def test_opencode_two_forwards_flags_only_one_documents(flag: str) -> None:
     options = Options(native_args=(flag,))
-    _versioned("1.19.3").validate(resolved("opencode", options))
-    with pytest.raises(PratError, match="unknown native option"):
-        _versioned("2.0.32").validate(resolved("opencode", options))
+    _versioned("2.0.32").validate(resolved("opencode", options))
+    assert _versioned_build(options, "2.0.32").argv[-1] == flag
 
 
 @pytest.mark.parametrize("version", ["opencode dev", "build 20261018", "build .5.3"])

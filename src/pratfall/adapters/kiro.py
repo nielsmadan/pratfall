@@ -42,6 +42,29 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--wrap",
         )
     }
+    | {
+        name: Flag(0, joined=name in {"-V"})
+        for name in (
+            "--classic",
+            "--cloud",
+            "--help-all",
+            "--legacy-ui",
+            "--non-interactive",
+            "--sessions",
+            "--tui",
+            "--v2",
+            "--v3",
+            "-V",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--format",
+            "--profile",
+            "--repo",
+        )
+    }
 )
 
 

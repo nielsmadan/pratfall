@@ -394,9 +394,24 @@ an [`Adapter`](../src/pratfall/adapters/registry.py) record with exactly one of 
 them; `build` assumes the CLI already validated at the trust boundary and never revalidates.
 A version-specific record returned by `for_version` must also be listed in `ADAPTER_VARIANTS`, so
 the cross-adapter contract and retention suites exercise it alongside the base records.
-Use [`validate_flags`](../src/pratfall/adapters/native_args.py) with a finite flag set and known
-arity. Reserve Pratfall-owned fields and transports; response files, positional arguments and
-subcommands are rejected. Trusted executable wrappers cover unsupported options.
+Use [`validate_flags`](../src/pratfall/adapters/native_args.py) with an allowlist of documented
+flags and their arity, and a reserved list. Any other dash token passes as a single token, so the
+reserved list is the safety boundary: it holds every native flag that would change what Pratfall
+owns (output format and streaming, prompt transport, interactive modes, working directory,
+session and resume, config-file selection, native config persistence, and each flag a public
+option sets). Native CLIs change faster than an allowlist can follow, so unknown flags pass rather
+than wait for a release. Pratfall still controls arity without knowing the flag: it never treats the next word as an
+unknown flag's value, and a bare word that is not a known flag's value is rejected, since the
+agent could read it as prompt text. A native parser can still give a bare unknown value flag the
+argument Pratfall places after the native arguments, so such a flag needs its value joined with
+`=`. An unknown long flag that is a prefix of a reserved one, or a
+short token that starts with a reserved short flag, is rejected as reserved, because many parsers
+expand abbreviations or join values to short flags. A single-dash token is read as a group of
+short flags up to the first known flag that takes a value, so `-vC` is rejected when `-C` is
+reserved; adapters whose parser never attaches `-xVALUE` (yargs, Effect) check every letter. A
+camelCase or `--no-` spelling of a reserved long flag is rejected too, and Go-flag adapters treat
+`-name` as `--name`. `--help`, `-h` and `--version` are reserved everywhere. Response files and
+`--` are rejected. Trusted executable wrappers cover reserved options.
 
 Check the relevant [native evidence](reference/overview.md) before exposing capabilities or
 accounting; the [fast-mode mappings](reference/overview.md#shared-controls-and-accounting) show why native

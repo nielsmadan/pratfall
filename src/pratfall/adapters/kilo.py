@@ -8,26 +8,46 @@ _ALLOWED = {name: Flag(0) for name in ("--auto", "--thinking", "--print-logs")} 
     name: Flag(1, joined=name == "-f")
     for name in ("--agent", "--title", "--log-level", "--file", "-f")
 }
-_RESERVED = {
-    name: Flag(0) for name in ("--continue", "-c", "--fork", "--interactive", "--share")
-} | {
-    name: Flag(1, joined=name in {"-m", "-s", "-f"})
-    for name in (
-        "--model",
-        "-m",
-        "--variant",
-        "--format",
-        "--attach",
-        "--session",
-        "-s",
-        "--command",
-        "--dir",
-        "--port",
-        "--hostname",
-        "--password",
-        "--username",
-    )
-}
+_RESERVED = (
+    {name: Flag(0) for name in ("--continue", "-c", "--fork", "--interactive", "--share")}
+    | {
+        name: Flag(1, joined=name in {"-m", "-s", "-f"})
+        for name in (
+            "--model",
+            "-m",
+            "--variant",
+            "--format",
+            "--attach",
+            "--session",
+            "-s",
+            "--command",
+            "--dir",
+            "--port",
+            "--hostname",
+            "--password",
+            "--username",
+        )
+    }
+    | {
+        name: Flag(0, joined=name in {"-i", "-v"})
+        for name in (
+            "--cloud-fork",
+            "--demo",
+            "--mini",
+            "--replay",
+            "-i",
+            "-v",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-p", "-u"})
+        for name in (
+            "--replay-limit",
+            "-p",
+            "-u",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
@@ -45,7 +65,9 @@ def validate(resolved: ResolvedProfile) -> None:
     reserved = _RESERVED | (
         {name: _ALLOWED[name] for name in ("--file", "-f")} if resolved.options.attachments else {}
     )
-    validate_flags("Kilo", resolved.options.native_args or (), _ALLOWED, reserved)
+    validate_flags(
+        "Kilo", resolved.options.native_args or (), _ALLOWED, reserved, attached_short_values=False
+    )
 
 
 def decode(stdout: str) -> DecodedOutput:

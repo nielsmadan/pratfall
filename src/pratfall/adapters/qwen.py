@@ -74,6 +74,26 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--json-schema",
         )
     }
+    | {
+        name: Flag(0, joined=name in {"-l", "-v"})
+        for name in (
+            "--chat-recording",
+            "--include-partial-messages",
+            "--list-extensions",
+            "-l",
+            "-v",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--acp-execution-engine",
+            "--input-file",
+            "--json-fd",
+            "--json-file",
+            "--sandbox-session-id",
+        )
+    }
 )
 _QWEN_RESULT_ERRORS = {"error_during_execution", "error_max_turns"}
 
@@ -116,7 +136,9 @@ def validate(resolved: ResolvedProfile) -> None:
         reserved |= {"--core-tools": Flag(1)}
     if resolved.options.disabled_tools:
         reserved |= {"--exclude-tools": Flag(1)}
-    validate_flags("Qwen", resolved.options.native_args or (), _ALLOWED, reserved)
+    validate_flags(
+        "Qwen", resolved.options.native_args or (), _ALLOWED, reserved, attached_short_values=False
+    )
 
 
 def decode(stdout: str) -> DecodedOutput:

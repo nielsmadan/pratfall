@@ -29,6 +29,7 @@ from pratfall.adapters import (
     kiro,
     openclaw,
     opencode,
+    pi,
     reasonix,
     vibe,
 )
@@ -236,12 +237,26 @@ def test_validate_rejects_owned_native_arguments(name: str, flag: str) -> None:
 
 
 @pytest.mark.parametrize("name", sorted(_NAMED_ADAPTERS))
-def test_validate_rejects_unknown_native_arguments(name: str) -> None:
+def test_validate_passes_unknown_native_flags_as_single_tokens(name: str) -> None:
     agent, adapter = _NAMED_ADAPTERS[name]
-    probe = Options(native_args=("--prat-conformance-probe",))
-    with pytest.raises(PratError, match="unknown native option") as unknown:
+    probe = ("--prat-conformance-probe", "--prat-conformance-value=1")
+    options = Options(timeout=_TIMEOUT, native_args=probe)
+    adapter.validate(resolved(agent, options))
+    argv = adapter.build(resolved(agent, options), b"prompt").argv
+    assert argv[argv.index(probe[0]) + 1] == probe[1]
+
+
+@pytest.mark.parametrize("name", sorted(_NAMED_ADAPTERS))
+def test_validate_names_the_unknown_flag_before_a_stray_word(name: str) -> None:
+    agent, adapter = _NAMED_ADAPTERS[name]
+    probe = Options(native_args=("--prat-conformance-probe", "value"))
+    with pytest.raises(PratError) as stray:
         adapter.validate(resolved(agent, probe))
-    assert unknown.value.code == "invalid_arguments"
+    assert stray.value.code == "invalid_arguments"
+    assert str(stray.value).endswith(
+        "native argument 'value': positional arguments are not accepted; if it is the value of "
+        "--prat-conformance-probe, write --prat-conformance-probe=value"
+    )
 
 
 @pytest.mark.parametrize(
@@ -256,6 +271,9 @@ def test_validate_rejects_unknown_native_arguments(name: str) -> None:
         ("codex", ("--cd=/tmp",), Options()),
         ("codex", ("-cmodel=other",), Options(model="conformance-model")),
         ("codex", ("--json",), Options()),
+        ("claude", ("--out=text",), Options()),
+        ("claude", ("--output",), Options()),
+        ("codex", ("--js",), Options()),
     ],
 )
 def test_owned_native_flags_are_rejected(
@@ -288,12 +306,14 @@ def test_fast_mode_native_mapping(agent: str, fast: bool | None, expected: tuple
 @pytest.mark.parametrize(
     ("agent", "arguments", "message"),
     [
-        ("claude", ("positional",), "positional arguments"),
-        ("codex", ("resume",), "subcommands"),
+        ("claude", ("positional",), "positional arguments are not accepted; use a trusted"),
+        ("codex", ("resume",), "positional arguments"),
+        ("codex", ("--",), "positional arguments"),
+        ("codex", ("-",), "positional arguments"),
+        ("codex", ("-Z", "value"), "if it is the value of -Z, write -Zvalue"),
         ("claude", ("@response",), "response files"),
-        ("codex", ("--future-flag",), "unknown native option"),
         ("codex", ("--sandbox",), "missing native option value"),
-        ("claude", ("--verbose=yes",), "does not take a value"),
+        ("claude", ("--bare=yes",), "does not take a value"),
         ("codex", ("--sandbox", "--model=native"), "use the =VALUE form"),
     ],
 )
@@ -311,7 +331,9 @@ def test_unvetted_native_argument_forms_are_rejected(
         (gemini, "gemini", ("--prompt=native",)),
         (gemini, "gemini", ("-mnative",)),
         (antigravity, "antigravity", ("--print-timeout=2m",)),
-        (antigravity, "antigravity", ("-ptext",)),
+        (antigravity, "antigravity", ("-output-format=json",)),
+        (antigravity, "antigravity", ("-model", "x")),
+        (antigravity, "antigravity", ("-help",)),
         (copilot, "copilot", ("--reasoning-effort=max",)),
         (copilot, "copilot", ("-Ctmp",)),
         (copilot, "copilot", ("--allow-tool", "write", "--prompt=native")),
@@ -328,6 +350,8 @@ def test_unvetted_native_argument_forms_are_rejected(
         (hermes, "hermes", ("--query=native",)),
         (hermes, "hermes", ("-zprompt",)),
         (hermes, "hermes", ("--max-turns=2",)),
+        (pi, "pi", ("-ptext",)),
+        (goose, "goose", ("-rsession",)),
     ],
 )
 def test_new_adapters_reject_owned_native_flags(
@@ -340,15 +364,14 @@ def test_new_adapters_reject_owned_native_flags(
 @pytest.mark.parametrize(
     ("adapter", "agent", "arguments", "message"),
     [
-        (gemini, "gemini", ("--future",), "unknown native option"),
-        (antigravity, "antigravity", ("resume",), "subcommands"),
+        (antigravity, "antigravity", ("resume",), "positional arguments"),
         (copilot, "copilot", ("@args",), "response files"),
-        (copilot, "copilot", ("--allow-tool", "write", "--future"), "unknown native option"),
         (copilot, "copilot", ("--allow-tool", "@args"), "response files"),
         (cursor, "cursor", ("--sandbox",), "missing native option value"),
         (opencode, "opencode", ("--pure=yes",), "does not take a value"),
-        (kiro, "kiro", ("--future",), "unknown native option"),
-        (openclaw, "openclaw", ("gateway",), "subcommands"),
+        (openclaw, "openclaw", ("gateway",), "positional arguments"),
+        (gemini, "gemini", ("-Z", "value"), "if it is the value of -Z, write -Z=value"),
+        (antigravity, "antigravity", ("-zed", "x"), "if it is the value of -zed, write -zed=x"),
         (hermes, "hermes", ("@args",), "response files"),
     ],
 )
@@ -1149,3 +1172,58 @@ def test_every_whole_document_decoder_clears_an_unencodable_answer(agent: str) -
     assert decoded.error == ResultError(
         "output_encoding", "agent output contains invalid Unicode text"
     )
+
+
+@pytest.mark.parametrize("name", sorted(_NAMED_ADAPTERS))
+@pytest.mark.parametrize("flag", ["--help", "-h", "--version"])
+def test_every_adapter_reserves_help_and_version(name: str, flag: str) -> None:
+    agent, adapter = _NAMED_ADAPTERS[name]
+    with pytest.raises(PratError, match="controlled by prat"):
+        adapter.validate(resolved(agent, Options(native_args=(flag,))))
+
+
+@pytest.mark.parametrize(
+    ("name", "argument"),
+    [
+        ("crush", "-vC"),
+        ("reasonix", "-yc"),
+        ("kiro", "-vr"),
+        ("goose", "-qs"),
+        ("cursor", "-fc"),
+        ("qwen", "-dc"),
+        ("cortex", "-cp"),
+        ("opencode", "-fc"),
+        ("opencode", "-fm=model"),
+        ("opencode@2", "-wc"),
+        ("qwen", "--outputFormat=text"),
+        ("cortex", "--maxTurns=3"),
+        ("opencode@2", "--no-standalone"),
+        ("kilo", "--no-format"),
+        ("hermes", "--f=text"),
+        ("hermes", "--max=3"),
+        ("antigravity", "-effort=high"),
+    ],
+)
+def test_validate_rejects_spellings_that_reach_a_reserved_flag(name: str, argument: str) -> None:
+    agent, adapter = _NAMED_ADAPTERS[name]
+    with pytest.raises(PratError, match="controlled by prat"):
+        adapter.validate(resolved(agent, Options(native_args=(argument,))))
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("codex", ("-cmodel_verbosity=low",)),
+        ("antigravity", ("-project", "work")),
+        ("antigravity", ("-new-project",)),
+        ("pi", ("-nt",)),
+    ],
+)
+def test_validate_passes_value_and_single_dash_forms_the_parser_owns(
+    name: str, arguments: tuple[str, ...]
+) -> None:
+    agent, adapter = _NAMED_ADAPTERS[name]
+    options = Options(timeout=_TIMEOUT, native_args=arguments)
+    adapter.validate(resolved(agent, options))
+    argv = adapter.build(resolved(agent, options), b"prompt").argv
+    assert argv[argv.index(arguments[0]) : argv.index(arguments[0]) + len(arguments)] == arguments

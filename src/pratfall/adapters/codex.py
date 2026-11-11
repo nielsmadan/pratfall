@@ -68,6 +68,14 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "-o",
         )
     }
+    | {
+        name: Flag(0, joined=name in {"-V"})
+        for name in (
+            "--experimental-json",
+            "--worktree",
+            "-V",
+        )
+    }
 )
 
 

@@ -62,6 +62,13 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--models",
         )
     }
+    | {
+        name: Flag(0, joined=name in {"-v"})
+        for name in (
+            "--list-models",
+            "-v",
+        )
+    }
 )
 _IGNORED = frozenset(
     {

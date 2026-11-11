@@ -73,7 +73,6 @@ def test_reasonix_literal_stdin_and_native_controls() -> None:
         ("--takeover",),
         ("serve",),
         ("login",),
-        ("--unknown",),
         ("@args",),
         ("--show-thinking=true",),
         ("--max-steps",),

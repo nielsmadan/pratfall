@@ -4,28 +4,47 @@ from pratfall.adapters.whole_json import document_error, encoding_error, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
 
 _ALLOWED = {"--provider": Flag(1)}
-_RESERVED = {
-    name: Flag(0)
-    for name in ("--quiet", "-q", "--no-session", "--resume", "-r", "--interactive", "-s")
-} | {
-    name: Flag(1, joined=name in {"-i", "-t"})
-    for name in (
-        "--model",
-        "--max-turns",
-        "--output-format",
-        "--instructions",
-        "-i",
-        "--text",
-        "-t",
-        "--recipe",
-        "--system",
-        "--params",
-        "--sub-recipe",
-        "--name",
-        "--path",
-        "--session-id",
-    )
-}
+_RESERVED = (
+    {
+        name: Flag(0)
+        for name in ("--quiet", "-q", "--no-session", "--resume", "-r", "--interactive", "-s")
+    }
+    | {
+        name: Flag(1, joined=name in {"-i", "-t"})
+        for name in (
+            "--model",
+            "--max-turns",
+            "--output-format",
+            "--instructions",
+            "-i",
+            "--text",
+            "-t",
+            "--recipe",
+            "--system",
+            "--params",
+            "--sub-recipe",
+            "--name",
+            "--path",
+            "--session-id",
+        )
+    }
+    | {
+        name: Flag(0)
+        for name in (
+            "--explain",
+            "--render-recipe",
+            "--stats",
+        )
+    }
+    | {
+        name: Flag(1, joined=name in {"-n"})
+        for name in (
+            "--id",
+            "--scheduled-job-id",
+            "-n",
+        )
+    }
+)
 
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:

@@ -47,6 +47,14 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--resume",
         )
     }
+    | {
+        name: Flag(1, joined=name in {"-f"})
+        for name in (
+            "--legacy-idle-on-fail-env",
+            "--skill",
+            "-f",
+        )
+    }
 )
 _IGNORED = frozenset(
     {

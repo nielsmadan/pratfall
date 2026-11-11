@@ -57,6 +57,27 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "-w",
         )
     }
+    | {
+        name: Flag(0, joined=name in {"-l", "-v"})
+        for name in (
+            "--accept-raw-output-risk",
+            "--list-extensions",
+            "--list-models",
+            "--raw-output",
+            "-l",
+            "-v",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--fake-responses",
+            "--fake-responses-non-strict",
+            "--record-responses",
+            "--session-file",
+            "--session-id",
+        )
+    }
 )
 
 
@@ -79,7 +100,13 @@ def validate(resolved: ResolvedProfile) -> None:
         if resolved.options.add_dirs
         else {}
     )
-    validate_flags("Gemini", resolved.options.native_args or (), _ALLOWED, reserved)
+    validate_flags(
+        "Gemini",
+        resolved.options.native_args or (),
+        _ALLOWED,
+        reserved,
+        attached_short_values=False,
+    )
 
 
 def decode(stdout: str) -> DecodedOutput:

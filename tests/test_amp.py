@@ -70,7 +70,6 @@ def test_amp_literal_stdin_and_native_thinking() -> None:
         ("--no-tui",),
         ("threads", "continue"),
         ("login",),
-        ("--unknown",),
         ("@args",),
         ("--stream-json-thinking=true",),
     ],

@@ -87,11 +87,9 @@ def test_cortex_defaults_add_only_exec_stdin_controls() -> None:
         ("--help",),
         ("exec",),
         ("update",),
-        ("--unknown",),
         ("@args",),
         ("--connection",),
         ("-c",),
-        ("-clocal",),
     ],
 )
 def test_cortex_rejects_contract_overrides(arguments: tuple[str, ...]) -> None:

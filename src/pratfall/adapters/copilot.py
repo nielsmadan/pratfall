@@ -76,9 +76,11 @@ _ALLOWED: Mapping[str, Flag] = MappingProxyType(
 )
 _RESERVED: Mapping[str, Flag] = MappingProxyType(
     {
-        name: Flag(0, joined=name in {"-p", "-s"})
+        name: Flag(0, joined=name in {"-p", "-s", "--bash-env", "--no-bash-env"})
         for name in (
+            "--bash-env",
             "--continue",
+            "--no-bash-env",
             "--no-banner",
             "-p",
             "--silent",
@@ -108,6 +110,43 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--stream",
             "-w",
             "--worktree",
+        )
+    }
+    | {
+        name: Flag(0, joined=name in {"-v"})
+        for name in (
+            "--acp",
+            "--banner",
+            "--cloud",
+            "--embedded-host",
+            "--headless",
+            "--host-ahp",
+            "--host-ahp-disable-token",
+            "--host-environment",
+            "--managed-server",
+            "--mouse",
+            "--remote",
+            "--server",
+            "--stdio",
+            "--ui-server",
+            "-v",
+        )
+    }
+    | {
+        name: Flag(1)
+        for name in (
+            "--ahp",
+            "--collect-debug-logs",
+            "--collect-debug-logs-output",
+            "--config-dir",
+            "--dynamic-retrieval",
+            "--host-ahp-listen",
+            "--host-ahp-token",
+            "--host-compute-id",
+            "--host-directory",
+            "--new-session-id",
+            "--port",
+            "--sync-session",
         )
     }
 )
