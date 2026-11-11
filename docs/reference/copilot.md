@@ -49,10 +49,11 @@ the retained-state budget like the message identifiers.
 The [CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference)
 documents `--session-id ID` as an exact session or task id: "If the ID matches an existing
 session or task, that session or task is resumed. If nothing matches, a new session is created
-only when the value is a valid UUID." A freshly generated UUID therefore names a new session,
-so Prat grants the `session_id` capability and forwards `--session-id=ID`. The dual mode is
-real and the caller owns it: reusing an id resumes. The same reference warns against combining
-it with `--resume`, `--continue` or `--connect`; all three stay reserved.
+only when the value is a valid UUID." The capability was withdrawn on 2026-11-11: a reused id
+resumes an earlier conversation without any sign in the result, while Prat runs one fresh
+session per run, so Prat no longer forwards `--session-id`. Native `--session-id` stays reserved,
+as do `--resume`, `--continue` and `--connect`. Copilot still reports its `sessionId` as
+`native_session_id`.
 
 ## Sources
 

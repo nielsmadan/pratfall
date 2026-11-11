@@ -463,6 +463,11 @@ config file that still sets `max_ai_credits` fails as an unknown field naming th
 Pass Copilot's own flag instead: `native_args = ["--max-ai-credits=50"]` in a Copilot profile, or
 `prat copilot "…" -- --max-ai-credits=50`.
 
+Copilot no longer takes `--session-id` or `session_id`: an id matching an earlier Copilot session
+resumed that conversation instead of starting a new one. A Copilot run, profile or `[defaults]`
+that sets it now fails with `--session-id: Copilot does not support a session id` (or the config
+file and key). Copilot still reports `native_session_id`. Claude Code and Grok keep the setting.
+
 A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
 naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that
 applies, and `workflows.NAME` for a workflow. Templates have their own names and never collide.

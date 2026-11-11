@@ -187,8 +187,7 @@ _RUN_OPTIONS: tuple[_RunOption, ...] = (
     _RunOption(
         "--session-id ID",
         ("--session-id",),
-        "Set the native session id so its transcript can be located. A value matching an "
-        "existing Copilot session resumes it.",
+        "Set the native session id so its transcript can be located.",
     ),
     _RunOption("--effort EFFORT", ("--effort",), "Override the native effort setting."),
     _RunOption(

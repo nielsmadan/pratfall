@@ -161,8 +161,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.append(f"--model={options.model}")
     if options.effort is not None:
         argv.append(f"--effort={options.effort}")
-    if options.session_id is not None:
-        argv.append(f"--session-id={options.session_id}")
     argv.extend(f"--add-dir={directory}" for directory in options.add_dirs or ())
     if options.tools is not None:
         if options.tools:

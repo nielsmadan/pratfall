@@ -162,7 +162,7 @@ def test_invalid_session_id_rejected_before_input_or_editor(
     assert error["message"] == f"--session-id: {message}"
 
 
-@pytest.mark.parametrize("agent", ["codex", "opencode", "qwen"])
+@pytest.mark.parametrize("agent", ["codex", "opencode", "qwen", "copilot"])
 def test_unsupported_session_id_rejected_before_input_or_editor(
     agent: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -216,7 +216,6 @@ def test_the_inventory_declares_both_sides_of_the_feature(
     records = json.loads(capsys.readouterr().out)["agents"]
     assert {r["name"] for r in records if r["capabilities"]["session_id"]} == {
         "claude",
-        "copilot",
         "grok",
     }
     assert {r["name"] for r in records if r["capabilities"]["reports_session_id"]} == {
@@ -313,10 +312,6 @@ def test_every_reporting_agent_surfaces_its_session(agent: str) -> None:
     ("agent", "expected"),
     [
         ("claude", ["-p", "--output-format", "json", f"--session-id={SESSION}"]),
-        (
-            "copilot",
-            ["--output-format=json", f"--session-id={SESSION}", "--prompt=task"],
-        ),
         (
             "grok",
             [

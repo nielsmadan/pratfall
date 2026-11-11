@@ -636,14 +636,12 @@ Unsupported public selection and native collisions fail before prompt input or e
 prat cc --session-id "$(uuidgen)" "review this change"
 ```
 
-`--session-id ID` sets the native session id before the run starts. Claude Code, Copilot and
-Grok support it, each mapped to its own native flag; Prat requires only a nonblank, NUL-free
-UTF-8 string and leaves format rules to the native CLI. Other agents reject the setting.
+`--session-id ID` sets the native session id before the run starts. Claude Code and Grok support
+it, each mapped to its own native flag; Prat requires only a nonblank, NUL-free UTF-8 string and
+leaves format rules to the native CLI. Other agents reject the setting.
 
 Use a freshly generated UUID. Claude and Grok both document the value as naming a *new* session
-and require a UUID, so reuse fails natively. Copilot differs: an id matching an existing session
-or task **resumes** it, and only a valid UUID that matches nothing creates. Pinning a static
-`session_id` in a profile or `[defaults]` therefore accumulates one growing Copilot session.
+and require a UUID, so reuse fails natively.
 
 Supply one when the caller needs the native transcript. An agent that reports its session in the
 result is read back into `native_session_id`, but a run that is killed, times out, or dies before

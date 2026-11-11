@@ -58,7 +58,6 @@ AGENTS = (
         ("copilot",),
         Capabilities(
             reports_session_id=True,
-            session_id=True,
             effort=True,
             effort_values=("low", "medium", "high", "xhigh", "max"),
             attachments=True,
