@@ -289,7 +289,3 @@ def test_reasonix_current_readiness_preserves_native_completion() -> None:
     assert decoded.output == "answer"
     assert decoded.error is None
     assert decoded.usage == Usage(3, 1, None, 2, None)
-    options = Options(native_args=("--fail-on-unverified",))
-    resolved = resolved_profile("reasonix", options)
-    reasonix.validate(resolved)
-    assert reasonix.build(resolved, b"task").argv[-1] == "--fail-on-unverified"

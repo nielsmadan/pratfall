@@ -14,7 +14,7 @@ The pinned [run parser](https://github.com/esengine/DeepSeek-Reasonix/blob/v2.37
 establishes `reasonix run --output-format json` with plain stdin, which the native reader trims.
 `--model` selects a configured provider name, and `--effort` passes a session effort override
 whose accepted levels depend on that provider. Accepted native options are `--max-steps` and
-`--permission-mode` (one value each), plus `--show-thinking` and `--fail-on-unverified` (zero). Max steps counts native
+`--permission-mode` (one value each), plus `--show-thinking` (zero). Max steps counts native
 rounds and is not normalized to max_turns. Prompt/print/output/events, model/effort, config/dir,
 resume/continue/copy/takeover, serve and administrative selectors are reserved or rejected.
 Version probing uses `--version`. The [versioned CLI guide](https://github.com/esengine/DeepSeek-Reasonix/blob/v2.37.0/docs/CLI.md)
@@ -32,10 +32,16 @@ The decoder also retains older incomplete_read, recovery_paused and completion_u
 handling for 1.x compatibility. Prat retains result text and usage on failures.
 
 Current native readiness failures can still be success/false with exit zero. This is completion,
-not a guarantee that the requested task was achieved. Explicit `--fail-on-unverified` converts
-unmet readiness to exit 3; Prat never injects it. Untrusted-folder refusal exits 4, or 3 with that
-flag, even when its JSON envelope says success. Native nonzero status remains authoritative;
+not a guarantee that the requested task was achieved. Untrusted-folder refusal exits 4, even when
+its JSON envelope says success. Native nonzero status remains authoritative;
 see [run verdicts](https://github.com/esengine/DeepSeek-Reasonix/blob/v2.37.0/internal/frontend/cli/run_verdict.go).
+
+## Removed `--fail-on-unverified` (verified 2026-11-11 against 2.58.0)
+
+The [2.58.0 release notes](https://github.com/esengine/DeepSeek-Reasonix/blob/v2.58.0/release-notes/studio/2.58.0.md)
+say: "Removed `--fail-on-unverified` and `agent.host_verification`; old configs carrying them
+still load (8c785fa4b)." Prat no longer lists the flag as a known native option. Like any other
+unknown flag it still passes through, and Reasonix 2.58.0 or newer reports it.
 
 Input/output and cache_read_input_tokens are native counts. Cache_creation_input_tokens is filled
 from CacheMissTokens, so cache-write usage remains unknown. The estimated bit is telemetry;
