@@ -1038,7 +1038,7 @@ def test_prompt_source_conflicts_are_normalized_without_opening_input(
 @pytest.mark.parametrize(
     "case",
     [
-        ("codex", ["--cwd=missing"], "--cwd is not a directory"),
+        ("codex", ["--cwd=missing"], "--cwd: not a directory: "),
         ("codex", ["--", "--model", "x"], "this option is controlled by prat"),
         ("openclaw", ["--", "--fallback", "x"], "requires an explicit model override"),
     ],
@@ -4593,3 +4593,11 @@ def test_openclaw_gets_a_native_timeout_only_while_one_is_set(
     assert main(["openclaw", "hi", "--config", str(config), "--dry-run", "--json", *flags]) == 0
     argv = json.loads(capsys.readouterr().out)["argv"]
     assert argv[argv.index("-") + 1 :] == expected
+
+
+def test_cwd_error_names_the_flag_like_other_path_options(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = tmp_path / "nonexist"
+    assert main(["cc", "--cwd", str(missing), "--dry-run", "hi"]) == 2
+    assert capsys.readouterr().err == f"prat: --cwd: not a directory: {missing}\n"

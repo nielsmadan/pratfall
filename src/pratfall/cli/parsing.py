@@ -901,7 +901,7 @@ def _run_cwd(value: str | None, invocation_cwd: Path) -> Path:
             code="invalid_arguments",
         ) from error
     if not path.is_dir():
-        raise PratError(f"--cwd is not a directory: {path}", code="invalid_arguments")
+        raise PratError(f"--cwd: not a directory: {path}", code="invalid_arguments")
     return path
 
 
