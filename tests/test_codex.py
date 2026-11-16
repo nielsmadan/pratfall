@@ -29,6 +29,7 @@ def test_codex_builds_verified_stdin_invocation_and_toml_quotes_effort() -> None
         "native",
         "exec",
         "--json",
+        "-",
         "--model",
         "gpt-5.6-luna",
         "-c",
@@ -38,7 +39,6 @@ def test_codex_builds_verified_stdin_invocation_and_toml_quotes_effort() -> None
         "--sandbox",
         "read-only",
         "--ephemeral",
-        "-",
     )
     assert invocation.stdin == b"-leading prompt"
 
@@ -241,11 +241,10 @@ def test_codex_schema_build_and_native_collision() -> None:
         "native",
         "exec",
         "--json",
+        "-",
         "--image=/image.png",
         "--output-schema",
         "/snapshot",
-        "--",
-        "-",
     )
     for arguments in (("--output-schema", "native"), ("--output-schema=native",)):
         native = resolved("codex", Options(native_args=arguments))

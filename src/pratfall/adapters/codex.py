@@ -79,7 +79,7 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
 
 def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     arguments = resolved.options.native_args or ()
-    argv = [*resolved.command, "exec", "--json"]
+    argv = [*resolved.command, "exec", "--json", "-"]
     options = resolved.options
     if options.instructions is not None:
         value = json.dumps(options.instructions, ensure_ascii=False).replace("\x7f", "\\u007f")
@@ -99,9 +99,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
             raise ValueError("prepared schema requires a file snapshot")
         argv.extend(("--output-schema", resolved.prepared_schema.path))
     argv.extend(arguments)
-    if options.attachments:
-        argv.append("--")
-    argv.append("-")
     return Invocation(tuple(argv), prompt)
 
 

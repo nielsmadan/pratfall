@@ -405,9 +405,13 @@ native settings, select a config file or profile, change permissions or retry ar
 choice, as when they type the agent's command, and pass. Native CLIs change faster than an allowlist can follow, so unknown flags pass rather
 than wait for a release. Pratfall still controls arity without knowing the flag: it never treats the next word as an
 unknown flag's value, and a bare word that is not a known flag's value is rejected, since the
-agent could read it as prompt text. A native parser can still give a bare unknown value flag the
-argument Pratfall places after the native arguments, so such a flag needs its value joined with
-`=`. An unknown long flag that is a prefix of a reserved one, or a
+agent could read it as prompt text. Where a native parser could take a token Pratfall owns as a
+flag's value, that token goes before the native arguments, so a forgotten value reaches the end of
+argv and the agent's own parser reports it: Kimi's `--prompt=TEXT` (commander takes any next
+token), Codex's stdin marker `-` (clap takes a lone `-`), and Cursor's `agent` subcommand.
+Cursor's prompt must still follow `--`, which commander would take as a forgotten value. The other
+adapters' trailing prompt tokens start with a dash or follow `--`, which their parsers do not take
+as a value. An unknown long flag that is a prefix of a reserved one, or a
 short token that starts with a reserved short flag, is rejected as reserved, because many parsers
 expand abbreviations or join values to short flags. A single-dash token is read as a group of
 short flags up to the first known flag that takes a value, so `-vC` is rejected when `-C` is

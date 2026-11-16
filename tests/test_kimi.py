@@ -31,6 +31,21 @@ def test_kimi_code_transports_literal_prompt_as_one_argv_value() -> None:
 
 
 @pytest.mark.parametrize(
+    "native",
+    [("--environment-cwd",), ("--environment-cwd=/tmp",), ("--environment=work", "--yolo")],
+)
+def test_kimi_native_arguments_follow_the_prompt(native: tuple[str, ...]) -> None:
+    profile = resolved("kimi", Options(native_args=native))
+    kimi.validate(profile)
+    assert kimi.build(profile, b"task").argv[2:] == (
+        "--output-format",
+        "stream-json",
+        "--prompt=task",
+        *native,
+    )
+
+
+@pytest.mark.parametrize(
     "flag",
     [
         "--print",

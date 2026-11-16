@@ -1245,7 +1245,7 @@ def test_controls_fake_rejects_added_approval_flags(tmp_path: Path, agent: str) 
         qa._control_observations(agent, arguments)
 
 
-def test_codex_controls_fake_requires_attachment_terminator(tmp_path: Path) -> None:
+def test_codex_controls_fake_requires_the_stdin_marker_before_options(tmp_path: Path) -> None:
     image = tmp_path / "image.bin"
     image.write_bytes(b"\xff")
     with pytest.raises(AssertionError):

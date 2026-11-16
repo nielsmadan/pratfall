@@ -720,7 +720,7 @@ def test_schema_file_native_transport_and_cleanup(
     call = json.loads(snapshot_log.read_text())
     snapshot = call.pop("snapshot")
     expected_argv = (
-        ["exec", "--json", flag, snapshot, "-"]
+        ["exec", "--json", "-", flag, snapshot]
         if agent == "codex"
         else ["--output-format", "stream-json", flag, "@" + snapshot]
     )

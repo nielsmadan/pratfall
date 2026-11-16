@@ -219,12 +219,12 @@ def test_codex_dispatch_normalizes_output_and_supports_flags_around_selector(
     assert answer["argv"] == [
         "exec",
         "--json",
+        "-",
         "--model",
         "model-id",
         "-c",
         'model_reasoning_effort="high"',
         "--sandbox=read-only",
-        "-",
     ]
     assert captured.err.startswith("prat: launching Codex\n")
     assert "native diagnostic\n" in captured.err
@@ -452,7 +452,7 @@ def test_run_uses_local_profile_and_global_wrapper_from_invocation_directory(
     else:
         answer = json.loads(captured.out)
     assert answer == {
-        "argv": ["exec", "--json", "--model", "local-model", "-"],
+        "argv": ["exec", "--json", "-", "--model", "local-model"],
         "prompt": "prompt",
         "cwd": str(child),
     }
@@ -1334,11 +1334,11 @@ def test_dry_run_is_a_single_versioned_preview_and_does_not_launch(
             str(tmp_path / "codex_fake.py"),
             "exec",
             "--json",
+            "-",
             "--model",
             "configured",
             "--sandbox",
             "workspace-write",
-            "-",
         ],
         "cwd": str(Path.cwd()),
         "timeout": 3600.0,
@@ -1348,7 +1348,7 @@ def test_dry_run_is_a_single_versioned_preview_and_does_not_launch(
         main(["safe", "prompt", "--config", str(config), "--dry-run", "--json", "--", "--oss"]) == 0
     )
     appended = json.loads(capsys.readouterr().out)
-    assert appended["argv"][-4:] == ["--sandbox", "workspace-write", "--oss", "-"]
+    assert appended["argv"][-3:] == ["--sandbox", "workspace-write", "--oss"]
 
 
 @pytest.mark.parametrize(
@@ -3524,7 +3524,7 @@ def test_extra_directories_reach_fake_agent_in_order(
     capsys.readouterr()
     expected = {
         "claude": ["-p", "--output-format", "json"],
-        "codex": ["exec", "--json"],
+        "codex": ["exec", "--json", "-"],
         "gemini": ["--output-format", "json"],
         "qwen": ["--output-format", "stream-json"],
         "copilot": ["--output-format=json"],
@@ -3535,7 +3535,6 @@ def test_extra_directories_reach_fake_agent_in_order(
         else:
             flag = "--include-directories" if agent in {"gemini", "qwen"} else "--add-dir"
             expected.extend([flag, str(directory)])
-    expected.extend(["-"] if agent == "codex" else [])
     expected.extend(["--prompt=task"] if agent in {"gemini", "copilot"} else [])
     record = json.loads(log.read_text())
     assert record == {
@@ -3743,7 +3742,7 @@ def test_config_directory_traversal_and_cli_override_preserve_origins(
         == 0
     )
     argv = json.loads(capsys.readouterr().out)["argv"]
-    assert argv[-3:] == ["--add-dir", str(override), "-"]
+    assert argv[-2:] == ["--add-dir", str(override)]
 
 
 def test_cleared_directory_setting_preserves_native_only_flags(
@@ -3756,7 +3755,7 @@ def test_cleared_directory_setting_preserves_native_only_flags(
         'native_args=["--add-dir=native"]\n'
     )
     assert main(["clear", "task", "--config", str(path), "--dry-run", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)["argv"][-2:] == ["--add-dir=native", "-"]
+    assert json.loads(capsys.readouterr().out)["argv"][-1:] == ["--add-dir=native"]
 
 
 def test_directory_delimiter_error_names_inherited_source(

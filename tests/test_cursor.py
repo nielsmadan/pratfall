@@ -24,9 +24,9 @@ def test_cursor_builds_explicit_agent_command_and_protected_prompt(prompt: bytes
         "json",
         "--model",
         "cursor-model",
+        "agent",
         "--mode",
         "ask",
-        "agent",
         "--",
         prompt.decode(),
     )

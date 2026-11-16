@@ -14,7 +14,7 @@ from pratfall.errors import PratError
 from pratfall.models import Options
 
 PREFIXES = {
-    "codex": ["exec", "--json"],
+    "codex": ["exec", "--json", "-"],
     "hermes": ["chat", "--oneshot", "--quiet", "--query-file", "-"],
     "copilot": ["--output-format=json"],
     "opencode": ["run", "--format", "json"],
@@ -30,8 +30,6 @@ FLAGS = {
 
 
 def _suffix(agent: str, prompt: str) -> list[str]:
-    if agent == "codex":
-        return ["--", "-"]
     return [f"--prompt={prompt}"] if agent == "copilot" else []
 
 
@@ -269,8 +267,7 @@ def test_attachment_collision_and_native_only_compatibility(
 ) -> None:
     assert main([agent, "task", "--dry-run", "--json", "--", *native]) == 0
     preview = json.loads(capsys.readouterr().out)
-    suffix = ["-"] if agent == "codex" else _suffix(agent, "task")
-    assert preview["argv"] == [agent, *PREFIXES[agent], *native, *suffix]
+    assert preview["argv"] == [agent, *PREFIXES[agent], *native, *_suffix(agent, "task")]
 
     def forbidden(*args: object, **kwargs: object) -> bytes:
         pytest.fail("must reject before resource or prompt reads")
@@ -399,9 +396,8 @@ def test_attachment_cli_list_replaces_missing_config_resources(
         "codex",
         "exec",
         "--json",
-        f"--image={tmp_path / 'cli.png'}",
-        "--",
         "-",
+        f"--image={tmp_path / 'cli.png'}",
     ]
     config.write_text(
         'version=1\n[defaults]\nattachments=["missing-global"]\n'
@@ -452,6 +448,6 @@ def test_attachment_empty_config_preserves_native_only_image(
         "codex",
         "exec",
         "--json",
-        "-inative.png",
         "-",
+        "-inative.png",
     ]

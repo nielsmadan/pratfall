@@ -11,7 +11,8 @@ JSON print mode succeeds with one `type: result`, `subtype: success`, `is_error:
 string `result`. The docs state that failures exit nonzero and need not emit well-formed JSON, so
 native exit status takes precedence over decoder failure. Published package source confirms
 Commander's end-of-options handling. Prat supplies global print/model options first, then the
-explicit `agent` command and `--` before the prompt; command-like text such as `login` and flags such
+explicit `agent` command, native arguments, and `--` before the prompt. The root command does not
+enable positional options, so commander still parses global options after `agent`; command-like text such as `login` and flags such
 as `--force` remain data. No token usage is documented, and the argv prompt inherits OS size limits.
 Whole-document parsing is bounded and rejects duplicate keys, excessive numeric width/nesting,
 nonfinite numbers and invalid Unicode anywhere in the document.

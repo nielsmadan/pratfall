@@ -78,10 +78,9 @@ no authenticated native run was performed for this control.
 The [shared options at revision 7498521d](https://github.com/openai/codex/blob/7498521d288b9b3b96ffba4eedf089d8d6e06a84/codex-rs/utils/cli/src/shared_options.rs)
 declare `long = "image"`, `short = 'i'`, `value_delimiter = ','`, and `num_args = 1..` on
 `images: Vec<PathBuf>`. Prat emits repeated `--image=PATH` with canonical regular readable paths,
-rejects commas, and inserts `--` before the final stdin prompt sentinel `-` in attachment mode.
-Clap documents `--` as the “Only positional args follow” idiom in its
-[argument reference](https://docs.rs/clap/4.6.7/clap/struct.Arg.html#method.allow_hyphen_values).
-This keeps the variadic image option from swallowing the task sentinel. Active attachments reserve
+rejects commas. Prat places the stdin prompt sentinel `-` directly after `exec --json`, before
+every option, so the variadic image option and any native value flag cannot take it; clap accepts
+options after a positional. Active attachments reserve
 both `--image` and `-i`; existing native-only use remains accepted.
 
 Native image decoding, vision-capable model support and payload limits remain authoritative.
@@ -93,8 +92,7 @@ Evidence is primary source inspection and fake executable argv tests; no native 
 The [exec CLI at revision 7498521d](https://github.com/openai/codex/blob/7498521d288b9b3b96ffba4eedf089d8d6e06a84/codex-rs/exec/src/cli.rs)
 declares `long = "output-schema", value_name = "FILE"`. Prat passes a private snapshot of the
 validated original schema bytes, alive through decoding and removed afterward. Active public
-schemas reserve `--output-schema`; native-only use remains compatible. Image transport retains
-its option terminator before the final stdin sentinel.
+schemas reserve `--output-schema`; native-only use remains compatible.
 
 The [SDK thread implementation at the same revision](https://github.com/openai/codex/blob/7498521d288b9b3b96ffba4eedf089d8d6e06a84/sdk/typescript/src/thread.ts#L117)
 assigns `finalResponse = event.item.text;` for each completed `agent_message`. Prat's schema

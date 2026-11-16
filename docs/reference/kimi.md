@@ -6,7 +6,9 @@
 
 Support targets `@moonshot-ai/kimi-code@2.1.1`, executable `kimi`. The retired Python `kimi-cli`
 package is incompatible. The [release parser](https://github.com/MoonshotAI/kimi-code/blob/%40moonshot-ai%2Fkimi-code%402.1.1/apps/kimi-code/src/cli/commands.ts)
-accepts `kimi --output-format stream-json --prompt=PROMPT` and `--model VALUE`. Prompt text is
+accepts `kimi --output-format stream-json --prompt=PROMPT` and `--model VALUE`. Prat places
+`--prompt=PROMPT` before native arguments, because commander gives a required option value the next
+token whatever it is. Prompt text is
 one literal argv value with empty stdin; OS argument-size limits apply. Whitespace-only prompts
 fail native validation. Native option validation does not trim ordinary submitted prompt text.
 

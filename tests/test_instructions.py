@@ -25,9 +25,9 @@ def test_instruction_native_argv_round_trips_literal_text(agent: str) -> None:
     resolved = ResolvedProfile(BY_NAME[agent], None, ("fake",), Options(instructions=TEXT))
     invocation = ADAPTERS[agent].build(resolved, b"task")
     if agent == "codex":
-        assert invocation.argv[:4] == ("fake", "exec", "--json", "-c")
-        assert tomllib.loads(invocation.argv[4]) == {"developer_instructions": TEXT}
-        assert invocation.argv[5:] == ("-",)
+        assert invocation.argv[:5] == ("fake", "exec", "--json", "-", "-c")
+        assert tomllib.loads(invocation.argv[5]) == {"developer_instructions": TEXT}
+        assert len(invocation.argv) == 6
     else:
         prefix = {
             "claude": ("fake", "-p", "--output-format", "json"),
@@ -73,9 +73,9 @@ def test_instruction_fake_process_receives_literal_argv_and_prompt(
     assert json.loads(capsys.readouterr().out)["output"] == "ok"
     argv, prompt = json.loads(log.read_text())
     if agent == "codex":
-        assert argv[:3] == ["exec", "--json", "-c"]
-        assert tomllib.loads(argv[3]) == {"developer_instructions": TEXT}
-        assert argv[4:] == ["-"]
+        assert argv[:4] == ["exec", "--json", "-", "-c"]
+        assert tomllib.loads(argv[4]) == {"developer_instructions": TEXT}
+        assert len(argv) == 5
     else:
         assert (
             argv
@@ -261,7 +261,7 @@ def test_instruction_config_listing_never_reads_files_and_selected_override_wins
     assert options["instructions"] is None
     assert main(["work", "--instructions", "override", "task", "--dry-run", "--json"]) == 0
     argv = json.loads(capsys.readouterr().out)["argv"]
-    assert tomllib.loads(argv[4]) == {"developer_instructions": "override"}
+    assert tomllib.loads(argv[5]) == {"developer_instructions": "override"}
     assert main(["work", "task", "--dry-run", "--json"]) == 2
     error = json.loads(capsys.readouterr().out)["error"]
     assert error["code"] == "invalid_config"

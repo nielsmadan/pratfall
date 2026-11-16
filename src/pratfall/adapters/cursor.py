@@ -73,8 +73,9 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     argv = [*resolved.command, "--print", "--output-format", "json"]
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
+    argv.append("agent")
     argv.extend(arguments)
-    argv.extend(("agent", "--", prompt.decode("utf-8")))
+    argv.extend(("--", prompt.decode("utf-8")))
     return Invocation(tuple(argv), b"")
 
 

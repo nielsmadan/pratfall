@@ -304,7 +304,7 @@ _NATIVE_OPTIONS.update(
 )
 _CONTROL_PREFIXES = {
     "claude": ["-p", "--output-format", "json"],
-    "codex": ["exec", "--json"],
+    "codex": ["exec", "--json", "-"],
     "gemini": ["--output-format", "json"],
     "copilot": ["--output-format=json"],
     "hermes": ["chat", "--oneshot", "--quiet", "--query-file", "-"],
@@ -1417,12 +1417,7 @@ def _control_observations(agent: str, arguments: list[str]) -> dict[str, object]
         prefix = _CONTROL_PREFIXES[agent]
         assert arguments[: len(prefix)] == prefix
         options = arguments[len(prefix) :]
-        if agent == "codex":
-            attached = any(arg.startswith("--image=") for arg in options)
-            suffix = ["--", "-"] if attached else ["-"]
-            assert options[-len(suffix) :] == suffix
-            options = options[: -len(suffix)]
-        elif agent in {"gemini", "copilot"}:
+        if agent in {"gemini", "copilot"}:
             assert options[-1].startswith("--prompt=")
             options = options[:-1]
         _native_options(agent, options)
@@ -2936,10 +2931,10 @@ def _exercise_e05(context: _EnhancementContext) -> _ScenarioObservation:
         _assert_result(case, returncode=0, status="success", native_exit_code=0, error_code=None)
     fast_calls = _calls(log)[-6:]
     assert 'service_tier="' not in " ".join(_texts(fast_calls[0]["argv"]))
-    assert _texts(fast_calls[1]["argv"])[-3:-1] == ["-c", 'service_tier="priority"']
-    assert _texts(fast_calls[2]["argv"])[-3:-1] == ["-c", 'service_tier="default"']
-    assert _texts(fast_calls[3]["argv"])[-3:-1] == ["-c", 'service_tier="default"']
-    assert _texts(fast_calls[4]["argv"])[-3:-1] == ["-c", 'service_tier="priority"']
+    assert _texts(fast_calls[1]["argv"])[-2:] == ["-c", 'service_tier="priority"']
+    assert _texts(fast_calls[2]["argv"])[-2:] == ["-c", 'service_tier="default"']
+    assert _texts(fast_calls[3]["argv"])[-2:] == ["-c", 'service_tier="default"']
+    assert _texts(fast_calls[4]["argv"])[-2:] == ["-c", 'service_tier="priority"']
     assert _texts(fast_calls[5]["argv"])[3:5] == ["--settings", '{"fastMode": true}']
     calls_before = len(_calls(log))
     unsupported_fast = _run(
@@ -3378,13 +3373,13 @@ def _exercise_q04(context: _ExerciseContext) -> dict[str, object]:
         "argv": [
             "exec",
             "--json",
+            "-",
             "--model",
             "profile-model",
             "-c",
             'model_reasoning_effort="medium"',
             "--sandbox",
             "read-only",
-            "-",
         ],
         "stdin": "rebase git",
         "prompt": "rebase git",
@@ -4422,13 +4417,7 @@ def _control_cases(root: Path) -> list[tuple[str, list[str], list[str]]]:
 
 def _control_argv(agent: str, options: list[str], prompt: str) -> list[str]:
     prefix = _CONTROL_PREFIXES.get(agent, _STDIN_PREFIXES.get(agent, []))
-    suffix = (
-        (["--", "-"] if any(arg.startswith("--image=") for arg in options) else ["-"])
-        if agent == "codex"
-        else ["--prompt=" + prompt]
-        if agent in {"gemini", "copilot"}
-        else []
-    )
+    suffix = ["--prompt=" + prompt] if agent in {"gemini", "copilot"} else []
     return [*prefix, *options, *suffix]
 
 

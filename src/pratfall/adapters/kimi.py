@@ -46,14 +46,7 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "-c",
         )
     }
-    | {
-        name: Flag(1, joined=name in {"-S"})
-        for name in (
-            "--environment",
-            "--environment-cwd",
-            "-S",
-        )
-    }
+    | {"-S": Flag(1, joined=True)}
 )
 
 
@@ -61,8 +54,8 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     argv = [*resolved.command, "--output-format", "stream-json"]
     if resolved.options.model is not None:
         argv.extend(("--model", resolved.options.model))
-    argv.extend(resolved.options.native_args or ())
     argv.append(f"--prompt={prompt.decode('utf-8')}")
+    argv.extend(resolved.options.native_args or ())
     return Invocation(tuple(argv), b"")
 
 
