@@ -50,10 +50,8 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
         for name in (
             "--background",
             "--cloud",
-            "--disable-project-configs",
             "--list-models",
             "--show-thinking",
-            "--trust",
             "-b",
             "-c",
             "-v",

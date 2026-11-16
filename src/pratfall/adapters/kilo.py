@@ -9,7 +9,7 @@ _ALLOWED = {name: Flag(0) for name in ("--auto", "--thinking", "--print-logs")} 
     for name in ("--agent", "--title", "--log-level", "--file", "-f")
 }
 _RESERVED = (
-    {name: Flag(0) for name in ("--continue", "-c", "--fork", "--interactive", "--share")}
+    {name: Flag(0) for name in ("--continue", "-c", "--fork", "--interactive")}
     | {
         name: Flag(1, joined=name in {"-m", "-s", "-f"})
         for name in (

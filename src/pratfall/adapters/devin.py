@@ -16,11 +16,9 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--file",
             "--output-format",
             "--export",
-            "--config",
             "--cwd",
             "--resume",
             "-r",
-            "--respect-workspace-trust",
             "--executor",
             "--remote",
             "--cloud",
@@ -33,13 +31,7 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "-V",
         )
     }
-    | {
-        name: Flag(1)
-        for name in (
-            "--refusal-fallback",
-            "--verbosity",
-        )
-    }
+    | {name: Flag(1) for name in ("--verbosity",)}
 )
 
 

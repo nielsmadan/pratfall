@@ -61,7 +61,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
         name: Flag(1)
         for name in (
             "--format",
-            "--profile",
             "--repo",
         )
     }

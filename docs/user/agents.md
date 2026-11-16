@@ -128,7 +128,8 @@ an OS sandbox or a permission approval mechanism.
 ## Native behavior
 
 Native flags after `--` pass unless Prat controls them; see
-[Pass native arguments](running.md#pass-native-arguments). The flags listed per agent below are
+[Pass native arguments](running.md#pass-native-arguments). Native flags you pass may change the
+agent's saved settings, as when you type them yourself. The flags listed per agent below are
 the ones Prat knows, with their value counts, so they also accept a value as the next word. Any
 other flag passes as one token, with its value joined by `=`.
 

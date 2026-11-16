@@ -57,15 +57,13 @@ _ALLOWED: Mapping[str, Flag] = MappingProxyType(
 _RESERVED: Mapping[str, Flag] = MappingProxyType(
     {name: Flag(0) for name in ("--json",)}
     | {
-        name: Flag(1, joined=name in {"-C", "-m", "-o"})
+        name: Flag(1, joined=name in {"-C", "-m"})
         for name in (
             "--cd",
             "-C",
             "--color",
             "--model",
             "-m",
-            "--output-last-message",
-            "-o",
         )
     }
     | {

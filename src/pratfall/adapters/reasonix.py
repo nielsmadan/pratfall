@@ -21,16 +21,12 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--output-format",
             "--dir",
             "--cwd",
-            "--config",
             "--resume",
             "--prompt",
-            "--profile",
-            "--preset",
             "--metrics",
             "--trajectory",
         )
     }
-    | {name: Flag(1) for name in ("--agent-composition",)}
 )
 _COMPLETIONS = {
     "success": False,

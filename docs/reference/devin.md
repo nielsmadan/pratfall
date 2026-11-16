@@ -9,9 +9,9 @@ The [command reference](https://docs.devin.ai/cli/reference/commands), checked 2
 establishes `devin -p -- PROMPT`: the entire UTF-8 prompt is one literal argv item, with empty
 stdin. `--model VALUE` and the optional native `--permission-mode VALUE` precede the delimiter.
 The native permission option has arity one and is never injected. Prompt-file/stdin markers are
-not inferred; OS argv-size limits apply. Print/prompt/file/output/export, model, config/cwd,
-continue/resume, trust-bypass, cloud/remote/executor and administrative controls are reserved or
-rejected. No generic effort, fast or budget controls are verified. Version probing uses `--version`.
+not inferred; OS argv-size limits apply. Print/prompt/file/output/export, model, cwd,
+continue/resume, cloud/remote/executor and administrative controls are reserved or rejected;
+config, workspace-trust and refusal-fallback flags pass as native arguments. No generic effort, fast or budget controls are verified. Version probing uses `--version`.
 
 Print requires an already trusted workspace and existing native authentication. The
 [permission reference](https://docs.devin.ai/cli/reference/permissions) describes configurable

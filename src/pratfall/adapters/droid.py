@@ -9,10 +9,7 @@ _ALLOWED: Mapping[str, Flag] = MappingProxyType(
     {name: Flag(1) for name in ("--auto", "--only-tools", "--add-tools", "--remove-tools")}
 )
 _RESERVED: Mapping[str, Flag] = MappingProxyType(
-    {
-        name: Flag(0)
-        for name in ("--use-spec", "--mission", "--list-tools", "--skip-permissions-unsafe")
-    }
+    {name: Flag(0) for name in ("--use-spec", "--mission", "--list-tools")}
     | {
         name: Flag(1, joined=name in {"-o", "-f", "-s", "-m", "-r", "-w"})
         for name in (
@@ -26,20 +23,13 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "-m",
             "--reasoning-effort",
             "-r",
-            "--spec-model",
-            "--spec-reasoning-effort",
             "--session-id",
             "-s",
             "--fork",
             "--cwd",
-            "--config",
             "--worktree",
             "-w",
             "--worktree-dir",
-            "--worker-model",
-            "--worker-reasoning-effort",
-            "--validator-model",
-            "--validator-reasoning-effort",
             "--remote",
         )
     }
@@ -49,7 +39,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--calling-session-id",
             "--calling-tool-use-id",
             "--init-session-id",
-            "--settings",
         )
     }
 )

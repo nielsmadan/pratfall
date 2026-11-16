@@ -63,8 +63,6 @@ def test_amp_literal_stdin_and_native_thinking() -> None:
         ("-ox",),
         ("--runner-id=x",),
         ("--cwd=x",),
-        ("--config=x",),
-        ("--settings-file=x",),
         ("--thread=x",),
         ("--resume=x",),
         ("--no-tui",),

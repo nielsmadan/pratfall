@@ -3,7 +3,6 @@ import pytest
 from adapter_helpers import codex_stream, copilot_result, resolved
 from pratfall.adapters import copilot
 from pratfall.consumer import ConsumerFailure, ConsumerLimits
-from pratfall.errors import PratError
 from pratfall.models import Options, ResultError
 
 
@@ -55,9 +54,10 @@ def test_copilot_builds_optional_variadic_native_arguments() -> None:
     "argument",
     ("--bash-env", "--bash-env=on", "--bash-envon", "--no-bash-env", "--no-bash-env=true"),
 )
-def test_copilot_rejects_native_flags_that_persist_configuration(argument: str) -> None:
-    with pytest.raises(PratError, match="controlled by prat"):
-        copilot.validate(resolved("copilot", Options(native_args=(argument,))))
+def test_copilot_passes_native_flags_that_persist_configuration(argument: str) -> None:
+    profile = resolved("copilot", Options(native_args=(argument,)))
+    copilot.validate(profile)
+    assert copilot.build(profile, b"prompt").argv[-2:] == (argument, "--prompt=prompt")
 
 
 def test_copilot_deduplicates_snapshots_and_excludes_subagent_text() -> None:

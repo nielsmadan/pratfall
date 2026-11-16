@@ -13,8 +13,8 @@ adds two newline characters before the empty positional prompt, and `run` forwar
 text without trimming. The independent fake records raw stdin separately from this native prompt.
 Accepted native options are `--verbose`/`-v` and `--debug`/`-d`, each with zero values;
 debug is inherited from the [root command](https://github.com/charmbracelet/crush/blob/v0.93.1/internal/cmd/root.go).
-Prompt/output/model/small-model, cwd/data-dir/config, session/continue, host/channels/server,
-permission-bypass and administrative selectors are reserved or rejected. Fast and normalized budgets are unsupported. Effort maps to native `--reasoning-effort`;
+Prompt/output/model, cwd/data-dir, session/continue, host/channels/server and administrative
+selectors are reserved or rejected; `--small-model`, `--yolo` and config flags pass. Fast and normalized budgets are unsupported. Effort maps to native `--reasoning-effort`;
 accepted values depend on the selected model. The version diagnostic is `--version`.
 
 On 2026-10-13 the [0.98.1 run command](https://github.com/charmbracelet/crush/blob/v0.98.1/internal/cmd/run.go)

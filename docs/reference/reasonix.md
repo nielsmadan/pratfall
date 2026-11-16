@@ -15,8 +15,9 @@ establishes `reasonix run --output-format json` with plain stdin, which the nati
 `--model` selects a configured provider name, and `--effort` passes a session effort override
 whose accepted levels depend on that provider. Accepted native options are `--max-steps` and
 `--permission-mode` (one value each), plus `--show-thinking` (zero). Max steps counts native
-rounds and is not normalized to max_turns. Prompt/print/output/events, model/effort, config/dir,
-resume/continue/copy/takeover, serve and administrative selectors are reserved or rejected.
+rounds and is not normalized to max_turns. Prompt/print/output/events, model/effort, dir,
+resume/continue/copy/takeover, serve and administrative selectors are reserved or rejected;
+config, profile, preset and agent-composition flags pass as native arguments.
 Version probing uses `--version`. The [versioned CLI guide](https://github.com/esengine/DeepSeek-Reasonix/blob/v2.37.0/docs/CLI.md)
 defaults to `auto` only for a trusted workspace with working write-confining sandbox support;
 otherwise it uses `ask`. Headless ask mode refuses writes. Prat adds no approval override and

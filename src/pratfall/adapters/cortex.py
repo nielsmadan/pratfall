@@ -12,9 +12,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--continue",
             "--private",
             "--plan",
-            "--auto-accept-plans",
-            "--bypass",
-            "--dangerously-allow-all-tool-calls",
             "--no-workspace",
             "--help",
             "--version",
@@ -31,7 +28,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--workdir",
             "-w",
             "--cwd",
-            "--config",
             "--resume",
             "-r",
             "--session",
@@ -51,7 +47,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
         name: Flag(0)
         for name in (
             "--allow-remote-control",
-            "--auto-update",
             "--background-agent",
             "--desktop-sidecar",
             "--fips-status",
@@ -67,19 +62,13 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
         name: Flag(1, joined=name in {"-o"})
         for name in (
             "--channels",
-            "--config-file",
             "--fork",
             "--goal",
             "--input-format",
-            "--output-last-message",
-            "--profile",
             "--resume-session-at",
             "--session-id",
-            "--setting-sources",
-            "--skills",
             "--worktree",
             "--worktree-base",
-            "-o",
         )
     }
 )

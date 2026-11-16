@@ -36,7 +36,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--fork",
             "--interactive",
             "-i",
-            "--share",
             "--standalone",
         )
     }

@@ -87,7 +87,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--output-format",
             "--remote-control",
             "--resume",
-            "--settings",
             "-r",
             "--session-id",
             "--worktree",
@@ -116,7 +115,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
         name: Flag(1)
         for name in (
             "--attach-serve",
-            "--client-data-url",
             "--cloud",
             "--dangerously-load-development-channels",
             "--deep-link-cwd-b64",
@@ -125,12 +123,10 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--fast-mode",
             "--from-pr",
             "--handle-uri",
-            "--managed-settings",
             "--parent-session-id",
             "--pool",
             "--prefill",
             "--prefill-b64",
-            "--project-config-root",
             "--prompt-suggestions",
             "--rc",
             "--remote",
@@ -183,6 +179,8 @@ def validate(resolved: ResolvedProfile) -> None:
         }
     if resolved.options.schema is not None:
         reserved |= {"--json-schema": _ALLOWED["--json-schema"]}
+    if resolved.options.fast is not None:
+        reserved |= {"--settings": Flag(1)}
     validate_flags("Claude Code", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

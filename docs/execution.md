@@ -396,10 +396,13 @@ A version-specific record returned by `for_version` must also be listed in `ADAP
 the cross-adapter contract and retention suites exercise it alongside the base records.
 Use [`validate_flags`](../src/pratfall/adapters/native_args.py) with an allowlist of documented
 flags and their arity, and a reserved list. Any other dash token passes as a single token, so the
-reserved list is the safety boundary: it holds every native flag that would change what Pratfall
-owns (output format and streaming, prompt transport, interactive modes, working directory,
-session and resume, config-file selection, native config persistence, and each flag a public
-option sets). Native CLIs change faster than an allowlist can follow, so unknown flags pass rather
+reserved list is the safety boundary. It holds a native flag only if the flag breaks Pratfall's
+run: (a) output format, streaming or verbosity that changes what Pratfall parses; (b) prompt
+transport and input files; (c) interactive or TUI, background, remote and server modes; (d)
+session, resume and fork flags, and flags that move the session store; (e) help and version; (f)
+flags a public option sets, including the working directory behind `--cwd`. Flags that persist
+native settings, select a config file or profile, change permissions or retry are the user's
+choice, as when they type the agent's command, and pass. Native CLIs change faster than an allowlist can follow, so unknown flags pass rather
 than wait for a release. Pratfall still controls arity without knowing the flag: it never treats the next word as an
 unknown flag's value, and a bare word that is not a known flag's value is rejected, since the
 agent could read it as prompt text. A native parser can still give a bare unknown value flag the

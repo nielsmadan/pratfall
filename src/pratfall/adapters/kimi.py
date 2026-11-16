@@ -18,8 +18,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--debug",
             "--final-message-only",
             "--plan",
-            "--yolo",
-            "--auto",
             "--continue",
             "--version",
             "-V",
@@ -35,23 +33,17 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "-m",
             "--output-format",
             "--input-format",
-            "--agent",
-            "--agent-file",
             "--resume",
             "-r",
             "--session",
             "--cwd",
-            "--config",
         )
     }
     | {
-        name: Flag(0, joined=name in {"-C", "-c", "-y"})
+        name: Flag(0, joined=name in {"-C", "-c"})
         for name in (
-            "--auto-approve",
-            "--yes",
             "-C",
             "-c",
-            "-y",
         )
     }
     | {

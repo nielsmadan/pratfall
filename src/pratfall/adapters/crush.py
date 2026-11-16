@@ -8,16 +8,12 @@ _ALLOWED: Mapping[str, Flag] = MappingProxyType(
     {name: Flag(0) for name in ("--verbose", "-v", "--debug", "-d")}
 )
 _RESERVED: Mapping[str, Flag] = MappingProxyType(
-    {
-        name: Flag(0)
-        for name in ("--quiet", "-q", "--continue", "-C", "--yolo", "-y", "--help", "--version")
-    }
+    {name: Flag(0) for name in ("--quiet", "-q", "--continue", "-C", "--help", "--version")}
     | {
         name: Flag(1, joined=name in {"-m", "-s", "-c", "-D", "-H"})
         for name in (
             "--model",
             "-m",
-            "--small-model",
             "--reasoning-effort",
             "--session",
             "-s",
@@ -28,7 +24,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--host",
             "-H",
             "--channels",
-            "--config",
             "--prompt",
             "--file",
             "--output-format",

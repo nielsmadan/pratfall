@@ -31,7 +31,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--max-price",
             "--model",
             "--effort",
-            "--config",
             "--workdir",
             "--worktree",
             "--resume",

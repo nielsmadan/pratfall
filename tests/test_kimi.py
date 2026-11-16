@@ -39,8 +39,6 @@ def test_kimi_code_transports_literal_prompt_as_one_argv_value() -> None:
         "--thinking",
         "--no-thinking",
         "--plan",
-        "--yolo",
-        "--auto",
         "--resume=x",
         "--prompt=x",
         "--model=x",

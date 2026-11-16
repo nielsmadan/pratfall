@@ -11,9 +11,9 @@ Global `--model`, `--effort minimal|low|medium|high|max`, and `--max-turns` map 
 Prat options. The 2026-10-13 reference defines the limit as “Maximum number of agentic turns per
 conversation round”. Optional `--connection`/`-c` takes one
 value selecting an existing Snowflake connection. Global options precede `exec`. No fast or
-spending controls are verified. Prompt/print/file/output, model/effort/turns, workdir/config,
-session/resume/continue/private, plan/bypass, cloud/remote/executor and administrative controls
-are reserved or rejected. `--github` is a cloud-related credential control and is also blocked;
+spending controls are verified. Prompt/print/file/output, model/effort/turns, workdir,
+session/resume/continue/private, plan, cloud/remote/executor and administrative controls are
+reserved or rejected; config, profile and permission flags pass as native arguments. `--github` is a cloud-related credential control and is also blocked;
 the reference describes it as “With `--cloud`, allow authenticated GitHub access”, not as an
 independent cloud-execution selector. The version
 diagnostic is `--version`.

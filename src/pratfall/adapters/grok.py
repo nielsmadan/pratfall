@@ -89,19 +89,10 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
         name: Flag(0)
         for name in (
             "--force-login",
-            "--memory-flush",
             "--restore-code",
-            "--trust",
-            "--trust-folder",
         )
     }
-    | {
-        name: Flag(1)
-        for name in (
-            "--conversation-history-file",
-            "--installer",
-        )
-    }
+    | {name: Flag(1) for name in ("--conversation-history-file",)}
 )
 _STOP_REASONS = {"end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled"}
 _USAGE_FIELDS = (

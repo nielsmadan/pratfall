@@ -10,8 +10,9 @@ and [option declarations](https://github.com/QwenLM/qwen-code/blob/v0.23.3/packa
 establish `qwen --output-format stream-json` with plain text stdin. Prat maps model to `--model`
 and max_turns to `--max-session-turns`; effort, fast and spend budgets are unsupported.
 Accepted native flags are `--debug`/`-d` (zero values), `--approval-mode`, `--system-prompt` and
-`--append-system-prompt` (one value each). Prompt/input/output, native model/turn/budget controls,
-config/cwd, continuation/session, ACP/serve and fallback selectors are reserved or rejected.
+`--append-system-prompt` (one value each). Prompt/input/output, native model and turn controls,
+cwd, continuation/session and ACP/serve selectors are reserved or rejected; config, fallback-model
+and the wall-time and tool-call limits pass as native arguments.
 The version diagnostic uses `--version`. Existing native permissions apply; unresolved interactive
 approval requests are denied in headless mode. No approval bypass is added.
 

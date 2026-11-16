@@ -25,9 +25,9 @@ excluded. Unknown types and malformed agent records are protocol errors, retaini
 No synthetic terminal marker or inferred prose error is used.
 
 Accepted native flags are `--name`/`-n` (one value), `--strict-mcp-startup` (zero), and
-`--mcp-startup-timeout` (one value). Prompt/file/saved-prompt, output/model, cwd/config/profile,
-conversation, cloud/environment/runner/executor/harness, sharing and session lifetime controls are
-reserved or rejected. Native authentication and permission defaults remain active. There is no
+`--mcp-startup-timeout` (one value). Prompt/file/saved-prompt, output/model, cwd, conversation,
+cloud/environment/runner/executor/harness and session lifetime controls are reserved or rejected;
+config, profile and sharing flags pass as native arguments. Native authentication and permission defaults remain active. There is no
 verified one-shot replacement using the newer `warp` TUI. Recheck these sources at release time;
 Prat does not remove this adapter by date or silently substitute another command.
 

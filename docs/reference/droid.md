@@ -15,7 +15,8 @@ numeric width/nesting, nonfinite numbers and invalid Unicode.
 
 Only `--auto` (one value: low/medium/high) is accepted as a native option. It is never injected;
 exec defaults to read-only. Prompt/file/input/output, model/effort, session/fork, cwd/worktree,
-config, mission/remote and administrative controls are reserved or rejected. Version probing uses
+mission/remote and administrative controls are reserved or rejected; config, settings and
+permission flags pass as native arguments. Version probing uses
 `--version`; this is not a compatibility check. Existing native authentication is required.
 
 [Settings](https://docs.factory.ai/droid-cli/settings) documents the provider-dependent effort union

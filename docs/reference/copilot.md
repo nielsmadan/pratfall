@@ -37,8 +37,8 @@ flag for it and passes it as a native argument.
 
 Copilot's tool and URL allow/deny lists, tool visibility lists, and secret environment-variable
 list accept zero or more values per occurrence. A bare `--available-tools` disables all visible
-tools. `--bash-env` and `--no-bash-env` persist native configuration, so Prat does not pass them
-through; a trusted executable wrapper remains the escape hatch for intentionally persistent setup.
+tools. `--bash-env` and `--no-bash-env` persist native configuration; they pass as native
+arguments because the user chose them, as when typing `copilot` directly.
 
 ## Session id (verified 2026-09-19)
 

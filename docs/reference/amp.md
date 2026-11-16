@@ -7,8 +7,8 @@
 
 The [streaming schema](https://ampcode.com/docs/cli/streaming-json), checked 2026-09-11,
 establishes `amp --execute --stream-json` with plain stdin. Only `--stream-json-thinking` (zero
-values) is a known native flag. Input/output, model, config/cwd, thread/resume,
-executor/orb/runner and administrative selectors are reserved or rejected. Generic model, effort
+values) is a known native flag. Input/output, model, cwd, thread/resume, executor/orb/runner and
+administrative selectors are reserved or rejected; `--settings-file` passes as a native argument. Generic model, effort
 and budgets are unsupported; native mode is not a model identifier. The documented
 [version probe](https://ampcode.com/docs/cli) is `amp version`.
 

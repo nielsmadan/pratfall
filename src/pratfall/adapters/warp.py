@@ -15,10 +15,7 @@ _ALLOWED: Mapping[str, Flag] = MappingProxyType(
     | {name: Flag(1, joined=name == "-n") for name in ("--name", "-n", "--mcp-startup-timeout")}
 )
 _RESERVED: Mapping[str, Flag] = MappingProxyType(
-    {
-        name: Flag(0)
-        for name in ("--gui", "--share", "--cloud", "--sandboxed", "--skip-initial-turn")
-    }
+    {name: Flag(0) for name in ("--gui", "--cloud", "--sandboxed", "--skip-initial-turn")}
     | {
         name: Flag(1, joined=name in {"-p", "-m", "-C", "-e"})
         for name in (
@@ -31,9 +28,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "-m",
             "--cwd",
             "-C",
-            "--config",
-            "--config-file",
-            "--profile",
             "--conversation",
             "--environment",
             "-e",

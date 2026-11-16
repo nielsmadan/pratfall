@@ -61,7 +61,6 @@ def test_vibe_bare_prompt_stdin_and_native_budgets() -> None:
         ("--effort=high",),
         ("--workdir=x",),
         ("--worktree",),
-        ("--config=x",),
         ("--resume=x",),
         ("--continue",),
         ("--teleport",),

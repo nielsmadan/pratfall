@@ -25,8 +25,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--executor",
             "--runner-id",
             "--cwd",
-            "--config",
-            "--settings-file",
             "--thread",
             "--resume",
             "--output-format",

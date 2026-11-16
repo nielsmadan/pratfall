@@ -66,7 +66,6 @@ def test_reasonix_literal_stdin_and_native_controls() -> None:
         ("--effort=high",),
         ("--dir=x",),
         ("--cwd=x",),
-        ("--config=x",),
         ("--continue",),
         ("--resume=x",),
         ("--copy",),

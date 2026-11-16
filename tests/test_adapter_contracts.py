@@ -233,6 +233,45 @@ def test_validate_rejects_owned_native_arguments(name: str, flag: str) -> None:
     assert owned.value.code == "invalid_arguments"
 
 
+@pytest.mark.parametrize(
+    ("name", "flag"),
+    [
+        ("amp", "--settings-file=s.json"),
+        ("claude", "--settings=s.json"),
+        ("claude", "--managed-settings={}"),
+        ("codex", "--output-last-message=last.txt"),
+        ("copilot", "--bash-env"),
+        ("copilot", "--share=out.md"),
+        ("cortex", "--profile=p"),
+        ("cortex", "--bypass"),
+        ("crush", "--yolo"),
+        ("crush", "--small-model=m"),
+        ("cursor", "--trust"),
+        ("cursor", "--disable-project-configs"),
+        ("devin", "--respect-workspace-trust=false"),
+        ("droid", "--settings=s.json"),
+        ("droid", "--skip-permissions-unsafe"),
+        ("grok", "--trust"),
+        ("grok", "--memory-flush"),
+        ("kilo", "--share"),
+        ("kimi", "--yolo"),
+        ("kimi", "--agent=a"),
+        ("kiro", "--profile=p"),
+        ("opencode", "--share"),
+        ("qwen", "--fallback-model=m"),
+        ("qwen", "--max-wall-time=3"),
+        ("reasonix", "--profile=p"),
+        ("vibe", "--config=c.toml"),
+        ("warp", "--profile=p"),
+    ],
+)
+def test_validate_passes_flags_that_do_not_break_the_run(name: str, flag: str) -> None:
+    agent, adapter = _NAMED_ADAPTERS[name]
+    options = Options(timeout=_TIMEOUT, native_args=(flag,))
+    adapter.validate(resolved(agent, options))
+    assert flag in adapter.build(resolved(agent, options), b"prompt").argv
+
+
 @pytest.mark.parametrize("name", sorted(_NAMED_ADAPTERS))
 def test_validate_passes_unknown_native_flags_as_single_tokens(name: str) -> None:
     agent, adapter = _NAMED_ADAPTERS[name]
@@ -263,7 +302,7 @@ def test_validate_names_the_unknown_flag_before_a_stray_word(name: str) -> None:
         ("claude", ("-pprint",), Options()),
         ("claude", ("-rsession",), Options()),
         ("claude", ("--output-format", "text"), Options()),
-        ("claude", ("--settings", '{"fastMode": true}'), Options()),
+        ("claude", ("--settings", '{"fastMode": true}'), Options(fast=False)),
         ("codex", ("-mnative",), Options()),
         ("codex", ("--cd=/tmp",), Options()),
         ("codex", ("-cmodel=other",), Options(model="conformance-model")),
