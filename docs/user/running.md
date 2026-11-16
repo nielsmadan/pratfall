@@ -329,7 +329,8 @@ prat cc "make the requested edit" -- --permission-mode acceptEdits
 prat cx --effort high "review this" -- -c shell_environment_policy.inherit=all
 ```
 
-These arguments replace the profile's `native_args`. Any native flag passes except the ones Prat
+These arguments are appended after the profile's `native_args`, so a profile's native flags stay
+in place; select another profile to run without them. Any native flag passes except the ones Prat
 controls: its prompt, output format, interactive mode, session, working directory, config file,
 and the native flags behind its model, effort, fast mode, budget and other run options. An unknown
 long flag that abbreviates a controlled one, such as `--out` for `--output-format`, counts as

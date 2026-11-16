@@ -1162,12 +1162,16 @@ def resolve_profile(
             ),
             code="invalid_arguments",
         )
+    overrides = overrides if overrides is not None else Options()
     options = merge_options(
         Options(timeout=DEFAULT_TIMEOUT, native_args=()),
         config.defaults,
         Options(command_prefix=config.command_prefixes.get(agent.name)),
         profile_options,
-        overrides if overrides is not None else Options(),
+        replace(overrides, native_args=None),
+    )
+    options = replace(
+        options, native_args=(*(options.native_args or ()), *(overrides.native_args or ()))
     )
     validate_capabilities(
         agent,

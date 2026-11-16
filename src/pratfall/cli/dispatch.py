@@ -110,15 +110,41 @@ def _config_view(config: Config) -> View:
     )
 
 
+@dataclass(frozen=True)
+class _NativeLabels:
+    configured: str
+    typed: str = ""
+    typed_count: int = 0
+
+
 def _validate_native_arguments(
-    resolved: ResolvedProfile, label: str, origins: Mapping[str, OptionOrigin]
+    resolved: ResolvedProfile, labels: _NativeLabels, origins: Mapping[str, OptionOrigin]
 ) -> None:
     adapter = ADAPTERS.get(resolved.agent.name)
     if adapter is not None:
-        _validate_adapter_arguments(adapter, resolved, label, origins)
+        _validate_adapter_arguments(adapter, resolved, labels, origins)
 
 
 def _validate_adapter_arguments(
+    adapter: Adapter,
+    resolved: ResolvedProfile,
+    labels: _NativeLabels,
+    origins: Mapping[str, OptionOrigin],
+) -> None:
+    if not labels.typed_count:
+        _validate_labelled(adapter, resolved, labels.configured, origins)
+        return
+    configured = (resolved.options.native_args or ())[: -labels.typed_count]
+    _validate_labelled(
+        adapter,
+        replace(resolved, options=replace(resolved.options, native_args=configured)),
+        labels.configured,
+        origins,
+    )
+    _validate_labelled(adapter, resolved, labels.typed, origins)
+
+
+def _validate_labelled(
     adapter: Adapter, resolved: ResolvedProfile, label: str, origins: Mapping[str, OptionOrigin]
 ) -> None:
     try:
@@ -137,7 +163,7 @@ def _validate_config_native_arguments(config: Config) -> None:
         source = config.profiles[name].source or config.path
         fallback = OptionOrigin(f"{source}: profiles.{name}.native_args")
         label = option_origins(config, name).get("native_args", fallback).label
-        _validate_native_arguments(resolved, label, option_origins(config, name))
+        _validate_native_arguments(resolved, _NativeLabels(label), option_origins(config, name))
 
 
 def _dispatch(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -> int:
@@ -214,13 +240,16 @@ def _trust(args: argparse.Namespace, cwd: Path, environ: Mapping[str, str]) -> N
 
 
 def _run_adapter(
-    resolved: ResolvedProfile, cwd: Path, label: str, origins: Mapping[str, OptionOrigin]
+    resolved: ResolvedProfile,
+    cwd: Path,
+    labels: _NativeLabels,
+    origins: Mapping[str, OptionOrigin],
 ) -> Adapter:
     adapter = ADAPTERS[resolved.agent.name]
     if adapter.for_version is None:
         return adapter
     selected = adapter.for_version(_native_version(resolved, cwd))
-    _validate_adapter_arguments(selected, resolved, label, origins)
+    _validate_adapter_arguments(selected, resolved, labels, origins)
     return selected
 
 
@@ -543,7 +572,7 @@ def _prepare_run_instructions(
 
 
 def _prepare_run_paths(
-    resolved: ResolvedProfile, origins: Mapping[str, OptionOrigin], label: str
+    resolved: ResolvedProfile, origins: Mapping[str, OptionOrigin], labels: _NativeLabels
 ) -> ResolvedProfile:
     if resolved.options.add_dirs:
         paths = prepare_directories(
@@ -551,7 +580,7 @@ def _prepare_run_paths(
             origins.get("add_dirs", OptionOrigin("add_dirs", "invalid_arguments")),
         )
         resolved = replace(resolved, options=replace(resolved.options, add_dirs=paths))
-    _validate_native_arguments(resolved, label, origins)
+    _validate_native_arguments(resolved, labels, origins)
     if not resolved.options.attachments:
         return resolved
     paths = prepare_attachments(
@@ -559,7 +588,7 @@ def _prepare_run_paths(
         origins.get("attachments", OptionOrigin("attachments", "invalid_arguments")),
     )
     resolved = replace(resolved, options=replace(resolved.options, attachments=paths))
-    _validate_native_arguments(resolved, label, origins)
+    _validate_native_arguments(resolved, labels, origins)
     return resolved
 
 
@@ -676,13 +705,21 @@ def _prepare_run(
 ) -> _PreparedRun:
     _validate_schema_extraction(resolved, parsed.extract)
     fallback = OptionOrigin(f"selector {parsed.selector!r}.native_args")
-    origins = option_origins(config, parsed.selector, parsed.options, option_flags(parsed.options))
-    label = origins.get("native_args", fallback).label
-    resolved = _prepare_run_paths(resolved, origins, label)
+    flags = option_flags(parsed.options)
+    origins = option_origins(config, parsed.selector, parsed.options, flags)
+    configured = option_origins(
+        config, parsed.selector, replace(parsed.options, native_args=None), flags
+    )
+    labels = _NativeLabels(
+        configured.get("native_args", fallback).label,
+        origins.get("native_args", fallback).label,
+        len(parsed.options.native_args or ()),
+    )
+    resolved = _prepare_run_paths(resolved, origins, labels)
     cwd = _run_cwd(parsed.cwd, invocation_cwd)
     template, bound = _bind_run_input(config, parsed)
     _check_stdin_context(parsed, bound.source, absent=template is not None or parsed.edit)
-    adapter = _run_adapter(resolved, cwd, label, origins)
+    adapter = _run_adapter(resolved, cwd, labels, origins)
     resolved = _prepare_run_schema(adapter, resolved, origins, resources)
     resolved = _prepare_run_instructions(resolved, origins)
     return _PreparedRun(resolved, adapter, template, bound, cwd)

@@ -472,10 +472,13 @@ native_args=["--allowed-tools", "literal argument"]
         native_args=("--allowed-tools", "literal argument"),
     )
     assert resolve_profile(config, "cc").options.model == "default-model"
-    assert resolve_profile(config, "work", Options(native_args=())).options.native_args == ()
+    assert resolve_profile(config, "work", Options(native_args=())).options.native_args == (
+        "--allowed-tools",
+        "literal argument",
+    )
     assert resolve_profile(
         config, "work", Options(native_args=("--strict-mcp-config",))
-    ).options.native_args == ("--strict-mcp-config",)
+    ).options.native_args == ("--allowed-tools", "literal argument", "--strict-mcp-config")
 
 
 def test_command_prefixes_resolve_paths_without_expanding_argument_data(tmp_path: Path) -> None:

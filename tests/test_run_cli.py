@@ -1344,9 +1344,47 @@ def test_dry_run_is_a_single_versioned_preview_and_does_not_launch(
         "timeout": 3600.0,
         "stdin_bytes": 6,
     }
-    assert main(["safe", "prompt", "--config", str(config), "--dry-run", "--json", "--"]) == 0
-    replacement = json.loads(capsys.readouterr().out)
-    assert "--sandbox" not in replacement["argv"]
+    assert (
+        main(["safe", "prompt", "--config", str(config), "--dry-run", "--json", "--", "--oss"]) == 0
+    )
+    appended = json.loads(capsys.readouterr().out)
+    assert appended["argv"][-4:] == ["--sandbox", "workspace-write", "--oss", "-"]
+
+
+@pytest.mark.parametrize(
+    ("profile_args", "typed", "detail"),
+    [
+        ('["--sandbox", "workspace-write"]', ["--help"], "'--help'"),
+        ('["--zz"]', ["value"], "if it is the value of --zz"),
+    ],
+)
+def test_combined_native_arguments_name_the_command_line_for_a_rejected_typed_flag(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    profile_args: str,
+    typed: list[str],
+    detail: str,
+) -> None:
+    config = write_agent(
+        tmp_path, "codex", CODEX_SUCCESS, profile="safe", settings=f"native_args={profile_args}\n"
+    )
+    arguments = ["safe", "hi", "--config", str(config), "--dry-run", "--json", "--", *typed]
+    assert main(arguments) == 2
+    message = json.loads(capsys.readouterr().out)["error"]["message"]
+    assert message.startswith("arguments after --: Codex native argument ")
+    assert detail in message
+
+
+def test_a_profile_native_flag_that_a_command_line_option_controls_names_the_profile(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = write_agent(
+        tmp_path, "amp", CODEX_SUCCESS, profile="quick", settings='native_args=["--fast"]\n'
+    )
+    arguments = ["quick", "hi", "--fast", "--config", str(config), "--dry-run", "--json"]
+    assert main([*arguments, "--", "--zz"]) == 2
+    message = json.loads(capsys.readouterr().out)["error"]["message"]
+    assert message.startswith(f"{config}: profiles.quick.native_args: Amp native argument '--fast'")
 
 
 def test_dispatch_rejects_invalid_native_arguments_in_an_unselected_profile(

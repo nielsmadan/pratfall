@@ -2563,6 +2563,7 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
         "cli-model",
         "--max-session-turns",
         "9",
+        "--debug",
         *native,
     ]
     dry_run = _run(prat, root, [*arguments, "--dry-run", "--", *native], config=config)
@@ -3558,6 +3559,8 @@ def _exercise_q08(context: _ExerciseContext) -> dict[str, object]:
         "4.0",
         "--max-turns",
         "5",
+        "--allowed-tools",
+        "Read",
         "--permission-mode",
         "plan",
     ]

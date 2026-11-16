@@ -205,7 +205,7 @@ Settings resolve from highest to lowest priority:
 | `schema` | The higher-priority source path replaces the lower-priority path. |
 | `native_agent` | The higher-priority string replaces the lower-priority selection. |
 | `instructions`, `instructions_file` | One override group: either higher-priority form clears the lower-priority form. |
-| `native_args`, `add_dirs`, `attachments`, `tools`, `disabled_tools`, `command_prefix` | The higher-priority array replaces the lower-priority array, even when empty. |
+| `native_args`, `add_dirs`, `attachments`, `tools`, `disabled_tools`, `command_prefix` | The higher-priority array replaces the lower-priority array, even when empty. Arguments after `--` are the exception: they are appended to the resolved `native_args`. |
 
 Profiles from every file remain available. A profile inherits only through an explicit
 `extends`; omitted fields then fall back to the merged defaults.
@@ -474,6 +474,11 @@ The default `timeout` rises from 600 to 3600 seconds, so ordinary long agent tas
 cut off at ten minutes. Set `timeout = 600` in `[defaults]` to keep the old deadline. `timeout =
 "none"` (or `0`, or `--timeout none`) now turns the deadline off; a workflow applies it to every
 step and drops the step backstop too.
+
+Arguments after `--` are now appended to the profile's `native_args` instead of replacing them,
+so `prat reviewer "…" -- --strict-mcp-config` keeps a Claude profile's `--disallowedTools=Bash`.
+A native flag that a profile sets can no longer be dropped from the command line; select another
+profile instead.
 
 A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
 naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that
