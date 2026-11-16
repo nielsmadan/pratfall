@@ -329,7 +329,7 @@ def _preview(
         "fast": resolved.options.fast,
         "argv": argv,
         "cwd": str(cwd),
-        "timeout": resolved.options.timeout or None,
+        "timeout": resolved.options.timeout,
         "stdin_bytes": len(invocation.stdin),
     }
     if invocation.env:

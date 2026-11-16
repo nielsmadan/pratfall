@@ -141,6 +141,18 @@ def test_sets_names_text_and_list_settings_by_key(tmp_path: Path) -> None:
     assert lines[1] == f"p     claude  -        {sets}  local"
 
 
+@pytest.mark.parametrize("value", ['"none"', "0"])
+def test_an_off_timeout_reads_none_in_text_and_zero_in_json(tmp_path: Path, value: str) -> None:
+    write(tmp_path / ".pratfile", f'[profiles.t]\nagent="claude"\ntimeout={value}\n')
+    config = load_config(cwd=tmp_path, env=os.environ)
+    _, lines = list_view(config, "profiles", width=None, which=nothing_installed)
+    assert lines[1] == "t     claude  -        timeout=none  local"
+    assert "timeout  none   profiles.t (local)" in profile_page(config, "t").splitlines()
+    assert help_page(config, "t", nothing_installed)["settings"] == [
+        {"name": "timeout", "value": 0.0, "origin": "profiles.t (local)"}
+    ]
+
+
 def test_profile_page_names_the_origin_of_each_value(tmp_path: Path) -> None:
     write(
         tmp_path / "config-home/pratfall/config.toml",

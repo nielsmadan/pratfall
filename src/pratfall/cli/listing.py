@@ -15,7 +15,7 @@ from pratfall.cli.parsing import (
 from pratfall.cli.presentation import _limit_text, render_table
 from pratfall.config import option_origins, reject_blocked, resolve_profile, supports_setting
 from pratfall.limits import DEFAULT_MAX_PARALLEL
-from pratfall.models import AgentSpec, Config, OptionOrigin, ProfileLayer, WorkflowStep
+from pratfall.models import NO_TIMEOUT, AgentSpec, Config, OptionOrigin, ProfileLayer, WorkflowStep
 from pratfall.prompt_input import delivery_limit, mib_text
 from pratfall.prompt_templates import template_parameters
 from pratfall.workflow_plan import workflow_parameter_names
@@ -120,6 +120,8 @@ def _sets_text(layer: ProfileLayer) -> str:
 
 
 def _setting_text(key: str, value: object) -> str:
+    if key == "timeout" and value == NO_TIMEOUT:
+        return "none"
     if key in _JSON_RENDERED_OPTIONS:
         return json.dumps(value, ensure_ascii=False)
     if isinstance(value, float) and value.is_integer():

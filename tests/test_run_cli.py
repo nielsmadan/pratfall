@@ -4572,7 +4572,7 @@ def test_timeout_none_or_zero_turns_the_deadline_off(
     assert main(arguments) == 0
     assert "\ntimeout: none\n" in capsys.readouterr().out
     assert main([*arguments, "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)["timeout"] is None
+    assert json.loads(capsys.readouterr().out)["timeout"] == 0
 
 
 def test_default_timeout_is_an_hour(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -4586,14 +4586,14 @@ def test_default_timeout_is_an_hour(tmp_path: Path, capsys: pytest.CaptureFixtur
     [
         ('timeout = "none"', ["--timeout", "5"], 5.0),
         ("timeout = 0", ["--timeout", "5"], 5.0),
-        ('timeout = "none"', [], None),
-        ("timeout = 30", ["--timeout", "none"], None),
+        ('timeout = "none"', [], 0),
+        ("timeout = 30", ["--timeout", "none"], 0),
     ],
 )
 def test_an_off_timeout_overrides_like_any_value(
     settings: str,
     flags: list[str],
-    expected: float | None,
+    expected: float,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -4614,7 +4614,7 @@ def test_defaults_timeout_none_reaches_the_run(
     config = write_agent(tmp_path, "codex", "raise AssertionError('dry run launched agent')")
     config.write_text(config.read_text() + '[defaults]\ntimeout = "none"\n')
     assert main(["cx", "hi", "--config", str(config), "--dry-run", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)["timeout"] is None
+    assert json.loads(capsys.readouterr().out)["timeout"] == 0
 
 
 @pytest.mark.parametrize(

@@ -30,9 +30,9 @@ Every `--json` output follows these rules:
   `workflow`, `step` or `item`.
 - `null` means the agent decides. A default that Prat applies shows its value.
 - Durations are integers in milliseconds with an `_ms` suffix. Settings keep their config units,
-  such as `timeout` in seconds. A timeout that is turned off is `0.0` in profile options and help
-  settings, where `null` already means not set; the dry-run preview, which always shows a
-  resolved deadline, reports it as `null`.
+  such as `timeout` in seconds, emitted as a float (`3600.0`). `timeout` `0` (`0.0`) means no
+  timeout and `null` means not set, in profile options, help settings and the dry-run preview
+  alike; text output shows `none`.
 - `error.message` is the same text Prat prints on stderr without `--json`: lowercase, no trailing
   period, naming the flag or config key and the rejected value, such as `--effort 'ultra': Claude
   Code accepts low, medium, high, xhigh, max`. Its wording can change; match `error.code`.
@@ -267,7 +267,7 @@ result was already written, Prat reports the failure only on stderr to keep stdo
 ## Previews and management commands
 
 `--dry-run --json` returns a preview containing `dry_run`, resolved identity, argv, cwd, timeout
-(`null` when it is off), and stdin byte count, rather than a run status. Active schemas add the original `schema` path and
+(`0.0` when it is off), and stdin byte count, rather than a run status. Active schemas add the original `schema` path and
 `schema_transport`: `inline` when the schema's JSON is passed as an argument, `file` when the agent
 reads a temporary prepared copy. The text preview says `inline JSON` or `temporary prepared file`.
 Prepared temporary paths are labeled placeholders, not reusable filenames. Prompts passed through argv appear in the preview.
