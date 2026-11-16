@@ -109,7 +109,6 @@ def test_pi_native_tool_flags_are_valid() -> None:
         Options(instructions="literal"),
         Options(add_dirs=("/example",)),
         Options(fast=False),
-        Options(native_agent="research"),
         Options(schema="schema.json"),
         Options(max_turns=2),
     ],

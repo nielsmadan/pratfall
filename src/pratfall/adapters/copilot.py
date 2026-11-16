@@ -162,8 +162,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     if options.effort is not None:
         argv.append(f"--effort={options.effort}")
     argv.extend(f"--add-dir={directory}" for directory in options.add_dirs or ())
-    if options.native_agent is not None:
-        argv.append(f"--agent={options.native_agent}")
     argv.extend(f"--attachment={attachment}" for attachment in resolved.options.attachments or ())
     argv.extend(arguments)
     argv.append(f"--prompt={prompt.decode('utf-8')}")
@@ -176,8 +174,6 @@ def validate(resolved: ResolvedProfile) -> None:
     )
     if resolved.options.attachments:
         reserved |= {"--attachment": _ALLOWED["--attachment"]}
-    if resolved.options.native_agent is not None:
-        reserved |= {"--agent": _ALLOWED["--agent"]}
     validate_flags("Copilot", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

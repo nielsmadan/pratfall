@@ -6,7 +6,7 @@ from pratfall.adapters.whole_json import document_error, encoding_error, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
 
 _ALLOWED: Mapping[str, Flag] = MappingProxyType(
-    {name: Flag(1) for name in ("--max-tokens", "--enabled-tools", "--disabled-tools")}
+    {name: Flag(1) for name in ("--max-tokens", "--enabled-tools", "--disabled-tools", "--agent")}
 )
 _RESERVED: Mapping[str, Flag] = MappingProxyType(
     {
@@ -31,7 +31,6 @@ _RESERVED: Mapping[str, Flag] = MappingProxyType(
             "--max-price",
             "--model",
             "--effort",
-            "--agent",
             "--config",
             "--workdir",
             "--worktree",
@@ -52,8 +51,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--max-turns", str(resolved.options.max_turns)))
     if resolved.options.max_budget_usd is not None:
         argv.extend(("--max-price", str(resolved.options.max_budget_usd)))
-    if resolved.options.native_agent is not None:
-        argv.append(f"--agent={resolved.options.native_agent}")
     return Invocation((*argv, *arguments), prompt)
 
 

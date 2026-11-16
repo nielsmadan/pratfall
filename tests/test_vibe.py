@@ -59,7 +59,6 @@ def test_vibe_bare_prompt_stdin_and_native_budgets() -> None:
         ("--max-price=2",),
         ("--model=x",),
         ("--effort=high",),
-        ("--agent=x",),
         ("--workdir=x",),
         ("--worktree",),
         ("--config=x",),

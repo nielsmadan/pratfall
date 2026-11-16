@@ -10,7 +10,7 @@ from types import MappingProxyType
 from typing import Any, NoReturn
 
 from pratfall.catalog import MANAGEMENT_COMMANDS
-from pratfall.config import validate_native_agent, validate_session_id
+from pratfall.config import validate_session_id
 from pratfall.errors import PratError, did_you_mean
 from pratfall.instructions import validate_instructions
 from pratfall.models import MAX_TURNS, NO_TIMEOUT, OptionOrigin, Options
@@ -90,7 +90,6 @@ _RUN_VALUE_FLAGS: Mapping[str, str] = MappingProxyType(
         "--max-turns": "max_turns",
         "--model": "model",
         "--schema": "schema",
-        "--native-agent": "native_agent",
         "--session-id": "session_id",
         "--timeout": "timeout",
         "--file": "file",
@@ -177,11 +176,6 @@ _RUN_OPTIONS: tuple[_RunOption, ...] = (
         "-e, --edit", ("-e", "--edit"), "Edit the complete prompt in VISUAL, EDITOR, or vi."
     ),
     _RunOption("--model MODEL", ("--model",), "Override the profile model."),
-    _RunOption(
-        "--native-agent NAME",
-        ("--native-agent",),
-        "Select a native agent/persona for Claude, Copilot, or Vibe.",
-    ),
     _RunOption(
         "--session-id ID",
         ("--session-id",),
@@ -751,13 +745,6 @@ def _run_options(
         fast=fast,
         add_dirs=tuple(repeated["add_dirs"]) or None,
         attachments=tuple(repeated["attachments"]) or None,
-        native_agent=(
-            validate_native_agent(
-                values["native_agent"], OptionOrigin("--native-agent", "invalid_arguments")
-            )
-            if "native_agent" in values
-            else None
-        ),
         session_id=(
             validate_session_id(
                 values["session_id"], OptionOrigin("--session-id", "invalid_arguments")

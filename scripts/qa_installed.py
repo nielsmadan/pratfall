@@ -141,7 +141,6 @@ _ATTACHMENT_TYPES = {
 }
 _SCHEMA = frozenset({"claude", "codex", "qwen"})
 _INSTRUCTIONS = frozenset({"claude", "codex", "qwen", "droid"})
-_NATIVE_AGENTS = frozenset({"claude", "copilot", "vibe"})
 _SESSION_IDS = frozenset({"claude", "grok"})
 _REPORTS_SESSION_IDS = frozenset({"claude", "codex", "copilot", "cursor", "grok", "droid", "kimi"})
 _STDIN_PREFIXES = {
@@ -2394,7 +2393,6 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
             "attachments": name in _ATTACHMENT_TYPES,
             "attachment_types": _ATTACHMENT_TYPES.get(name),
             "attachment_max_count": 1 if name == "hermes" else None,
-            "native_agent": name in _NATIVE_AGENTS,
             "session_id": name in _SESSION_IDS,
             "reports_session_id": name in _REPORTS_SESSION_IDS,
             "instructions": name in _INSTRUCTIONS,
@@ -2501,7 +2499,6 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "timeout": 7.0,
                     "max_turns": 3,
                     "max_budget_usd": None,
-                    "native_agent": None,
                     "session_id": None,
                     "native_args": ["--debug"],
                     "notify": None,
@@ -3462,7 +3459,6 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "instructions": None,
                     "instructions_file": None,
                     "schema": None,
-                    "native_agent": None,
                     "session_id": None,
                     "native_args": [],
                     "notify": None,
@@ -4385,18 +4381,12 @@ def _control_cases(root: Path) -> list[tuple[str, list[str], list[str]]]:
     attachment = str(root / "consumer" / "image.bin")
     dirs = ["--add-dir", "cli dir"]
     instructions = ["--instructions-file", "rules.md"]
-    persona = ["--native-agent", "reviewer"]
     attach = ["--attachment", "image.bin"]
     return [
         (
             "claude",
-            dirs + instructions + persona,
-            [
-                "--append-system-prompt=CLI rules café\r\n",
-                "--add-dir",
-                directory,
-                "--agent=reviewer",
-            ],
+            dirs + instructions,
+            ["--append-system-prompt=CLI rules café\r\n", "--add-dir", directory],
         ),
         (
             "codex",
@@ -4421,15 +4411,10 @@ def _control_cases(root: Path) -> list[tuple[str, list[str], list[str]]]:
         ),
         (
             "copilot",
-            dirs + persona + attach,
-            [
-                "--add-dir=" + directory,
-                "--agent=reviewer",
-                "--attachment=" + attachment,
-            ],
+            dirs + attach,
+            ["--add-dir=" + directory, "--attachment=" + attachment],
         ),
         ("droid", instructions, ["--append-system-prompt=CLI rules café\r\n"]),
-        ("vibe", persona, ["--agent=reviewer"]),
         ("hermes", attach, ["--image=" + attachment]),
         ("opencode", attach, ["--file=" + attachment]),
     ]
@@ -4503,14 +4488,12 @@ def _exercise_w_control_layers(prat: Path, root: Path) -> dict[str, object]:
     global_config = root / "xdg" / "pratfall" / "config.toml"
     global_config.parent.mkdir(exist_ok=True)
     global_config.write_text(
-        'version=1\n[defaults]\ninstructions_file="missing-global"\n'
-        'add_dirs=["missing-global"]\nnative_agent="global"\n'
+        'version=1\n[defaults]\ninstructions_file="missing-global"\nadd_dirs=["missing-global"]\n'
     )
     with config.open("a") as stream:
         stream.write(
-            '[defaults]\ninstructions="local"\nadd_dirs=["config dir"]\nnative_agent="local"\n'
+            '[defaults]\ninstructions="local"\nadd_dirs=["config dir"]\n'
             '[profiles.layered]\nagent="claude"\ninstructions_file="rules.md"\n'
-            'native_agent="profile"\n'
             '[profiles.cleared]\nagent="claude"\nadd_dirs=[]\ninstructions="cleared"\n'
         )
     cases = [
@@ -4520,7 +4503,6 @@ def _exercise_w_control_layers(prat: Path, root: Path) -> dict[str, object]:
                 "--append-system-prompt=config rules\r\n",
                 "--add-dir",
                 str(root / "config dir"),
-                "--agent=profile",
             ],
         ),
         (
@@ -4530,19 +4512,16 @@ def _exercise_w_control_layers(prat: Path, root: Path) -> dict[str, object]:
                 "CLI inline",
                 "--add-dir",
                 "cli dir",
-                "--native-agent",
-                "cli",
             ],
             [
                 "--append-system-prompt=CLI inline",
                 "--add-dir",
                 str(root / "consumer" / "cli dir"),
-                "--agent=cli",
             ],
         ),
         (
             ["cleared", "--instructions-file", "rules.md"],
-            ["--append-system-prompt=CLI rules café\r\n", "--agent=local"],
+            ["--append-system-prompt=CLI rules café\r\n"],
         ),
     ]
     observations: list[dict[str, object]] = []
@@ -4746,7 +4725,6 @@ def _exercise_w_control_rejections(prat: Path, root: Path) -> dict[str, object]:
     cases = {
         "unsupported-instructions": ["amp", "--instructions-file", "missing"],
         "unsupported-directories": ["amp", "--add-dir", "missing"],
-        "unsupported-persona": ["amp", "--native-agent", "reviewer"],
         "unsupported-attachments": ["amp", "--attachment", "missing"],
         "unsupported-schema": ["amp", "--schema", "missing"],
         "collision-instructions": [
@@ -4757,7 +4735,6 @@ def _exercise_w_control_rejections(prat: Path, root: Path) -> dict[str, object]:
             "--append-system-prompt=native",
         ],
         "collision-directories": ["claude", "--add-dir", "cli dir", "--", "--add-dir=native"],
-        "collision-persona": ["claude", "--native-agent", "reviewer", "--", "--agent=native"],
         "collision-attachments": ["codex", "--attachment", "image.bin", "--", "--image=native"],
         "collision-schema": ["claude", "--schema", "cli-schema.json", "--", "--json-schema={}"],
         "schema-extract": ["claude", "--schema", "missing", "--extract"],

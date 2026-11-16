@@ -18,7 +18,6 @@ AGENTS = (
             fast=True,
             add_dirs=True,
             instructions=True,
-            native_agent=True,
             session_id=True,
         ),
     ),
@@ -58,7 +57,6 @@ AGENTS = (
             attachments=True,
             attachment_types=("image", "native document"),
             add_dirs=True,
-            native_agent=True,
         ),
     ),
     AgentSpec(
@@ -164,7 +162,6 @@ AGENTS = (
         ("vibe",),
         Capabilities(
             model=False,
-            native_agent=True,
             budgets=frozenset({"max_turns", "max_budget_usd"}),
         ),
     ),

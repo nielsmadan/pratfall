@@ -97,7 +97,7 @@ run outside the sandbox, and fake argv and stream tests.
 
 ## Native agent selection (verified 2026-09-18)
 
-Public `native_agent` is unsupported. The [run command at revision 5f9d9187](https://github.com/anomalyco/opencode/blob/5f9d9187c01708b4e700c9c81c1045ab482bf31d/packages/opencode/src/cli/cmd/run.ts#L589)
+Prat has no agent-selection setting. The [run command at revision 5f9d9187](https://github.com/anomalyco/opencode/blob/5f9d9187c01708b4e700c9c81c1045ab482bf31d/packages/opencode/src/cli/cmd/run.ts#L589)
 returns `undefined` after warning for an unknown name or a subagent-only definition, allowing
 default-agent fallback. For an unknown name the warning says “not found. Falling back to default
 agent”. Prat cannot promise explicit selection using this contract. Existing native-only

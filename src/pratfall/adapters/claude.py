@@ -164,8 +164,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--settings", json.dumps({"fastMode": options.fast})))
     for directory in resolved.options.add_dirs or ():
         argv.extend(("--add-dir", directory))
-    if options.native_agent is not None:
-        argv.append(f"--agent={options.native_agent}")
     if options.session_id is not None:
         argv.append(f"--session-id={options.session_id}")
     if resolved.prepared_schema is not None:
@@ -185,8 +183,6 @@ def validate(resolved: ResolvedProfile) -> None:
         }
     if resolved.options.schema is not None:
         reserved |= {"--json-schema": _ALLOWED["--json-schema"]}
-    if resolved.options.native_agent is not None:
-        reserved |= {"--agent": _ALLOWED["--agent"]}
     validate_flags("Claude Code", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

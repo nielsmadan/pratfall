@@ -214,7 +214,6 @@ SAMPLE_SETTINGS: dict[str, object] = {
     "instructions": "x",
     "instructions_file": "x.md",
     "schema": "s.json",
-    "native_agent": "n",
     "session_id": "s",
     "notify": True,
 }

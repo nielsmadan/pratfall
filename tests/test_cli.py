@@ -193,14 +193,14 @@ def test_agents_inventory_reports_aliases_and_capabilities(
             "cc",
             (
                 "claude (cc): model, effort, fast, add_dirs, instructions, schema, "
-                "native_agent, session_id, max_budget_usd, max_turns, prompt_limit=8 MiB"
+                "session_id, max_budget_usd, max_turns, prompt_limit=8 MiB"
             ),
         ),
         ("kiro", "kiro: model, effort, prompt_limit=1 MiB"),
         ("warp", "warp: model, prompt_limit=1 MiB"),
         ("qwen", "qwen: model, add_dirs, instructions, schema, max_turns, prompt_limit=8 MiB"),
         ("amp", "amp: fast, prompt_limit=8 MiB"),
-        ("vibe", "vibe: native_agent, max_budget_usd, max_turns, prompt_limit=8 MiB"),
+        ("vibe", "vibe: max_budget_usd, max_turns, prompt_limit=8 MiB"),
     ],
 )
 def test_agent_help_header_lists_supported_settings(
@@ -636,7 +636,6 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
                 "instructions": None,
                 "instructions_file": None,
                 "schema": None,
-                "native_agent": None,
                 "session_id": None,
                 "native_args": [],
                 "notify": None,
@@ -2228,8 +2227,8 @@ def test_agent_help_json_marks_the_options_its_agent_rejects(
     assert isinstance(page["run_options"], list)
     rejected = [option["flags"] for option in page["run_options"] if not option["supported"]]
     assert rejected == [["--attachment"]]
-    assert page["run_options"][11]["flags"] == ["--fast", "--no-fast"]
-    assert page["run_options"][11]["setting"] == "fast"
+    assert page["run_options"][10]["flags"] == ["--fast", "--no-fast"]
+    assert page["run_options"][10]["setting"] == "fast"
 
 
 def test_top_level_help_json_lists_commands_and_every_run_option(

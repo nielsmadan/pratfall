@@ -28,7 +28,6 @@ class Capabilities:
     attachment_max_count: int | None = None
     instructions: bool = False
     schema: bool = False
-    native_agent: bool = False
     session_id: bool = False
     reports_session_id: bool = False
 
@@ -60,7 +59,6 @@ class Options:
     instructions: str | None = None
     instructions_file: str | None = None
     schema: str | None = None
-    native_agent: str | None = None
     session_id: str | None = None
     native_args: tuple[str, ...] | None = None
     notify: bool | None = None

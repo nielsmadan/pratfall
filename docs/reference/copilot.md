@@ -97,9 +97,8 @@ authenticated vendor execution.
 
 The [programmatic reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-programmatic-reference#using-custom-agents)
 states: “You can delegate work to a specialized agent by using the `--agent` option.” Its example
-selects an existing `code-review` custom agent. Prat maps `native_agent` to `--agent=NAME` and
-adds no permission approval. Names are literal and native configuration remains authoritative.
-Native-only `--agent` stays accepted; an active public selection conflicts with it.
+selects an existing `code-review` custom agent. Native `--agent` passes as a native argument;
+Prat has no setting of its own for it and adds no permission approval.
 Verification used primary documentation and fake executable argv tests, not authenticated execution.
 
 ## Native attachments (verified 2026-09-18)

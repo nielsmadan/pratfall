@@ -1168,13 +1168,6 @@ def test_harness_directory_capabilities_match_the_catalog() -> None:
     assert supported == qa._ADD_DIRS
 
 
-def test_harness_native_agent_capabilities_match_the_catalog() -> None:
-    assert (
-        frozenset(agent.name for agent in catalog.AGENTS if agent.capabilities.native_agent)
-        == qa._NATIVE_AGENTS
-    )
-
-
 def test_harness_attachment_capabilities_match_the_catalog() -> None:
     assert {
         agent.name: list(agent.capabilities.attachment_types)
@@ -1240,7 +1233,7 @@ def test_schema_oracle_rejects_metadata_loss(
 
 
 @pytest.mark.parametrize(
-    "agent", ["claude", "codex", "gemini", "qwen", "copilot", "droid", "vibe", "hermes", "opencode"]
+    "agent", ["claude", "codex", "gemini", "qwen", "copilot", "droid", "hermes", "opencode"]
 )
 def test_controls_fake_rejects_added_approval_flags(tmp_path: Path, agent: str) -> None:
     root, _ = qa._controls_root(Path(sys.executable), tmp_path, "controls")

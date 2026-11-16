@@ -2493,7 +2493,6 @@ def test_json_token_consumed_as_an_option_value_is_not_an_output_flag(
     "flag",
     [
         "--model",
-        "--native-agent",
         "--session-id",
         "--instructions",
         "--timeout",

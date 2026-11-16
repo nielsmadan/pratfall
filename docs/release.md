@@ -84,9 +84,9 @@ the hidden completion callback offers agents, aliases, configured profiles and t
 command without launching an agent. F01 runs a parallel fan-out and merge workflow through the
 installed command, and F02 runs `each` steps over lines with `as` and over a JSON array with
 `max_parallel = 2`, checking item results and the joined merge input.
-W04–W07 also run both installations through all five public control families: exact native argv and composed prompts across nine agents, CLI/config path origins under a different
-`--cwd`, layer precedence and empty-array clearing, binary attachments, native agent selection,
-and Claude/Codex/Qwen schema text/JSON output. Schema checks retain raw trace and
+W04–W07 also run both installations through all four public control families: exact native argv and composed prompts across eight agents, CLI/config path origins under a different
+`--cwd`, layer precedence and empty-array clearing, binary attachments, and Claude/Codex/Qwen
+schema text/JSON output. Schema checks retain raw trace and
 accounting on native failure, observe private snapshot bytes and permissions during execution, and
 check removal after the entrypoint exits. Rejection checks keep stdin open and supply an editor trap
 to prove failure before input acquisition for unsupported controls, native collisions and invalid

@@ -32,7 +32,6 @@ _JSON_RENDERED_OPTIONS = frozenset(
         "instructions",
         "schema",
         "instructions_file",
-        "native_agent",
         "session_id",
     }
 )
@@ -45,7 +44,6 @@ _SUPPORTED_FIELDS = (
     "attachments",
     "instructions",
     "schema",
-    "native_agent",
     "session_id",
 )
 
@@ -240,7 +238,6 @@ def _agent_record(agent: AgentSpec) -> dict[str, object]:
             "attachment_max_count": caps.attachment_max_count,
             "instructions": caps.instructions,
             "schema": caps.schema,
-            "native_agent": caps.native_agent,
             "session_id": caps.session_id,
             "reports_session_id": caps.reports_session_id,
         },

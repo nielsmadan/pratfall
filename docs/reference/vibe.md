@@ -11,9 +11,9 @@ mode; the native reader trims stdin. Model/effort have no verified CLI mapping a
 use native settings or a trusted command prefix selecting an existing `VIBE_ACTIVE_MODEL`.
 `max_turns` maps to `--max-turns`; `max_budget_usd` maps to `--max-price` in dollars. Native
 limits may interrupt after usage exceeds them, so Prat adds no stronger spending guarantee.
-Accepted native flags `--max-tokens`, `--enabled-tools`, and `--disabled-tools` each take one value.
-Max tokens counts cumulative prompt plus completion tokens; it is only native passthrough.
-Prompt/output, budgets, model/effort, native agent/config/cwd/worktree/session/resume/continue, harness,
+Accepted native flags `--max-tokens`, `--enabled-tools`, `--disabled-tools` and `--agent` each take
+one value. Max tokens counts cumulative prompt plus completion tokens; it is only native passthrough.
+Prompt/output, budgets, model/effort, config/cwd/worktree/session/resume/continue, harness,
 setup/update and remote controls are reserved or rejected. `--teleport` is explicitly reserved:
 it may synchronize/push Git state and changes JSON to a remote-history object. No remote aliases
 are declared by the pinned parser. Version probing uses `--version`.
@@ -70,10 +70,9 @@ The [v2.25.2 parser](https://github.com/mistralai/mistral-vibe/blob/v2.25.2/vibe
 defines `--agent NAME` with built-ins `ask`, `plan`, `accept-edits`, `smart-approve`,
 `auto-approve`, and custom definitions under `~/.vibe/agents/NAME.toml`. Its programmatic help
 states: “Tool approval follows the selected --agent (or 'default_agent' config)”.
-Prat maps `native_agent` to `--agent=NAME` and leaves name resolution to Vibe.
+Native `--agent` passes as a one-value native argument and Vibe resolves the name.
 
-Selecting `auto-approve` can automatically approve tools. Public selection therefore changes
-native permission behavior as defined by the chosen agent; Prat injects no `--auto-approve`,
-`--yolo`, or other approval flags. The previously reserved native `--agent` stays reserved;
-public selection is the supported interface. Prat discovers no names and writes no definitions.
+Selecting `auto-approve` can automatically approve tools, so the chosen agent changes native
+permission behavior; Prat injects no `--auto-approve`, `--yolo`, or other approval flags. Prat
+discovers no names and writes no definitions.
 Verification used pinned parser inspection and fake argv tests, not authenticated execution.

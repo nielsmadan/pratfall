@@ -106,7 +106,6 @@ the page as one object ([help pages](docs/user/json.md#help-pages)).
 | `--attachment PATH` | Attach a native image or file. |
 | `--add-dir PATH` | Add a native workspace directory. |
 | `--instructions TEXT` / `--instructions-file PATH` | Append native instructions. |
-| `--native-agent NAME` | Select a native agent or persona. |
 | `--session-id ID` | Set the native session id. |
 | `--progress` | Show live activity on stderr. |
 | `--trace` | Copy captured native stdout to stderr. |

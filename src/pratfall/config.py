@@ -122,10 +122,6 @@ def _validated_text(value: object, origin: OptionOrigin, noun: str) -> str:
     return value
 
 
-def validate_native_agent(value: object, origin: OptionOrigin) -> str:
-    return _validated_text(value, origin, "native agent name")
-
-
 def validate_session_id(value: object, origin: OptionOrigin) -> str:
     return _validated_text(value, origin, "session id")
 
@@ -245,11 +241,6 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
         attachments=_paths(table["attachments"], f"{label}.attachments", base)
         if "attachments" in table
         else None,
-        native_agent=(
-            validate_native_agent(table["native_agent"], OptionOrigin(f"{label}.native_agent"))
-            if "native_agent" in table
-            else None
-        ),
         session_id=(
             validate_session_id(table["session_id"], OptionOrigin(f"{label}.session_id"))
             if "session_id" in table
@@ -326,7 +317,6 @@ def validate_capabilities(
     for name, setting in (
         ("model", "a model override"),
         ("schema", "schema output"),
-        ("native_agent", "native agent selection"),
         ("session_id", "a session id"),
         ("fast", "a fast-mode override"),
     ):

@@ -50,7 +50,7 @@ prat simple --effort high "investigate this failure"
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
 `model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `attachments`, `instructions`,
-`instructions_file`, `prompt`, `schema`, `native_agent`, `session_id`,
+`instructions_file`, `prompt`, `schema`, `session_id`,
 `notify`, `notify_method`, `notify_after`, `command_prefix`, and the agent's supported budget
 fields (`max_budget_usd`, `max_turns`).
 Use `[defaults]` for shared settings. `timeout` is in seconds and defaults to 3600; `timeout =
@@ -203,7 +203,6 @@ Settings resolve from highest to lowest priority:
 | `[agents.NAME].command` | A local command array replaces the global array for that agent. |
 | `[agents.NAME].command_prefix` | A local prefix replaces the global prefix for that agent, independently of `command`. |
 | `schema` | The higher-priority source path replaces the lower-priority path. |
-| `native_agent` | The higher-priority string replaces the lower-priority selection. |
 | `instructions`, `instructions_file` | One override group: either higher-priority form clears the lower-priority form. |
 | `native_args`, `add_dirs`, `attachments`, `command_prefix` | The higher-priority array replaces the lower-priority array, even when empty. Arguments after `--` are the exception: they are appended to the resolved `native_args`. |
 
@@ -490,6 +489,12 @@ Droid `["--only-tools=Read,Grep"]`, Qwen `["--core-tools=ReadFileTool"]`, Vibe
 `disabled_tools`, `tools_empty`, `tools_scope` and `disabled_tools_scope` capabilities. See
 [native tool flags](running.md#limit-tools-with-native-arguments).
 
+`--native-agent` and the `native_agent` setting are removed: agent names belong to each native CLI.
+A config that still sets `native_agent` fails as an unknown field naming the file and key, and
+`--native-agent` fails as an unrecognized argument. Use `native_args = ["--agent=NAME"]` in the
+profile, or `prat cc "…" -- --agent=NAME`. Vibe's native `--agent` is no longer refused, and
+`prat list agents --json` no longer reports the `native_agent` capability.
+
 A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
 naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that
 applies, and `workflows.NAME` for a workflow. Templates have their own names and never collide.
@@ -575,23 +580,17 @@ caveats.
 
 ## Configure native agent selection
 
+Native agent names belong to each agent, so a profile selects one with the agent's own flag:
+
 ```toml
 [profiles.review]
 agent = "claude"
-native_agent = "reviewer"
+native_args = ["--agent=reviewer"]
 ```
 
-`agent` chooses the Prat backend, `review` names the Prat profile, and `native_agent` selects an
-existing native persona. Claude, Copilot and Vibe support this string. CLI `--native-agent`
-overrides the profile, local defaults and global defaults, in that order. Omission inherits;
-empty or whitespace-only names do not clear a selection. Names must be NUL-free valid UTF-8
-and are forwarded literally. `prat help NAME` includes the resolved selection.
-
-Backend-specific defaults apply to every profile: putting `native_agent` in `[defaults]` makes
-an unsupported profile invalid even if it is not selected. Config validation and listing do not
-discover native names or read/write agent definitions. The selected persona can change native
-permissions, including automatic approval with Vibe's `auto-approve` agent. See
-[native agent selection](running.md#select-a-native-agent) for native collisions and limitations.
+`agent` chooses the Prat backend, `review` names the Prat profile, and `--agent=reviewer` selects an
+existing Claude Code agent. To run another persona, select another profile. See
+[native agent selection](running.md#select-a-native-agent).
 
 ## Attachments
 

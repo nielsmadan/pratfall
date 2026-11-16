@@ -582,28 +582,19 @@ exclusions after the allowlist. Quote patterns to protect them from your shell.
 
 ## Select a native agent
 
+Claude Code, Copilot, Vibe and OpenCode select a native agent or persona with their own `--agent`
+flag. Pass it after `--`, or keep it in a profile's `native_args`:
+
 ```sh
-prat cc --native-agent reviewer "review this change"
-prat cp --native-agent code-review "review the latest commit"
-prat vibe --native-agent plan "plan this change"
+prat cc "review this change" -- --agent=reviewer
+prat vibe "plan this change" -- --agent plan
 ```
 
-`--native-agent NAME` selects an existing native agent/persona for Claude, Copilot or Vibe.
-The Prat selector still chooses the backend or a Prat profile; this setting becomes native
-`--agent=NAME`. Prat does not discover names, create agent definitions, or validate whether a
-name exists. Native resolution and errors remain authoritative. Names must be nonblank, NUL-free
-UTF-8; spaces, punctuation and case are preserved. Use `--native-agent=-leading-dash` for a
-name beginning with a dash. Omission preserves native agent selection.
-
-Selecting a persona can change native instructions, models, tools and permissions. In particular,
-Vibe's `auto-approve` agent can automatically approve tool calls. Prat adds no approval flags
-and does not restrict the permission behavior of the selected native agent.
-
-An active public selection conflicts with native `--agent` in `native_args` or after `--`.
-Previously supported native-only selection remains accepted for Claude, Copilot and OpenCode;
-Vibe's native `--agent` remains reserved, so use the public flag. OpenCode has no public support
-because its CLI falls back to the default agent for unknown or subagent-only names.
-Unsupported public selection and native collisions fail before prompt input or editor startup.
+The Prat selector still chooses the backend or a Prat profile. Prat does not discover names,
+create agent definitions, or check that a name exists; the native CLI resolves it. Selecting a
+persona can change native instructions, models, tools and permissions. In particular, Vibe's
+`auto-approve` agent can automatically approve tool calls. OpenCode falls back to its default
+agent for an unknown or subagent-only name.
 
 ## Name the session
 
