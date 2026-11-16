@@ -4,7 +4,7 @@ from dataclasses import replace
 from types import MappingProxyType
 
 from pratfall.adapters.accounting import cost, model_map
-from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
+from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.adapters.whole_json import (
     document_error,
     encodable_text,
@@ -164,10 +164,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--settings", json.dumps({"fastMode": options.fast})))
     for directory in resolved.options.add_dirs or ():
         argv.extend(("--add-dir", directory))
-    if options.tools is not None:
-        argv.append("--tools=" + ",".join(options.tools))
-    if options.disabled_tools:
-        argv.append("--disallowedTools=" + ",".join(options.disabled_tools))
     if options.native_agent is not None:
         argv.append(f"--agent={options.native_agent}")
     if options.session_id is not None:
@@ -191,12 +187,6 @@ def validate(resolved: ResolvedProfile) -> None:
         reserved |= {"--json-schema": _ALLOWED["--json-schema"]}
     if resolved.options.native_agent is not None:
         reserved |= {"--agent": _ALLOWED["--agent"]}
-    validate_tool_values(resolved.options.tools, "tools", comma=True, whitespace=True, trim=True)
-    validate_tool_values(resolved.options.disabled_tools, "disabled_tools", comma=True, trim=True)
-    if resolved.options.tools is not None:
-        reserved |= {"--tools": _ALLOWED["--tools"]}
-    if resolved.options.disabled_tools:
-        reserved |= {name: _ALLOWED[name] for name in ("--disallowedTools", "--disallowed-tools")}
     validate_flags("Claude Code", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

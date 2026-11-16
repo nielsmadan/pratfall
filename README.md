@@ -106,7 +106,6 @@ the page as one object ([help pages](docs/user/json.md#help-pages)).
 | `--attachment PATH` | Attach a native image or file. |
 | `--add-dir PATH` | Add a native workspace directory. |
 | `--instructions TEXT` / `--instructions-file PATH` | Append native instructions. |
-| `--tools NAME` / `--disabled-tools NAME` | Restrict or disable native tools. |
 | `--native-agent NAME` | Select a native agent or persona. |
 | `--session-id ID` | Set the native session id. |
 | `--progress` | Show live activity on stderr. |
@@ -213,7 +212,7 @@ profile:
 ```toml
 [profiles.claude-base]
 agent = "claude"
-tools = ["Read", "Edit", "Bash"]
+native_args = ["--tools=Read,Edit,Bash"]
 
 [profiles.weekly]
 extends = "claude-base"

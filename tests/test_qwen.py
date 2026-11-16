@@ -489,7 +489,10 @@ def test_qwen_schema_transport_preserves_explicit_tool_denial() -> None:
     profile = replace(
         resolved_profile(
             "qwen",
-            Options(schema="source", tools=("read_file",), disabled_tools=("structured_output",)),
+            Options(
+                schema="source",
+                native_args=("--core-tools=read_file", "--exclude-tools=structured_output"),
+            ),
         ),
         prepared_schema=PreparedSchema("{}", {}, "/private/schema.json"),
     )
@@ -500,9 +503,9 @@ def test_qwen_schema_transport_preserves_explicit_tool_denial() -> None:
         "native",
         "--output-format",
         "stream-json",
-        "--core-tools=read_file",
-        "--exclude-tools=structured_output",
         "--json-schema",
         "@/private/schema.json",
+        "--core-tools=read_file",
+        "--exclude-tools=structured_output",
     )
     assert invocation.stdin == b"task"

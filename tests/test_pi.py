@@ -46,8 +46,6 @@ def test_pi_build_preserves_literal_stdin_and_separate_values() -> None:
     options = Options(
         model="provider/model",
         effort="high",
-        tools=("read", "bash"),
-        disabled_tools=("write",),
         attachments=("/example/a b.png",),
         native_args=("--provider=test", "--system-prompt", "--tools=literal", "--no-session"),
     )
@@ -62,10 +60,6 @@ def test_pi_build_preserves_literal_stdin_and_separate_values() -> None:
         "provider/model",
         "--thinking",
         "high",
-        "--tools",
-        "read,bash",
-        "--exclude-tools",
-        "write",
         "--provider",
         "test",
         "--system-prompt",
@@ -74,7 +68,6 @@ def test_pi_build_preserves_literal_stdin_and_separate_values() -> None:
         "@/example/a b.png",
     )
     assert invocation.stdin == b"@literal\n$(id)\n"
-    assert pi.build(resolved("pi", Options(tools=())), b"x").argv[-2:] == ("--tools", "")
 
 
 @pytest.mark.parametrize(
@@ -96,30 +89,16 @@ def test_pi_rejects_unsafe_native_modes(arguments: tuple[str, ...]) -> None:
         pi.validate(resolved("pi", Options(native_args=arguments)))
 
 
-@pytest.mark.parametrize(
-    "options",
-    [
-        Options(tools=("read,write",)),
-        Options(tools=("\ufeffread",)),
-        Options(disabled_tools=("read ",)),
-        Options(tools=(), native_args=("--no-tools",)),
-        Options(disabled_tools=("write",), native_args=("-xt", "read")),
-        Options(attachments=("/example/a\u00a0b.png",)),
-    ],
-)
-def test_pi_rejects_public_control_ambiguity(options: Options) -> None:
+def test_pi_rejects_attachment_paths_with_unicode_spaces() -> None:
     with pytest.raises(PratError):
-        pi.validate(resolved("pi", options))
+        pi.validate(resolved("pi", Options(attachments=("/example/a\u00a0b.png",))))
 
 
-def test_pi_native_passthrough_and_empty_deny_are_valid() -> None:
+def test_pi_native_tool_flags_are_valid() -> None:
     pi.validate(
         resolved(
             "pi",
-            Options(
-                disabled_tools=(),
-                native_args=("--exclude-tools=write", "--provider", "test"),
-            ),
+            Options(native_args=("--exclude-tools=write", "--no-tools", "--provider", "test")),
         )
     )
 
@@ -161,14 +140,14 @@ def test_pi_independent_native_contract(
             "provider/model",
             "--effort",
             "high",
-            "--tools",
-            "read",
-            "--disabled-tools",
-            "write",
             "--attachment",
             str(attachment),
             "--",
             "--provider=test",
+            "--tools",
+            "read",
+            "--exclude-tools",
+            "write",
         ]
     )
     payload = json.loads(capsys.readouterr().out)
@@ -184,12 +163,12 @@ def test_pi_independent_native_contract(
         "provider/model",
         "--thinking",
         "high",
+        "--provider",
+        "test",
         "--tools",
         "read",
         "--exclude-tools",
         "write",
-        "--provider",
-        "test",
         f"@{attachment.resolve()}",
     ]
     assert payload["reported_models"] == ["pi-model"]

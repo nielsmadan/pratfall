@@ -78,25 +78,21 @@ no authenticated native run was performed for this control.
 The [v0.24.0 option declarations](https://github.com/QwenLM/qwen-code/blob/v0.24.0/packages/cli/src/config/top-level-options.ts)
 and [CLI configuration](https://github.com/QwenLM/qwen-code/blob/v0.24.0/packages/cli/src/config/config.ts)
 establish `--core-tools` and `--exclude-tools` arrays. Coercion splits commas and trims values.
-Prat repeats `--core-tools=NAME` / `--exclude-tools=NAME`, rejecting commas and surrounding native
-whitespace in entries. Native tool aliases and internal pattern spaces are preserved.
+Prat has no tool setting of its own; both flags pass as native arguments after `--` or in
+`native_args`.
 
 The configuration source says: “they have whitelist semantics (only listed tools are registered),
 not auto-approve semantics.” It keeps core entries separate from permission allow rules. Its
 `isExplicitlyAllowed` helper nevertheless combines CLI and configured core entries to exempt
 matching tools from automatic headless write/execute exclusions. Native settings and approval
-mode therefore affect the outcome. Prat forwards no `--allowed-tools`, changes no native
-configuration, and does not override explicit permission denies.
+mode therefore affect the outcome.
 
-An empty core list is treated as unset, so Prat rejects `tools=[]`. The synthetic
+An empty core list is treated as unset. The synthetic
 `structured_output` tool for native schema mode bypasses core allowlists but obeys explicit
 excludes and permission denies; availability is not a universal all-tools restriction. See the
 [v0.24 structured-output contract](https://github.com/QwenLM/qwen-code/blob/v0.24.0/docs/users/features/structured-output.md).
-These tool-control guarantees target v0.24.0; no version probe is performed.
-
-Equivalent native core/exclude flags conflict with active public lists. Empty `disabled_tools`
-clears Prat inheritance without adding an exclusion. Evidence is primary-source inspection and
-fake argv tests; no authenticated native run was performed.
+These findings target v0.24.0. Evidence is primary-source inspection; no authenticated native run
+was performed.
 
 
 ## Schema output (verified 2026-09-18)

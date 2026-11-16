@@ -245,17 +245,6 @@ def parse_options(table: dict[str, object], label: str, *, base: Path | None = N
         attachments=_paths(table["attachments"], f"{label}.attachments", base)
         if "attachments" in table
         else None,
-        tools=tuple(
-            _string(item, f"{label}.tools") for item in _arguments(table["tools"], f"{label}.tools")
-        )
-        if "tools" in table
-        else None,
-        disabled_tools=tuple(
-            _string(item, f"{label}.disabled_tools")
-            for item in _arguments(table["disabled_tools"], f"{label}.disabled_tools")
-        )
-        if "disabled_tools" in table
-        else None,
         native_agent=(
             validate_native_agent(table["native_agent"], OptionOrigin(f"{label}.native_agent"))
             if "native_agent" in table
@@ -362,15 +351,6 @@ def validate_capabilities(
     for name in ("instructions", "instructions_file"):
         if getattr(options, name) is not None and not caps.instructions:
             raise _rejected(fields[name], f"{agent.label} does not support appended instructions")
-    if options.tools is not None:
-        if not caps.tools:
-            raise _rejected(fields["tools"], f"{agent.label} does not support tool allowlists")
-        if not options.tools and not caps.tools_empty:
-            raise _rejected(
-                fields["tools"], f"{agent.label} cannot represent an empty tool allowlist"
-            )
-    if options.disabled_tools and not caps.disabled_tools:
-        raise _rejected(fields["disabled_tools"], f"{agent.label} does not support disabling tools")
 
 
 def supports_setting(agent: AgentSpec, setting: str) -> bool:

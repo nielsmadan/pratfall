@@ -2495,8 +2495,6 @@ def test_json_token_consumed_as_an_option_value_is_not_an_output_flag(
         "--model",
         "--native-agent",
         "--session-id",
-        "--tools",
-        "--disabled-tools",
         "--instructions",
         "--timeout",
         "-t",
@@ -2522,10 +2520,10 @@ def test_equals_value_may_start_with_a_dash(capsys: pytest.CaptureFixture[str]) 
 
 
 def test_separate_value_refusal_is_reported_as_json(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["cc", "--tools", "-x", "--json", "--dry-run", "hi"]) == 2
+    assert main(["cc", "--model", "-x", "--json", "--dry-run", "hi"]) == 2
     assert json.loads(capsys.readouterr().out)["error"] == {
         "code": "invalid_arguments",
-        "message": "--tools requires a value; '-x' is not a value; write --tools=-x if it is",
+        "message": "--model requires a value; '-x' is not a value; write --model=-x if it is",
     }
 
 

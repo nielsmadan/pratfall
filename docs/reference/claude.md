@@ -66,14 +66,11 @@ exception while other tools remain.
 
 The [official Python SDK transport](https://github.com/anthropics/claude-agent-sdk-python/blob/e773e44608c4873f30c8ebf78d69410e2a8b0901/src/claude_agent_sdk/_internal/transport/subprocess_cli.py)
 constructs both `tools` and `disallowed_tools` with comma joins, and passes an empty string for an
-empty `tools` list. Prat uses `--tools=LIST` and `--disallowedTools=LIST`; commas inside entries are
-rejected. Allowlist names reject Unicode whitespace; deny patterns preserve internal spaces.
-Prat never maps availability to `--allowedTools`, which grants automatic permission and can opt
-in task-tracking tools. Explicit native permission denials continue to apply.
+empty `tools` list. `--allowedTools` differs: it grants automatic permission and can opt in
+task-tracking tools.
 
-Equivalent native flags conflict only when the corresponding public list is active. Empty
-`disabled_tools` clears Prat inheritance without adding a native deny flag. Evidence is source
-inspection and fake argv tests, not an authenticated vendor run.
+Prat has no tool setting of its own; these flags pass as native arguments after `--` or in
+`native_args`. Evidence is source inspection and fake argv tests, not an authenticated vendor run.
 
 ## Native agent selection (verified 2026-09-18)
 

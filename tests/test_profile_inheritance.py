@@ -10,7 +10,7 @@ from pratfall.models import Options
 BASES = (
     "version=1\n"
     '[profiles.claude-base]\nagent="claude"\nmodel="claude-sonnet-5"\n'
-    'tools=["Read","Edit","Bash"]\ntimeout=1800\n'
+    "max_budget_usd=2.5\ntimeout=1800\n"
     '[profiles.codex-base]\nagent="codex"\neffort="medium"\n'
 )
 
@@ -30,7 +30,7 @@ def test_a_local_child_inherits_a_global_base_across_files(tmp_path: Path) -> No
 
     assert resolved.agent.name == "claude"
     assert resolved.options == Options(
-        model="claude-opus-5", timeout=1800, tools=("Read", "Edit", "Bash"), native_args=()
+        model="claude-opus-5", timeout=1800, max_budget_usd=2.5, native_args=()
     )
 
 
@@ -43,7 +43,7 @@ def test_a_base_for_another_agent_no_longer_poisons_the_file(tmp_path: Path) -> 
 
     config = load_config(cwd=Path.cwd(), env=os.environ)
 
-    assert resolve_profile(config, "weekly").options.tools == ("Read", "Edit", "Bash")
+    assert resolve_profile(config, "weekly").options.max_budget_usd == 2.5
     assert resolve_profile(config, "codex-base").agent.name == "codex"
 
 
@@ -68,13 +68,12 @@ def test_an_inherited_array_is_replaced_not_merged(tmp_path: Path) -> None:
     _local(
         tmp_path,
         "version=1\n"
-        '[profiles.base]\nagent="claude"\ntools=["Read","Edit","Bash"]\n'
-        '[profiles.child]\nextends="base"\ntools=["Skill"]\n',
+        '[profiles.base]\nagent="claude"\nnative_args=["--permission-mode=plan"]\n'
+        '[profiles.child]\nextends="base"\nnative_args=["--strict-mcp-config"]\n',
     )
 
-    assert resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "child").options.tools == (
-        "Skill",
-    )
+    child = resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "child")
+    assert child.options.native_args == ("--strict-mcp-config",)
 
 
 def test_an_inherited_value_beats_a_local_default(tmp_path: Path) -> None:
@@ -100,8 +99,8 @@ def test_provenance_names_the_profile_that_defined_the_field(tmp_path: Path) -> 
 
     origins = option_origins(load_config(cwd=Path.cwd(), env=os.environ), "weekly")
 
-    assert (
-        origins["tools"].label == f"{global_path}: profiles.claude-base.tools (selector 'weekly')"
+    assert origins["max_budget_usd"].label == (
+        f"{global_path}: profiles.claude-base.max_budget_usd (selector 'weekly')"
     )
     assert origins["model"].label == f"{local}: profiles.weekly.model"
 
@@ -115,8 +114,8 @@ def test_an_inherited_option_the_child_agent_rejects_names_the_parent(tmp_path: 
         load_config(cwd=Path.cwd(), env=os.environ)
 
     assert caught.value.args[0] == (
-        f"{global_path}: profiles.claude-base.tools (selector 'odd'): "
-        "Codex does not support tool allowlists"
+        f"{global_path}: profiles.claude-base.max_budget_usd (selector 'odd'): "
+        "Codex does not support a USD budget"
     )
     assert caught.value.code == "invalid_config"
 

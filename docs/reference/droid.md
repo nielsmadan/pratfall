@@ -45,14 +45,14 @@ no authenticated native run was performed for this control.
 The [exec reference](https://docs.factory.ai/droid-exec/overview) defines `--restrict-tools` as:
 “Restrict the run to only the specified tools (comma or space separated list)”. It also defines
 `--disabled-tools` and the separate `--additional-tools` expansion. Names are native IDs, such as
-`ApplyPatch` and `execute-cli`; Prat does not translate them or add `--auto`.
+`ApplyPatch` and `execute-cli`, and the available set depends on the model (`droid exec
+--list-tools`). Droid 1.8.0 help documents `--only-tools`, `--add-tools` and `--remove-tools`; the
+older `--restrict-tools` and `--disabled-tools` still work but are no longer listed.
 
-Prat emits `--restrict-tools=LIST` and `--disabled-tools=LIST`, comma-joining each list and rejecting
-commas or Unicode whitespace (including U+FEFF) inside IDs. A faithful empty restriction is not
-established, so `tools=[]` is rejected. Equivalent native flags and `--additional-tools` conflict
-with the corresponding active public controls. The native-only acceptance set remains unchanged.
-Existing native permission denials remain authoritative. Verification used primary documentation
-and fake argv tests; no authenticated native run was performed.
+Prat has no tool setting of its own. `--only-tools`, `--add-tools` and `--remove-tools` are known
+one-value native flags, so they pass after `--` or in `native_args` with the value as the next word;
+the older spellings pass in their `=` form. Verification used primary documentation and fake argv
+tests; no authenticated native run was performed.
 
 ## Session id (verified 2026-09-20)
 

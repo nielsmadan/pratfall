@@ -1,413 +1,114 @@
 import json
-import os
 import sys
 from pathlib import Path
 
 import pytest
 
 from adapter_helpers import copilot_result
-from pratfall.adapters.registry import ADAPTERS
-from pratfall.catalog import BY_NAME
-from pratfall.cli import dispatch, main
-from pratfall.config import config_path, load_config, option_origins, resolve_profile
-from pratfall.errors import PratError
-from pratfall.models import Options, ResolvedProfile
+from pratfall.cli import main
 
-AGENTS = ("claude", "qwen", "copilot", "droid", "vibe")
 PREFIXES = {
     "claude": ["-p", "--output-format", "json"],
     "qwen": ["--output-format", "stream-json"],
     "copilot": ["--output-format=json"],
     "droid": ["exec", "--output-format", "json"],
     "vibe": ["--prompt", "--output", "json"],
+    "pi": ["--print", "--mode", "json"],
 }
-FLAGS = {
-    "claude": ["--tools=Read,-literal", "--disallowedTools=Write,Edit"],
-    "qwen": [
-        "--core-tools=Read",
-        "--core-tools=-literal",
-        "--exclude-tools=Write",
-        "--exclude-tools=Edit",
-    ],
-    "copilot": ["--available-tools=Read,-literal", "--excluded-tools=Write,Edit"],
-    "droid": ["--restrict-tools=Read,-literal", "--disabled-tools=Write,Edit"],
-    "vibe": [
-        "--enabled-tools=Read",
-        "--enabled-tools=-literal",
-        "--disabled-tools=Write",
-        "--disabled-tools=Edit",
-    ],
+NATIVE = {
+    "claude": ["--tools=Read,Grep", "--disallowedTools", "Bash(git push *)"],
+    "qwen": ["--core-tools=ShellTool", "--exclude-tools=Shell(rm *)"],
+    "copilot": ["--available-tools", "Read", "--excluded-tools=Write"],
+    "droid": ["--only-tools", "Read,Grep", "--add-tools=LS", "--remove-tools", "Execute"],
+    "vibe": [r"--enabled-tools=re:^(read|search)[, ]", "--disabled-tools", "bash*"],
+    "pi": ["--tools", "read,grep", "--exclude-tools", "bash"],
 }
+OUTPUT = {
+    "copilot": "\n".join(
+        (
+            json.dumps({"type": "assistant.message", "data": {"messageId": "1", "content": "ok"}}),
+            json.dumps(copilot_result()),
+        )
+    ),
+    "vibe": '[{"type":"message","role":"assistant","content":[{"type":"text","text":"ok"}]}]',
+    "pi": "\n".join(
+        json.dumps(event)
+        for event in (
+            {"type": "agent_start"},
+            {
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "ok"}],
+                    "stopReason": "stop",
+                },
+            },
+            {"type": "agent_end"},
+            {"type": "agent_settled"},
+        )
+    ),
+}
+RESULT = json.dumps(
+    {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "ok",
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    }
+)
 
 
-@pytest.mark.parametrize("agent", AGENTS)
-def test_tools_fake_process_receives_exact_argv(
-    agent: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize("agent", list(NATIVE))
+def test_native_tool_flags_reach_the_agent_after_double_dash(
+    agent: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     script = tmp_path / "native.py"
     log = tmp_path / "argv.json"
-    native_output = json.dumps(
-        {
-            "type": "result",
-            "subtype": "success",
-            "is_error": False,
-            "result": "ok",
-            "usage": {"input_tokens": 1, "output_tokens": 1},
-        }
-    )
-    if agent == "copilot":
-        native_output = (
-            json.dumps({"type": "assistant.message", "data": {"messageId": "1", "content": "ok"}})
-            + "\n"
-            + json.dumps(copilot_result())
-        )
-    elif agent == "vibe":
-        native_output = (
-            '[{"type":"message","role":"assistant","content":[{"type":"text","text":"ok"}]}]'
-        )
     script.write_text(
         "import json, pathlib, sys\n"
-        f"pathlib.Path({str(log)!r}).write_text(json.dumps([sys.argv[1:], sys.stdin.read()]))\n"
-        f"print({native_output!r})\n"
+        f"pathlib.Path({str(log)!r}).write_text(json.dumps(sys.argv[1:]))\n"
+        f"print({OUTPUT.get(agent, RESULT)!r})\n"
     )
     (tmp_path / ".pratfile").write_text(
         f"version=1\n[agents.{agent}]\ncommand={json.dumps([sys.executable, str(script)])}\n"
     )
-    assert (
-        main(
-            [
-                "--tools",
-                "Read",
-                agent,
-                "--tools=-literal",
-                "--disabled-tools",
-                "Write",
-                "task",
-                "--disabled-tools=Edit",
-                "--json",
-            ]
-        )
-        == 0
-    )
+    assert main([agent, "task", "--json", "--", *NATIVE[agent]]) == 0
     assert json.loads(capsys.readouterr().out)["output"] == "ok"
-    argv, stdin = json.loads(log.read_text())
-    assert argv == [
-        *PREFIXES[agent],
-        *FLAGS[agent],
-        *(["--prompt=task"] if agent == "copilot" else []),
-    ]
-    assert stdin == ("" if agent == "copilot" else "task")
+    argv = json.loads(log.read_text())
+    assert argv[: len(PREFIXES[agent])] == PREFIXES[agent]
+    assert argv[len(PREFIXES[agent]) : len(PREFIXES[agent]) + len(NATIVE[agent])] == NATIVE[agent]
 
 
 @pytest.mark.parametrize(
-    "agent,allow,deny,expected",
+    "arguments", [["--tools", "Read"], ["--disabled-tools=Bash"], ["--tools=Read"]]
+)
+def test_removed_tool_flags_are_unknown_run_flags(
+    arguments: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["cc", *arguments, "--dry-run", "--json", "hi"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert error["message"] == f"unrecognized argument: {arguments[0]}"
+
+
+@pytest.mark.parametrize(
+    ("table", "key"),
     [
         (
-            "claude",
-            "Read",
-            "Bash(git push *)",
-            ["--tools=Read", "--disallowedTools=Bash(git push *)"],
+            '[profiles.ro]\nagent = "claude"\ntools = ["Read"]\n',
+            "profiles.ro: unknown field 'tools'",
         ),
-        (
-            "qwen",
-            "ShellTool",
-            "Shell(rm *)",
-            ["--core-tools=ShellTool", "--exclude-tools=Shell(rm *)"],
-        ),
-        (
-            "vibe",
-            r"re:^(read|search)[, ]",
-            "bash*",
-            [r"--enabled-tools=re:^(read|search)[, ]", "--disabled-tools=bash*"],
-        ),
+        ('[defaults]\ndisabled_tools = ["Bash"]\n', "defaults: unknown field 'disabled_tools'"),
     ],
 )
-def test_native_patterns_are_preserved(
-    agent: str, allow: str, deny: str, expected: list[str]
+def test_removed_tool_settings_are_unknown_config_fields(
+    table: str, key: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    resolved = ResolvedProfile(
-        BY_NAME[agent], None, ("fake",), Options(tools=(allow,), disabled_tools=(deny,))
-    )
-    ADAPTERS[agent].validate(resolved)
-    assert ADAPTERS[agent].build(resolved, b"task").argv == ("fake", *PREFIXES[agent], *expected)
-
-
-def test_tool_arrays_replace_all_four_layers_and_keep_winning_origins(tmp_path: Path) -> None:
-    global_path = config_path(cwd=Path.cwd(), env=os.environ)
-    global_path.parent.mkdir(parents=True)
-    global_path.write_text(
-        'version=1\n[defaults]\ntools=["Global"]\ndisabled_tools=["GlobalDeny"]\n'
-    )
-    local = tmp_path / ".pratfile"
-    local.write_text(
-        'version=1\n[defaults]\ntools=["Local"]\ndisabled_tools=["LocalDeny"]\n'
-        '[profiles.work]\nagent="claude"\ntools=["Profile"]\ndisabled_tools=["ProfileDeny"]\n'
-        '[profiles.clear]\nagent="copilot"\ntools=[]\ndisabled_tools=[]\n'
-    )
-    config = load_config(cwd=Path.cwd(), env=os.environ)
-    assert resolve_profile(config, "claude").options.tools == ("Local",)
-    assert resolve_profile(config, "claude").options.disabled_tools == ("LocalDeny",)
-    assert resolve_profile(config, "work").options.tools == ("Profile",)
-    assert resolve_profile(config, "work").options.disabled_tools == ("ProfileDeny",)
-    cli = Options(tools=("CLI", "CLI"), disabled_tools=())
-    assert resolve_profile(config, "work", cli).options.tools == ("CLI", "CLI")
-    assert resolve_profile(config, "work", cli).options.disabled_tools == ()
-    assert resolve_profile(config, "clear").options.tools == ()
-    assert resolve_profile(config, "clear").options.disabled_tools == ()
-    assert option_origins(config, "work")["tools"].label == f"{local}: profiles.work.tools"
-    assert option_origins(config, "work", cli)["disabled_tools"].code == "invalid_arguments"
-    local.unlink()
-    assert resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "claude").options.tools == (
-        "Global",
-    )
-
-
-@pytest.mark.parametrize("field", ["tools", "disabled_tools"])
-@pytest.mark.parametrize("value", ['"Read"', "true", "[1]", '[""]', '[" "]', '["\\u0000"]'])
-def test_tool_config_requires_array_of_nonempty_names(
-    field: str, value: str, tmp_path: Path
-) -> None:
-    path = tmp_path / ".pratfile"
-    path.write_text(f"version=1\n[defaults]\n{field}={value}\n")
-    with pytest.raises(PratError, match=rf"defaults.{field}"):
-        load_config(cwd=Path.cwd(), env=os.environ)
-
-
-@pytest.mark.parametrize(
-    "agent,expected",
-    [
-        ("claude", ["--tools="]),
-        ("copilot", ["--available-tools", "--prompt=task"]),
-    ],
-)
-def test_empty_allowlist_has_explicit_native_transport(
-    agent: str, expected: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    (tmp_path / ".pratfile").write_text(f'version=1\n[profiles.empty]\nagent="{agent}"\ntools=[]\n')
-    assert main(["empty", "task", "--dry-run", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)["argv"] == [agent, *PREFIXES[agent], *expected]
-    assert main(["help", "empty"]) == 0
-    rows = [line.split() for line in capsys.readouterr().out.splitlines()]
-    assert ["tools", "[]", "profiles.empty", "(local)"] in rows
-
-
-@pytest.mark.parametrize("agent", ["qwen", "droid", "vibe", "codex"])
-def test_empty_allowlist_rejected_with_config_source(
-    agent: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    path = tmp_path / ".pratfile"
-    path.write_text(f'version=1\n[profiles.empty]\nagent="{agent}"\ntools=[]\n')
-    assert main(["config", "validate", "--json"]) == 2
-    error = json.loads(capsys.readouterr().out)["error"]
-    assert error["code"] == "invalid_config"
-    assert f"{path}: profiles.empty.tools" in error["message"]
-
-
-@pytest.mark.parametrize("agent", sorted(BY_NAME))
-def test_empty_disabled_tools_neutral_for_every_agent(agent: str, tmp_path: Path) -> None:
-    (tmp_path / ".pratfile").write_text(
-        f'version=1\n[defaults]\ndisabled_tools=["Write"]\n[profiles.clear]\nagent="{agent}"\ndisabled_tools=[]\n'
-    )
-    resolved = resolve_profile(load_config(cwd=Path.cwd(), env=os.environ), "clear")
-    assert resolved.options.disabled_tools == ()
-    ADAPTERS[agent].validate(resolved)
-
-
-@pytest.mark.parametrize(
-    "agent,public,native",
-    [
-        ("claude", "--tools", "--tools=Read"),
-        ("claude", "--disabled-tools", "--disallowedTools=Write"),
-        ("claude", "--disabled-tools", "--disallowed-tools=Write"),
-        ("qwen", "--tools", "--core-tools=Read"),
-        ("qwen", "--disabled-tools", "--exclude-tools=Write"),
-        ("copilot", "--tools", "--available-tools"),
-        ("copilot", "--tools", "--enable-mcp-server=server"),
-        ("copilot", "--tools", "--enable-all-github-mcp-tools"),
-        ("copilot", "--tools", "--add-github-mcp-tool=tool"),
-        ("copilot", "--tools", "--add-github-mcp-toolset=tools"),
-        ("copilot", "--disabled-tools", "--excluded-tools=Write"),
-        ("droid", "--tools", "--restrict-tools=Read"),
-        ("droid", "--tools", "--additional-tools=Write"),
-        ("droid", "--disabled-tools", "--disabled-tools=Write"),
-        ("droid", "--disabled-tools", "--additional-tools=Write"),
-        ("vibe", "--tools", "--enabled-tools=Read"),
-        ("vibe", "--disabled-tools", "--disabled-tools=Write"),
-    ],
-)
-def test_tool_conflicts_fail_before_input(
-    agent: str,
-    public: str,
-    native: str,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    def forbidden(*args: object, **kwargs: object) -> bytes:
-        pytest.fail("prompt must not be acquired")
-
-    monkeypatch.setattr(dispatch, "acquire_prompt", forbidden)
-    assert main([agent, public, "Read", "--json", "--", native]) == 2
-    error = json.loads(capsys.readouterr().out)["error"]
-    assert error["code"] == "invalid_arguments"
-    assert "controlled by prat" in error["message"]
-
-
-@pytest.mark.parametrize(
-    "agent,native",
-    [
-        ("claude", ("--tools=Read", "--disallowed-tools=Bash(rm *)")),
-        ("copilot", ("--available-tools", "Read", "--excluded-tools=Write")),
-        ("vibe", ("--enabled-tools=read*", "--disabled-tools=bash")),
-    ],
-)
-def test_native_only_tool_arguments_stay_accepted(agent: str, native: tuple[str, ...]) -> None:
-    resolved = ResolvedProfile(
-        BY_NAME[agent], None, ("fake",), Options(native_args=native, disabled_tools=())
-    )
-    ADAPTERS[agent].validate(resolved)
-    suffix = ("--prompt=task",) if agent == "copilot" else ()
-    assert ADAPTERS[agent].build(resolved, b"task").argv == (
-        "fake",
-        *PREFIXES[agent],
-        *native,
-        *suffix,
-    )
-
-
-@pytest.mark.parametrize(
-    "agent,value",
-    [
-        ("claude", "Read,Write"),
-        ("claude", " Read"),
-        ("claude", "Read Write"),
-        ("qwen", "Read,Write"),
-        ("qwen", "Read\ufeff"),
-        ("copilot", "Read,Write"),
-        ("copilot", " Read"),
-        ("droid", "Read,Write"),
-        ("droid", "Read Write"),
-        ("droid", "Read\tWrite"),
-        ("droid", "Read\ufeffWrite"),
-        ("claude", "Read\ufeffWrite"),
-        ("vibe", "\ud800"),
-    ],
-)
-def test_unrepresentable_tool_values_fail_before_input(
-    agent: str,
-    value: str,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    def forbidden(*args: object, **kwargs: object) -> bytes:
-        pytest.fail("prompt must not be acquired")
-
-    monkeypatch.setattr(dispatch, "acquire_prompt", forbidden)
-    assert main([agent, "--tools", value, "--json"]) == 2
-    error = json.loads(capsys.readouterr().out)["error"]
-    assert error["code"] == "invalid_arguments"
-    assert "tools" in error["message"]
-
-
-@pytest.mark.parametrize("flag", ["--tools", "--disabled-tools"])
-def test_unsupported_tools_rejected_before_input(
-    flag: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    def forbidden(*args: object, **kwargs: object) -> bytes:
-        pytest.fail("prompt must not be acquired")
-
-    monkeypatch.setattr(dispatch, "acquire_prompt", forbidden)
-    assert main(["codex", flag, "Read", "--json"]) == 2
-    assert json.loads(capsys.readouterr().out)["error"]["code"] == "invalid_arguments"
-
-
-def test_tool_capability_inventory(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["list", "agents", "--json"]) == 0
-    records = json.loads(capsys.readouterr().out)["agents"]
-    assert {r["name"] for r in records if r["capabilities"]["tools"]} == set(AGENTS) | {"pi"}
-    assert {r["name"] for r in records if r["capabilities"]["disabled_tools"]} == set(AGENTS) | {
-        "pi"
-    }
-    assert {r["name"] for r in records if r["capabilities"]["tools_empty"]} == {
-        "claude",
-        "copilot",
-        "pi",
-    }
-    claude = next(r["capabilities"] for r in records if r["name"] == "claude")
-    assert claude["tools_scope"] == "built-ins; MCP unaffected; EndConversation may remain"
-    assert claude["disabled_tools_scope"] == "native deny rules; EndConversation exception"
-
-
-@pytest.mark.parametrize(
-    "agent,native", [("claude", "--tools=Read"), ("copilot", "--available-tools=read")]
-)
-def test_active_empty_allowlist_conflicts_with_native_flags(
-    agent: str,
-    native: str,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    (tmp_path / ".pratfile").write_text(f'version=1\n[profiles.empty]\nagent="{agent}"\ntools=[]\n')
-
-    def forbidden(*args: object, **kwargs: object) -> bytes:
-        pytest.fail("prompt must not be acquired")
-
-    monkeypatch.setattr(dispatch, "acquire_prompt", forbidden)
-    assert main(["empty", "--json", "--", native]) == 2
-    assert "controlled by prat" in json.loads(capsys.readouterr().out)["error"]["message"]
-
-
-@pytest.mark.parametrize(
-    "agent,native",
-    [
-        ("claude", ("--disallowed-tools=Write",)),
-        ("copilot", ("--deny-tool=write",)),
-        ("vibe", ("--disabled-tools=bash",)),
-        ("qwen", ("--approval-mode=default",)),
-    ],
-)
-def test_tool_allowlist_retains_native_denials(agent: str, native: tuple[str, ...]) -> None:
-    resolved = ResolvedProfile(
-        BY_NAME[agent], None, ("fake",), Options(tools=("Read",), native_args=native)
-    )
-    ADAPTERS[agent].validate(resolved)
-    tool_flag = {
-        "claude": "--tools=Read",
-        "copilot": "--available-tools=Read",
-        "vibe": "--enabled-tools=Read",
-        "qwen": "--core-tools=Read",
-    }[agent]
-    suffix = ("--prompt=task",) if agent == "copilot" else ()
-    assert ADAPTERS[agent].build(resolved, b"task").argv == (
-        "fake",
-        *PREFIXES[agent],
-        tool_flag,
-        *native,
-        *suffix,
-    )
-
-
-@pytest.mark.parametrize("field", ["tools", "disabled_tools"])
-def test_invalid_config_tool_delimiters_name_winning_source(
-    field: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    path = tmp_path / ".pratfile"
-    path.write_text(
-        f'version=1\n[defaults]\n{field}=["Read,Write"]\n[profiles.work]\nagent="claude"\n'
-    )
-    assert main(["config", "validate", "--json"]) == 2
-    error = json.loads(capsys.readouterr().out)["error"]
-    assert error["code"] == "invalid_config"
-    assert f"{path}: defaults.{field}" in error["message"]
-
-
-@pytest.mark.parametrize("field", ["tools", "disabled_tools"])
-def test_unsupported_inherited_tool_defaults_reject_even_unused_profiles(
-    field: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    path = tmp_path / ".pratfile"
-    path.write_text(f'version=1\n[defaults]\n{field}=["Read"]\n[profiles.unused]\nagent="codex"\n')
-    assert main(["claude", "task", "--dry-run", "--json"]) == 2
-    error = json.loads(capsys.readouterr().out)["error"]
-    assert error["code"] == "invalid_config"
-    assert f"{path}: defaults.{field}" in error["message"]
+    config = tmp_path / "config.toml"
+    config.write_text(f"version = 1\n{table}")
+    assert main(["cc", "--config", str(config), "--dry-run", "--json", "hi"]) == 2
+    assert json.loads(capsys.readouterr().out)["error"]["message"] == f"{config}: {key}"

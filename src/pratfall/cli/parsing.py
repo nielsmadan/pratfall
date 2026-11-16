@@ -98,8 +98,6 @@ _RUN_VALUE_FLAGS: Mapping[str, str] = MappingProxyType(
         "--context": "context",
         "--add-dir": "add_dirs",
         "--attachment": "attachments",
-        "--tools": "tools",
-        "--disabled-tools": "disabled_tools",
         "--instructions": "instructions",
         "--instructions-file": "instructions_file",
         "--template": "template",
@@ -210,14 +208,6 @@ _RUN_OPTIONS: tuple[_RunOption, ...] = (
         "--attachment PATH",
         ("--attachment",),
         "Attach a native image/file; repeat where supported.",
-    ),
-    _RunOption(
-        "--tools NAME", ("--tools",), "Restrict native tool availability; repeat for several."
-    ),
-    _RunOption(
-        "--disabled-tools NAME",
-        ("--disabled-tools",),
-        "Disable native tools or patterns; repeat for several.",
     ),
     _RunOption(
         "--instructions TEXT",
@@ -664,8 +654,6 @@ def _parse_run(arguments: list[str]) -> RunArguments:
     repeated: dict[str, list[str]] = {
         "add_dirs": [],
         "attachments": [],
-        "tools": [],
-        "disabled_tools": [],
         "parameters": [],
     }
     selector: str | None = None
@@ -763,8 +751,6 @@ def _run_options(
         fast=fast,
         add_dirs=tuple(repeated["add_dirs"]) or None,
         attachments=tuple(repeated["attachments"]) or None,
-        tools=tuple(repeated["tools"]) or None,
-        disabled_tools=tuple(repeated["disabled_tools"]) or None,
         native_agent=(
             validate_native_agent(
                 values["native_agent"], OptionOrigin("--native-agent", "invalid_arguments")

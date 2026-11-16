@@ -192,28 +192,15 @@ def test_agents_inventory_reports_aliases_and_capabilities(
         (
             "cc",
             (
-                "claude (cc): model, effort, fast, add_dirs, instructions, schema, tools, "
-                "disabled_tools, native_agent, session_id, max_budget_usd, max_turns, "
-                "prompt_limit=8 MiB"
+                "claude (cc): model, effort, fast, add_dirs, instructions, schema, "
+                "native_agent, session_id, max_budget_usd, max_turns, prompt_limit=8 MiB"
             ),
         ),
         ("kiro", "kiro: model, effort, prompt_limit=1 MiB"),
         ("warp", "warp: model, prompt_limit=1 MiB"),
-        (
-            "qwen",
-            (
-                "qwen: model, add_dirs, instructions, schema, tools, disabled_tools, max_turns, "
-                "prompt_limit=8 MiB"
-            ),
-        ),
+        ("qwen", "qwen: model, add_dirs, instructions, schema, max_turns, prompt_limit=8 MiB"),
         ("amp", "amp: fast, prompt_limit=8 MiB"),
-        (
-            "vibe",
-            (
-                "vibe: tools, disabled_tools, native_agent, max_budget_usd, max_turns, "
-                "prompt_limit=8 MiB"
-            ),
-        ),
+        ("vibe", "vibe: native_agent, max_budget_usd, max_turns, prompt_limit=8 MiB"),
     ],
 )
 def test_agent_help_header_lists_supported_settings(
@@ -425,9 +412,7 @@ def test_trust_revoke_outcomes(tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert "local config is not trusted" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize(
-    ("flag", "renamed"), [("--attach", "--attachment"), ("--disable-tools", "--disabled-tools")]
-)
+@pytest.mark.parametrize(("flag", "renamed"), [("--attach", "--attachment")])
 def test_renamed_run_flags_reject_their_old_spellings(
     flag: str, renamed: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -442,13 +427,9 @@ def test_renamed_run_flags_render_native_arguments(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "x.png").write_bytes(b"png")
-    arguments = ["--disabled-tools", "write", "--attachment", "x.png", "--dry-run", "--json"]
+    arguments = ["--attachment", "x.png", "--dry-run", "--json"]
     assert main(["pi", "hi", *arguments]) == 0
-    assert json.loads(capsys.readouterr().out)["argv"][-3:] == [
-        "--exclude-tools",
-        "write",
-        f"@{tmp_path / 'x.png'}",
-    ]
+    assert json.loads(capsys.readouterr().out)["argv"][-1:] == [f"@{tmp_path / 'x.png'}"]
 
 
 def test_trust_moved_out_of_config(capsys: pytest.CaptureFixture[str]) -> None:
@@ -655,8 +636,6 @@ def test_profiles_list_resolved_model_and_effort(capsys: pytest.CaptureFixture[s
                 "instructions": None,
                 "instructions_file": None,
                 "schema": None,
-                "tools": None,
-                "disabled_tools": None,
                 "native_agent": None,
                 "session_id": None,
                 "native_args": [],

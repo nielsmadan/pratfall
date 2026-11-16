@@ -32,8 +32,6 @@ _JSON_RENDERED_OPTIONS = frozenset(
         "instructions",
         "schema",
         "instructions_file",
-        "tools",
-        "disabled_tools",
         "native_agent",
         "session_id",
     }
@@ -47,8 +45,6 @@ _SUPPORTED_FIELDS = (
     "attachments",
     "instructions",
     "schema",
-    "tools",
-    "disabled_tools",
     "native_agent",
     "session_id",
 )
@@ -247,11 +243,6 @@ def _agent_record(agent: AgentSpec) -> dict[str, object]:
             "native_agent": caps.native_agent,
             "session_id": caps.session_id,
             "reports_session_id": caps.reports_session_id,
-            "tools": caps.tools,
-            "disabled_tools": caps.disabled_tools,
-            "tools_empty": caps.tools_empty,
-            "tools_scope": caps.tools_scope,
-            "disabled_tools_scope": caps.disabled_tools_scope,
         },
     }
 
@@ -300,7 +291,7 @@ def _settings(config: Config, selector: str) -> list[tuple[str, object, str]]:
     rows: list[tuple[str, object, str]] = [
         (key, value, _origin_text(config, resolved.agent.name, key, origins.get(key)))
         for key, value in asdict(resolved.options).items()
-        if value is not None and (value != () or key == "tools")
+        if value is not None and value != ()
     ]
     profile = config.profiles.get(selector)
     if profile is not None and profile.prompt is not None:

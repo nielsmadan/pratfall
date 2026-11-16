@@ -3,7 +3,7 @@ from types import MappingProxyType
 
 from pratfall.adapters.accounting import cost as native_cost
 from pratfall.adapters.accounting import model as native_model
-from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
+from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
     ConsumerLimits,
@@ -99,10 +99,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     for flag, value in (("--model", options.model), ("--thinking", options.effort)):
         if value is not None:
             argv.extend((flag, value))
-    if options.tools is not None:
-        argv.extend(("--tools", ",".join(options.tools)))
-    if options.disabled_tools:
-        argv.extend(("--exclude-tools", ",".join(options.disabled_tools)))
     arguments = options.native_args or ()
     index = 0
     while index < len(arguments):
@@ -122,9 +118,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
 
 def validate(resolved: ResolvedProfile) -> None:
     options = resolved.options
-    reserved = dict(_RESERVED)
-    validate_tool_values(options.tools, "tools", comma=True, trim=True)
-    validate_tool_values(options.disabled_tools, "disabled_tools", comma=True, trim=True)
     for path in options.attachments or ():
         if any(
             char
@@ -136,21 +129,7 @@ def validate(resolved: ResolvedProfile) -> None:
                 code="invalid_arguments",
                 option="attachments",
             )
-    if options.tools is not None:
-        reserved |= {
-            name: _ALLOWED[name]
-            for name in (
-                "--tools",
-                "-t",
-                "--no-tools",
-                "-nt",
-                "--no-builtin-tools",
-                "-nbt",
-            )
-        }
-    if options.disabled_tools:
-        reserved |= {name: _ALLOWED[name] for name in ("--exclude-tools", "-xt")}
-    validate_flags("Pi", options.native_args or (), _ALLOWED, reserved)
+    validate_flags("Pi", options.native_args or (), _ALLOWED, _RESERVED)
 
 
 def decode(stdout: str) -> DecodedOutput:

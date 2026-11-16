@@ -378,7 +378,7 @@ def test_path_flags_delegate_to_shell(flag: str, tmp_path: Path) -> None:
 
 def test_flags_named_after_config_keys_complete(tmp_path: Path) -> None:
     assert words(["cc", "--attach"], tmp_path) == ["--attachment"]
-    assert words(["cc", "--disable"], tmp_path) == ["--disabled-tools"]
+    assert words(["cc", "--instructions-"], tmp_path) == ["--instructions-file"]
     assert _complete(["cc", "--attachment", ""], loader(tmp_path)).mode == "files"
 
 

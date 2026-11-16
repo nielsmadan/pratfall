@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
+from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.adapters.whole_json import document_error, encoding_error, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
 
@@ -52,22 +52,13 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--max-turns", str(resolved.options.max_turns)))
     if resolved.options.max_budget_usd is not None:
         argv.extend(("--max-price", str(resolved.options.max_budget_usd)))
-    argv.extend(f"--enabled-tools={tool}" for tool in resolved.options.tools or ())
-    argv.extend(f"--disabled-tools={tool}" for tool in resolved.options.disabled_tools or ())
     if resolved.options.native_agent is not None:
         argv.append(f"--agent={resolved.options.native_agent}")
     return Invocation((*argv, *arguments), prompt)
 
 
 def validate(resolved: ResolvedProfile) -> None:
-    reserved = dict(_RESERVED)
-    validate_tool_values(resolved.options.tools, "tools")
-    validate_tool_values(resolved.options.disabled_tools, "disabled_tools")
-    if resolved.options.tools is not None:
-        reserved |= {"--enabled-tools": _ALLOWED["--enabled-tools"]}
-    if resolved.options.disabled_tools:
-        reserved |= {"--disabled-tools": _ALLOWED["--disabled-tools"]}
-    validate_flags("Vibe", resolved.options.native_args or (), _ALLOWED, reserved)
+    validate_flags("Vibe", resolved.options.native_args or (), _ALLOWED, _RESERVED)
 
 
 def decode(stdout: str) -> DecodedOutput:

@@ -42,7 +42,7 @@ it does not maintain a fixed model catalog.
 | Grok Build | `grok` | none | Whole JSON result; model/effort/turns; native tokens, model IDs and complete USD cost |
 | Goose | `goose` | none | Last assistant text from JSON history; native USD cost and turn limit; token usage unknown |
 | Kilo | `kilo` | none | OpenCode-compatible events, token usage and native USD cost; daemon attachment disabled |
-| Pi | `pi` | none | v0.85.1+ JSON events; model/effort/tools/attachments; native session saving |
+| Pi | `pi` | none | v0.85.1+ JSON events; model/effort/attachments; native session saving |
 
 ## Shared controls and limitations
 
@@ -121,10 +121,9 @@ Antigravity's documented `--print-timeout` examples apply to print mode. Its std
 contract is not verified, so Pratfall relies on its configured outer `--timeout` and strict terminal
 event checks instead of forwarding the print-only option.
 
-Tool availability controls are supported by Claude, Qwen, Copilot, Droid, Vibe and Pi. Their
-[native scopes and empty-list behavior](running.md#control-tool-availability) differ; inventory
-JSON includes support booleans, scope descriptions and `tools_empty`. These are native tool
-filters, not an OS sandbox or a permission approval mechanism.
+Claude, Qwen, Copilot, Droid, Vibe and Pi limit tools through their own
+[native flags](running.md#limit-tools-with-native-arguments). These are native tool filters, not
+an OS sandbox or a permission approval mechanism.
 
 ## Native behavior
 
@@ -144,10 +143,10 @@ Requires Pi v0.85.1 or newer. `prat pi "review this checkout"` uses `pi --print 
 with stdin. Pi trims prompt-edge whitespace and saves its native session by default; use
 `prat pi "review" -- --no-session` for an ephemeral native session.
 
-Use `--model provider/model`, `--effort high`, `--tools read`, `--disabled-tools bash`, or
-`--attachment screenshot.png`. Effort accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`,
-and `max`; actual support depends on the native model. Tool lists cover built-in, extension
-and custom tools, including an empty config allowlist (`tools = []`).
+Use `--model provider/model`, `--effort high` or `--attachment screenshot.png`. Effort accepts
+`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; actual support depends on the native
+model. Limit tools with Pi's own flags, as in `prat pi "review" -- --tools read,grep
+--exclude-tools bash`; they cover built-in, extension and custom tools.
 
 Prat returns the latest completed assistant text after Pi settles its native retries and
 compaction. Provider failures are detected even when Pi exits zero. Usage and USD cost cover

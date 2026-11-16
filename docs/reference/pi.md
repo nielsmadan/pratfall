@@ -17,21 +17,18 @@ accepted native `--flag=value` forms into separate argv entries without splittin
 | --- | --- |
 | `model` | `--model VALUE`, including `provider/model` patterns |
 | `effort` | `--thinking off|minimal|low|medium|high|xhigh|max`; native model limits apply |
-| `tools` | `--tools COMMA_LIST`; an empty array becomes an empty argv value |
-| `disabled_tools` | `--exclude-tools COMMA_LIST` |
 | `attachments` | Repeated `@ABSOLUTE_PATH` arguments |
 
-Tool allowlists and denylists apply to built-in, extension and custom tools; exclusions apply
-last. Names are exact, comma-separated and JavaScript-trimmed by Pi, so Prat rejects commas and
-surrounding native whitespace in individual public values. Tool filters do not sandbox the process.
+Pi's native `--tools` and `--exclude-tools` pass as native arguments. They apply to built-in,
+extension and custom tools; exclusions apply last. Names are exact, comma-separated and
+JavaScript-trimmed by Pi. Tool filters do not sandbox the process.
 See [SDK selection](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/src/core/sdk.ts)
 and [session filtering](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/src/core/agent-session.ts).
 
 Native passthrough supports provider selection, system/append prompts, tool filters, disabling
 extensions/skills/prompt templates/context files, `--offline`, and `--no-session`. Prat reserves
 prompt, output, model, thinking and session-resumption controls. Other options pass as single
-tokens (Pi hands unknown `--NAME=VALUE` flags to extensions); positional arguments are rejected. Active public tool controls reserve equivalent
-native flags. Native session saving, authentication, extensions and permission behavior remain
+tokens (Pi hands unknown `--NAME=VALUE` flags to extensions); positional arguments are rejected. Native session saving, authentication, extensions and permission behavior remain
 Pi's own; no automatic approval flag is added.
 
 Public instructions are unsupported because Pi can interpret a string as an existing filename.

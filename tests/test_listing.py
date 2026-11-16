@@ -133,11 +133,11 @@ def test_sets_names_text_and_list_settings_by_key(tmp_path: Path) -> None:
     write(
         tmp_path / ".pratfile",
         '[profiles.p]\nagent="claude"\ntimeout=600.0\nfast=true\ninstructions="Be brief"\n'
-        'tools=["Read"]\nprompt="Tidy ${folder} and ${depth}"\nnative_args=["--verbose"]\n',
+        'add_dirs=["src"]\nprompt="Tidy ${folder} and ${depth}"\nnative_args=["--verbose"]\n',
     )
     config = load_config(cwd=tmp_path, env=os.environ)
     _, lines = list_view(config, "profiles", width=None, which=nothing_installed)
-    sets = "timeout=600 fast=True instructions tools native_args prompt (folder, depth)"
+    sets = "timeout=600 fast=True add_dirs instructions native_args prompt (folder, depth)"
     assert lines[1] == f"p     claude  -        {sets}  local"
 
 
@@ -188,12 +188,17 @@ def test_agent_help_page_names_the_agent_settings_and_its_list_entry() -> None:
 def test_profile_help_page_settings_keep_list_values_and_the_prompt(tmp_path: Path) -> None:
     write(
         tmp_path / ".pratfile",
-        '[profiles.p]\nagent="claude"\ntools=["Read","Grep"]\nprompt="Tidy ${folder}"\n',
+        '[profiles.p]\nagent="claude"\nnative_args=["--allowed-tools","Read"]\n'
+        'prompt="Tidy ${folder}"\n',
     )
     page = help_page(load_config(cwd=tmp_path, env=os.environ), "p", nothing_installed)
     assert page["settings"] == [
         {"name": "timeout", "value": 3600.0, "origin": "built-in default"},
-        {"name": "tools", "value": ["Read", "Grep"], "origin": "profiles.p (local)"},
+        {
+            "name": "native_args",
+            "value": ["--allowed-tools", "Read"],
+            "origin": "profiles.p (local)",
+        },
         {"name": "prompt", "value": "Tidy ${folder}", "origin": "profiles.p (local)"},
     ]
 
@@ -208,8 +213,6 @@ SAMPLE_SETTINGS: dict[str, object] = {
     "attachments": ("a.png",),
     "instructions": "x",
     "instructions_file": "x.md",
-    "tools": ("Read",),
-    "disabled_tools": ("Bash",),
     "schema": "s.json",
     "native_agent": "n",
     "session_id": "s",

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 
 from pratfall.adapters.accounting import model
-from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
+from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.adapters.whole_json import session_text
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
@@ -162,13 +162,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
     if options.effort is not None:
         argv.append(f"--effort={options.effort}")
     argv.extend(f"--add-dir={directory}" for directory in options.add_dirs or ())
-    if options.tools is not None:
-        if options.tools:
-            argv.append("--available-tools=" + ",".join(options.tools))
-        else:
-            argv.append("--available-tools")
-    if options.disabled_tools:
-        argv.append("--excluded-tools=" + ",".join(options.disabled_tools))
     if options.native_agent is not None:
         argv.append(f"--agent={options.native_agent}")
     argv.extend(f"--attachment={attachment}" for attachment in resolved.options.attachments or ())
@@ -185,21 +178,6 @@ def validate(resolved: ResolvedProfile) -> None:
         reserved |= {"--attachment": _ALLOWED["--attachment"]}
     if resolved.options.native_agent is not None:
         reserved |= {"--agent": _ALLOWED["--agent"]}
-    validate_tool_values(resolved.options.tools, "tools", comma=True, trim=True)
-    validate_tool_values(resolved.options.disabled_tools, "disabled_tools", comma=True, trim=True)
-    if resolved.options.tools is not None:
-        reserved |= {
-            name: _ALLOWED[name]
-            for name in (
-                "--available-tools",
-                "--enable-mcp-server",
-                "--enable-all-github-mcp-tools",
-                "--add-github-mcp-tool",
-                "--add-github-mcp-toolset",
-            )
-        }
-    if resolved.options.disabled_tools:
-        reserved |= {"--excluded-tools": _ALLOWED["--excluded-tools"]}
     validate_flags("Copilot", resolved.options.native_args or (), _ALLOWED, reserved)
 
 

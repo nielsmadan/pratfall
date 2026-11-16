@@ -144,23 +144,6 @@ _INSTRUCTIONS = frozenset({"claude", "codex", "qwen", "droid"})
 _NATIVE_AGENTS = frozenset({"claude", "copilot", "vibe"})
 _SESSION_IDS = frozenset({"claude", "grok"})
 _REPORTS_SESSION_IDS = frozenset({"claude", "codex", "copilot", "cursor", "grok", "droid", "kimi"})
-_TOOLS_EMPTY = frozenset({"claude", "copilot", "pi"})
-_TOOLS_SCOPES = {
-    "pi": "built-in, extension and custom tools",
-    "claude": "built-ins; MCP unaffected; EndConversation may remain",
-    "qwen": "native core allowlist; schema tool exempt; native settings apply",
-    "copilot": "model-visible tools",
-    "droid": "native run tools",
-    "vibe": "native available tools, including MCP and connectors",
-}
-_DISABLED_TOOLS_SCOPES = {
-    "pi": "built-in, extension and custom tools",
-    "claude": "native deny rules; EndConversation exception",
-    "qwen": "native deny rules, including schema tool",
-    "copilot": "model-visible tools",
-    "droid": "native run tools",
-    "vibe": "native available tools, including MCP and connectors",
-}
 _STDIN_PREFIXES = {
     "kilo": ["run", "--format", "json"],
     "goose": ["run", "--quiet", "--no-session", "--output-format", "json", "--instructions", "-"],
@@ -2416,11 +2399,6 @@ def _exercise_a_inventory(prat: Path, root: Path, config: Path) -> dict[str, obj
             "reports_session_id": name in _REPORTS_SESSION_IDS,
             "instructions": name in _INSTRUCTIONS,
             "schema": name in _SCHEMA,
-            "tools": name in _TOOLS_SCOPES,
-            "disabled_tools": name in _DISABLED_TOOLS_SCOPES,
-            "tools_empty": name in _TOOLS_EMPTY,
-            "tools_scope": _TOOLS_SCOPES.get(name),
-            "disabled_tools_scope": _DISABLED_TOOLS_SCOPES.get(name),
         }
     assert len(ALIASES) == 15 and not set(ALIASES).intersection(AGENTS)
     doctor = _run(prat, root, ["doctor", "--json"], config=config)
@@ -2520,8 +2498,6 @@ def _exercise_a_profile(prat: Path, root: Path) -> dict[str, object]:
                     "instructions": None,
                     "instructions_file": None,
                     "schema": None,
-                    "tools": None,
-                    "disabled_tools": None,
                     "timeout": 7.0,
                     "max_turns": 3,
                     "max_budget_usd": None,
@@ -3486,8 +3462,6 @@ def _exercise_q07(context: _ExerciseContext) -> dict[str, object]:
                     "instructions": None,
                     "instructions_file": None,
                     "schema": None,
-                    "tools": None,
-                    "disabled_tools": None,
                     "native_agent": None,
                     "session_id": None,
                     "native_args": [],
@@ -4410,20 +4384,17 @@ def _control_cases(root: Path) -> list[tuple[str, list[str], list[str]]]:
     directory = str(root / "consumer" / "cli dir")
     attachment = str(root / "consumer" / "image.bin")
     dirs = ["--add-dir", "cli dir"]
-    tools = ["--tools", "Read", "--tools", "Search", "--disabled-tools", "Write"]
     instructions = ["--instructions-file", "rules.md"]
     persona = ["--native-agent", "reviewer"]
     attach = ["--attachment", "image.bin"]
     return [
         (
             "claude",
-            dirs + instructions + tools + persona,
+            dirs + instructions + persona,
             [
                 "--append-system-prompt=CLI rules café\r\n",
                 "--add-dir",
                 directory,
-                "--tools=Read,Search",
-                "--disallowedTools=Write",
                 "--agent=reviewer",
             ],
         ),
@@ -4441,46 +4412,24 @@ def _control_cases(root: Path) -> list[tuple[str, list[str], list[str]]]:
         ("gemini", dirs, ["--include-directories", directory]),
         (
             "qwen",
-            dirs + instructions + tools,
+            dirs + instructions,
             [
                 "--append-system-prompt=CLI rules café\r\n",
                 "--include-directories",
                 directory,
-                "--core-tools=Read",
-                "--core-tools=Search",
-                "--exclude-tools=Write",
             ],
         ),
         (
             "copilot",
-            dirs + tools + persona + attach,
+            dirs + persona + attach,
             [
                 "--add-dir=" + directory,
-                "--available-tools=Read,Search",
-                "--excluded-tools=Write",
                 "--agent=reviewer",
                 "--attachment=" + attachment,
             ],
         ),
-        (
-            "droid",
-            instructions + tools,
-            [
-                "--append-system-prompt=CLI rules café\r\n",
-                "--restrict-tools=Read,Search",
-                "--disabled-tools=Write",
-            ],
-        ),
-        (
-            "vibe",
-            tools + persona,
-            [
-                "--enabled-tools=Read",
-                "--enabled-tools=Search",
-                "--disabled-tools=Write",
-                "--agent=reviewer",
-            ],
-        ),
+        ("droid", instructions, ["--append-system-prompt=CLI rules café\r\n"]),
+        ("vibe", persona, ["--agent=reviewer"]),
         ("hermes", attach, ["--image=" + attachment]),
         ("opencode", attach, ["--file=" + attachment]),
     ]
@@ -4555,17 +4504,14 @@ def _exercise_w_control_layers(prat: Path, root: Path) -> dict[str, object]:
     global_config.parent.mkdir(exist_ok=True)
     global_config.write_text(
         'version=1\n[defaults]\ninstructions_file="missing-global"\n'
-        'add_dirs=["missing-global"]\ntools=["Global"]\n'
-        'disabled_tools=["GlobalDeny"]\nnative_agent="global"\n'
+        'add_dirs=["missing-global"]\nnative_agent="global"\n'
     )
     with config.open("a") as stream:
         stream.write(
-            '[defaults]\ninstructions="local"\nadd_dirs=["config dir"]\n'
-            'tools=["Local"]\ndisabled_tools=["LocalDeny"]\nnative_agent="local"\n'
+            '[defaults]\ninstructions="local"\nadd_dirs=["config dir"]\nnative_agent="local"\n'
             '[profiles.layered]\nagent="claude"\ninstructions_file="rules.md"\n'
-            'tools=["Profile"]\ndisabled_tools=[]\nnative_agent="profile"\n'
-            '[profiles.cleared]\nagent="claude"\nadd_dirs=[]\ntools=[]\n'
-            'disabled_tools=[]\ninstructions="cleared"\n'
+            'native_agent="profile"\n'
+            '[profiles.cleared]\nagent="claude"\nadd_dirs=[]\ninstructions="cleared"\n'
         )
     cases = [
         (
@@ -4574,7 +4520,6 @@ def _exercise_w_control_layers(prat: Path, root: Path) -> dict[str, object]:
                 "--append-system-prompt=config rules\r\n",
                 "--add-dir",
                 str(root / "config dir"),
-                "--tools=Profile",
                 "--agent=profile",
             ],
         ),
@@ -4585,10 +4530,6 @@ def _exercise_w_control_layers(prat: Path, root: Path) -> dict[str, object]:
                 "CLI inline",
                 "--add-dir",
                 "cli dir",
-                "--tools",
-                "CLI",
-                "--disabled-tools",
-                "CLIDeny",
                 "--native-agent",
                 "cli",
             ],
@@ -4596,14 +4537,12 @@ def _exercise_w_control_layers(prat: Path, root: Path) -> dict[str, object]:
                 "--append-system-prompt=CLI inline",
                 "--add-dir",
                 str(root / "consumer" / "cli dir"),
-                "--tools=CLI",
-                "--disallowedTools=CLIDeny",
                 "--agent=cli",
             ],
         ),
         (
             ["cleared", "--instructions-file", "rules.md"],
-            ["--append-system-prompt=CLI rules café\r\n", "--tools=", "--agent=local"],
+            ["--append-system-prompt=CLI rules café\r\n", "--agent=local"],
         ),
     ]
     observations: list[dict[str, object]] = []
@@ -4618,11 +4557,10 @@ def _exercise_w_control_layers(prat: Path, root: Path) -> dict[str, object]:
     neutral = root / "neutral.toml"
     neutral.write_text(
         config.read_text().split("[defaults]")[0]
-        + '[profiles.neutral]\nagent="amp"\nattachments=[]\nadd_dirs=[]\ndisabled_tools=[]\n'
+        + '[profiles.neutral]\nagent="amp"\nattachments=[]\nadd_dirs=[]\n'
     )
     global_config.write_text(
-        'version=1\n[defaults]\nattachments=["missing"]\n'
-        'add_dirs=["missing"]\ndisabled_tools=["Write"]\n'
+        'version=1\n[defaults]\nattachments=["missing"]\nadd_dirs=["missing"]\n'
     )
     completed = _run(
         prat, root, ["neutral", "QA_CONTROLS neutral", "--cwd", "project", "--json"], config=neutral
@@ -4693,7 +4631,9 @@ def _exercise_w_schemas(prat: Path, root: Path) -> dict[str, object]:
                 'instructions_file="rules.md"\nadd_dirs=["config dir"]\n'
             )
             if agent == "qwen":
-                stream.write('tools=["Read"]\ndisabled_tools=["submit_final_result"]\n')
+                stream.write(
+                    'native_args=["--core-tools=Read", "--exclude-tools=submit_final_result"]\n'
+                )
             if agent == "codex":
                 stream.write('attachments=["consumer/image.bin"]\n')
     observations: dict[str, object] = {"status": "Pass"}
@@ -4745,10 +4685,10 @@ def _exercise_w_schemas(prat: Path, root: Path) -> dict[str, object]:
                     "--append-system-prompt=config rules\r\n",
                     "--include-directories",
                     str(root / "config dir"),
-                    "--core-tools=Read",
-                    "--exclude-tools=submit_final_result",
                     "--json-schema",
                     "@" + schema_path,
+                    "--core-tools=Read",
+                    "--exclude-tools=submit_final_result",
                 ]
             _assert_control_call(root, agent, expected, prompt)
             observations[f"{agent}.{code}"] = {"result": result, "native": record}
@@ -4806,11 +4746,9 @@ def _exercise_w_control_rejections(prat: Path, root: Path) -> dict[str, object]:
     cases = {
         "unsupported-instructions": ["amp", "--instructions-file", "missing"],
         "unsupported-directories": ["amp", "--add-dir", "missing"],
-        "unsupported-tools": ["amp", "--tools", "Read"],
         "unsupported-persona": ["amp", "--native-agent", "reviewer"],
         "unsupported-attachments": ["amp", "--attachment", "missing"],
         "unsupported-schema": ["amp", "--schema", "missing"],
-        "collision-tools": ["claude", "--tools", "Read", "--", "--tools=Write"],
         "collision-instructions": [
             "claude",
             "--instructions",

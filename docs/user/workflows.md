@@ -250,8 +250,9 @@ children are launched in declared order. With `parallel = false`, one step runs 
 declared order among the ready steps.
 
 Parallel steps share one working directory. Two steps that edit files can overwrite each other's
-changes, and Prat does not detect it. Run editing steps in sequence, give parallel steps
-read-only tools, or select separate trees with each profile's own settings.
+changes, and Prat does not detect it. Run editing steps in sequence, limit parallel steps to
+read-only tools with each agent's native flags in `native_args`, or select separate trees with each
+profile's own settings.
 
 ## Failure and interruption
 
@@ -326,7 +327,7 @@ when the step runs.
 A workflow accepts `--param`, `-f`/`--file`, `--prompt`, `--config`, `--cwd`, `--timeout`,
 `--json`, `--dry-run`, `--progress`, `--trace`, `--notify` and `--no-notify`. Every other flag, and
 native arguments after `--`, fails with "FLAG is not supported for workflows." Set model, effort,
-tools and other options in the step profiles. `--config`, `--cwd`, `--timeout`, `--progress` and
+native arguments and other options in the step profiles. `--config`, `--cwd`, `--timeout`, `--progress` and
 `--trace` are passed to every step.
 
 A malformed flag value fails in the argument parser before Prat knows the selector is a workflow,

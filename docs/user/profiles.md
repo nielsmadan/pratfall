@@ -50,7 +50,7 @@ prat simple --effort high "investigate this failure"
 
 Each profile requires an `agent`, given as a [full name or alias](agents.md). Optional fields are
 `model`, `effort`, `fast`, `timeout`, `native_args`, `add_dirs`, `attachments`, `instructions`,
-`instructions_file`, `prompt`, `schema`, `tools`, `disabled_tools`, `native_agent`, `session_id`,
+`instructions_file`, `prompt`, `schema`, `native_agent`, `session_id`,
 `notify`, `notify_method`, `notify_after`, `command_prefix`, and the agent's supported budget
 fields (`max_budget_usd`, `max_turns`).
 Use `[defaults]` for shared settings. `timeout` is in seconds and defaults to 3600; `timeout =
@@ -205,7 +205,7 @@ Settings resolve from highest to lowest priority:
 | `schema` | The higher-priority source path replaces the lower-priority path. |
 | `native_agent` | The higher-priority string replaces the lower-priority selection. |
 | `instructions`, `instructions_file` | One override group: either higher-priority form clears the lower-priority form. |
-| `native_args`, `add_dirs`, `attachments`, `tools`, `disabled_tools`, `command_prefix` | The higher-priority array replaces the lower-priority array, even when empty. Arguments after `--` are the exception: they are appended to the resolved `native_args`. |
+| `native_args`, `add_dirs`, `attachments`, `command_prefix` | The higher-priority array replaces the lower-priority array, even when empty. Arguments after `--` are the exception: they are appended to the resolved `native_args`. |
 
 Profiles from every file remain available. A profile inherits only through an explicit
 `extends`; omitted fields then fall back to the merged defaults.
@@ -239,10 +239,10 @@ cannot be hidden by a local override.
 ```toml
 # the global config: bases shared across projects
 [profiles.claude-base]
-agent   = "claude"
-model   = "claude-sonnet-5"
-tools   = ["Read", "Edit", "Bash"]
-timeout = 1800
+agent          = "claude"
+model          = "claude-sonnet-5"
+max_budget_usd = 2.0
+timeout        = 1800
 
 [profiles.codex-base]
 agent  = "codex"
@@ -256,11 +256,11 @@ extends = "claude-base"
 model   = "claude-opus-5"
 ```
 
-`weekly` runs Claude Code with `claude-opus-5`, the base's tools, and a 1800 second timeout.
+`weekly` runs Claude Code with `claude-opus-5`, the base's budget, and a 1800 second timeout.
 
 This is how backend-specific settings are shared. `[defaults]` cannot do it: defaults apply to
-every profile in the file and are validated against each one's agent, so a single `tools` entry
-beside any Codex profile fails the whole file. A base profile is validated only against its own
+every profile in the file and are validated against each one's agent, so a single
+`max_budget_usd` entry beside any Codex profile fails the whole file. A base profile is validated only against its own
 agent and only reaches the children that ask for it.
 
 Rules:
@@ -273,7 +273,7 @@ Rules:
   `extends` must declare one. A child may override `agent`; an inherited option the new agent
   does not support is then rejected, naming the parent field that supplied it.
 - Arrays replace rather than merge, exactly as they do between files. A child setting
-  `tools = ["Skill"]` gets only `Skill`.
+  `native_args = ["--strict-mcp-config"]` gets only that flag, not its parent's native arguments.
 - Inherited values beat `[defaults]`, including the defaults of a nearer file: the chain is part
   of the profile, and profiles outrank defaults.
 
@@ -342,7 +342,7 @@ list SECTION` prints one of them, and `--json` returns every field. A profile ro
 AGENT, EXTENDS, SETS (what the profile itself sets) and FROM: `global` for the global or `--config`
 file, `local` for the `.pratfile`, or `local, replaces global` when a `.pratfile` profile replaces
 a global one of the same name. SETS shows short values in full and text or list settings, such as
-`prompt`, `instructions`, `native_args` and `tools`, by key only, with a prompt's parameters in
+`prompt`, `instructions` and `native_args`, by key only, with a prompt's parameters in
 brackets: `prompt (topic)`. On a terminal a long SETS cell is cut with `…` to fit the width, never
 below 20 columns; piped output is never cut.
 
@@ -449,9 +449,9 @@ is now an aligned table. `agents`, `profiles`, `templates` and `workflows` are n
 so they are legal profile and workflow names again; `list` is now reserved, so rename a
 `[profiles.list]` or `[workflows.list]` and update invocations that select it.
 
-A separate value that starts with a dash is now refused rather than taken as the value: `--tools
--name` and `--add-dir -dir` fail with `--tools requires a value; '-name' is not a value; write
---tools=-name if it is`. Write `--tools=-name` and `--add-dir=-dir`. A lone `-` is still a value.
+A separate value that starts with a dash is now refused rather than taken as the value: `--model
+-name` and `--add-dir -dir` fail with `--model requires a value; '-name' is not a value; write
+--model=-name if it is`. Write `--model=-name` and `--add-dir=-dir`. A lone `-` is still a value.
 
 Piped stdin beside an explicit prompt is no longer read: `git diff | prat cc "review"` no longer
 reads the diff; write `git diff | prat cc --context - "review"`. The diff now arrives under a
@@ -479,6 +479,16 @@ Arguments after `--` are now appended to the profile's `native_args` instead of 
 so `prat reviewer "…" -- --strict-mcp-config` keeps a Claude profile's `--disallowedTools=Bash`.
 A native flag that a profile sets can no longer be dropped from the command line; select another
 profile instead.
+
+`--tools`, `--disabled-tools` and the `tools` and `disabled_tools` settings are removed: tool names
+differ on every agent, so each list only renamed one agent's own flag. A config that still sets
+`tools` or `disabled_tools` fails as an unknown field naming the file and key, and the run flags
+fail as unrecognized arguments. Move each list into the agent's own flag in `native_args`: Claude
+`native_args = ["--tools=Read,Grep", "--disallowedTools=Bash"]`, Pi `["--tools", "read,grep"]`,
+Droid `["--only-tools=Read,Grep"]`, Qwen `["--core-tools=ReadFileTool"]`, Vibe
+`["--enabled-tools=read*"]`. `prat list agents --json` no longer reports the `tools`,
+`disabled_tools`, `tools_empty`, `tools_scope` and `disabled_tools_scope` capabilities. See
+[native tool flags](running.md#limit-tools-with-native-arguments).
 
 A collision reports `FILE: profiles.NAME is shadowed by the built-in agent 'NAME'; rename it`,
 naming `the alias 'NAME' of the built-in agent 'AGENT'` or `the command 'NAME'` instead where that
@@ -547,34 +557,21 @@ The former aliases are available as custom profile names.
 
 ## Tool availability
 
+Tool names differ on every agent, so tool limits are the agent's own flags in `native_args`:
+
 ```toml
 [profiles.read]
 agent = "claude"
-tools = ["Read", "Grep"]
-disabled_tools = ["mcp__*"]
+native_args = ["--tools=Read,Grep", "--disallowedTools=mcp__*"]
 
-[profiles.no_tools]
-agent = "copilot"
-tools = []
-disabled_tools = []
+[profiles.droid-read]
+agent = "droid"
+native_args = ["--only-tools=Read,Grep,LS"]
 ```
 
-`tools` and `disabled_tools` are arrays of nonempty native names or patterns. Each array replaces
-its inherited value: CLI → profile → local defaults → global defaults. Omitting a field preserves
-native behavior. `disabled_tools = []` clears Prat's inherited exclusions and is neutral even on
-unsupported agents; it does not clear native permission denials.
-
-`tools = []` actively requests no tools in the [documented native scope](running.md#control-tool-availability).
-Claude, Copilot and Pi can represent it; Qwen, Droid, Vibe and unsupported agents reject it.
-Claude's MCP tools and, while other tools remain, `EndConversation` are outside its empty built-in
-selection. `prat help NAME` displays active `tools=[]` and `prat list agents --json` exposes `tools`,
-`disabled_tools`, `tools_empty`, `tools_scope`, and `disabled_tools_scope` capabilities.
-
-Backend-specific defaults affect every profile that inherits them, including unused profiles
-validated when the configuration loads. Keep allowlists in profiles when mixing agents: an empty
-allowlist does not neutralize an unsupported inherited `tools` field. Native flag collisions and
-unrepresentable list delimiters fail before prompt input; ordinary config inspection reads no
-auxiliary resources and launches no native command.
+Arguments after `--` are appended to these, so a run cannot drop the profile's limits. See
+[native tool flags](running.md#limit-tools-with-native-arguments) for each agent's flags and
+caveats.
 
 ## Configure native agent selection
 
@@ -646,9 +643,8 @@ A Pi profile can select its model, thinking level, tool filters and attachments:
 agent = "pi"
 model = "anthropic/claude-sonnet-4-5"
 effort = "high"
-tools = ["read", "grep", "find", "ls"]
-disabled_tools = ["bash"]
 attachments = ["notes/context.txt"]
+native_args = ["--tools", "read,grep,find,ls", "--exclude-tools", "bash"]
 ```
 
 Use a model available in your native Pi configuration. All normal option precedence and

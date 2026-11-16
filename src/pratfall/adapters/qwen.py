@@ -3,12 +3,7 @@ from dataclasses import replace
 from types import MappingProxyType
 
 from pratfall.adapters.accounting import model
-from pratfall.adapters.native_args import (
-    Flag,
-    validate_directory_values,
-    validate_flags,
-    validate_tool_values,
-)
+from pratfall.adapters.native_args import Flag, validate_directory_values, validate_flags
 from pratfall.consumer import (
     DEFAULT_CONSUMER_LIMITS,
     ConsumerLimits,
@@ -109,8 +104,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--max-session-turns", str(resolved.options.max_turns)))
     for directory in resolved.options.add_dirs or ():
         argv.extend(("--include-directories", directory))
-    argv.extend(f"--core-tools={tool}" for tool in resolved.options.tools or ())
-    argv.extend(f"--exclude-tools={tool}" for tool in resolved.options.disabled_tools or ())
     if resolved.prepared_schema is not None:
         if resolved.prepared_schema.path is None:
             raise ValueError("prepared schema requires a file snapshot")
@@ -130,12 +123,6 @@ def validate(resolved: ResolvedProfile) -> None:
     )
     if resolved.options.instructions is not None or resolved.options.instructions_file is not None:
         reserved |= {"--append-system-prompt": _ALLOWED["--append-system-prompt"]}
-    validate_tool_values(resolved.options.tools, "tools", comma=True, trim=True)
-    validate_tool_values(resolved.options.disabled_tools, "disabled_tools", comma=True, trim=True)
-    if resolved.options.tools is not None:
-        reserved |= {"--core-tools": Flag(1)}
-    if resolved.options.disabled_tools:
-        reserved |= {"--exclude-tools": Flag(1)}
     validate_flags(
         "Qwen", resolved.options.native_args or (), _ALLOWED, reserved, attached_short_values=False
     )

@@ -31,11 +31,6 @@ class Capabilities:
     native_agent: bool = False
     session_id: bool = False
     reports_session_id: bool = False
-    tools: bool = False
-    disabled_tools: bool = False
-    tools_empty: bool = False
-    tools_scope: str | None = None
-    disabled_tools_scope: str | None = None
 
 
 @dataclass(frozen=True)
@@ -64,8 +59,6 @@ class Options:
     attachments: tuple[str, ...] | None = None
     instructions: str | None = None
     instructions_file: str | None = None
-    tools: tuple[str, ...] | None = None
-    disabled_tools: tuple[str, ...] | None = None
     schema: str | None = None
     native_agent: str | None = None
     session_id: str | None = None

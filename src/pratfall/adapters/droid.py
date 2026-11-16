@@ -1,11 +1,13 @@
 from collections.abc import Mapping
 from types import MappingProxyType
 
-from pratfall.adapters.native_args import Flag, validate_flags, validate_tool_values
+from pratfall.adapters.native_args import Flag, validate_flags
 from pratfall.adapters.whole_json import document_error, encoding_error, parse
 from pratfall.models import DecodedOutput, Invocation, ResolvedProfile, ResultError
 
-_ALLOWED: Mapping[str, Flag] = MappingProxyType({"--auto": Flag(1)})
+_ALLOWED: Mapping[str, Flag] = MappingProxyType(
+    {name: Flag(1) for name in ("--auto", "--only-tools", "--add-tools", "--remove-tools")}
+)
 _RESERVED: Mapping[str, Flag] = MappingProxyType(
     {
         name: Flag(0)
@@ -62,10 +64,6 @@ def build(resolved: ResolvedProfile, prompt: bytes) -> Invocation:
         argv.extend(("--model", resolved.options.model))
     if resolved.options.effort is not None:
         argv.extend(("--reasoning-effort", resolved.options.effort))
-    if resolved.options.tools is not None:
-        argv.append("--restrict-tools=" + ",".join(resolved.options.tools))
-    if resolved.options.disabled_tools:
-        argv.append("--disabled-tools=" + ",".join(resolved.options.disabled_tools))
     return Invocation((*argv, *arguments), prompt)
 
 
@@ -73,26 +71,6 @@ def validate(resolved: ResolvedProfile) -> None:
     reserved = dict(_RESERVED)
     if resolved.options.instructions is not None or resolved.options.instructions_file is not None:
         reserved |= {"--append-system-prompt": Flag(1), "--append-system-prompt-file": Flag(1)}
-    validate_tool_values(resolved.options.tools, "tools", comma=True, whitespace=True, trim=True)
-    validate_tool_values(
-        resolved.options.disabled_tools, "disabled_tools", comma=True, whitespace=True, trim=True
-    )
-    if resolved.options.tools is not None:
-        reserved |= {
-            name: Flag(1)
-            for name in (
-                "--restrict-tools",
-                "--additional-tools",
-                "--only-tools",
-                "--add-tools",
-                "--enabled-tools",
-            )
-        }
-    if resolved.options.disabled_tools:
-        reserved |= {
-            name: Flag(1)
-            for name in ("--disabled-tools", "--additional-tools", "--add-tools", "--remove-tools")
-        }
     validate_flags("Droid", resolved.options.native_args or (), _ALLOWED, reserved)
 
 
