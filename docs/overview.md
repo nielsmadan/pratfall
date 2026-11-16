@@ -13,6 +13,7 @@ profile: a few builder guides, plus separate user guides, external references, a
 | Re-record or re-render the README demo GIF | [README demo](demo/README.md) |
 | Repeat installed-package checks | [Local package verification](release.md#check-installed-packages-locally) |
 | Understand an accepted documentation or architecture choice | [Decisions](decisions/) |
+| Decide whether a native control gets a public flag | [ADR 0007](decisions/0007-add-a-public-flag-only-for-a-shared-value.md) |
 
 ## Maintenance
 

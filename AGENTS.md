@@ -56,6 +56,10 @@ native config changes.
   allowed, and offer a near match with `did_you_mean` from `errors.py`.
 - Treat configured command prefixes and native arguments as trusted input, while keeping prompts as
   argv or stdin data without invoking a shell.
+- Add a public flag or config key for a native control only when two or more agents support it
+  and its value means the same on each, or when profiles pin it and runs override it (`--model`);
+  otherwise document it as a native argument
+  ([ADR 0007](docs/decisions/0007-add-a-public-flag-only-for-a-shared-value.md)).
 - Update the README and linked Markdown guides when the CLI or config contract changes.
 
 The [documentation map](docs/overview.md) links current guides, external contracts, and decisions.

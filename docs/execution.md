@@ -420,6 +420,12 @@ camelCase or `--no-` spelling of a reserved long flag is rejected too, and Go-fl
 `-name` as `--name`. `--help`, `-h` and `--version` are reserved everywhere. Response files and
 `--` are rejected. Trusted executable wrappers cover reserved options.
 
+A native control becomes a public prat flag or config key only when at least two agents support
+it and its value means the same thing on each, or when it is a single setting that profiles pin and
+runs routinely override, as `--model` is. Everything else is a native argument;
+[ADR 0007](decisions/0007-add-a-public-flag-only-for-a-shared-value.md) records the rule and the
+flags it removed.
+
 Check the relevant [native evidence](reference/overview.md) before exposing capabilities or
 accounting; the [fast-mode mappings](reference/overview.md#shared-controls-and-accounting) show why native
 config flags may need reserving. Exercise native completion, replacement budgets, malformed output
