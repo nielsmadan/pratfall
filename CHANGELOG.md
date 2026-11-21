@@ -3,6 +3,35 @@
 All notable user-facing changes to Pratfall. While the project is on `0.x`, breaking changes may
 land in a minor release and are called out explicitly.
 
+## [1.3.0] - 2026-11-21
+
+### Features
+
+- Refuse a separate flag value that starts with a dash
+- Let the last of --fast/--no-fast and --notify/--no-notify win
+- Accept --prompt TEXT like other value flags
+- Read stdin beside an explicit prompt only through --context -
+- Raise the prompt limit to 8 MiB for agents that read stdin
+- Pass any native flag that prat does not control
+- Remove --max-ai-credits in favour of Copilot's native flag
+- Map fast mode for Amp
+- Stop passing --session-id to Copilot, where a reused id resumes
+- Raise the default timeout to an hour and let none or 0 turn it off
+- Append arguments after -- to a profile's native arguments
+- Remove --tools and --disabled-tools in favour of each agent's native tool flags
+- Remove --native-agent in favour of each agent's native --agent flag
+- Reserve only the native flags that would break a run
+
+### Bug Fixes
+
+- Name 1.2.0 as the release that removed OpenHands and iFlow
+- Name the rejected value in run option number errors
+- Say how to quote extra prompt words and name the source of empty input
+- Drop the Reasonix --fail-on-unverified flag that 2.58.0 removed
+- Word the --cwd directory error like the other path options
+- Place prat's own prompt token before native arguments for Kimi, Codex and Cursor
+- Show an off timeout as none in text and 0 in every JSON view
+
 ## [1.2.0] - 2026-11-08
 
 ### Features
@@ -21,6 +50,13 @@ land in a minor release and are called out explicitly.
 - Exit 1 when a native status collides with prat's reserved exit codes
 - Name flags and rejected values in errors and suggest near matches
 - Write every error message in one lowercase style without trailing periods
+- Tighten near-match suggestions and name agents removed in 0.9.0
+- Add selector-aware help and describe each management command
+- Fail a run without a selector unless bare prat runs at a terminal
+- Add prat help and prat version commands
+- Replace the listing commands with prat list and show full selector help pages
+- Print help pages as JSON with --json
+- Drop only the profile or workflow a built-in name shadows
 
 ### Bug Fixes
 
@@ -30,6 +66,9 @@ land in a minor release and are called out explicitly.
 - Apply functional review findings
 - Resolve test review findings
 - Require trust for a local .pratfile and harden workflow output
+- Fail at once when prat __step is typed at a terminal
+- Print a selected shadowed name's collision once
+- Match release QA to the 1.2.0 help and error text
 
 ## [1.1.0] - 2026-10-13
 
@@ -106,6 +145,7 @@ land in a minor release and are called out explicitly.
 - Create pytest basetemp parent so a fresh checkout can run the suite (#1)
 - Harden cli failure handling
 
+[1.3.0]: https://github.com/nielsmadan/pratfall/compare/v1.2.0..v1.3.0
 [1.2.0]: https://github.com/nielsmadan/pratfall/compare/v1.1.0..v1.2.0
 [1.1.0]: https://github.com/nielsmadan/pratfall/compare/v1.0.0..v1.1.0
 [1.0.0]: https://github.com/nielsmadan/pratfall/compare/v0.9.1..v1.0.0
